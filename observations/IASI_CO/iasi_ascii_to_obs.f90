@@ -1,3 +1,4 @@
+
 ! Data Assimilation Research Testbed -- DART
 ! Copyright 2004-2007, Data Assimilation Research Section
 ! University Corporation for Atmospheric Research
@@ -150,6 +151,7 @@ real*8, dimension(ias_dimp)     :: co_press
 real*8, dimension(num_copies)   :: co_vmr
 real,dimension(ias_dimp)        :: ias_prs
 real,dimension(ias_dim)         :: x_r, x_p, x_p_col, air_col, raw_x_r, raw_x_p, err2_rs_r, raw_err, ret_err
+real,dimension(ias_dim)         :: ret_x_r, ret_x_p
 real,dimension(ias_dim)         :: xcomp, xcomperr, xapr
 real,dimension(ias_dim,ias_dim) :: avgker, avg_k, adj_avg_k, temp_mat
 real,dimension(ias_dim,ias_dim) :: raw_cov, ret_cov, cov_a, cov_r, cov_m, cov_use
@@ -209,6 +211,7 @@ day_lst=-9999
 hour_lst=-9999
 minute_lst=-9999
 second_lst=-9999 
+fac=1.0
 !
 call find_namelist_in_file("input.nml", "create_iasi_obs_nml", iunit)
 read(iunit, nml = create_iasi_obs_nml, iostat = io)
@@ -235,6 +238,12 @@ call init_obs_sequence(seq, num_copies, num_qc, max_num_obs)
 ! Initialize the obs variable
 call init_obs(obs, num_copies, num_qc)
 
+! If use_log_co is 'true' the make sure retrieval type is RETR
+if (use_log_co.eq..TRUE. .and. trim(IASI_CO_retrieval_type).ne.'RETR') then
+   print *, 'APM: if use_log_co=true then IASI_CO_retrieval_type=RETR'
+   stop
+endif 
+
 do icopy =1, num_copies
    if (icopy == 1) then
        copy_meta_data='IASI CO observation'
@@ -248,6 +257,9 @@ call set_qc_meta_data(seq, 1, qc_meta_data)
 
 qc_iasi(:)=100
 qc_thinning(:)=100
+!
+! assign obs error scale factor
+fac=fac_obs_error
 
 !-------------------------------------------------------
 ! Read IASI obs
@@ -497,10 +509,6 @@ qc_thinning(:)=100
 !
 ! Assign cov_use
         cov_use(:,:)=cov_r(:,:)
-!
-! assign obs error scale factor
-        fac=fac_obs_error
-!
         raw_cov(:,:)=cov_use(:,:)
 !
 ! Calculate prior term
@@ -517,11 +525,28 @@ qc_thinning(:)=100
         do i=1,nlvls
            raw_x_r(i)=x_r(i)
            raw_x_p(i)=x_p(i)
+           ret_x_r(i)=log10(x_r(i))
+           ret_x_p(i)=log10(x_p(i))
+        enddo
+!
+! Calculate RET errors
+! (APM: IS THIS CORRECT?)
+        do i=1,nlvls
+           do j=1,nlvls
+              ret_cov(i,j)=raw_cov(i,j)/raw_x_r(i)/raw_x_r(j)/ln_10/ln_10
+           enddo
         enddo
 !
 ! Calculate errors for NO ROT RAW case
         do j=1,nlvls
            raw_err(j)=sqrt(raw_cov(j,j))
+        enddo
+!
+! Calculate errors for NO ROT RET case
+        do j=1,nlvls
+! (APM: IS THIS CORRECT?)
+!           ret_err(j)=sqrt(ret_cov(j,j)))
+           ret_err(j)=log10(sqrt(raw_cov(j,j)))
         enddo
 !
 ! Calculate superobs
@@ -544,8 +569,12 @@ qc_thinning(:)=100
            xg_raw_x_p(lon_qc,lat_qc,i)=xg_raw_x_p(lon_qc,lat_qc,i)+raw_x_p(i-kstr+1)*wt
            xg_raw_err(lon_qc,lat_qc,i)=xg_raw_err(lon_qc,lat_qc,i)+raw_err(i-kstr+1)*wt
            xg_raw_adj_x_p(lon_qc,lat_qc,i)=xg_raw_adj_x_p(lon_qc,lat_qc,i)+adj_x_p(i-kstr+1)*wt
+           xg_ret_x_r(lon_qc,lat_qc,i)=xg_ret_x_r(lon_qc,lat_qc,i)+ret_x_r(i-kstr+1)*wt
+           xg_ret_x_p(lon_qc,lat_qc,i)=xg_ret_x_p(lon_qc,lat_qc,i)+ret_x_p(i-kstr+1)*wt
+           xg_ret_err(lon_qc,lat_qc,i)=xg_ret_err(lon_qc,lat_qc,i)+ret_err(i-kstr+1)*wt
            do j=kstr,ias_dim
               xg_raw_cov(lon_qc,lat_qc,i,j)=xg_raw_cov(lon_qc,lat_qc,i,j)+raw_cov(i-kstr+1,j-kstr+1)*wt
+              xg_ret_cov(lon_qc,lat_qc,i,j)=xg_ret_cov(lon_qc,lat_qc,i,j)+ret_cov(i-kstr+1,j-kstr+1)*wt
               xg_avg_k(lon_qc,lat_qc,i,j)=xg_avg_k(lon_qc,lat_qc,i,j)+avg_k(i-kstr+1,j-kstr+1)*wt
            enddo
         enddo
@@ -580,10 +609,14 @@ qc_thinning(:)=100
            xg_raw_x_r(i,j,k)=xg_raw_x_r(i,j,k)/real(xg_norm(i,j,k))
            xg_raw_x_p(i,j,k)=xg_raw_x_p(i,j,k)/real(xg_norm(i,j,k))
            xg_raw_err(i,j,k)=xg_raw_err(i,j,k)/real(xg_norm(i,j,k))
+           xg_ret_x_r(i,j,k)=xg_ret_x_r(i,j,k)/real(xg_norm(i,j,k))
+           xg_ret_x_p(i,j,k)=xg_ret_x_p(i,j,k)/real(xg_norm(i,j,k))
+           xg_ret_err(i,j,k)=xg_ret_err(i,j,k)/real(xg_norm(i,j,k))
            xg_raw_adj_x_p(i,j,k)=xg_raw_adj_x_p(i,j,k)/real(xg_norm(i,j,k))
            do l=1,ias_dim
               if(xg_norm(i,j,l).eq.0) cycle
               xg_raw_cov(i,j,k,l)=xg_raw_cov(i,j,k,l)/real(xg_norm(i,j,k))
+              xg_ret_cov(i,j,k,l)=xg_ret_cov(i,j,k,l)/real(xg_norm(i,j,k))
               xg_avg_k(i,j,k,l)=xg_avg_k(i,j,k,l)/real(xg_norm(i,j,k))
            enddo
         enddo
@@ -641,6 +674,7 @@ qc_thinning(:)=100
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
         if(trim(IASI_CO_retrieval_type) .eq. 'QOR') then
+!
 ! Calculate SVD of raw_cov (Z=U_xxx * SV_xxx * VT_xxx)
            allocate(Z(nlvls,nlvls),SV_cov(nlvls),SV(nlvls,nlvls))
            allocate(U_cov(nlvls,nlvls),UT_cov(nlvls,nlvls),V_cov(nlvls,nlvls),VT_cov(nlvls,nlvls))
@@ -663,6 +697,7 @@ qc_thinning(:)=100
 !              print *, 'SV ',SV_cov(:)
 !
 ! Scale the singular vectors (NO SCALE/SCALE)     
+! (APM: IS THIS CORRECT? WHY IS THIS COMMENTED OUT?)
 !!           do k=1,nlvls_trc
 !!              U_cov(:,k)=U_cov(:,k)/sqrt(SV_cov(k))
 !!           enddo
@@ -800,17 +835,11 @@ qc_thinning(:)=100
 ! Calculate SVD of rr_cov (Z=U_xxx * SV_xxx * VT_xxx) - SECOND ROTATION
            Z(1:nlvls,1:nlvls)=rr_cov(1:nlvls,1:nlvls)
            call dgesvd('A','A',nlvls,nlvls,Z,nlvls,SV_cov,U_cov,nlvls,VT_cov,nlvls,wrk,lwrk,info)
-!           do k=1,nlvls
-!              if(SV_cov(k).ge.eps_tol) then
-!                 nlvls_trc=k
-!              else
-!                 SV_cov(k)=0
-!                 U_cov(:,k)=0. 
-!                 VT_cov(k,:)=0.
-!              endif 
-!           enddo
-!              print *,'nlvls_trc ',nlvls_trc
-!              print *, 'SV ',SV_cov(:)
+           do k=nlvls_trc+1,nlvls
+              SV_cov(k)=0
+              U_cov(:,k)=0. 
+              VT_cov(k,:)=0.
+           enddo 
 !
 ! Scale the singular vectors (NO SCALE/SCALE)     
            do k=1,nlvls_trc
@@ -903,14 +932,22 @@ qc_thinning(:)=100
 ! RAW with NO ROT
            if(trim(IASI_CO_retrieval_type) .eq. 'RAWR') then
               xcomp(k)=xg_raw_x_r(i,j,k+kstr-1)
-print *, 'xg_raw_x_r ',xg_raw_x_r(i,j,k+kstr-1)
               xcomperr(k)=fac*xg_raw_err(i,j,k+kstr-1)
-              xapr(k)=xg_raw_adj_x_p(i,j,k+kstr-1)
+              xapr(k)=xg_raw_x_p(i,j,k+kstr-1)
               do l=1,xg_nlvls(i,j)
                  avgker(k,l)=xg_avg_k(i,j,k+kstr-1,l+kstr-1)
               enddo
            endif
-
+!
+! RET with NO ROT
+           if(trim(IASI_CO_retrieval_type) .eq. 'RETR') then
+              xcomp(k)=xg_ret_x_r(i,j,k+kstr-1)
+              xcomperr(k)=fac*xg_ret_err(i,j,k+kstr-1)
+              xapr(k)=xg_ret_x_p(i,j,k+kstr-1)
+              do l=1,xg_nlvls(i,j)
+                 avgker(k,l)=xg_avg_k(i,j,k+kstr-1,l+kstr-1)
+              enddo
+           endif  
 !
 ! RAW QOR with NO ROT
 !           xcomp(k)=xg_raw_adj_x_r(i,j,k+kstr-1)
@@ -919,6 +956,9 @@ print *, 'xg_raw_x_r ',xg_raw_x_r(i,j,k+kstr-1)
 !           do l=1,xg_nlvls(i,j)
 !              avgker(k,l)=xg_avg_k(i,j,k+kstr-1,l+kstr-1)
 !           enddo
+!
+! RET QOR with NO ROT
+! (This form cannot be done because averaging kernel is not in log10 format)
 !
 ! RAW QOR with ROT and NO SCALE
 ! comment scaling

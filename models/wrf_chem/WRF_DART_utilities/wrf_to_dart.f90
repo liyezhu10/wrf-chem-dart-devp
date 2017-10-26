@@ -76,10 +76,10 @@ character(len=129) :: dart_restart_name = "dart_wrf_vector"
 
 !
 ! LXL/APM +++
-logical :: add_emiss = .false., use_log_co = .false.
+logical :: add_emiss = .false., use_log_co = .false., use_log_o3 = .false.
 
 namelist /wrf_to_dart_nml/  &
-    dart_restart_name, print_data_ranges, debug, add_emiss, use_log_co
+    dart_restart_name, print_data_ranges, debug, add_emiss, use_log_co, use_log_o3
 ! LXL/APM ---
 !
 
@@ -221,9 +221,24 @@ WRFDomains2 : do id = 1,num_domains
             do jj=1,wrf%var_size(2,ind)
                do ii=1,wrf%var_size(1,ind)
                   if(wrf_var_2d(ii,jj).gt.0.) then
-                     wrf_var_2d(ii,jj)=log10(wrf_var_2d(ii,jj)*1.e-6)
+                     wrf_var_2d(ii,jj)=log10(wrf_var_2d(ii,jj))
                   else
-                     wrf_var_2d(ii,jj)=-9.
+                     wrf_var_2d(ii,jj)=-3.
+                     print *, 'APM 2d: wrf_to_dart reset ',ii,jj,kk
+                 endif
+               enddo
+            enddo
+         endif
+!
+! APM: code to take log10(x) transform of O3 chemistry field
+         if (use_log_o3.eq..TRUE. .and. trim(my_field).eq.'o3') then
+!            print *, 'APM: wrf_to_dart 3D O3 conversion '
+            do jj=1,wrf%var_size(2,ind)
+               do ii=1,wrf%var_size(1,ind)
+                  if(wrf_var_2d(ii,jj).gt.0.) then
+                     wrf_var_2d(ii,jj)=log10(wrf_var_2d(ii,jj))
+                  else
+                     wrf_var_2d(ii,jj)=-3.
                      print *, 'APM 2d: wrf_to_dart reset ',ii,jj,kk
                  endif
                enddo
@@ -263,9 +278,26 @@ WRFDomains2 : do id = 1,num_domains
                do jj=1,wrf%var_size(2,ind)
                   do ii=1,wrf%var_size(1,ind)
                      if(wrf_var_3d(ii,jj,kk).gt.0.) then
-                        wrf_var_3d(ii,jj,kk)=log10(wrf_var_3d(ii,jj,kk)*1.e-6)
+                        wrf_var_3d(ii,jj,kk)=log10(wrf_var_3d(ii,jj,kk))
                      else
-                        wrf_var_3d(ii,jj,kk)=-9.
+                        wrf_var_3d(ii,jj,kk)=-3.
+                        print *, 'APM 3d: wrf_to_dart reset ',ii,jj,kk
+                    endif
+                  enddo
+               enddo
+            enddo
+         endif
+!
+! APM: code to take log10(x) transform of O3 chemistry field
+         if (use_log_o3.eq..TRUE. .and. trim(my_field).eq.'o3') then
+!            print *, 'APM: wrf_to_dart 2D O3 conversion '
+            do kk=1,wrf%var_size(3,ind)
+               do jj=1,wrf%var_size(2,ind)
+                  do ii=1,wrf%var_size(1,ind)
+                     if(wrf_var_3d(ii,jj,kk).gt.0.) then
+                        wrf_var_3d(ii,jj,kk)=log10(wrf_var_3d(ii,jj,kk))
+                     else
+                        wrf_var_3d(ii,jj,kk)=-3.
                         print *, 'APM 3d: wrf_to_dart reset ',ii,jj,kk
                     endif
                   enddo

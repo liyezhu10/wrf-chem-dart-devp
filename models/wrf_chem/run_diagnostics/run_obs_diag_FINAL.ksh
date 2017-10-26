@@ -7,7 +7,6 @@
 #
 export START_DATE=2014072006
 export END_DATE=2014072018
-export END_DATE=2014072006
 export DART_FILTER=dart_filter
 #
 export DELETE_FLG=false
@@ -36,11 +35,11 @@ export JOB_CLASS=regular
 #
 # Define independent directory paths
 #export DIR_NAME=real_FRAPPE_RETR_CNTL
-export DIR_NAME=real_FRAPPE_RETR_MOP_CO
+#export DIR_NAME=real_FRAPPE_RETR_MOP_CO
 #export DIR_NAME=real_FRAPPE_RETR_AIR_CO
 #export DIR_NAME=real_FRAPPE_RETR_MOPnAIR_CO
 #export DIR_NAME=real_FRAPPE_RETR_IAS_O3
-#export DIR_NAME=real_FRAPPE_RETR_AIR_O3
+export DIR_NAME=real_FRAPPE_RETR_AIR_O3
 #export DIR_NAME=real_FRAPPE_RETR_IASnAIR_O3
 #
 # Independent path settings

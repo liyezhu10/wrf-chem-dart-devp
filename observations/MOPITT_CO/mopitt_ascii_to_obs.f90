@@ -1108,6 +1108,7 @@ fac=fac_obs_error
            co_vmr(1)=xcomp(k)
            err = xcomperr(k)
            co_error=err*err
+!
            call set_obs_def_kind(obs_def, obs_kind)
            call set_obs_def_location(obs_def, obs_location)
            call set_obs_def_time(obs_def, obs_time)

@@ -15,7 +15,7 @@
 # so this MUST be run first.
 #----------------------------------------------------------------------
 
-\rm -f preprocess *.o *.mod
+#\rm -f preprocess *.o *.mod
 \rm -f ../../../obs_def/obs_def_mod.f90
 \rm -f ../../../obs_kind/obs_kind_mod.f90
 
@@ -56,7 +56,7 @@ foreach TARGET ( mkmf_* )
    endsw
 end
 
-#\rm -f *.o *.mod 
+\rm -f *.o *.mod 
 \rm -f input.nml*_default
 
 if ( $#argv == 1 && "$1" == "-mpi" ) then
@@ -110,7 +110,7 @@ echo "build number $n is mkmf_wakeup_filter"
 csh  mkmf_wakeup_filter -mpi
 make || exit $n
 
-\rm -f *.o *.mod 
+#\rm -f *.o *.mod 
 \rm -f input.nml*_default
 
 echo

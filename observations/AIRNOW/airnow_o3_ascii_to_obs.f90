@@ -233,7 +233,7 @@
             hour(indx)=hour_temp
             minute(indx)=minute_temp
             obs_val(indx)=obs_val_temp*fac
-            obs_err(indx)=.005
+            obs_err(indx)=.2 * obs_val_temp
             data_greg_sec(indx)=data_greg_sec_temp
          endif
       enddo

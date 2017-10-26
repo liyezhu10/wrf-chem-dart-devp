@@ -12,7 +12,7 @@
 export CYCLE_STR_DATE=2014071400
 export CYCLE_STR_DATE=2014072012
 export CYCLE_END_DATE=${CYCLE_STR_DATE}
-export CYCLE_END_DATE=2014072018
+export CYCLE_END_DATE=2014072012
 export CYCLE_DATE=${CYCLE_STR_DATE}
 export NL_FAC_OBS_ERROR_MOPITT=4.00
 export NL_FAC_OBS_ERROR_MOPITT=10.0
@@ -276,28 +276,28 @@ export ASIM_MAX_SEC_GREG=${temp[1]}
 # SELECT COMPONENT RUN OPTIONS:
 if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_GEOGRID=false
-   export RUN_UNGRIB=true
-   export RUN_METGRID=true
-   export RUN_REAL=true
-   export RUN_PERT_WRFCHEM_MET_IC=true
-   export RUN_PERT_WRFCHEM_MET_BC=true
-   export RUN_EXO_COLDENS=true
-   export RUN_SEASON_WES=true
-   export RUN_WRFCHEM_BIO=true
-   export RUN_WRFCHEM_FIRE=true
-   export RUN_WRFCHEM_CHEMI=true
-   export RUN_PERT_WRFCHEM_CHEM_ICBC=true
-   export RUN_PERT_WRFCHEM_CHEM_EMISS=true
-   export RUN_MOPITT_CO_OBS=true
+   export RUN_UNGRIB=false
+   export RUN_METGRID=false
+   export RUN_REAL=false
+   export RUN_PERT_WRFCHEM_MET_IC=false
+   export RUN_PERT_WRFCHEM_MET_BC=false
+   export RUN_EXO_COLDENS=false
+   export RUN_SEASON_WES=false
+   export RUN_WRFCHEM_BIO=false
+   export RUN_WRFCHEM_FIRE=false
+   export RUN_WRFCHEM_CHEMI=false
+   export RUN_PERT_WRFCHEM_CHEM_ICBC=false
+   export RUN_PERT_WRFCHEM_CHEM_EMISS=false
+   export RUN_MOPITT_CO_OBS=false
    export RUN_IASI_CO_OBS=false
-   export RUN_IASI_O3_OBS=true
+   export RUN_IASI_O3_OBS=false
    export RUN_OMI_NO2_OBS=false
-   export RUN_AIRNOW_O3_OBS=true
-   export RUN_AIRNOW_CO_OBS=true
+   export RUN_AIRNOW_O3_OBS=false
+   export RUN_AIRNOW_CO_OBS=false
    export RUN_MODIS_AOD_OBS=false
-   export RUN_MET_OBS=true
-   export RUN_COMBINE_OBS=true
-   export RUN_PREPROCESS_OBS=true
+   export RUN_MET_OBS=false
+   export RUN_COMBINE_OBS=false
+   export RUN_PREPROCESS_OBS=false
 #
    if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
       export RUN_WRFCHEM_INITIAL=true
@@ -479,7 +479,7 @@ export WRFDA_TIME_LIMIT=0:10
 export WRFDA_NUM_TASKS=32
 export WRFDA_TASKS_PER_NODE=8
 export WRFDA_JOB_CLASS=geyser
-export FILTER_TIME_LIMIT=5:59
+export FILTER_TIME_LIMIT=6:59
 export FILTER_NUM_TASKS=32
 export FILTER_TASKS_PER_NODE=8
 export FILTER_JOB_CLASS=geyser
@@ -2983,6 +2983,7 @@ EOFF
    export NL_MOPITT_CO_RETRIEVAL_TYPE=\'${RETRIEVAL_TYPE_MOPITT}\'
    export NL_FAC_OBS_ERROR=${NL_FAC_OBS_ERROR_MOPITT}
    export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
+   export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
 #
 # USE MOPITT DATA 
    rm -rf input.nml

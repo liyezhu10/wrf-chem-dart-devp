@@ -308,7 +308,7 @@ subroutine get_expected_iasi_o3(state, location, key, val, istatus)
    integer             :: apm_dom, apm_mm
    type(location_type) :: loc2
    real(r8)            :: mloc(3), prs_wrf(wrf_nlev)
-   real(r8)            :: obs_val, o3_min, o3_min_str, level, missing
+   real(r8)            :: obs_val, o3_min, o3_min_str, o3_min_log, level, missing
    real(r8)            :: prs_wrf_sfc, o3_wrf_sfc
    real(r8)            :: prs_wrf_1, prs_wrf_nlev
    real(r8)            :: prs_iasi_sfc
@@ -324,9 +324,14 @@ subroutine get_expected_iasi_o3(state, location, key, val, istatus)
 ! 
 ! Initialize variables
    o3_min      = 0.004
+   o3_min_log  = log10(o3_min)
    o3_min_str  = 4.5
    missing     = -888888.0_r8
    nlevels     = iasi_nlevels(key)    
+   if ( use_log_o3 ) then
+      o3_min=o3_min_log
+      o3_min_str=log10(o3_min_str)
+   endif
 !
 ! Get location information
    mloc=get_location(location)
@@ -373,6 +378,7 @@ subroutine get_expected_iasi_o3(state, location, key, val, istatus)
 ! loop through IASI levels
    val = 0.0_r8
 
+print *, 'at RET EQ loop',key
    do ilev = 1, nlevels
 !
 ! get location of obs
@@ -425,10 +431,14 @@ subroutine get_expected_iasi_o3(state, location, key, val, istatus)
             write(string1, *)'APM: NOTICE resetting minimum IASI O3 value ',ilev
             call error_handler(E_MSG,'set_obs_def_iasi_o3',string1,source,revision,revdate)
             obs_val = o3_min 
-!            write(string1, *),'ilev obs_val, lb reset ',ilev,obs_val
-!            call error_handler(E_MSG,'set_obs_def_iasi_o3',string1,source,revision,revdate)
+            write(string1, *),'ilev obs_val, lb reset ',ilev,obs_val
+            call error_handler(E_MSG,'set_obs_def_iasi_o3',string1,source,revision,revdate)
          endif
-         obs_val = obs_val * 1000.0_r8
+         if ( use_log_o3 ) then
+            obs_val=obs_val - 6.0
+         else
+            obs_val = obs_val / 1.e6
+         endif
       endif
 !
 ! interpolation failed
@@ -440,9 +450,19 @@ subroutine get_expected_iasi_o3(state, location, key, val, istatus)
       endif
 !
 ! apply averaging kernel
-      val = val + avg_kernel(key,ilev) * obs_val
+      if( use_log_o3 ) then
+         val = val + avg_kernel(key,ilev) * 10.**obs_val
+      else
+         val = val + avg_kernel(key,ilev) * obs_val
+      endif
    enddo
-   val = val + iasi_prior(key)
+   val = val * 1.e9 + iasi_prior(key)
+!
+print *, 'val ',val
+   if( use_log_o3 ) then
+      val=log10(val)
+   endif
+
 end subroutine get_expected_iasi_o3
 
 !----------------------------------------------------------------------

@@ -17,6 +17,7 @@ cat > input.nml_temp << EOF
    debug                        = ${NL_DEBUG:-.false.},
    add_emiss                    = ${NL_ADD_EMISS:-.false.},
    use_log_co                   = ${NL_USE_LOG_CO:-.false.},
+   use_log_o3                   = ${NL_USE_LOG_O3:-.false.},
 /
 EOF
 #

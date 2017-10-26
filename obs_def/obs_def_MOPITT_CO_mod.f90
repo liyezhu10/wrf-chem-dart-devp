@@ -135,7 +135,7 @@ subroutine read_mopitt_co(key, ifile, fform)
 
 integer,          intent(out)          :: key
 integer,          intent(in)           :: ifile
-character(len=*), intent(in), optional :: fform
+character(lenb=*), intent(in), optional :: fform
 
 character(len=32)                   :: fileformat
 
@@ -179,7 +179,6 @@ call set_obs_def_mopitt_co(key, avg_kernels_1, mopitt_prior_1, mopitt_psurf_1, &
                            mopitt_nlevels_1)
 
 end subroutine read_mopitt_co
-
 
  subroutine write_mopitt_co(key, ifile, fform)
 !----------------------------------------------------------------------
@@ -285,7 +284,7 @@ end subroutine interactive_mopitt_co
 !
 ! Initialize variables
    co_min      = 1.e-2
-   co_min_log  = -8.
+   co_min_log  = log10(co_min)
    missing     = -888888.0_r8
    nlevels = mopitt_nlevels(key)
    if ( use_log_co ) then
@@ -359,7 +358,6 @@ end subroutine interactive_mopitt_co
             call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source,revision,revdate)
             obs_val = co_min 
          endif
-         obs_val = obs_val / 1000000.0_r8
       endif
 !
 ! interpolation failed
@@ -370,21 +368,24 @@ end subroutine interactive_mopitt_co
          return
       endif
 !
-! apply averaging kernel
+      if( use_log_co ) then
+         obs_val = obs_val - 6.0
+      else
+         obs_val = obs_val / 1.e6
+      endif
 !
-! Use this form for RAWR, RETR, QOR, and CPSR
-      if(use_log_co) then
-         obs_val=obs_val * 1000000.0_r8
+! apply averaging kernel
+      if( use_log_co ) then
          val = val + avg_kernel(key,ilev) * obs_val  
       else
          val = val + avg_kernel(key,ilev) * log10(obs_val)  
       endif
    enddo
-   val = val + mopitt_prior(key)
-! 
-! Use this correction for raw retrievals
-   if(trim(MOPITT_CO_retrieval_type) .eq. 'RAWR') then
-      val = (10.**val)*1.e6
+   if ( use_log_co .or. trim(MOPITT_CO_retrieval_type).eq.'RETR') then
+      val = val + mopitt_prior(key)
+   elseif (trim(MOPITT_CO_retrieval_type).eq.'RAWR') then
+      val = val + mopitt_prior(key)
+      val = (10.**val) * 1.e6
    endif
 !
 end subroutine get_expected_mopitt_co

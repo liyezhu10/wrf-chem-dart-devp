@@ -43,7 +43,7 @@
 
 module obs_def_iasi_CO_mod
 
-use        types_mod, only : r8
+use        types_mod, only : r8, missing_r8
 use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG, &
                              nmlfileunit, check_namelist_read, &
                              find_namelist_in_file, do_nml_file, do_nml_term, &
@@ -86,7 +86,7 @@ logical, save :: module_initialized = .false.
 integer  :: counts1 = 0
 
 character(len=129)  :: IASI_CO_retrieval_type
-logical             :: use_log_co=.false.
+logical             :: use_log_co
 !
 ! IASI_CO_retrieval_type:
 !     RAWR - retrievals in VMR (ppb) units
@@ -129,15 +129,16 @@ if (do_nml_term()) write(     *     , nml=obs_def_IASI_CO_nml)
 
 end subroutine initialize_module
 
-!----------------------------------------------------------------------
-
 subroutine read_iasi_co(key, ifile, fform)
+!----------------------------------------------------------------------
+!subroutine read_iasi_co(key, ifile, fform)
 
 integer,          intent(out)          :: key
 integer,          intent(in)           :: ifile
 character(len=*), intent(in), optional :: fform
 
 character(len=32)              :: fileformat
+
 integer                        :: iasi_nlevels_1
 integer                        :: iasi_nlevelsp_1
 real(r8)                       :: iasi_prior_1
@@ -159,6 +160,9 @@ pressure_1(:) = 0.0_r8
 SELECT CASE (fileformat)
    CASE ("unf", "UNF", "unformatted", "UNFORMATTED")
    iasi_nlevels_1 = read_iasi_nlevels(ifile, fileformat)
+   if(iasi_nlevels_1 .gt. iasi_dim) then 
+      print *, 'APM: nlevels too large ',iasi_nlevels_1
+   endif
    iasi_nlevelsp_1 = iasi_nlevels_1+1
    iasi_prior_1 = read_iasi_prior(ifile, fileformat)
    iasi_psurf_1 = read_iasi_psurf(ifile, fileformat)
@@ -167,6 +171,9 @@ SELECT CASE (fileformat)
    read(ifile) keyin
    CASE DEFAULT
    iasi_nlevels_1 = read_iasi_nlevels(ifile, fileformat)
+   if(iasi_nlevels_1 .gt. iasi_dim) then 
+      print *, 'APM: nlevels too large ',iasi_nlevels_1
+   endif
    iasi_nlevelsp_1 = iasi_nlevels_1+1
    iasi_prior_1 = read_iasi_prior(ifile, fileformat)
    iasi_psurf_1 = read_iasi_psurf(ifile, fileformat)
@@ -180,9 +187,9 @@ call set_obs_def_iasi_co(key, avg_kernels_1, pressure_1, iasi_prior_1, iasi_psur
                            iasi_nlevels_1, iasi_nlevelsp_1)
 end subroutine read_iasi_co
 
-!----------------------------------------------------------------------
-
 subroutine write_iasi_co(key, ifile, fform)
+!----------------------------------------------------------------------
+!subroutine write_iasi_co(key, ifile, fform)
 
 integer,          intent(in)           :: key
 integer,          intent(in)           :: ifile
@@ -278,7 +285,7 @@ subroutine get_expected_iasi_co(state, location, key, val, istatus)
 !
 ! Initialize variables
    co_min=1.e-2
-   co_min_log=-8.
+   co_min_log=log10(co_min)
    missing=-888888.0_r8
    nlevels = iasi_nlevels(key)
    nlevelsp = iasi_nlevelsp(key)
@@ -343,7 +350,7 @@ subroutine get_expected_iasi_co(state, location, key, val, istatus)
       if(prs_iasi.ge.prs_wrf_1) then
          istatus=0
          obs_val=co_wrf_sfc
-      else
+      else 
          istatus=0
          call interpolate(state, loc2, KIND_CO, obs_val, istatus)  
 !
@@ -353,7 +360,6 @@ subroutine get_expected_iasi_co(state, location, key, val, istatus)
             call error_handler(E_MSG,'set_obs_def_iasi_co',string1,source,revision,revdate)
             obs_val = co_min 
          endif
-         obs_val = obs_val * 1000.0_r8
       endif
 !
 ! interpolation failed
@@ -364,11 +370,26 @@ subroutine get_expected_iasi_co(state, location, key, val, istatus)
          return
       endif
 !
-! apply averaging kernel
-      val = val + avg_kernel(key,ilev) * obs_val  
-   enddo
+      if( use_log_co ) then 
+         obs_val = obs_val - 6.0
+      else
+         obs_val = obs_val / 1.e6
+      endif
 !
-   val = val + iasi_prior(key)
+! apply averaging kernel
+      if ( use_log_co ) then
+         val = val + avg_kernel(key,ilev) * 10.**obs_val  
+      else
+         val = val + avg_kernel(key,ilev) * obs_val  
+      endif
+   enddo
+   if (trim(IASI_CO_retrieval_type).eq.'RETR') then
+      val = val * 1.e9 + 10.**iasi_prior(key)
+      val = log10(val)
+   elseif (trim(IASI_CO_retrieval_type).eq.'RAWR') then
+      val = val * 1.e9 + iasi_prior(key)
+   endif
+!
 end subroutine get_expected_iasi_co
 
 !----------------------------------------------------------------------
@@ -391,17 +412,15 @@ if(num_iasi_co_obs >= MAX_IASI_CO_OBS) then
    call error_handler(E_ERR,'set_obs_def_iasi_co',string1,source,revision,revdate,text2=string2)
 endif
 
-avg_kernel(   key,:) = co_avgker(:)
-pressure(     key,:) = co_press(:)
+avg_kernel(   key,:) = co_avgker(1:co_nlevels)
+pressure(     key,:) = co_press(1:co_nlevelsp)
 iasi_prior(   key)   = co_prior
 iasi_psurf(   key)   = co_psurf
 iasi_nlevels( key)   = co_nlevels
 iasi_nlevelsp(key)   = co_nlevelsp
 
 end subroutine set_obs_def_iasi_co
-
-
-
+!
 function read_iasi_prior(ifile, fform)
 integer,          intent(in)           :: ifile
 character(len=*), intent(in), optional :: fform
@@ -418,9 +437,7 @@ SELECT CASE (fileformat)
       read(ifile, *) read_iasi_prior
 END SELECT
 end function read_iasi_prior
-
-
-
+!
 function read_iasi_nlevels(ifile, fform)
 integer,          intent(in)           :: ifile
 character(len=*), intent(in), optional :: fform
@@ -437,8 +454,7 @@ SELECT CASE (fileformat)
       read(ifile, *) read_iasi_nlevels
 END SELECT
 end function read_iasi_nlevels
-
-
+!
 function read_iasi_nlevelsp(ifile, fform)
 integer,          intent(in)           :: ifile
 character(len=*), intent(in), optional :: fform
@@ -455,8 +471,7 @@ SELECT CASE (fileformat)
       read(ifile, *) read_iasi_nlevelsp
 END SELECT
 end function read_iasi_nlevelsp
-
-
+!
 subroutine write_iasi_prior(ifile, iasi_prior_temp, fform)
 integer,          intent(in) :: ifile
 real(r8),         intent(in) :: iasi_prior_temp
@@ -473,9 +488,7 @@ SELECT CASE (fileformat)
       write(ifile, *) iasi_prior_temp
 END SELECT
 end subroutine write_iasi_prior
-
-
-
+!
 subroutine write_iasi_nlevels(ifile, iasi_nlevels_temp, fform)
 integer,          intent(in) :: ifile
 integer,          intent(in) :: iasi_nlevels_temp
@@ -491,8 +504,7 @@ SELECT CASE (fileformat)
       write(ifile, *) iasi_nlevels_temp
 END SELECT
 end subroutine write_iasi_nlevels
-
-
+!
 
 subroutine write_iasi_nlevelsp(ifile, iasi_nlevelsp_temp, fform)
 integer,          intent(in) :: ifile
@@ -509,9 +521,7 @@ SELECT CASE (fileformat)
       write(ifile, *) iasi_nlevelsp_temp
 END SELECT
 end subroutine write_iasi_nlevelsp
-
-
-
+!
 function read_iasi_psurf(ifile, fform)
 integer,          intent(in)           :: ifile
 character(len=*), intent(in), optional :: fform
@@ -528,8 +538,7 @@ SELECT CASE (fileformat)
       read(ifile, *) read_iasi_psurf
 END SELECT
 end function read_iasi_psurf
-
-
+!
 subroutine write_iasi_psurf(ifile, iasi_psurf_temp, fform)
 integer,          intent(in) :: ifile
 real(r8),         intent(in) :: iasi_psurf_temp
@@ -545,7 +554,7 @@ SELECT CASE (fileformat)
       write(ifile, *) iasi_psurf_temp
 END SELECT
 end subroutine write_iasi_psurf
-
+!
 function read_iasi_avg_kernels(ifile, nlevels, fform)
 integer,          intent(in)           :: ifile, nlevels
 character(len=*), intent(in), optional :: fform
@@ -563,9 +572,7 @@ SELECT CASE (fileformat)
       read(ifile, *) read_iasi_avg_kernels(1:nlevels)
 END SELECT
 end function read_iasi_avg_kernels
-
-
-
+!
 subroutine write_iasi_avg_kernels(ifile, avg_kernels_temp, nlevels_temp, fform)
 integer,                 intent(in) :: ifile, nlevels_temp
 real(r8), dimension(19), intent(in) :: avg_kernels_temp
@@ -581,9 +588,7 @@ SELECT CASE (fileformat)
       write(ifile, *) avg_kernels_temp(1:nlevels_temp)
 END SELECT
 end subroutine write_iasi_avg_kernels
-
-
-
+!
 function read_iasi_pressure(ifile, nlevelsp, fform)
 integer,          intent(in)           :: ifile, nlevelsp
 character(len=*), intent(in), optional :: fform
@@ -601,7 +606,7 @@ SELECT CASE (fileformat)
       read(ifile, *) read_iasi_pressure(1:nlevelsp)
 END SELECT
 end function read_iasi_pressure
-
+!
 subroutine write_iasi_pressure(ifile, pressure_temp, nlevelsp_temp, fform)
 integer,                 intent(in) :: ifile, nlevelsp_temp
 real(r8), dimension(20), intent(in)  :: pressure_temp
@@ -617,7 +622,7 @@ SELECT CASE (fileformat)
       write(ifile, *) pressure_temp(1:nlevelsp_temp)
 END SELECT
 end subroutine write_iasi_pressure
-
+!
 end module obs_def_iasi_CO_mod
 ! END DART PREPROCESS MODULE CODE
 

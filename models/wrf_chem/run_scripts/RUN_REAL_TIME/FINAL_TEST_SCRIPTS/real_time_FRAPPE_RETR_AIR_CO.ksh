@@ -10,20 +10,14 @@
 #
 # CYCLE DATE-TIME:
 export CYCLE_STR_DATE=2014071400
-export CYCLE_STR_DATE=2014072012
+export CYCLE_STR_DATE=2014072006
 export CYCLE_END_DATE=${CYCLE_STR_DATE}
-export CYCLE_END_DATE=2014072018
+export CYCLE_END_DATE=2014072006
 export CYCLE_DATE=${CYCLE_STR_DATE}
-export NL_FAC_OBS_ERROR_MOPITT=4.00
-export NL_FAC_OBS_ERROR_MOPITT=10.0
-export NL_FAC_OBS_ERROR_MOPITT=2.50
-export NL_FAC_OBS_ERROR_MOPITT=3.00
-export NL_FAC_OBS_ERROR_MOPITT=2.25
-export NL_FAC_OBS_ERROR_MOPITT=2.00
 export NL_FAC_OBS_ERROR_MOPITT=1.00
 export NL_FAC_OBS_ERROR_IASI=1.00
 export RETRIEVAL_TYPE_MOPITT=RETR
-export RETRIEVAL_TYPE_IASI=RAWR
+export RETRIEVAL_TYPE_IASI=RETR
 #
 export USE_LOG=false
 if [[ ${USE_LOG} == true ]]; then
@@ -65,11 +59,11 @@ fi
 #
 # Run WRF-Chem for failed forecasts
 export RUN_SPECIAL_FORECAST=false
-export NUM_SPECIAL_FORECAST=4
+export NUM_SPECIAL_FORECAST=1
 export SPECIAL_FORECAST_FAC=1./2.
 export SPECIAL_FORECAST_FAC=2./3.
 export SPECIAL_FORECAST_FAC=1.
-export SPECIAL_FORECAST_MEM[1]=2
+export SPECIAL_FORECAST_MEM[1]=6
 export SPECIAL_FORECAST_MEM[2]=5
 export SPECIAL_FORECAST_MEM[3]=9
 export SPECIAL_FORECAST_MEM[4]=10
@@ -276,28 +270,28 @@ export ASIM_MAX_SEC_GREG=${temp[1]}
 # SELECT COMPONENT RUN OPTIONS:
 if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_GEOGRID=false
-   export RUN_UNGRIB=true
-   export RUN_METGRID=true
-   export RUN_REAL=true
-   export RUN_PERT_WRFCHEM_MET_IC=true
-   export RUN_PERT_WRFCHEM_MET_BC=true
-   export RUN_EXO_COLDENS=true
-   export RUN_SEASON_WES=true
-   export RUN_WRFCHEM_BIO=true
-   export RUN_WRFCHEM_FIRE=true
-   export RUN_WRFCHEM_CHEMI=true
-   export RUN_PERT_WRFCHEM_CHEM_ICBC=true
-   export RUN_PERT_WRFCHEM_CHEM_EMISS=true
-   export RUN_MOPITT_CO_OBS=true
+   export RUN_UNGRIB=false
+   export RUN_METGRID=false
+   export RUN_REAL=false
+   export RUN_PERT_WRFCHEM_MET_IC=false
+   export RUN_PERT_WRFCHEM_MET_BC=false
+   export RUN_EXO_COLDENS=false
+   export RUN_SEASON_WES=false
+   export RUN_WRFCHEM_BIO=false
+   export RUN_WRFCHEM_FIRE=false
+   export RUN_WRFCHEM_CHEMI=false
+   export RUN_PERT_WRFCHEM_CHEM_ICBC=false
+   export RUN_PERT_WRFCHEM_CHEM_EMISS=false
+   export RUN_MOPITT_CO_OBS=false
    export RUN_IASI_CO_OBS=false
-   export RUN_IASI_O3_OBS=true
+   export RUN_IASI_O3_OBS=false
    export RUN_OMI_NO2_OBS=false
-   export RUN_AIRNOW_O3_OBS=true
-   export RUN_AIRNOW_CO_OBS=true
+   export RUN_AIRNOW_O3_OBS=false
+   export RUN_AIRNOW_CO_OBS=false
    export RUN_MODIS_AOD_OBS=false
-   export RUN_MET_OBS=true
-   export RUN_COMBINE_OBS=true
-   export RUN_PREPROCESS_OBS=true
+   export RUN_MET_OBS=false
+   export RUN_COMBINE_OBS=false
+   export RUN_PREPROCESS_OBS=false
 #
    if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
       export RUN_WRFCHEM_INITIAL=true
@@ -311,7 +305,7 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
       export RUN_ENSEMBLE_MEAN_OUTPUT=false
    else
       export RUN_WRFCHEM_INITIAL=false
-      export RUN_DART_FILTER=true
+      export RUN_DART_FILTER=false
       export RUN_UPDATE_BC=true
       export RUN_WRFCHEM_CYCLE_CR=true
       export RUN_BAND_DEPTH=false
@@ -1172,28 +1166,32 @@ export NL_INPUT_FILES="'${DART_DIR}/obs_def/obs_def_reanalysis_bufr_mod.f90',
 #
 # &obs_kind_nml
 #
-export NL_ASSIMILATE_THESE_OBS_TYPES="'RADIOSONDE_TEMPERATURE',
-                                   'RADIOSONDE_U_WIND_COMPONENT',
-                                   'RADIOSONDE_V_WIND_COMPONENT',
-                                   'RADIOSONDE_SPECIFIC_HUMIDITY',
-                                   'ACARS_U_WIND_COMPONENT',
-                                   'ACARS_V_WIND_COMPONENT',
-                                   'ACARS_TEMPERATURE',
-                                   'AIRCRAFT_U_WIND_COMPONENT',
-                                   'AIRCRAFT_V_WIND_COMPONENT',
-                                   'AIRCRAFT_TEMPERATURE',
-                                   'SAT_U_WIND_COMPONENT',
-                                   'SAT_V_WIND_COMPONENT',
-                                   'AIRNOW_CO'"
+export NL_ASSIMILATE_THESE_OBS_TYPES="'MOPITT_CO_RETRIEVAL'"
+#export NL_ASSIMILATE_THESE_OBS_TYPES="'IASI_CO_RETRIEVAL'"
+#export NL_ASSIMILATE_THESE_OBS_TYPES="'IASI_O3_RETRIEVAL'"
+#export NL_ASSIMILATE_THESE_OBS_TYPES="'AIRNOW_CO'"
+#export NL_ASSIMILATE_THESE_OBS_TYPES="'RADIOSONDE_TEMPERATURE',
+#                                   'RADIOSONDE_U_WIND_COMPONENT',
+#                                   'RADIOSONDE_V_WIND_COMPONENT',
+#                                   'RADIOSONDE_SPECIFIC_HUMIDITY',
+#                                   'ACARS_U_WIND_COMPONENT',
+#                                   'ACARS_V_WIND_COMPONENT',
+#                                   'ACARS_TEMPERATURE',
+#                                   'AIRCRAFT_U_WIND_COMPONENT',
+#                                   'AIRCRAFT_V_WIND_COMPONENT',
+#                                   'AIRCRAFT_TEMPERATURE',
+#                                   'SAT_U_WIND_COMPONENT',
+#                                   'SAT_V_WIND_COMPONENT',
+#                                   'AIRNOW_CO'"
 #                                   'MOPITT_CO_RETRIEVAL',
 #                                   'IASI_CO_RETRIEVAL',
 #                                   'IASI_O3_RETRIEVAL',
 #                                   'MODIS_AOD_RETRIEVAL',
 #                                   'AIRNOW_O3',
 #                                   'OMI_NO2_COLUMN'"
-export NL_EVALUATE_THESE_OBS_TYPES="'MOPITT_CO_RETRIEVAL',
-                                   'IASI_O3_RETRIEVAL',
-                                   'AIRNOW_O3'"
+#export NL_EVALUATE_THESE_OBS_TYPES="'MOPITT_CO_RETRIEVAL',
+#                                   'IASI_O3_RETRIEVAL',
+#                                   'AIRNOW_O3'"
 #
 # &replace_wrf_fields_nml
 export NL_FIELDNAMES="'SNOWC',
@@ -2985,6 +2983,7 @@ EOFF
    export NL_MOPITT_CO_RETRIEVAL_TYPE=\'${RETRIEVAL_TYPE_MOPITT}\'
    export NL_FAC_OBS_ERROR=${NL_FAC_OBS_ERROR_MOPITT}
    export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
+   export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
 #
 # USE MOPITT DATA 
    rm -rf input.nml
