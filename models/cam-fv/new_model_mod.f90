@@ -38,17 +38,17 @@ private
 ! the arguments - they will be called *from* the DART code.
 
 ! routines in this list have code in this module
-public :: get_model_size,                &
+public :: static_init_model,             &
+          get_model_size,                &
           get_state_meta_data,           &
-          static_init_model,             &
           model_interpolate,             &
           shortest_time_between_assimilations, &
           convert_vertical_obs,          &
           convert_vertical_state,        &
-          end_model,                     &
           nc_write_model_atts,           &
           write_model_time,              &
-          read_model_time
+          read_model_time,               &
+          end_model
 
 ! code for these routines are in other modules
 public :: nc_write_model_vars,           &
@@ -65,39 +65,42 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
+! global variables
 character(len=512) :: string1, string2, string3
-logical, save :: module_initialized = .false.
+logical, save      :: module_initialized = .false.
 
-! things which can/should be in the model_nml
+! model_nml namelist variables
 integer  :: assimilation_period_days     = 0
 integer  :: assimilation_period_seconds  = 21600
 integer  :: vert_localization_coord      = VERTISPRESSURE
 integer  :: debug = 0   ! turn up for more and more debug messages
 logical  :: minimal_output = .false.
-character(len=256) :: cam_grid_filename = 'caminput.nc'
-character(len=256) :: cam_phis_filename = 'camphis.nc'
+character(len=256) :: cam_template_filename = 'caminput.nc' ! template restart file
+character(len=256) :: cam_grid_filename     = 'caminput.nc' ! JPH probably delete?
+character(len=256) :: cam_phis_filename     = 'camphis.nc'
 
 namelist /model_nml/  &
    assimilation_period_days,    &
    assimilation_period_seconds, &
+   cam_template_filename,       &
    cam_grid_filename,           &
    cam_phis_filename,           &
    vert_localization_coord,     &
    minimal_output,              &
    debug,                       &
-   variables
+   state_variables
 
-! DART contents are specified in the input.nml:&model_nml namelist.
-!>@todo  NF90_MAX_NAME is 256 ... this makes the namelist output unreadable
-integer, parameter :: MAX_STATE_VARIABLES = 8
+! the number of state variables allowed in the state.  this may need to change
+! depending on the number of variables that you are using.
+integer, parameter :: MAX_STATE_VARIABLES = 100
+! column variables should be the same as the cam_template_file and
+! have the same shape as the restarts being used. For no clamping use 'NA'
+!
+!    variable_name, variable_type, clamp_min, clamp_max, update_variable
 integer, parameter :: num_state_table_columns = 5
-character(len=vtablenamelength) :: variables(MAX_STATE_VARIABLES * num_state_table_columns ) = ' '
-character(len=vtablenamelength) :: var_names(MAX_STATE_VARIABLES) = ' '
-logical  ::                   update_list(MAX_STATE_VARIABLES) = .FALSE.
-integer  ::                     kind_list(MAX_STATE_VARIABLES) = MISSING_I
-real(r8) ::                    clamp_vals(MAX_STATE_VARIABLES,2) = MISSING_R8
-
-integer :: nfields   ! This is the number of variables in the DART state vector.
+!>@todo JPH what should vtablenamelength be?
+character(len=vtablenamelength) :: state_variables(MAX_STATE_VARIABLES * &
+                                                   num_state_table_columns ) = ' '
 
 integer :: domain_id ! global variable for state_structure_mod routines
 
@@ -106,20 +109,31 @@ integer :: domain_id ! global variable for state_structure_mod routines
 !> the variable is stored in the DART state vector.
 !>
 
-type cam_grid
-   integer :: nlon, nlat
-   integer :: nslon, nslat, 
-   integer :: nlevels   ! is a vertical stagger possible?
-   real(r8), allocatable :: lon_vals(:)
-   real(r8), allocatable :: lat_vals(:)
-   ! something for vertical = hyma, hymb?
+type cam_1d_array
+   integer  :: nsize
+   real(r8), allocatable :: vals(:) 
 end type
 
-type(time_type) :: model_timestep
+type cam_grid
+   type(cam_1d_array) :: lon
+   type(cam_1d_array) :: lat
+   type(cam_1d_array) :: slon
+   type(cam_1d_array) :: slat
+   type(cam_1d_array) :: lev
+   type(cam_1d_array) :: ilev
+   type(cam_1d_array) :: gw
+   type(cam_1d_array) :: hyai
+   type(cam_1d_array) :: hybi
+   type(cam_1d_array) :: hyam
+   type(cam_1d_array) :: hybm
+   type(cam_1d_array) :: P0
+end type
 
-integer(i8) :: model_size    ! the state vector length
+type(cam_grid) :: grid_data
 
-type(cam_grid) :: grid
+! domain id for the cam model.  this allows us access to all of the state structure
+! info and is require for getting state variables.
+integer :: domain_id
 
 contains
 
@@ -127,6 +141,59 @@ contains
 !-----------------------------------------------------------------------
 ! All the REQUIRED interfaces come first - by convention.
 !-----------------------------------------------------------------------
+
+
+!-----------------------------------------------------------------------
+!>
+!> Called to do one time initialization of the model.
+!> In this case, it reads in the grid information, the namelist
+!> containing the variables of interest, where to get them, their size,
+!> their associated DART KIND, etc.
+!>
+!> In addition to harvesting the model metadata (grid,
+!> desired model advance step, etc.), it also fills a structure
+!> containing information about what variables are where in the DART
+!> framework.
+
+subroutine static_init_model()
+
+integer :: iunit, io
+integer :: ncid
+
+
+if ( module_initialized ) return
+
+! The Plan:
+!
+! * read in the grid sizes from grid file
+! * allocate space, and read in actual grid values
+! * figure out model timestep
+! * Compute the model size.
+
+! Record version info
+call register_module(source, revision, revdate)
+
+module_initialized = .true.
+
+! Read the DART namelist for this model
+call find_namelist_in_file('input.nml', 'model_nml', iunit)
+read(iunit, nml = model_nml, iostat = io)
+call check_namelist_read(iunit, io, 'model_nml')
+
+! Record the namelist values used for the run
+if (do_nml_file()) write(logfileunit, nml=model_nml)
+if (do_nml_term()) write(     *     , nml=model_nml)
+
+
+call read_grid_info(cam_template_filename, cam_phis_filename, grid_data)
+
+! is there a common subroutine outside of the model mod we can call here?
+
+! set_cam_variable_info() fills var_names, kind_list, clamp_vals, update_list
+! from the &model_mod_nml variables
+call set_cam_variable_info(state_variables)
+
+end subroutine static_init_model
 
 
 !-----------------------------------------------------------------------
@@ -141,7 +208,7 @@ integer(i8) :: get_model_size
 
 if ( .not. module_initialized ) call static_init_model
 
-get_model_size = model_size
+get_model_size = get_domain_size(domain_id)
 
 end function get_model_size
 
@@ -230,7 +297,7 @@ interp_val = MISSING_R8
 istatus = 99
 
 write(string1,*)'model_interpolate should not be called.'
-write(string2,*)'we are getting forward observations directly from ROMS'
+write(string2,*)'we are getting forward observations directly from CAM'
 call error_handler(E_MSG,'model_interpolate:',string1,source,revision,revdate, text2=string2)
 
 end subroutine model_interpolate
@@ -238,8 +305,11 @@ end subroutine model_interpolate
 
 !-----------------------------------------------------------------------
 !>
-!> Returns the the time step of the model; the smallest increment in
-!> time that the model is capable of advancing the ROMS state.
+!> Set the desired minimum model advance time. This is generally NOT the
+!> dynamical timestep of the model, but rather the shortest forecast length
+!> you are willing to make. This impacts how frequently the observations
+!> may be assimilated.
+!>
 !>
 
 function shortest_time_between_assimilations()
@@ -248,97 +318,20 @@ type(time_type) :: shortest_time_between_assimilations
 
 if ( .not. module_initialized ) call static_init_model
 
-shortest_time_between_assimilations = model_timestep
+call set_calendar_type('GREGORIAN')
+
+shortest_time_between_assimilations = set_time(assimilation_period_seconds, &
+                                               assimilation_period_days)
+
+write(string1,*)'assimilation period is ',assimilation_period_days,   ' days ', &
+                                          assimilation_period_seconds,' seconds'
+
+call error_handler(E_MSG,'shortest_time_between_assimilations:', &
+                   string1,source,revision,revdate)
 
 end function shortest_time_between_assimilations
 
 
-!-----------------------------------------------------------------------
-!>
-!> Called to do one time initialization of the model.
-!> In this case, it reads in the grid information, the namelist
-!> containing the variables of interest, where to get them, their size,
-!> their associated DART KIND, etc.
-!>
-!> In addition to harvesting the model metadata (grid,
-!> desired model advance step, etc.), it also fills a structure
-!> containing information about what variables are where in the DART
-!> framework.
-
-subroutine static_init_model()
-
-integer :: iunit, io
-integer :: ss, dd
-integer :: ncid
-
-character(len=32) :: calendar
-
-type(time_type) :: model_time
-
-if ( module_initialized ) return
-
-! The Plan:
-!
-! * read in the grid sizes from grid file
-! * allocate space, and read in actual grid values
-! * figure out model timestep
-! * Compute the model size.
-
-! Record version info
-call register_module(source, revision, revdate)
-
-module_initialized = .true.
-
-! Read the DART namelist for this model
-call find_namelist_in_file('input.nml', 'model_nml', iunit)
-read(iunit, nml = model_nml, iostat = io)
-call check_namelist_read(iunit, io, 'model_nml')
-
-! Record the namelist values used for the run
-if (do_nml_file()) write(logfileunit, nml=model_nml)
-if (do_nml_term()) write(     *     , nml=model_nml)
-
-
-! put this in a subroutine that deals with time
-model_timestep = set_model_time_step()
-
-call get_time(model_timestep,ss,dd)
-write(string1,*)'assimilation period is ',dd,' days ',ss,' seconds'
-call error_handler(E_MSG,'static_init_model:',string1,source,revision,revdate)
-
-call set_calendar_type( trim(calendar) )
-
-
-! put this in a subroutine that deals with the grid
-call nc_check( nf90_open(trim(roms_filename), NF90_NOWRITE, ncid), &
-                  'static_init_model', 'open '//trim(roms_filename))
-
-! Get the grid info
-call get_grid_dimensions()
-call get_grid()
-
-call get_time_information(roms_filename, ncid, 'ocean_time', 'ocean_time', &
-                          calendar=calendar, last_time=model_time)
-
-call nc_check( nf90_close(ncid), &
-                  'static_init_model', 'close '//trim(roms_filename))
-
-
-! is there a common subroutine outside of the model mod we can call here?
-
-! parse_variable_input() fills var_names, kind_list, clamp_vals, update_list
-call parse_variable_input(variables, nfields)
-
-domain_id = add_domain(roms_filename, nfields, &
-                    var_names, kind_list, clamp_vals, update_list )
-
-if (debug > 2) call state_structure_info(domain_id)
-
-
-
-model_size = get_domain_size(domain_id)
-
-end subroutine static_init_model
 
 
 !-----------------------------------------------------------------------
@@ -408,7 +401,7 @@ call nc_add_global_attribute(ncid, "model_source", source)
 call nc_add_global_attribute(ncid, "model_revision", revision)
 call nc_add_global_attribute(ncid, "model_revdate", revdate)
 
-call nc_add_global_attribute(ncid, "model", "ROMS")
+call nc_add_global_attribute(ncid, "model", "CAM")
 
 ! We need to output the grid information
 ! Define the new dimensions IDs
@@ -687,25 +680,6 @@ end function read_model_time
 
 !-----------------------------------------------------------------------
 !>
-!> Set the desired minimum model advance time. This is generally NOT the
-!> dynamical timestep of the model, but rather the shortest forecast length
-!> you are willing to make. This impacts how frequently the observations
-!> may be assimilated.
-!>
-
-function set_model_time_step()
-
-type(time_type) :: set_model_time_step
-
-! assimilation_period_seconds, assimilation_period_days are from the namelist
-
-set_model_time_step = set_time(assimilation_period_seconds, assimilation_period_days)
-
-end function set_model_time_step
-
-
-!-----------------------------------------------------------------------
-!>
 !> Read the grid dimensions from the ROMS grid netcdf file.
 !> By reading the dimensions first, we can use them in variable
 !> declarations later - which is faster than using allocatable arrays.
@@ -882,65 +856,156 @@ end subroutine get_grid
 !> Fill the array of requested variables, dart kinds, possible min/max
 !> values and whether or not to update the field in the output file.
 !>
-!>@param state_variables the list of variables and kinds from model_mod_nml
-!>@param ngood the number of variable/KIND pairs specified
+!>@param variable_array  the list of variables and kinds from model_mod_nml
+!>@param nfields         the number of variable/KIND pairs specified
 
-subroutine parse_variable_input( state_variables, ngood )
+subroutine set_cam_variable_info( variable_array, nfields )
 
-character(len=*), intent(in)  :: state_variables(:)
-integer,          intent(out) :: ngood
+character(len=*), intent(in)  :: variable_array(:)
+integer,          intent(out) :: nfields
 
 integer :: i
-character(len=NF90_MAX_NAME) :: varname       ! column 1
-character(len=NF90_MAX_NAME) :: dartstr       ! column 2
-character(len=NF90_MAX_NAME) :: minvalstring  ! column 3
-character(len=NF90_MAX_NAME) :: maxvalstring  ! column 4
-character(len=NF90_MAX_NAME) :: state_or_aux  ! column 5   change to updateable
 
-ngood = 0
+character(len=NF90_MAX_NAME) :: varname    ! column 1, NetCDF variable name
+character(len=NF90_MAX_NAME) :: dartstr    ! column 2, DART KIND
+character(len=NF90_MAX_NAME) :: minvalstr  ! column 3, Clamp min val
+character(len=NF90_MAX_NAME) :: maxvalstr  ! column 4, Clamp max val
+character(len=NF90_MAX_NAME) :: updatestr  ! column 5, Update output or not
+
+character(len=vtablenamelength) :: var_names(MAX_STATE_VARIABLES) = ' '
+logical  :: update_list(MAX_STATE_VARIABLES)   = .FALSE.
+integer  ::   kind_list(MAX_STATE_VARIABLES)   = MISSING_I
+real(r8) ::  clamp_vals(MAX_STATE_VARIABLES,2) = MISSING_R8
+
+
+nfields = 0
 MyLoop : do i = 1, MAX_STATE_VARIABLES
 
-   varname      = trim(state_variables(num_state_table_columns*i-4))
-   dartstr      = trim(state_variables(num_state_table_columns*i-3))
-   minvalstring = trim(state_variables(num_state_table_columns*i-2))
-   maxvalstring = trim(state_variables(num_state_table_columns*i-1))
-   state_or_aux = trim(state_variables(num_state_table_columns*i  ))
+   varname   = trim(variable_array(num_state_table_columns*i-4))
+   dartstr   = trim(variable_array(num_state_table_columns*i-3))
+   minvalstr = trim(variable_array(num_state_table_columns*i-2))
+   maxvalstr = trim(variable_array(num_state_table_columns*i-1))
+   updatestr = trim(variable_array(num_state_table_columns*i  ))
 
    if ( varname == ' ' .and. dartstr == ' ' ) exit MyLoop ! Found end of list.
 
-   if ( varname == ' ' .or. dartstr == ' ' ) then
+   if ( varname == ' ' .or.  dartstr == ' ' ) then
       string1 = 'model_nml:model "variables" not fully specified'
-      call error_handler(E_ERR,'parse_variable_input:',string1,source,revision,revdate)
+      call error_handler(E_ERR,'set_cam_variable_info:',string1,source,revision,revdate)
    endif
 
    ! Make sure DART kind is valid
 
    if( get_index_for_quantity(dartstr) < 0 ) then
-      write(string1,'(''there is no obs_kind <'',a,''> in obs_kind_mod.f90'')') trim(dartstr)
-      call error_handler(E_ERR,'parse_variable_input:',string1,source,revision,revdate)
+      write(string1,'(3A)') 'there is no obs_kind <', trim(dartstr), '> in obs_kind_mod.f90'
+      call error_handler(E_ERR,'set_cam_variable_info:',string1,source,revision,revdate)
    endif
 
-   call to_upper(minvalstring)
-   call to_upper(maxvalstring)
-   call to_upper(state_or_aux)
+   call to_upper(minvalstr)
+   call to_upper(maxvalstr)
+   call to_upper(updatestr)
 
    var_names(   i) = varname
    kind_list(   i) = get_index_for_quantity(dartstr)
-   clamp_vals(i,1) = string_to_real(minvalstring)
-   clamp_vals(i,2) = string_to_real(maxvalstring)
-   update_list( i) = string_to_logical(state_or_aux, 'UPDATE')
+   clamp_vals(i,1) = string_to_real(minvalstr)
+   clamp_vals(i,2) = string_to_real(maxvalstr)
+   update_list( i) = string_to_logical(updatestr, 'UPDATE')
 
-   ngood = ngood + 1
+   nfields = nfields + 1
 
 enddo MyLoop
 
-if (ngood == MAX_STATE_VARIABLES) then
-   string1 = 'WARNING: There is a possibility you need to increase ''MAX_STATE_VARIABLES'''
-   write(string2,'(''WARNING: you have specified at least '',i4,'' perhaps more.'')')ngood
-   call error_handler(E_MSG,'parse_variable_input:',string1,source,revision,revdate,text2=string2)
+if (nfields == MAX_STATE_VARIABLES) then
+   write(string1,'(2A') 'WARNING: There is a possibility you need to increase ', &
+                        'MAX_STATE_VARIABLES in the global variables in model_mod.f90'
+
+   write(string2,'(A,i4,A)') 'WARNING: you have specified at least ', nfields, &
+                             ' perhaps more'
+
+   call error_handler(E_MSG,'set_cam_variable_info:',string1, &
+                      source,revision,revdate,text2=string2)
 endif
 
-end subroutine parse_variable_input
+!>TODO JPH: do we need another namelist
+! JPH cam_template_filename comes from the namelist and should look like
+! a generic restart file.
+domain_id = add_domain(cam_template_filename, nfields, var_names, kind_list, &
+                       clamp_vals, update_list )
+
+if (debug > 2) call state_structure_info(domain_id)
+
+end subroutine set_cam_variable_info
+
+
+!-----------------------------------------------------------------------
+!>
+!> Read type(cam_grid) information
+!>
+!>
+!>
+!>
+!>
+!>
+
+
+subroutine read_grid_info(grid_file, phis_file, grid )
+character,      intent(in)  :: grid_file
+character,      intent(in)  :: phis_file
+type(cam_grid), intent(out) :: grid
+
+! put this in a subroutine that deals with the grid
+call nc_check( nf90_open(trim(grid_file), NF90_NOWRITE, ncid), &
+               'read_grid_info', 'open '//trim(grid_file))
+
+! Get the grid info
+call get_grid_dimensions()
+
+
+call get_grid()
+
+call nc_check( nf90_close(ncid), &
+                  'read_grid_info', 'close '//trim(grid_file))
+
+end subroutine read_grid_info
+!-----------------------------------------------------------------------
+!>
+!> 
+!>   
+
+
+subroutine fill_cam_1d_array(grid_array, varname)
+type(cam_1d_array), intent(inout) :: grid_array
+character(len=*),   intent(in) :: varname
+
+!>@todo need to check that this exists
+call nc_get_variable_size(ncid, varname, grid_array%nsize)
+allocate(grid_array%vals(grid_array%nsize))
+
+end subroutine fill_cam_1d_array
+
+!-----------------------------------------------------------------------
+!>
+!> 
+!>   
+
+subroutine get_grid_dimensions()
+   call fill_cam_1d_array(ncid, 'lon',  grid%lon)
+   call fill_cam_1d_array(ncid, 'lat',  grid%lat)
+   call fill_cam_1d_array(ncid, 'lev',  grid%lev)
+   call fill_cam_1d_array(ncid, 'ilev', grid%ilev) ! for staggered vertical grid
+   call fill_cam_1d_array(ncid, 'slon', grid%slon)
+   call fill_cam_1d_array(ncid, 'slat', grid%slat)
+   call fill_cam_1d_array(ncid, 'gw',   grid%gw)   ! gauss weights
+   call fill_cam_1d_array(ncid, 'hyai', grid%hyai)
+   call fill_cam_1d_array(ncid, 'hybi', grid%hybi)
+   call fill_cam_1d_array(ncid, 'hyam', grid%hyam)
+   call fill_cam_1d_array(ncid, 'hybm', grid%hybm)
+
+   ! P0 is a scalar with no dimensionality
+   allocate(grid%P0%vals(1))
+   grid%P0%nsize = 1
+
+end subroutine get_grid_dimensions
 
 
 !===================================================================

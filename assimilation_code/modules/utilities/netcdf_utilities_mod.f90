@@ -31,18 +31,20 @@ use netcdf
 implicit none
 private
 
-public :: nc_check,                     &
-          nc_add_global_attribute,      &
-          nc_add_attribute_to_variable, &
-          nc_define_dimension,          &
-          nc_define_integer_variable,   &
-          nc_define_real_variable,      &
-          nc_define_double_variable,    &
-          nc_put_variable,              &
-          nc_get_variable,              &
-          nc_add_global_creation_time,  &
-          nc_redef,                     &
-          nc_enddef,                    &
+public :: nc_check,                       &
+          nc_add_global_attribute,        &
+          nc_add_attribute_to_variable,   &
+          nc_define_dimension,            &
+          nc_define_integer_variable,     &
+          nc_define_real_variable,        &
+          nc_define_double_variable,      &
+          nc_put_variable,                &
+          nc_get_variable,                &
+          nc_add_global_creation_time,    &
+          nc_get_variable_num_dimensions, &
+          nc_get_variable_size,           &
+          nc_redef,                       &
+          nc_enddef,                      &
           nc_sync
 
 
@@ -96,6 +98,11 @@ interface nc_get_variable
    module procedure nc_get_real_2d
    module procedure nc_get_int_3d
    module procedure nc_get_real_3d
+end interface
+
+interface nc_get_variable_size
+   module procedure nc_get_variable_size_1d
+   module procedure nc_get_variable_size_Nd
 end interface
 
 ! version controlled file description for error handling, do not edit
@@ -919,10 +926,104 @@ call nc_check(ret, routine, 'file sync', context, filename)
 
 end subroutine nc_sync
 
+!------------------------------------------------------------------
 !--------------------------------------------------------------------
+! inquire variable info
 !--------------------------------------------------------------------
 
-end module netcdf_utilities_mod
+subroutine nc_get_variable_size_1d(ncid, varname, varsize, context, filename)      
+
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: varname
+integer,          intent(out) :: varsize
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_get_variable_size_1d'
+integer :: ret, varid, dimids(NF90_MAX_DIMS)
+
+ret = nf90_inq_varid(ncid, varname, varid)
+call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename)
+
+ret = nf90_inquire_variable(ncid, varid, dimids=dimids)
+call nc_check(ret, routine, 'inquire dimensions for variable '//trim(varname), context, filename)
+
+ret = nf90_inquire_dimension(ncid, dimids(1), len=varsize)
+call nc_check(ret, routine, 'inquire dimension length for dimension 1', context, filename)
+
+subroutine nc_get_variable_size_1d
+
+!--------------------------------------------------------------------
+
+subroutine nc_get_variable_size_Nd(ncid, varname, varsize, context, filename)      
+
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: varname
+integer,          intent(out) :: varsize(:)
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_get_variable_size_Nd'
+integer :: ret, varid, dimids(NF90_MAX_DIMS)
+
+ret = nf90_inq_varid(ncid, varname, varid)
+call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename)
+
+ret = nf90_inquire_variable(ncid, varid, dimids=dimids)
+call nc_check(ret, routine, 'inquire dimensions for variable '//trim(varname), context, filename)
+
+if (size(varsize) >= 1) then
+   ret = nf90_inquire_dimension(ncid, dimids(1), len=varsize(1))
+   call nc_check(ret, routine, 'inquire dimension 1 length for variable '//trim(varname), context, filename)
+endif
+
+if (size(varsize) >= 2) then
+   ret = nf90_inquire_dimension(ncid, dimids(2), len=varsize(2))
+   call nc_check(ret, routine, 'inquire dimension 2 length for variable '//trim(varname), context, filename)
+endif
+
+if (size(varsize) >= 3) then
+   ret = nf90_inquire_dimension(ncid, dimids(3), len=varsize(3))
+   call nc_check(ret, routine, 'inquire dimension 3 length for variable '//trim(varname), context, filename)
+endif
+
+if (size(varsize) >= 4) then
+   ret = nf90_inquire_dimension(ncid, dimids(4), len=varsize(4))
+   call nc_check(ret, routine, 'inquire dimension 4 length for variable '//trim(varname), context, filename)
+endif
+
+if (size(varsize) >= 5) then
+   ret = nf90_inquire_dimension(ncid, dimids(5), len=varsize(5))
+   call nc_check(ret, routine, 'inquire dimension 5 length for variable '//trim(varname), context, filename)
+endif
+
+if (size(varsize) >= 6) then
+   call error_handler(E_ERR, routine, 'only 1d to 5d variables supported', &
+                      source, revision, revdate, text2='variable '//trim(varname))
+endif
+
+end subroutine nc_get_variable_size_Nd
+
+!------------------------------------------------------------------
+
+subroutine nc_get_variable_num_dimensions(ncid, varname, numdims, context, filename) 
+
+integer, intent(in) :: ncid
+character(len=*), intent(in):: varname
+integer, intent(out) :: numdims
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_get_variable_num_dimensions'
+integer :: ret, varid
+
+ret = nf90_inq_varid(ncid, varname, varid)
+call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename)
+
+ret = nf90_inquire_variable(ncid, varid, ndims=numdims)
+call nc_check(ret, routine, 'inquire dimensions for variable '//trim(varname), context, filename)
+
+end subroutine nc_get_variable_num_dimensions 
 
 ! <next few lines under version control, do not edit>
 ! $URL$
