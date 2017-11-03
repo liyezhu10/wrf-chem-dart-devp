@@ -245,10 +245,10 @@ call get_model_variable_indices(index_in, iloc, jloc, vloc, var_id=myvarid)
 myqty = get_kind_index(domain_id, myvarid)
 
 select case (myqty)
-  case U_WIND_COMPONENT:
+  case (QTY_U_WIND_COMPONENT)
    location = set_location(grid%slon(iloc), grid%lat(jloc), grid%level(vloc), VERTISLEVEL)
 
-  case V_WIND_COMPONENT:
+  case (QTY_V_WIND_COMPONENT)
    location = set_location(grid%lon(iloc), grid%slat(jloc), grid%level(vloc), VERTISLEVEL)
 
   case default
