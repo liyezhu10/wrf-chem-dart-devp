@@ -853,83 +853,9 @@ call nc_check(ret, routine, 'get values for '//trim(varname), context, filename)
 
 end subroutine nc_get_real_3d
 
-!--------------------------------------------------------------------
-!--------------------------------------------------------------------
-! misc section: file operations, standard timestamp routine
-
-subroutine nc_add_global_creation_time(ncid, context, filename)
-
-integer,          intent(in) :: ncid
-character(len=*), intent(in), optional :: context
-character(len=*), intent(in), optional :: filename
-
-character(len=8)      :: crdate      ! needed by F90 DATE_AND_TIME intrinsic
-character(len=10)     :: crtime      ! needed by F90 DATE_AND_TIME intrinsic
-character(len=5)      :: crzone      ! needed by F90 DATE_AND_TIME intrinsic
-integer, dimension(8) :: values      ! needed by F90 DATE_AND_TIME intrinsic
-
-character(len=128) :: str1
-
-call DATE_AND_TIME(crdate,crtime,crzone,values)
-write(str1,'(''YYYY MM DD HH MM SS = '',i4,5(1x,i2.2))') &
-                  values(1), values(2), values(3), values(5), values(6), values(7)
-
-call nc_add_global_char_att(ncid, "creation_date", str1, context, filename)
-
-end subroutine nc_add_global_creation_time
-
-!--------------------------------------------------------------------
-
-subroutine nc_redef(ncid, context, filename)
-
-integer,          intent(in) :: ncid
-character(len=*), intent(in), optional :: context
-character(len=*), intent(in), optional :: filename
-
-character(len=*), parameter :: routine = 'nc_redef'
-integer :: ret
-
-ret = nf90_Redef(ncid)
-call nc_check(ret, routine, 'begin file define mode', context, filename)
-
-end subroutine nc_redef
-
-!--------------------------------------------------------------------
-
-subroutine nc_enddef(ncid, context, filename)
-
-integer,          intent(in) :: ncid
-character(len=*), intent(in), optional :: context
-character(len=*), intent(in), optional :: filename
-
-character(len=*), parameter :: routine = 'nc_enddef'
-integer :: ret
-
-ret = nf90_EndDef(ncid)
-call nc_check(ret, routine, 'end file define mode', context, filename)
-
-end subroutine nc_enddef
-
-!--------------------------------------------------------------------
-
-subroutine nc_sync(ncid, context, filename)
-
-integer,          intent(in) :: ncid
-character(len=*), intent(in), optional :: context
-character(len=*), intent(in), optional :: filename
-
-character(len=*), parameter :: routine = 'nc_sync'
-integer :: ret
-
-ret = nf90_Sync(ncid)
-call nc_check(ret, routine, 'file sync', context, filename)
-
-end subroutine nc_sync
-
 !------------------------------------------------------------------
 !--------------------------------------------------------------------
 ! inquire variable info
-!--------------------------------------------------------------------
 
 subroutine nc_get_variable_size_1d(ncid, varname, varsize, context, filename)      
 
@@ -951,7 +877,7 @@ call nc_check(ret, routine, 'inquire dimensions for variable '//trim(varname), c
 ret = nf90_inquire_dimension(ncid, dimids(1), len=varsize)
 call nc_check(ret, routine, 'inquire dimension length for dimension 1', context, filename)
 
-subroutine nc_get_variable_size_1d
+end subroutine nc_get_variable_size_1d
 
 !--------------------------------------------------------------------
 
@@ -1025,8 +951,86 @@ call nc_check(ret, routine, 'inquire dimensions for variable '//trim(varname), c
 
 end subroutine nc_get_variable_num_dimensions 
 
+!--------------------------------------------------------------------
+!--------------------------------------------------------------------
+! misc section: file operations, standard timestamp routine
+
+subroutine nc_add_global_creation_time(ncid, context, filename)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=8)      :: crdate      ! needed by F90 DATE_AND_TIME intrinsic
+character(len=10)     :: crtime      ! needed by F90 DATE_AND_TIME intrinsic
+character(len=5)      :: crzone      ! needed by F90 DATE_AND_TIME intrinsic
+integer, dimension(8) :: values      ! needed by F90 DATE_AND_TIME intrinsic
+
+character(len=128) :: str1
+
+call DATE_AND_TIME(crdate,crtime,crzone,values)
+write(str1,'(''YYYY MM DD HH MM SS = '',i4,5(1x,i2.2))') &
+                  values(1), values(2), values(3), values(5), values(6), values(7)
+
+call nc_add_global_char_att(ncid, "creation_date", str1, context, filename)
+
+end subroutine nc_add_global_creation_time
+
+!--------------------------------------------------------------------
+
+subroutine nc_redef(ncid, context, filename)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_redef'
+integer :: ret
+
+ret = nf90_Redef(ncid)
+call nc_check(ret, routine, 'begin file define mode', context, filename)
+
+end subroutine nc_redef
+
+!--------------------------------------------------------------------
+
+subroutine nc_enddef(ncid, context, filename)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_enddef'
+integer :: ret
+
+ret = nf90_EndDef(ncid)
+call nc_check(ret, routine, 'end file define mode', context, filename)
+
+end subroutine nc_enddef
+
+!--------------------------------------------------------------------
+
+subroutine nc_sync(ncid, context, filename)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_sync'
+integer :: ret
+
+ret = nf90_Sync(ncid)
+call nc_check(ret, routine, 'file sync', context, filename)
+
+end subroutine nc_sync
+
+!--------------------------------------------------------------------
+
+end module netcdf_utilities_mod
+
 ! <next few lines under version control, do not edit>
 ! $URL$
 ! $Id$
 ! $Revision$
 ! $Date$
+
