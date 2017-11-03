@@ -576,3 +576,6 @@
    difference_method      = 4,
    /
 
+&quad_interpolate_nml
+   debug = 0
+  /

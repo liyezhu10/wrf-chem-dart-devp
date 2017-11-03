@@ -27,6 +27,7 @@ use distributed_state_mod
 use   state_structure_mod
 use  netcdf_utilities_mod,  only : nc_check, nc_get_variable, nc_get_variable_size
 use       location_io_mod
+use        quad_utils_mod
 use     default_model_mod,  only : adv_1step, init_time, init_conditions, &
                                    nc_write_model_vars, pert_model_copies
 
@@ -149,6 +150,11 @@ type(cam_stagger) :: grid_stagger
 
 ! Surface potential; used for calculation of geometric heights.
 real(r8), allocatable :: phis(:, :)
+
+! Horizontal interpolation code.  Need a handle for nonstaggered, U and V.
+type(quad_interp_handle) :: interp_nonstaggered, &
+                            interp_u_staggered, &
+                            interp_v_staggered
 
 contains
 
@@ -328,10 +334,9 @@ if ( .not. module_initialized ) call static_init_model
 interp_val = MISSING_R8
 istatus = 99
 
-lon_lat_vert = get_location(obs_loc)
+lon_lat_vert = get_location(location)
 
 varid = get_varid_from_kind(domain_id, obs_qty)
-
 
 if (varid < 0) then
    if(debug > 12) then
@@ -880,7 +885,7 @@ end subroutine fill_cam_stagger_info
 !>
 
 
-subroutine read_grid_info(grid_file, grid )
+subroutine read_grid_info(grid_file, grid)
 character(len=*), intent(in)  :: grid_file
 type(cam_grid),   intent(out) :: grid
 
@@ -891,7 +896,10 @@ call nc_check( nf90_open(grid_file, NF90_NOWRITE, ncid), &
                'read_grid_info', 'open '//trim(grid_file))
 
 ! Get the grid info
-call get_cam_grid(ncid)
+call get_cam_grid(ncid, grid)
+
+! Set up the interpolation structure for later 
+call setup_interpolation(grid)
 
 call nc_check( nf90_close(ncid), 'read_grid_info', 'close '//trim(grid_file))
 
@@ -903,23 +911,56 @@ end subroutine read_grid_info
 !> 
 !>   
 
-subroutine get_cam_grid(ncid)
-integer, intent(in) :: ncid
+subroutine setup_interpolation(grid)
+type(cam_grid), intent(in) :: grid
 
-call fill_cam_1d_array(ncid, 'lon',  grid_data%lon)
-call fill_cam_1d_array(ncid, 'lat',  grid_data%lat)
-call fill_cam_1d_array(ncid, 'lev',  grid_data%lev)
-call fill_cam_1d_array(ncid, 'ilev', grid_data%ilev) ! for staggered vertical grid
-call fill_cam_1d_array(ncid, 'slon', grid_data%slon)
-call fill_cam_1d_array(ncid, 'slat', grid_data%slat)
-call fill_cam_1d_array(ncid, 'gw',   grid_data%gw)   ! gauss weights
-call fill_cam_1d_array(ncid, 'hyai', grid_data%hyai)
-call fill_cam_1d_array(ncid, 'hybi', grid_data%hybi)
-call fill_cam_1d_array(ncid, 'hyam', grid_data%hyam)
-call fill_cam_1d_array(ncid, 'hybm', grid_data%hybm)
+!>@todo FIXME the cam fv grid is really evenly spaced in lat and lon,
+!>even though they provide full lon() and lat() arrays.  the deltas
+!>between each pair would be faster
+
+! mass points at cell centers
+call init_quad_interp(GRID_QUAD_IRREG_SPACED_REGULAR, grid%lon%nsize, grid%lat%nsize, QUAD_LOCATED_CELL_CENTERS, &
+                      global=.true., spans_lon_zero=.true., pole_wrap=.true., &
+                      interp_handle=interp_nonstaggered)
+call set_quad_coords(interp_nonstaggered, grid%lon%vals, grid%lat%vals)
+
+! U stagger
+call init_quad_interp(GRID_QUAD_IRREG_SPACED_REGULAR, grid%lon%nsize, grid%slat%nsize, QUAD_LOCATED_CELL_CENTERS, &
+                      global=.true., spans_lon_zero=.true., pole_wrap=.true., &
+                      interp_handle=interp_u_staggered)
+call set_quad_coords(interp_u_staggered, grid%lon%vals, grid%slat%vals)
+
+! V stagger
+call init_quad_interp(GRID_QUAD_IRREG_SPACED_REGULAR, grid%slon%nsize, grid%lat%nsize, QUAD_LOCATED_CELL_CENTERS, &
+                      global=.true., spans_lon_zero=.true., pole_wrap=.true., &
+                      interp_handle=interp_v_staggered)
+call set_quad_coords(interp_v_staggered, grid%slon%vals, grid%lat%vals)
+
+end subroutine setup_interpolation
+
+!-----------------------------------------------------------------------
+!>
+!> 
+!>   
+
+subroutine get_cam_grid(ncid, grid)
+integer,        intent(in)  :: ncid
+type(cam_grid), intent(out) :: grid
+
+call fill_cam_1d_array(ncid, 'lon',  grid%lon)
+call fill_cam_1d_array(ncid, 'lat',  grid%lat)
+call fill_cam_1d_array(ncid, 'lev',  grid%lev)
+call fill_cam_1d_array(ncid, 'ilev', grid%ilev) ! for staggered vertical grid
+call fill_cam_1d_array(ncid, 'slon', grid%slon)
+call fill_cam_1d_array(ncid, 'slat', grid%slat)
+call fill_cam_1d_array(ncid, 'gw',   grid%gw)   ! gauss weights
+call fill_cam_1d_array(ncid, 'hyai', grid%hyai)
+call fill_cam_1d_array(ncid, 'hybi', grid%hybi)
+call fill_cam_1d_array(ncid, 'hyam', grid%hyam)
+call fill_cam_1d_array(ncid, 'hybm', grid%hybm)
 
 ! P0 is a scalar with no dimensionality
-call fill_cam_0d_array(ncid, 'P0',   grid_data%P0) 
+call fill_cam_0d_array(ncid, 'P0',   grid%P0) 
 
 
 end subroutine get_cam_grid
