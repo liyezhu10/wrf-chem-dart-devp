@@ -89,10 +89,10 @@ interface nc_put_variable
    module procedure nc_put_real_3d
 end interface
 
-!>@todo FIXME do we need single value versions
-!> of these as well?
 interface nc_get_variable
+   module procedure nc_get_single_int_1d
    module procedure nc_get_int_1d
+   module procedure nc_get_single_real_1d
    module procedure nc_get_real_1d
    module procedure nc_get_int_2d
    module procedure nc_get_real_2d
@@ -730,6 +730,27 @@ end subroutine nc_put_real_3d
 !--------------------------------------------------------------------
 ! get values from variables
 
+subroutine nc_get_single_int_1d(ncid, varname, varval, context, filename)
+
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: varname
+integer,          intent(out) :: varval
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_get_single_int_1d'
+integer :: ret, varid
+
+ret = nf90_inq_varid(ncid, varname, varid)
+call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename)
+
+ret = nf90_get_var(ncid, varid, varval)
+call nc_check(ret, routine, 'get values for '//trim(varname), context, filename)
+
+end subroutine nc_get_single_int_1d
+
+!--------------------------------------------------------------------
+
 subroutine nc_get_int_1d(ncid, varname, varvals, context, filename)
 
 integer,          intent(in)  :: ncid
@@ -748,6 +769,27 @@ ret = nf90_get_var(ncid, varid, varvals)
 call nc_check(ret, routine, 'get values for '//trim(varname), context, filename)
 
 end subroutine nc_get_int_1d
+
+!--------------------------------------------------------------------
+
+subroutine nc_get_single_real_1d(ncid, varname, varval, context, filename)
+
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: varname
+real(r8),         intent(out) :: varval
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_get_single_real_1d'
+integer :: ret, varid
+
+ret = nf90_inq_varid(ncid, varname, varid)
+call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename)
+
+ret = nf90_get_var(ncid, varid, varval)
+call nc_check(ret, routine, 'get values for '//trim(varname), context, filename)
+
+end subroutine nc_get_single_real_1d
 
 !--------------------------------------------------------------------
 
