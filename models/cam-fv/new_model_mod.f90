@@ -25,9 +25,10 @@ use        random_seq_mod
 use  ensemble_manager_mod
 use distributed_state_mod
 use   state_structure_mod
-use  netcdf_utilities_mod
+use  netcdf_utilities_mod,  only : nc_check, nc_get_variable
 use       location_io_mod
-use     default_model_mod
+use     default_model_mod,  only : adv_1step, init_time, init_conditions, &
+                                   nc_write_model_vars, pert_model_copies
 
 use netcdf
 
@@ -102,7 +103,9 @@ integer, parameter :: num_state_table_columns = 5
 character(len=vtablenamelength) :: state_variables(MAX_STATE_VARIABLES * &
                                                    num_state_table_columns ) = ' '
 
-integer :: domain_id ! global variable for state_structure_mod routines
+! domain id for the cam model.  this allows us access to all of the state structure
+! info and is require for getting state variables.
+integer :: domain_id
 
 !> Everything needed to describe a variable. Basically all the metadata from
 !> a netCDF file is stored here as well as all the information about where
@@ -131,9 +134,6 @@ end type
 
 type(cam_grid) :: grid_data
 
-! domain id for the cam model.  this allows us access to all of the state structure
-! info and is require for getting state variables.
-integer :: domain_id
 
 contains
 
@@ -159,7 +159,7 @@ subroutine static_init_model()
 
 integer :: iunit, io
 integer :: ncid
-
+integer :: nfields
 
 if ( module_initialized ) return
 
@@ -191,7 +191,7 @@ call read_grid_info(cam_template_filename, cam_phis_filename, grid_data)
 
 ! set_cam_variable_info() fills var_names, kind_list, clamp_vals, update_list
 ! from the &model_mod_nml variables
-call set_cam_variable_info(state_variables)
+call set_cam_variable_info(state_variables, nfields)
 
 end subroutine static_init_model
 
@@ -246,13 +246,19 @@ myqty = get_kind_index(domain_id, myvarid)
 
 select case (myqty)
   case (QTY_U_WIND_COMPONENT)
-   location = set_location(grid%slon(iloc), grid%lat(jloc), grid%level(vloc), VERTISLEVEL)
+   location = set_location(grid_data%slon%vals(iloc), &
+                           grid_data%lat%vals(jloc), &
+                           grid_data%lev%vals(vloc), VERTISLEVEL)
 
   case (QTY_V_WIND_COMPONENT)
-   location = set_location(grid%lon(iloc), grid%slat(jloc), grid%level(vloc), VERTISLEVEL)
+   location = set_location(grid_data%lon%vals(iloc), &
+                           grid_data%slat%vals(jloc), &
+                           grid_data%lev%vals(vloc), VERTISLEVEL)
 
   case default
-   location = set_location(grid%lon(iloc), grid%lat(jloc), grid%level(vloc), VERTISLEVEL)
+   location = set_location(grid_data%lon%vals(iloc), &
+                           grid_data%lat%vals(jloc), &
+                           grid_data%lev%vals(vloc), VERTISLEVEL)
 
 end select
 
@@ -384,201 +390,201 @@ if ( .not. module_initialized ) call static_init_model
 
 write(filename,*) 'ncid', ncid
 
-! Write Global Attributes
-
-!>@todo FIXME  make writing the grid info optional.
-!> based on a namelist setting.  if not writing grid,
-!> this routine has nothing to do.
-
-if (minimal_output) return
-
-! add grid info
-call nc_redef(ncid)
-
-call nc_add_global_creation_time(ncid)
-
-call nc_add_global_attribute(ncid, "model_source", source)
-call nc_add_global_attribute(ncid, "model_revision", revision)
-call nc_add_global_attribute(ncid, "model_revdate", revdate)
-
-call nc_add_global_attribute(ncid, "model", "CAM")
-
-! We need to output the grid information
-! Define the new dimensions IDs
-
-call nc_check(nf90_def_dim(ncid, name='xi_rho',  len = Nxi_rho, &
-     dimid = nxirhoDimID),'nc_write_model_atts', 'xi_rho def_dim '//trim(filename))
-
-call nc_check(nf90_def_dim(ncid, name='eta_rho', len = Neta_rho,&
-     dimid = netarhoDimID),'nc_write_model_atts', 'eta_rho def_dim '//trim(filename))
-
-call nc_check(nf90_def_dim(ncid, name='s_rho',   len = Ns_rho,&
-     dimid = nsrhoDimID),'nc_write_model_atts', 's_rho def_dim '//trim(filename))
-
-call nc_check(nf90_def_dim(ncid, name='s_w',   len = Ns_w,&
-     dimid = nswDimID),'nc_write_model_atts', 's_w def_dim '//trim(filename))
-
-call nc_check(nf90_def_dim(ncid, name='xi_u',    len = Nxi_u,&
-     dimid = nxiuDimID),'nc_write_model_atts', 'xi_u def_dim '//trim(filename))
-
-call nc_check(nf90_def_dim(ncid, name='xi_v',    len = Nxi_v,&
-     dimid = nxivDimID),'nc_write_model_atts', 'xi_v def_dim '//trim(filename))
-
-call nc_check(nf90_def_dim(ncid, name='eta_u',   len = Neta_u,&
-     dimid = netauDimID),'nc_write_model_atts', 'eta_u def_dim '//trim(filename))
-
-call nc_check(nf90_def_dim(ncid, name='eta_v',   len = Neta_v,&
-     dimid = netavDimID),'nc_write_model_atts', 'eta_v def_dim '//trim(filename))
-
-! Create the Coordinate Variables and give them Attributes
-! The values will be added in a later block of code.
-
-call nc_check(nf90_def_var(ncid,name='lon_rho', xtype=nf90_double, &
-              dimids=(/ nxirhoDimID, netarhoDimID /), varid=VarID),&
-              'nc_write_model_atts', 'lon_rho def_var '//trim(filename))
-call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'rho longitudes'), &
-              'nc_write_model_atts', 'lon_rho long_name '//trim(filename))
-call nc_check(nf90_put_att(ncid,  VarID, 'units', 'degrees_east'), &
-              'nc_write_model_atts', 'lon_rho units '//trim(filename))
-
-call nc_check(nf90_def_var(ncid,name='lat_rho', xtype=nf90_double, &
-              dimids=(/ nxirhoDimID, netarhoDimID /), varid=VarID),&
-              'nc_write_model_atts', 'lat_rho def_var '//trim(filename))
-call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'rho latitudes'), &
-              'nc_write_model_atts', 'lat_rho long_name '//trim(filename))
-call nc_check(nf90_put_att(ncid,  VarID, 'units', 'degrees_north'), &
-              'nc_write_model_atts', 'lat_rho units '//trim(filename))
-
-call nc_check(nf90_def_var(ncid,name='lon_u', xtype=nf90_double, &
-              dimids=(/ nxiuDimID, netauDimID /), varid=VarID),&
-              'nc_write_model_atts', 'lon_u def_var '//trim(filename))
-call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'u longitudes'), &
-              'nc_write_model_atts', 'lon_u long_name '//trim(filename))
-call nc_check(nf90_put_att(ncid,  VarID, 'units', 'degrees_east'), &
-              'nc_write_model_atts', 'lon_u units '//trim(filename))
-
-call nc_check(nf90_def_var(ncid,name='lat_u', xtype=nf90_double, &
-              dimids=(/ nxiuDimID, netauDimID /), varid=VarID),&
-              'nc_write_model_atts', 'lat_u def_var '//trim(filename))
-call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'u latitudes'), &
-              'nc_write_model_atts', 'lat_u long_name '//trim(filename))
-call nc_check(nf90_put_att(ncid,  VarID, 'units', 'degrees_north'), &
-              'nc_write_model_atts', 'lat_u units '//trim(filename))
-
-call nc_check(nf90_def_var(ncid,name='lon_v', xtype=nf90_double, &
-              dimids=(/ nxivDimID, netavDimID /), varid=VarID),&
-              'nc_write_model_atts', 'lon_v def_var '//trim(filename))
-call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'v longitudes'), &
-              'nc_write_model_atts', 'lon_v long_name '//trim(filename))
-call nc_check(nf90_put_att(ncid,  VarID, 'units', 'degrees_east'), &
-              'nc_write_model_atts', 'lon_v units '//trim(filename))
-
-call nc_check(nf90_def_var(ncid,name='lat_v', xtype=nf90_double, &
-              dimids=(/ nxivDimID, netavDimID /), varid=VarID),&
-              'nc_write_model_atts', 'lat_v def_var '//trim(filename))
-call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'v latitudes'), &
-              'nc_write_model_atts', 'lat_v long_name '//trim(filename))
-call nc_check(nf90_put_att(ncid,  VarID, 'units', 'degrees_north'), &
-              'nc_write_model_atts', 'lat_v units '//trim(filename))
-
-call nc_check(nf90_def_var(ncid,name='z_rho', xtype=nf90_double, &
-              dimids=(/ nxirhoDimID, netarhoDimID, nsrhoDimID /), varid=VarID),&
-              'nc_write_model_atts', 'z_rho def_var '//trim(filename))
-call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'z at rho'), &
-              'nc_write_model_atts', 'z_rho long_name '//trim(filename))
-call nc_check(nf90_put_att(ncid,  VarID, 'units', 'm'), &
-              'nc_write_model_atts', 'z_rho units '//trim(filename))
-
-call nc_check(nf90_def_var(ncid,name='z_u', xtype=nf90_double, &
-              dimids=(/ nxiuDimID, netauDimID, nsrhoDimID /), varid=VarID),&
-              'nc_write_model_atts', 'z_u def_var '//trim(filename))
-call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'z at rho'), &
-              'nc_write_model_atts', 'z_u long_name '//trim(filename))
-call nc_check(nf90_put_att(ncid,  VarID, 'units', 'm'), &
-              'nc_write_model_atts', 'z_u units '//trim(filename))
-
-call nc_check(nf90_def_var(ncid,name='z_v', xtype=nf90_double, &
-              dimids=(/ nxivDimID, netavDimID, nsrhoDimID /), varid=VarID),&
-              'nc_write_model_atts', 'z_v def_var '//trim(filename))
-call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'z at rho'), &
-              'nc_write_model_atts', 'z_v long_name '//trim(filename))
-call nc_check(nf90_put_att(ncid,  VarID, 'units', 'm'), &
-              'nc_write_model_atts', 'z_v units '//trim(filename))
-
-call nc_check(nf90_def_var(ncid,name='z_w', xtype=nf90_double, &
-              dimids=(/ nxirhoDimID, netarhoDimID, nswDimID /), varid=VarID),&
-              'nc_write_model_atts', 'z_w def_var '//trim(filename))
-call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'z at rho'), &
-              'nc_write_model_atts', 'z_w long_name '//trim(filename))
-call nc_check(nf90_put_att(ncid,  VarID, 'units', 'm'), &
-              'nc_write_model_atts', 'z_w units '//trim(filename))
-
-! Finished with dimension/variable definitions, must end 'define' mode to fill.
-
-call nc_enddef(ncid)
-
-! Fill the coordinate variable values
-
-! the RHO grid
-
-call nc_check(NF90_inq_varid(ncid, 'lon_rho', VarID), &
-              'nc_write_model_atts', 'lon_rho inq_varid '//trim(filename))
-call nc_check(nf90_put_var(ncid, VarID, TLON ), &
-             'nc_write_model_atts', 'lon_rho put_var '//trim(filename))
-
-call nc_check(NF90_inq_varid(ncid, 'lat_rho', VarID), &
-              'nc_write_model_atts', 'lat_rho inq_varid '//trim(filename))
-call nc_check(nf90_put_var(ncid, VarID, TLAT ), &
-             'nc_write_model_atts', 'lat_rho put_var '//trim(filename))
-
-call nc_check(NF90_inq_varid(ncid, 'z_rho', VarID), &
-              'nc_write_model_atts', 'z_rho inq_varid '//trim(filename))
-call nc_check(nf90_put_var(ncid, VarID, TDEP ), &
-             'nc_write_model_atts', 'z_rho put_var '//trim(filename))
-
-! the U grid
-
-call nc_check(NF90_inq_varid(ncid, 'lon_u', VarID), &
-              'nc_write_model_atts', 'lon_u inq_varid '//trim(filename))
-call nc_check(nf90_put_var(ncid, VarID, ULON ), &
-             'nc_write_model_atts', 'lon_u put_var '//trim(filename))
-
-call nc_check(NF90_inq_varid(ncid, 'lat_u', VarID), &
-              'nc_write_model_atts', 'lat_u inq_varid '//trim(filename))
-call nc_check(nf90_put_var(ncid, VarID, ULAT ), &
-             'nc_write_model_atts', 'lat_u put_var '//trim(filename))
-
-call nc_check(NF90_inq_varid(ncid, 'z_u', VarID), &
-              'nc_write_model_atts', 'z_u inq_varid '//trim(filename))
-call nc_check(nf90_put_var(ncid, VarID, UDEP ), &
-             'nc_write_model_atts', 'z_u put_var '//trim(filename))
-
-! the V grid
-
-call nc_check(NF90_inq_varid(ncid, 'lon_v', VarID), &
-              'nc_write_model_atts', 'lon_v inq_varid '//trim(filename))
-call nc_check(nf90_put_var(ncid, VarID, VLON ), &
-             'nc_write_model_atts', 'lon_v put_var '//trim(filename))
-
-call nc_check(NF90_inq_varid(ncid, 'lat_v', VarID), &
-              'nc_write_model_atts', 'lat_v inq_varid '//trim(filename))
-call nc_check(nf90_put_var(ncid, VarID, VLAT ), &
-             'nc_write_model_atts', 'lat_v put_var '//trim(filename))
-
-call nc_check(NF90_inq_varid(ncid, 'z_v', VarID), &
-              'nc_write_model_atts', 'z_v inq_varid '//trim(filename))
-call nc_check(nf90_put_var(ncid, VarID, VDEP ), &
-             'nc_write_model_atts', 'z_v put_var '//trim(filename))
-
-! the W grid
-
-call nc_check(NF90_inq_varid(ncid, 'z_w', VarID), &
-              'nc_write_model_atts', 'z_w inq_varid '//trim(filename))
-call nc_check(nf90_put_var(ncid, VarID, WDEP ), &
-             'nc_write_model_atts', 'z_w put_var '//trim(filename))
-
-! Flush the buffer and leave netCDF file open
-call nc_sync(ncid)
+!#! ! Write Global Attributes
+!#! 
+!#! !>@todo FIXME  make writing the grid info optional.
+!#! !> based on a namelist setting.  if not writing grid,
+!#! !> this routine has nothing to do.
+!#! 
+!#! if (minimal_output) return
+!#! 
+!#! ! add grid info
+!#! call nc_redef(ncid)
+!#! 
+!#! call nc_add_global_creation_time(ncid)
+!#! 
+!#! call nc_add_global_attribute(ncid, "model_source", source)
+!#! call nc_add_global_attribute(ncid, "model_revision", revision)
+!#! call nc_add_global_attribute(ncid, "model_revdate", revdate)
+!#! 
+!#! call nc_add_global_attribute(ncid, "model", "CAM")
+!#! 
+!#! ! We need to output the grid information
+!#! ! Define the new dimensions IDs
+!#! 
+!#! call nc_check(nf90_def_dim(ncid, name='xi_rho',  len = Nxi_rho, &
+!#!      dimid = nxirhoDimID),'nc_write_model_atts', 'xi_rho def_dim '//trim(filename))
+!#! 
+!#! call nc_check(nf90_def_dim(ncid, name='eta_rho', len = Neta_rho,&
+!#!      dimid = netarhoDimID),'nc_write_model_atts', 'eta_rho def_dim '//trim(filename))
+!#! 
+!#! call nc_check(nf90_def_dim(ncid, name='s_rho',   len = Ns_rho,&
+!#!      dimid = nsrhoDimID),'nc_write_model_atts', 's_rho def_dim '//trim(filename))
+!#! 
+!#! call nc_check(nf90_def_dim(ncid, name='s_w',   len = Ns_w,&
+!#!      dimid = nswDimID),'nc_write_model_atts', 's_w def_dim '//trim(filename))
+!#! 
+!#! call nc_check(nf90_def_dim(ncid, name='xi_u',    len = Nxi_u,&
+!#!      dimid = nxiuDimID),'nc_write_model_atts', 'xi_u def_dim '//trim(filename))
+!#! 
+!#! call nc_check(nf90_def_dim(ncid, name='xi_v',    len = Nxi_v,&
+!#!      dimid = nxivDimID),'nc_write_model_atts', 'xi_v def_dim '//trim(filename))
+!#! 
+!#! call nc_check(nf90_def_dim(ncid, name='eta_u',   len = Neta_u,&
+!#!      dimid = netauDimID),'nc_write_model_atts', 'eta_u def_dim '//trim(filename))
+!#! 
+!#! call nc_check(nf90_def_dim(ncid, name='eta_v',   len = Neta_v,&
+!#!      dimid = netavDimID),'nc_write_model_atts', 'eta_v def_dim '//trim(filename))
+!#! 
+!#! ! Create the Coordinate Variables and give them Attributes
+!#! ! The values will be added in a later block of code.
+!#! 
+!#! call nc_check(nf90_def_var(ncid,name='lon_rho', xtype=nf90_double, &
+!#!               dimids=(/ nxirhoDimID, netarhoDimID /), varid=VarID),&
+!#!               'nc_write_model_atts', 'lon_rho def_var '//trim(filename))
+!#! call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'rho longitudes'), &
+!#!               'nc_write_model_atts', 'lon_rho long_name '//trim(filename))
+!#! call nc_check(nf90_put_att(ncid,  VarID, 'units', 'degrees_east'), &
+!#!               'nc_write_model_atts', 'lon_rho units '//trim(filename))
+!#! 
+!#! call nc_check(nf90_def_var(ncid,name='lat_rho', xtype=nf90_double, &
+!#!               dimids=(/ nxirhoDimID, netarhoDimID /), varid=VarID),&
+!#!               'nc_write_model_atts', 'lat_rho def_var '//trim(filename))
+!#! call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'rho latitudes'), &
+!#!               'nc_write_model_atts', 'lat_rho long_name '//trim(filename))
+!#! call nc_check(nf90_put_att(ncid,  VarID, 'units', 'degrees_north'), &
+!#!               'nc_write_model_atts', 'lat_rho units '//trim(filename))
+!#! 
+!#! call nc_check(nf90_def_var(ncid,name='lon_u', xtype=nf90_double, &
+!#!               dimids=(/ nxiuDimID, netauDimID /), varid=VarID),&
+!#!               'nc_write_model_atts', 'lon_u def_var '//trim(filename))
+!#! call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'u longitudes'), &
+!#!               'nc_write_model_atts', 'lon_u long_name '//trim(filename))
+!#! call nc_check(nf90_put_att(ncid,  VarID, 'units', 'degrees_east'), &
+!#!               'nc_write_model_atts', 'lon_u units '//trim(filename))
+!#! 
+!#! call nc_check(nf90_def_var(ncid,name='lat_u', xtype=nf90_double, &
+!#!               dimids=(/ nxiuDimID, netauDimID /), varid=VarID),&
+!#!               'nc_write_model_atts', 'lat_u def_var '//trim(filename))
+!#! call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'u latitudes'), &
+!#!               'nc_write_model_atts', 'lat_u long_name '//trim(filename))
+!#! call nc_check(nf90_put_att(ncid,  VarID, 'units', 'degrees_north'), &
+!#!               'nc_write_model_atts', 'lat_u units '//trim(filename))
+!#! 
+!#! call nc_check(nf90_def_var(ncid,name='lon_v', xtype=nf90_double, &
+!#!               dimids=(/ nxivDimID, netavDimID /), varid=VarID),&
+!#!               'nc_write_model_atts', 'lon_v def_var '//trim(filename))
+!#! call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'v longitudes'), &
+!#!               'nc_write_model_atts', 'lon_v long_name '//trim(filename))
+!#! call nc_check(nf90_put_att(ncid,  VarID, 'units', 'degrees_east'), &
+!#!               'nc_write_model_atts', 'lon_v units '//trim(filename))
+!#! 
+!#! call nc_check(nf90_def_var(ncid,name='lat_v', xtype=nf90_double, &
+!#!               dimids=(/ nxivDimID, netavDimID /), varid=VarID),&
+!#!               'nc_write_model_atts', 'lat_v def_var '//trim(filename))
+!#! call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'v latitudes'), &
+!#!               'nc_write_model_atts', 'lat_v long_name '//trim(filename))
+!#! call nc_check(nf90_put_att(ncid,  VarID, 'units', 'degrees_north'), &
+!#!               'nc_write_model_atts', 'lat_v units '//trim(filename))
+!#! 
+!#! call nc_check(nf90_def_var(ncid,name='z_rho', xtype=nf90_double, &
+!#!               dimids=(/ nxirhoDimID, netarhoDimID, nsrhoDimID /), varid=VarID),&
+!#!               'nc_write_model_atts', 'z_rho def_var '//trim(filename))
+!#! call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'z at rho'), &
+!#!               'nc_write_model_atts', 'z_rho long_name '//trim(filename))
+!#! call nc_check(nf90_put_att(ncid,  VarID, 'units', 'm'), &
+!#!               'nc_write_model_atts', 'z_rho units '//trim(filename))
+!#! 
+!#! call nc_check(nf90_def_var(ncid,name='z_u', xtype=nf90_double, &
+!#!               dimids=(/ nxiuDimID, netauDimID, nsrhoDimID /), varid=VarID),&
+!#!               'nc_write_model_atts', 'z_u def_var '//trim(filename))
+!#! call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'z at rho'), &
+!#!               'nc_write_model_atts', 'z_u long_name '//trim(filename))
+!#! call nc_check(nf90_put_att(ncid,  VarID, 'units', 'm'), &
+!#!               'nc_write_model_atts', 'z_u units '//trim(filename))
+!#! 
+!#! call nc_check(nf90_def_var(ncid,name='z_v', xtype=nf90_double, &
+!#!               dimids=(/ nxivDimID, netavDimID, nsrhoDimID /), varid=VarID),&
+!#!               'nc_write_model_atts', 'z_v def_var '//trim(filename))
+!#! call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'z at rho'), &
+!#!               'nc_write_model_atts', 'z_v long_name '//trim(filename))
+!#! call nc_check(nf90_put_att(ncid,  VarID, 'units', 'm'), &
+!#!               'nc_write_model_atts', 'z_v units '//trim(filename))
+!#! 
+!#! call nc_check(nf90_def_var(ncid,name='z_w', xtype=nf90_double, &
+!#!               dimids=(/ nxirhoDimID, netarhoDimID, nswDimID /), varid=VarID),&
+!#!               'nc_write_model_atts', 'z_w def_var '//trim(filename))
+!#! call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'z at rho'), &
+!#!               'nc_write_model_atts', 'z_w long_name '//trim(filename))
+!#! call nc_check(nf90_put_att(ncid,  VarID, 'units', 'm'), &
+!#!               'nc_write_model_atts', 'z_w units '//trim(filename))
+!#! 
+!#! ! Finished with dimension/variable definitions, must end 'define' mode to fill.
+!#! 
+!#! call nc_enddef(ncid)
+!#! 
+!#! ! Fill the coordinate variable values
+!#! 
+!#! ! the RHO grid
+!#! 
+!#! call nc_check(NF90_inq_varid(ncid, 'lon_rho', VarID), &
+!#!               'nc_write_model_atts', 'lon_rho inq_varid '//trim(filename))
+!#! call nc_check(nf90_put_var(ncid, VarID, TLON ), &
+!#!              'nc_write_model_atts', 'lon_rho put_var '//trim(filename))
+!#! 
+!#! call nc_check(NF90_inq_varid(ncid, 'lat_rho', VarID), &
+!#!               'nc_write_model_atts', 'lat_rho inq_varid '//trim(filename))
+!#! call nc_check(nf90_put_var(ncid, VarID, TLAT ), &
+!#!              'nc_write_model_atts', 'lat_rho put_var '//trim(filename))
+!#! 
+!#! call nc_check(NF90_inq_varid(ncid, 'z_rho', VarID), &
+!#!               'nc_write_model_atts', 'z_rho inq_varid '//trim(filename))
+!#! call nc_check(nf90_put_var(ncid, VarID, TDEP ), &
+!#!              'nc_write_model_atts', 'z_rho put_var '//trim(filename))
+!#! 
+!#! ! the U grid
+!#! 
+!#! call nc_check(NF90_inq_varid(ncid, 'lon_u', VarID), &
+!#!               'nc_write_model_atts', 'lon_u inq_varid '//trim(filename))
+!#! call nc_check(nf90_put_var(ncid, VarID, ULON ), &
+!#!              'nc_write_model_atts', 'lon_u put_var '//trim(filename))
+!#! 
+!#! call nc_check(NF90_inq_varid(ncid, 'lat_u', VarID), &
+!#!               'nc_write_model_atts', 'lat_u inq_varid '//trim(filename))
+!#! call nc_check(nf90_put_var(ncid, VarID, ULAT ), &
+!#!              'nc_write_model_atts', 'lat_u put_var '//trim(filename))
+!#! 
+!#! call nc_check(NF90_inq_varid(ncid, 'z_u', VarID), &
+!#!               'nc_write_model_atts', 'z_u inq_varid '//trim(filename))
+!#! call nc_check(nf90_put_var(ncid, VarID, UDEP ), &
+!#!              'nc_write_model_atts', 'z_u put_var '//trim(filename))
+!#! 
+!#! ! the V grid
+!#! 
+!#! call nc_check(NF90_inq_varid(ncid, 'lon_v', VarID), &
+!#!               'nc_write_model_atts', 'lon_v inq_varid '//trim(filename))
+!#! call nc_check(nf90_put_var(ncid, VarID, VLON ), &
+!#!              'nc_write_model_atts', 'lon_v put_var '//trim(filename))
+!#! 
+!#! call nc_check(NF90_inq_varid(ncid, 'lat_v', VarID), &
+!#!               'nc_write_model_atts', 'lat_v inq_varid '//trim(filename))
+!#! call nc_check(nf90_put_var(ncid, VarID, VLAT ), &
+!#!              'nc_write_model_atts', 'lat_v put_var '//trim(filename))
+!#! 
+!#! call nc_check(NF90_inq_varid(ncid, 'z_v', VarID), &
+!#!               'nc_write_model_atts', 'z_v inq_varid '//trim(filename))
+!#! call nc_check(nf90_put_var(ncid, VarID, VDEP ), &
+!#!              'nc_write_model_atts', 'z_v put_var '//trim(filename))
+!#! 
+!#! ! the W grid
+!#! 
+!#! call nc_check(NF90_inq_varid(ncid, 'z_w', VarID), &
+!#!               'nc_write_model_atts', 'z_w inq_varid '//trim(filename))
+!#! call nc_check(nf90_put_var(ncid, VarID, WDEP ), &
+!#!              'nc_write_model_atts', 'z_w put_var '//trim(filename))
+!#! 
+!#! ! Flush the buffer and leave netCDF file open
+!#! call nc_sync(ncid)
 
 
 end subroutine nc_write_model_atts
@@ -607,35 +613,10 @@ if ( .not. module_initialized ) call static_init_model
 
 if (present(adv_to_time)) then
    string3 = time_to_string(adv_to_time)
-   write(string1,*)'ROMS/DART not configured to advance ROMS.'
+   write(string1,*)'CAM/DART not configured to advance CAM.'
    write(string2,*)'called with optional advance_to_time of'
    call error_handler(E_ERR, 'write_model_time', string1, &
               source, revision, revdate, text2=string2,text3=string3)
-endif
-
-! If the ocean_time variable exists, we are updating a ROMS file,
-! if not ... must be updating a DART diagnostic file.
-
-io = nf90_inq_varid(ncid,'ocean_time',varid)
-if (io == NF90_NOERR) then
-   call get_time_information('unknown', ncid, 'ocean_time', 'ocean_time', &
-                myvarid=varid, origin_time=origin_time)
-   deltatime = model_time - origin_time
-   call get_time(deltatime, seconds, days)
-   run_duration = real(days,digits12)*86400.0_digits12 + real(seconds,digits12)
-   call nc_check(nf90_put_var(ncid, varid, run_duration), 'write_model_time', 'put_var')
-   return
-endif
-
-io = nf90_inq_varid(ncid,'time',varid)
-if (io == NF90_NOERR) then
-   call get_time_information('unknown', ncid, 'time', 'time', &
-                myvarid=varid, origin_time=origin_time)
-   deltatime = model_time - origin_time
-   call get_time(deltatime, seconds, days)
-   run_duration = real(days,digits12)*86400.0_digits12 + real(seconds,digits12)
-   call nc_check(nf90_put_var(ncid, varid, run_duration), 'write_model_time', 'put_var')
-   return
 endif
 
 end subroutine write_model_time
@@ -657,14 +638,71 @@ integer :: ncid
 if ( .not. module_initialized ) call static_init_model
 
 if ( .not. file_exist(filename) ) then
-   write(string1,*) 'cannot open file ', trim(filename),' for reading.'
+   write(string1,*) trim(filename), ' does not exist.'
    call error_handler(E_ERR,'read_model_time',string1,source,revision,revdate)
 endif
 
 call nc_check( nf90_open(trim(filename), NF90_NOWRITE, ncid), &
                   'read_model_time', 'open '//trim(filename))
 
-call get_time_information(filename, ncid, 'ocean_time', 'ocean_time', last_time=read_model_time)
+! CAM initial files have two variables of length 
+! 'time' (the unlimited dimension): date, datesec
+! This code require that the time length be size 1
+
+call nc_check(nf90_inq_dimid(ncid, 'time', dimid), &
+        'read_cam_init', 'inq_dimid time '//trim(file_name))
+call nc_check(nf90_inquire_dimension(ncid, dimid, len=dimlen), &
+        'read_cam_init', 'inquire_dimension time '//trim(file_name))
+
+if (dimlen /= 1) then
+   write(string1,*)trim(file_name),' has',dimlen,'times. Require exactly 1.'
+   call error_handler(E_ERR, 'read_cam_init', string1, source, revision, revdate)
+endif
+
+allocate(datetmp(dimlen), datesec(dimlen))
+
+call nc_check(nf90_inq_varid(ncid, 'date', varid), &
+       'read_cam_init', 'inq_varid date '//trim(file_name))
+call nc_check(nf90_get_var(ncid, varid, values=datetmp), &
+       'read_cam_init', 'get_var date '//trim(file_name))
+
+call nc_check(nf90_inq_varid(ncid, 'datesec', varid), &
+       'read_cam_init', 'inq_varid datesec '//trim(file_name))
+call nc_check(nf90_get_var(ncid, varid, values=datesec), &
+       'read_cam_init', 'get_var datesec '//trim(file_name))
+
+! for future extensibility, presume we find a 'timeindex' that we want.
+! Since we only support 1 timestep in the file, this is easy.
+
+timestep = 1
+
+! The 'date' is YYYYMMDD ... datesec is 'current seconds of current day'
+iyear  = datetmp(timestep) / 10000
+rem    = datetmp(timestep) - iyear*10000
+imonth = rem / 100
+iday   = rem - imonth*100
+
+ihour  = datesec(timestep) / 3600
+rem    = datesec(timestep) - ihour*3600
+imin   = rem / 60
+isec   = rem - imin*60
+
+deallocate(datetmp, datesec)
+
+! some cam files are from before the start of the gregorian calendar.
+! since these are 'arbitrary' years, just change the offset.
+
+if (iyear < 1601) then
+   write(string1,*)' '
+   write(string2,*)'WARNING - ',trim(file_name),' changing year from ',iyear,'to',iyear+1601
+   call error_handler(E_MSG, 'read_cam_init', string1, source, revision, &
+                revdate, text2=string2,text3='to make it a valid Gregorian date.')
+   write(string1,*)' '
+   call error_handler(E_MSG, 'read_cam_init', string1, source, revision)
+   iyear = iyear + 1601
+endif
+
+read_model_time = set_date(iyear,imonth,iday,ihour,imin,isec)
 
 call nc_check( nf90_close(ncid), 'read_model_time', 'close '//trim(filename))
 
@@ -676,51 +714,6 @@ end function read_model_time
 ! The remaining (private) interfaces come last.
 ! None of the private interfaces need to call static_init_model()
 !-----------------------------------------------------------------------
-
-
-!-----------------------------------------------------------------------
-!>
-!> Read the grid dimensions from the ROMS grid netcdf file.
-!> By reading the dimensions first, we can use them in variable
-!> declarations later - which is faster than using allocatable arrays.
-!>
-
-subroutine get_grid_dimensions()
-
-integer :: ncid
-
-! Read the (static) grid dimensions from the ROMS grid file.
-
-call nc_check(nf90_open(trim(roms_filename), nf90_nowrite, ncid), &
-              'get_grid_dimensions', 'open '//trim(roms_filename))
-
-Nxi_rho   = get_dimension_length(ncid, 'xi_rho',   roms_filename)
-Nxi_u     = get_dimension_length(ncid, 'xi_u',     roms_filename)
-Nxi_v     = get_dimension_length(ncid, 'xi_v',     roms_filename)
-Neta_rho  = get_dimension_length(ncid, 'eta_rho',  roms_filename)
-Neta_u    = get_dimension_length(ncid, 'eta_u',    roms_filename)
-Neta_v    = get_dimension_length(ncid, 'eta_v',    roms_filename)
-
-call nc_check(nf90_close(ncid), &
-              'get_grid_dimensions','close '//trim(roms_filename))
-
-! Read the vertical dimensions from the dedicated file.
-
-call nc_check(nf90_open(trim(roms_filename), nf90_nowrite, ncid), &
-               'get_grid_dimensions', 'open '//trim(roms_filename))
-
-Ns_rho    = get_dimension_length(ncid, 's_rho',    roms_filename)
-Ns_w      = get_dimension_length(ncid, 's_w'  ,    roms_filename)
-
-call nc_check(nf90_close(ncid), &
-              'get_grid_dimensions','close '//trim(roms_filename))
-
-Nx =  Nxi_rho  ! Setting the nominal value of the 'global' variables
-Ny = Neta_rho  ! Setting the nominal value of the 'global' variables
-Nz =   Ns_rho  ! Setting the nominal value of the 'global' variables
-
-end subroutine get_grid_dimensions
-
 
 !-----------------------------------------------------------------------
 !>
@@ -744,109 +737,109 @@ subroutine get_grid()
 
 integer  :: ncid, VarID
 
-real(r8), parameter :: all_land = 0.001_r8
-
-if (.not. allocated(ULAT)) allocate(ULAT(Nxi_u, Neta_u))
-if (.not. allocated(ULON)) allocate(ULON(Nxi_u, Neta_u))
-if (.not. allocated(UDEP)) allocate(UDEP(Nxi_u, Neta_u, Nz))
-
-if (.not. allocated(VLAT)) allocate(VLAT(Nxi_v, Neta_v))
-if (.not. allocated(VLON)) allocate(VLON(Nxi_v, Neta_v))
-if (.not. allocated(VDEP)) allocate(VDEP(Nxi_v, Neta_v, Nz))
-
-if (.not. allocated(TLAT)) allocate(TLAT(Nxi_rho, Neta_rho))
-if (.not. allocated(TLON)) allocate(TLON(Nxi_rho, Neta_rho))
-if (.not. allocated(TDEP)) allocate(TDEP(Nxi_rho, Neta_rho, Nz))
-if (.not. allocated(WDEP)) allocate(WDEP(Nxi_rho, Neta_rho, Ns_w))
-
-! Read the vertical information from the (separate) roms_filename
-
-call nc_check(nf90_open(trim(roms_filename), nf90_nowrite, ncid), &
-      'get_grid', 'open '//trim(roms_filename))
-
-call nc_check(nf90_inq_varid(ncid, 'z_u', VarID), &
-      'get_grid', 'inq_varid z_u '//trim(roms_filename))
-call nc_check(nf90_get_var( ncid, VarID, UDEP), &
-      'get_grid', 'get_var z_u '//trim(roms_filename))
-
-call nc_check(nf90_inq_varid(ncid, 'z_w', VarID), &
-      'get_grid', 'inq_varid z_w '//trim(roms_filename))
-call nc_check(nf90_get_var( ncid, VarID, WDEP), &
-      'get_grid', 'get_var z_w '//trim(roms_filename))
-
-call nc_check(nf90_inq_varid(ncid, 'z_v', VarID), &
-      'get_grid', 'inq_varid z_v '//trim(roms_filename))
-call nc_check(nf90_get_var( ncid, VarID, VDEP), &
-      'get_grid', 'get_var z_v '//trim(roms_filename))
-
-call nc_check(nf90_inq_varid(ncid, 'z_rho', VarID), &
-      'get_grid', 'inq_varid z_rho '//trim(roms_filename))
-call nc_check(nf90_get_var( ncid, VarID, TDEP), &
-      'get_grid', 'get_var z_rho '//trim(roms_filename))
-
-call nc_check(nf90_close(ncid), &
-             'get_var','close '//trim(roms_filename))
-
-! Read the rest of the grid information from the traditional grid file
-
-call nc_check(nf90_open(trim(roms_filename), nf90_nowrite, ncid), &
-      'get_grid', 'open '//trim(roms_filename))
-
-call nc_check(nf90_inq_varid(ncid, 'lon_rho', VarID), &
-   'get_grid', 'inq_varid lon_rho '//trim(roms_filename))
-call nc_check(nf90_get_var( ncid, VarID, TLON), &
-      'get_grid', 'get_var lon_rho '//trim(roms_filename))
-
-where (TLON < 0.0_r8) TLON = TLON + 360.0_r8
-
-call nc_check(nf90_inq_varid(ncid, 'lat_rho', VarID), &
-      'get_grid', 'inq_varid lat_rho '//trim(roms_filename))
-call nc_check(nf90_get_var( ncid, VarID, TLAT), &
-      'get_grid', 'get_var lat_rho '//trim(roms_filename))
-
-call nc_check(nf90_inq_varid(ncid, 'lon_u', VarID), &
-      'get_grid', 'inq_varid lon_u '//trim(roms_filename))
-call nc_check(nf90_get_var( ncid, VarID, ULON), &
-      'get_grid', 'get_var lon_u '//trim(roms_filename))
-
-where (ULON < 0.0_r8) ULON = ULON + 360.0_r8
-
-call nc_check(nf90_inq_varid(ncid, 'lat_u', VarID), &
-      'get_grid', 'inq_varid lat_u '//trim(roms_filename))
-call nc_check(nf90_get_var( ncid, VarID, ULAT), &
-      'get_grid', 'get_var lat_u '//trim(roms_filename))
-
-call nc_check(nf90_inq_varid(ncid, 'lon_v', VarID), &
-      'get_grid', 'inq_varid lon_v '//trim(roms_filename))
-call nc_check(nf90_get_var( ncid, VarID, VLON), &
-      'get_grid', 'get_var lon_v '//trim(roms_filename))
-
-where (VLON < 0.0_r8) VLON = VLON + 360.0_r8
-
-call nc_check(nf90_inq_varid(ncid, 'lat_v', VarID), &
-      'get_grid', 'inq_varid lat_v '//trim(roms_filename))
-call nc_check(nf90_get_var( ncid, VarID, VLAT), &
-      'get_grid', 'get_var lat_v '//trim(roms_filename))
-
-! Be aware that all the depths are negative values.
-! The surface of the ocean is 0.0, the deepest is a big negative value.
-
-if (do_output() .and. debug > 0) then
-    write(string1,*)'    min/max ULON ',minval(ULON), maxval(ULON)
-    write(string2,*)    'min/max ULAT ',minval(ULAT), maxval(ULAT)
-    write(string3,*)    'min/max UDEP ',minval(UDEP), maxval(UDEP)
-    call error_handler(E_MSG,'get_grid',string1, text2=string2, text3=string3)
-
-    write(string1,*)'    min/max VLON ',minval(VLON), maxval(VLON)
-    write(string2,*)    'min/max VLAT ',minval(VLAT), maxval(VLAT)
-    write(string3,*)    'min/max VDEP ',minval(VDEP), maxval(VDEP)
-    call error_handler(E_MSG,'get_grid',string1, text2=string2, text3=string3)
-
-    write(string1,*)'    min/max TLON ',minval(TLON), maxval(TLON)
-    write(string2,*)    'min/max TLAT ',minval(TLAT), maxval(TLAT)
-    write(string3,*)    'min/max TDEP ',minval(TDEP), maxval(TDEP)
-    call error_handler(E_MSG,'get_grid',string1, text2=string2, text3=string3)
-endif
+!#! real(r8), parameter :: all_land = 0.001_r8
+!#! 
+!#! if (.not. allocated(ULAT)) allocate(ULAT(Nxi_u, Neta_u))
+!#! if (.not. allocated(ULON)) allocate(ULON(Nxi_u, Neta_u))
+!#! if (.not. allocated(UDEP)) allocate(UDEP(Nxi_u, Neta_u, Nz))
+!#! 
+!#! if (.not. allocated(VLAT)) allocate(VLAT(Nxi_v, Neta_v))
+!#! if (.not. allocated(VLON)) allocate(VLON(Nxi_v, Neta_v))
+!#! if (.not. allocated(VDEP)) allocate(VDEP(Nxi_v, Neta_v, Nz))
+!#! 
+!#! if (.not. allocated(TLAT)) allocate(TLAT(Nxi_rho, Neta_rho))
+!#! if (.not. allocated(TLON)) allocate(TLON(Nxi_rho, Neta_rho))
+!#! if (.not. allocated(TDEP)) allocate(TDEP(Nxi_rho, Neta_rho, Nz))
+!#! if (.not. allocated(WDEP)) allocate(WDEP(Nxi_rho, Neta_rho, Ns_w))
+!#! 
+!#! ! Read the vertical information from the (separate) roms_filename
+!#! 
+!#! call nc_check(nf90_open(trim(roms_filename), nf90_nowrite, ncid), &
+!#!       'get_grid', 'open '//trim(roms_filename))
+!#! 
+!#! call nc_check(nf90_inq_varid(ncid, 'z_u', VarID), &
+!#!       'get_grid', 'inq_varid z_u '//trim(roms_filename))
+!#! call nc_check(nf90_get_var( ncid, VarID, UDEP), &
+!#!       'get_grid', 'get_var z_u '//trim(roms_filename))
+!#! 
+!#! call nc_check(nf90_inq_varid(ncid, 'z_w', VarID), &
+!#!       'get_grid', 'inq_varid z_w '//trim(roms_filename))
+!#! call nc_check(nf90_get_var( ncid, VarID, WDEP), &
+!#!       'get_grid', 'get_var z_w '//trim(roms_filename))
+!#! 
+!#! call nc_check(nf90_inq_varid(ncid, 'z_v', VarID), &
+!#!       'get_grid', 'inq_varid z_v '//trim(roms_filename))
+!#! call nc_check(nf90_get_var( ncid, VarID, VDEP), &
+!#!       'get_grid', 'get_var z_v '//trim(roms_filename))
+!#! 
+!#! call nc_check(nf90_inq_varid(ncid, 'z_rho', VarID), &
+!#!       'get_grid', 'inq_varid z_rho '//trim(roms_filename))
+!#! call nc_check(nf90_get_var( ncid, VarID, TDEP), &
+!#!       'get_grid', 'get_var z_rho '//trim(roms_filename))
+!#! 
+!#! call nc_check(nf90_close(ncid), &
+!#!              'get_var','close '//trim(roms_filename))
+!#! 
+!#! ! Read the rest of the grid information from the traditional grid file
+!#! 
+!#! call nc_check(nf90_open(trim(roms_filename), nf90_nowrite, ncid), &
+!#!       'get_grid', 'open '//trim(roms_filename))
+!#! 
+!#! call nc_check(nf90_inq_varid(ncid, 'lon_rho', VarID), &
+!#!    'get_grid', 'inq_varid lon_rho '//trim(roms_filename))
+!#! call nc_check(nf90_get_var( ncid, VarID, TLON), &
+!#!       'get_grid', 'get_var lon_rho '//trim(roms_filename))
+!#! 
+!#! where (TLON < 0.0_r8) TLON = TLON + 360.0_r8
+!#! 
+!#! call nc_check(nf90_inq_varid(ncid, 'lat_rho', VarID), &
+!#!       'get_grid', 'inq_varid lat_rho '//trim(roms_filename))
+!#! call nc_check(nf90_get_var( ncid, VarID, TLAT), &
+!#!       'get_grid', 'get_var lat_rho '//trim(roms_filename))
+!#! 
+!#! call nc_check(nf90_inq_varid(ncid, 'lon_u', VarID), &
+!#!       'get_grid', 'inq_varid lon_u '//trim(roms_filename))
+!#! call nc_check(nf90_get_var( ncid, VarID, ULON), &
+!#!       'get_grid', 'get_var lon_u '//trim(roms_filename))
+!#! 
+!#! where (ULON < 0.0_r8) ULON = ULON + 360.0_r8
+!#! 
+!#! call nc_check(nf90_inq_varid(ncid, 'lat_u', VarID), &
+!#!       'get_grid', 'inq_varid lat_u '//trim(roms_filename))
+!#! call nc_check(nf90_get_var( ncid, VarID, ULAT), &
+!#!       'get_grid', 'get_var lat_u '//trim(roms_filename))
+!#! 
+!#! call nc_check(nf90_inq_varid(ncid, 'lon_v', VarID), &
+!#!       'get_grid', 'inq_varid lon_v '//trim(roms_filename))
+!#! call nc_check(nf90_get_var( ncid, VarID, VLON), &
+!#!       'get_grid', 'get_var lon_v '//trim(roms_filename))
+!#! 
+!#! where (VLON < 0.0_r8) VLON = VLON + 360.0_r8
+!#! 
+!#! call nc_check(nf90_inq_varid(ncid, 'lat_v', VarID), &
+!#!       'get_grid', 'inq_varid lat_v '//trim(roms_filename))
+!#! call nc_check(nf90_get_var( ncid, VarID, VLAT), &
+!#!       'get_grid', 'get_var lat_v '//trim(roms_filename))
+!#! 
+!#! ! Be aware that all the depths are negative values.
+!#! ! The surface of the ocean is 0.0, the deepest is a big negative value.
+!#! 
+!#! if (do_output() .and. debug > 0) then
+!#!     write(string1,*)'    min/max ULON ',minval(ULON), maxval(ULON)
+!#!     write(string2,*)    'min/max ULAT ',minval(ULAT), maxval(ULAT)
+!#!     write(string3,*)    'min/max UDEP ',minval(UDEP), maxval(UDEP)
+!#!     call error_handler(E_MSG,'get_grid',string1, text2=string2, text3=string3)
+!#! 
+!#!     write(string1,*)'    min/max VLON ',minval(VLON), maxval(VLON)
+!#!     write(string2,*)    'min/max VLAT ',minval(VLAT), maxval(VLAT)
+!#!     write(string3,*)    'min/max VDEP ',minval(VDEP), maxval(VDEP)
+!#!     call error_handler(E_MSG,'get_grid',string1, text2=string2, text3=string3)
+!#! 
+!#!     write(string1,*)'    min/max TLON ',minval(TLON), maxval(TLON)
+!#!     write(string2,*)    'min/max TLAT ',minval(TLAT), maxval(TLAT)
+!#!     write(string3,*)    'min/max TDEP ',minval(TDEP), maxval(TDEP)
+!#!     call error_handler(E_MSG,'get_grid',string1, text2=string2, text3=string3)
+!#! endif
 
 end subroutine get_grid
 
@@ -916,8 +909,8 @@ MyLoop : do i = 1, MAX_STATE_VARIABLES
 enddo MyLoop
 
 if (nfields == MAX_STATE_VARIABLES) then
-   write(string1,'(2A') 'WARNING: There is a possibility you need to increase ', &
-                        'MAX_STATE_VARIABLES in the global variables in model_mod.f90'
+   write(string1,'(2A)') 'WARNING: There is a possibility you need to increase ', &
+                         'MAX_STATE_VARIABLES in the global variables in model_mod.f90'
 
    write(string2,'(A,i4,A)') 'WARNING: you have specified at least ', nfields, &
                              ' perhaps more'
@@ -953,59 +946,82 @@ character,      intent(in)  :: grid_file
 character,      intent(in)  :: phis_file
 type(cam_grid), intent(out) :: grid
 
+integer :: ncid
+
 ! put this in a subroutine that deals with the grid
 call nc_check( nf90_open(trim(grid_file), NF90_NOWRITE, ncid), &
                'read_grid_info', 'open '//trim(grid_file))
 
 ! Get the grid info
-call get_grid_dimensions()
+call get_grid_dimensions(ncid)
 
+! call get_grid()
 
-call get_grid()
-
-call nc_check( nf90_close(ncid), &
-                  'read_grid_info', 'close '//trim(grid_file))
+call nc_check( nf90_close(ncid), 'read_grid_info', 'close '//trim(grid_file))
 
 end subroutine read_grid_info
+
+!-----------------------------------------------------------------------
+!>
+!> 
+!>   
+
+subroutine get_grid_dimensions(ncid)
+integer, intent(in) :: ncid
+
+call fill_cam_1d_array(ncid, 'lon',  grid_data%lon)
+call fill_cam_1d_array(ncid, 'lat',  grid_data%lat)
+call fill_cam_1d_array(ncid, 'lev',  grid_data%lev)
+call fill_cam_1d_array(ncid, 'ilev', grid_data%ilev) ! for staggered vertical grid
+call fill_cam_1d_array(ncid, 'slon', grid_data%slon)
+call fill_cam_1d_array(ncid, 'slat', grid_data%slat)
+call fill_cam_1d_array(ncid, 'gw',   grid_data%gw)   ! gauss weights
+call fill_cam_1d_array(ncid, 'hyai', grid_data%hyai)
+call fill_cam_1d_array(ncid, 'hybi', grid_data%hybi)
+call fill_cam_1d_array(ncid, 'hyam', grid_data%hyam)
+call fill_cam_1d_array(ncid, 'hybm', grid_data%hybm)
+
+! P0 is a scalar with no dimensionality
+allocate(grid_data%P0%vals(1))
+grid_data%P0%nsize = 1
+
+end subroutine get_grid_dimensions
+
+
 !-----------------------------------------------------------------------
 !>
 !> 
 !>   
 
 
-subroutine fill_cam_1d_array(grid_array, varname)
+subroutine fill_cam_1d_array(ncid, varname, grid_array)
+integer,            intent(in)    :: ncid
+character(len=*),   intent(in)    :: varname
 type(cam_1d_array), intent(inout) :: grid_array
-character(len=*),   intent(in) :: varname
 
 !>@todo need to check that this exists
 call nc_get_variable_size(ncid, varname, grid_array%nsize)
 allocate(grid_array%vals(grid_array%nsize))
 
+call nc_get_variable(ncid, varname, grid_array%vals)
+
 end subroutine fill_cam_1d_array
+
 
 !-----------------------------------------------------------------------
 !>
 !> 
 !>   
 
-subroutine get_grid_dimensions()
-   call fill_cam_1d_array(ncid, 'lon',  grid%lon)
-   call fill_cam_1d_array(ncid, 'lat',  grid%lat)
-   call fill_cam_1d_array(ncid, 'lev',  grid%lev)
-   call fill_cam_1d_array(ncid, 'ilev', grid%ilev) ! for staggered vertical grid
-   call fill_cam_1d_array(ncid, 'slon', grid%slon)
-   call fill_cam_1d_array(ncid, 'slat', grid%slat)
-   call fill_cam_1d_array(ncid, 'gw',   grid%gw)   ! gauss weights
-   call fill_cam_1d_array(ncid, 'hyai', grid%hyai)
-   call fill_cam_1d_array(ncid, 'hybi', grid%hybi)
-   call fill_cam_1d_array(ncid, 'hyam', grid%hyam)
-   call fill_cam_1d_array(ncid, 'hybm', grid%hybm)
 
-   ! P0 is a scalar with no dimensionality
-   allocate(grid%P0%vals(1))
-   grid%P0%nsize = 1
+subroutine free_cam_1d_array(grid_array)
+type(cam_1d_array), intent(inout) :: grid_array
 
-end subroutine get_grid_dimensions
+deallocate(grid_array%vals)
+
+grid_array%nsize = -1
+
+end subroutine free_cam_1d_array
 
 
 !===================================================================

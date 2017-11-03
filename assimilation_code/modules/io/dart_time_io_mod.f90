@@ -12,13 +12,13 @@ module dart_time_io_mod
 !>@todo should this go in state_vector_io_mod or io_filename_mod?
 !> @{
 
-use types_mod,        only : r8, digits12
-use time_manager_mod, only : time_type, set_time, get_time, print_time, &
-                             set_calendar_type, set_date, get_calendar_string, &
-                             operator(+)
+use types_mod,            only : r8, digits12
+use time_manager_mod,     only : time_type, set_time, get_time, print_time, &
+                                 set_calendar_type, set_date, get_calendar_string, &
+                                 operator(+)
 
-use utilities_mod,    only : nc_check, E_MSG, E_ERR, error_handler, to_upper
-
+use utilities_mod,        only : E_MSG, E_ERR, error_handler, to_upper
+use netcdf_utilities_mod, only : nc_check
 use typeSizes
 use netcdf
 

@@ -16,7 +16,7 @@ module obs_impact_mod
 
 use      types_mod, only : r8, obstypelength, missing_r8
 use  utilities_mod, only : register_module, error_handler, E_ERR, E_MSG,       &
-                           open_file, close_file, nc_check, get_next_filename, &
+                           open_file, close_file, get_next_filename, &
                            find_namelist_in_file, check_namelist_read,         &
                            do_nml_file, do_nml_term, nmlfileunit, to_upper
 use  obs_kind_mod        ! all qtys/types, so impossible to enumerate them here

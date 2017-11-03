@@ -147,7 +147,7 @@ private
 ! module local data
 
 integer, parameter :: E_DBG = -2,   E_MSG = -1,  E_ALLMSG = 0, E_WARN = 1, E_ERR = 2
-integer, parameter :: DEBUG = -1, MESSAGE = 0, WARNING = 1, FATAL = 2
+!integer, parameter :: DEBUG = -1, MESSAGE = 0, WARNING = 1, FATAL = 2
 integer, parameter :: NML_NONE = 0, NML_FILE = 1, NML_TERMINAL = 2, NML_BOTH = 3
 
 real(r8), parameter :: TWOPI = PI * 2.0_r8
@@ -169,7 +169,6 @@ public :: file_exist, &
           error_handler, &
           to_upper, &
           squeeze_out_blanks, &
-          nc_check, &
           next_file, &
           logfileunit, &
           nmlfileunit, &
@@ -191,10 +190,6 @@ public :: file_exist, &
           E_ALLMSG, &
           E_WARN, &
           E_ERR, &
-          DEBUG, &
-          MESSAGE, &
-          WARNING, &
-          FATAL, &
           is_longitude_between, &
           get_next_filename, &
           ascii_file_format, &
@@ -737,44 +732,6 @@ contains
       endif
 
    end subroutine dump_unit_attributes
-
-
-!#######################################################################
-
-
-   subroutine error_mesg (routine, message, level)
-
-!             ------------------------------------
-!             |                                  |
-!             |    a very simple error handler   |
-!             |                                  |
-!             ------------------------------------
-!
-!  input:
-!      routine   name of the calling routine (character string)
-!      message   message written to standard output (character string)
-!      level     if not equal to zero then the program terminates
-!
-          character(len=*), intent(in) :: routine, message
-          integer,          intent(in) :: level
-
-          select case (iabs(level))
-             case (0)
-                if ( .not. do_output_flag) return
-                print *, ' MESSAGE from ',routine(1:len_trim(routine))
-                print *, ' ',message(1:len_trim(message))
-             case (1)
-                print *, ' WARNING in ',routine(1:len_trim(routine))
-                print *, ' ',message(1:len_trim(message))
-             case default
-                print *, ' ERROR in ',routine(1:len_trim(routine))
-                print *, ' ',message(1:len_trim(message))
-                call exit_all(99)
-          end select
-
-!         --------------------------------------------
-
-   end subroutine error_mesg
 
 
 !#######################################################################
@@ -1544,6 +1501,7 @@ end subroutine check_namelist_read
 !#######################################################################
 
 
+   !@>todo move to netcdf_utilities_mod
    subroutine nc_check(istatus, subr_name, context)
       integer, intent (in)                   :: istatus
       character(len=*), intent(in)           :: subr_name
@@ -1566,7 +1524,7 @@ end subroutine check_namelist_read
       endif
 
       ! this does not return 
-      call error_mesg(subr_name, error_msg, FATAL)
+      call error_handler(E_ERR, subr_name, error_msg, source, revision, revdate)
   
 
    end subroutine nc_check
