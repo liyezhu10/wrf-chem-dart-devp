@@ -142,7 +142,7 @@
    assimilation_period_days    = 0,
    vert_localization_coord     = 3
    minimal_output              = .false.
-   debug                       = 3
+   debug                       = 13
    /
 
    vert_coord          = 'log_invP'

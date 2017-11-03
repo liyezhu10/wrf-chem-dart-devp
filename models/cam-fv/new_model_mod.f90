@@ -147,6 +147,9 @@ end type
 
 type(cam_stagger) :: grid_stagger
 
+! Surface potential; used for calculation of geometric heights.
+real(r8), allocatable :: phis(:, :)
+
 contains
 
 
@@ -198,12 +201,14 @@ if (do_nml_term()) write(     *     , nml=model_nml)
 
 call set_calendar_type('GREGORIAN')
 
-call read_grid_info(cam_template_filename, cam_phis_filename, grid_data)
+call read_grid_info(cam_template_filename, grid_data)
+call read_cam_phis_array(cam_phis_filename)
 
-! is there a common subroutine outside of the model mod we can call here?
+!>@todo do we need to map_qtys here?
+!>@todo do we need to set the model top related stuff here?
 
 ! set_cam_variable_info() fills var_names, kind_list, clamp_vals, update_list
-! from the &model_mod_nml variables
+! from the &model_mod_nml state_variables
 call set_cam_variable_info(state_variables, nfields)
 
 end subroutine static_init_model
@@ -290,7 +295,7 @@ end subroutine get_state_meta_data
 !>
 !> Model interpolate will interpolate any DART state variable
 !> (i.e. S, T, U, V, Eta) to the given location given a state vector.
-!> The type of the variable being interpolated is obs_type since
+!> The type of the variable being interpolated is obs_qty since
 !> normally this is used to find the expected value of an observation
 !> at some location. The interpolated value is returned in interp_vals
 !> and istatus is 0 for success. NOTE: This is a workhorse routine and is
@@ -299,26 +304,42 @@ end subroutine get_state_meta_data
 !> @param state_handle DART ensemble handle
 !> @param ens_size DART ensemble size
 !> @param location the location of interest
-!> @param obs_type the DART KIND of interest
+!> @param obs_qty the DART KIND of interest
 !> @param interp_val the estimated value of the DART state at the location
 !>          of interest (the interpolated value).
 !> @param istatus interpolation status ... 0 == success, /=0 is a failure
 !>
 
-subroutine model_interpolate(state_handle, ens_size, location, obs_type, interp_val, istatus)
+subroutine model_interpolate(state_handle, ens_size, location, obs_qty, interp_val, istatus)
 
- type(ensemble_type), intent(in) :: state_handle
- integer,             intent(in) :: ens_size
- type(location_type), intent(in) :: location
- integer,             intent(in) :: obs_type
- integer,            intent(out) :: istatus(ens_size)
- real(r8),           intent(out) :: interp_val(ens_size) !< array of interpolated values
+type(ensemble_type), intent(in) :: state_handle
+integer,             intent(in) :: ens_size
+type(location_type), intent(in) :: location
+integer,             intent(in) :: obs_qty
+integer,            intent(out) :: istatus(ens_size)
+real(r8),           intent(out) :: interp_val(ens_size) !< array of interpolated values
+
+integer  :: varid
+real(r8) :: lon_lat_vert(3)
 
 if ( .not. module_initialized ) call static_init_model
 
 ! Successful istatus is 0
 interp_val = MISSING_R8
 istatus = 99
+
+lon_lat_vert = get_location(obs_loc)
+
+varid = get_varid_from_kind(domain_id, obs_qty)
+
+
+if (varid < 0) then
+   if(debug > 12) then
+      write(string1,*)'did not find obs_qty ', obs_qty, ' in the state'
+      call error_handler(E_MSG,'model_interpolate:',string1,source,revision,revdate)
+   endif
+   return
+endif
 
 write(string1,*)'model_interpolate should not be called.'
 write(string2,*)'we are getting forward observations directly from CAM'
@@ -722,135 +743,6 @@ end function read_model_time
 
 !-----------------------------------------------------------------------
 !>
-!> Read the actual grid values from the ROMS netcdf file.
-!>
-!>@todo FIXME:  the original implementation opened 3 different files
-!> to get the grid info - the namelist was:
-!>    roms_ini_filename            = '../data/wc13_ini.nc'
-!>    grid_definition_filename     = '../data/wc13_grd.nc'
-!>    depths_definition_filename   = '../data/wc13_depths.nc'
-!>
-!> these have been consolidated by hernan for the santa cruz version
-!> into a single file.  check with the other rutgers folks to see if
-!> they still need to open 3 different files.  if so, we might need
-!> to restore the 3 namelist items and we can use the same file for
-!> all 3 types of grid info in the first case, and 3 different files
-!> for the second case.
-!>
-
-subroutine get_grid()
-!#! 
-!#! integer  :: ncid, VarID
-!#! 
-!#! real(r8), parameter :: all_land = 0.001_r8
-!#! 
-!#! if (.not. allocated(ULAT)) allocate(ULAT(Nxi_u, Neta_u))
-!#! if (.not. allocated(ULON)) allocate(ULON(Nxi_u, Neta_u))
-!#! if (.not. allocated(UDEP)) allocate(UDEP(Nxi_u, Neta_u, Nz))
-!#! 
-!#! if (.not. allocated(VLAT)) allocate(VLAT(Nxi_v, Neta_v))
-!#! if (.not. allocated(VLON)) allocate(VLON(Nxi_v, Neta_v))
-!#! if (.not. allocated(VDEP)) allocate(VDEP(Nxi_v, Neta_v, Nz))
-!#! 
-!#! if (.not. allocated(TLAT)) allocate(TLAT(Nxi_rho, Neta_rho))
-!#! if (.not. allocated(TLON)) allocate(TLON(Nxi_rho, Neta_rho))
-!#! if (.not. allocated(TDEP)) allocate(TDEP(Nxi_rho, Neta_rho, Nz))
-!#! if (.not. allocated(WDEP)) allocate(WDEP(Nxi_rho, Neta_rho, Ns_w))
-!#! 
-!#! ! Read the vertical information from the (separate) roms_filename
-!#! 
-!#! call nc_check(nf90_open(trim(roms_filename), nf90_nowrite, ncid), &
-!#!       'get_grid', 'open '//trim(roms_filename))
-!#! 
-!#! call nc_check(nf90_inq_varid(ncid, 'z_u', VarID), &
-!#!       'get_grid', 'inq_varid z_u '//trim(roms_filename))
-!#! call nc_check(nf90_get_var( ncid, VarID, UDEP), &
-!#!       'get_grid', 'get_var z_u '//trim(roms_filename))
-!#! 
-!#! call nc_check(nf90_inq_varid(ncid, 'z_w', VarID), &
-!#!       'get_grid', 'inq_varid z_w '//trim(roms_filename))
-!#! call nc_check(nf90_get_var( ncid, VarID, WDEP), &
-!#!       'get_grid', 'get_var z_w '//trim(roms_filename))
-!#! 
-!#! call nc_check(nf90_inq_varid(ncid, 'z_v', VarID), &
-!#!       'get_grid', 'inq_varid z_v '//trim(roms_filename))
-!#! call nc_check(nf90_get_var( ncid, VarID, VDEP), &
-!#!       'get_grid', 'get_var z_v '//trim(roms_filename))
-!#! 
-!#! call nc_check(nf90_inq_varid(ncid, 'z_rho', VarID), &
-!#!       'get_grid', 'inq_varid z_rho '//trim(roms_filename))
-!#! call nc_check(nf90_get_var( ncid, VarID, TDEP), &
-!#!       'get_grid', 'get_var z_rho '//trim(roms_filename))
-!#! 
-!#! call nc_check(nf90_close(ncid), &
-!#!              'get_var','close '//trim(roms_filename))
-!#! 
-!#! ! Read the rest of the grid information from the traditional grid file
-!#! 
-!#! call nc_check(nf90_open(trim(roms_filename), nf90_nowrite, ncid), &
-!#!       'get_grid', 'open '//trim(roms_filename))
-!#! 
-!#! call nc_check(nf90_inq_varid(ncid, 'lon_rho', VarID), &
-!#!    'get_grid', 'inq_varid lon_rho '//trim(roms_filename))
-!#! call nc_check(nf90_get_var( ncid, VarID, TLON), &
-!#!       'get_grid', 'get_var lon_rho '//trim(roms_filename))
-!#! 
-!#! where (TLON < 0.0_r8) TLON = TLON + 360.0_r8
-!#! 
-!#! call nc_check(nf90_inq_varid(ncid, 'lat_rho', VarID), &
-!#!       'get_grid', 'inq_varid lat_rho '//trim(roms_filename))
-!#! call nc_check(nf90_get_var( ncid, VarID, TLAT), &
-!#!       'get_grid', 'get_var lat_rho '//trim(roms_filename))
-!#! 
-!#! call nc_check(nf90_inq_varid(ncid, 'lon_u', VarID), &
-!#!       'get_grid', 'inq_varid lon_u '//trim(roms_filename))
-!#! call nc_check(nf90_get_var( ncid, VarID, ULON), &
-!#!       'get_grid', 'get_var lon_u '//trim(roms_filename))
-!#! 
-!#! where (ULON < 0.0_r8) ULON = ULON + 360.0_r8
-!#! 
-!#! call nc_check(nf90_inq_varid(ncid, 'lat_u', VarID), &
-!#!       'get_grid', 'inq_varid lat_u '//trim(roms_filename))
-!#! call nc_check(nf90_get_var( ncid, VarID, ULAT), &
-!#!       'get_grid', 'get_var lat_u '//trim(roms_filename))
-!#! 
-!#! call nc_check(nf90_inq_varid(ncid, 'lon_v', VarID), &
-!#!       'get_grid', 'inq_varid lon_v '//trim(roms_filename))
-!#! call nc_check(nf90_get_var( ncid, VarID, VLON), &
-!#!       'get_grid', 'get_var lon_v '//trim(roms_filename))
-!#! 
-!#! where (VLON < 0.0_r8) VLON = VLON + 360.0_r8
-!#! 
-!#! call nc_check(nf90_inq_varid(ncid, 'lat_v', VarID), &
-!#!       'get_grid', 'inq_varid lat_v '//trim(roms_filename))
-!#! call nc_check(nf90_get_var( ncid, VarID, VLAT), &
-!#!       'get_grid', 'get_var lat_v '//trim(roms_filename))
-!#! 
-!#! ! Be aware that all the depths are negative values.
-!#! ! The surface of the ocean is 0.0, the deepest is a big negative value.
-!#! 
-!#! if (do_output() .and. debug > 0) then
-!#!     write(string1,*)'    min/max ULON ',minval(ULON), maxval(ULON)
-!#!     write(string2,*)    'min/max ULAT ',minval(ULAT), maxval(ULAT)
-!#!     write(string3,*)    'min/max UDEP ',minval(UDEP), maxval(UDEP)
-!#!     call error_handler(E_MSG,'get_grid',string1, text2=string2, text3=string3)
-!#! 
-!#!     write(string1,*)'    min/max VLON ',minval(VLON), maxval(VLON)
-!#!     write(string2,*)    'min/max VLAT ',minval(VLAT), maxval(VLAT)
-!#!     write(string3,*)    'min/max VDEP ',minval(VDEP), maxval(VDEP)
-!#!     call error_handler(E_MSG,'get_grid',string1, text2=string2, text3=string3)
-!#! 
-!#!     write(string1,*)'    min/max TLON ',minval(TLON), maxval(TLON)
-!#!     write(string2,*)    'min/max TLAT ',minval(TLAT), maxval(TLAT)
-!#!     write(string3,*)    'min/max TDEP ',minval(TDEP), maxval(TDEP)
-!#!     call error_handler(E_MSG,'get_grid',string1, text2=string2, text3=string3)
-!#! endif
-!#! 
-end subroutine get_grid
-
-
-!-----------------------------------------------------------------------
-!>
 !> Fill the array of requested variables, dart kinds, possible min/max
 !> values and whether or not to update the field in the output file.
 !>
@@ -924,17 +816,19 @@ if (nfields == MAX_STATE_VARIABLES) then
                       source,revision,revdate,text2=string2)
 endif
 
-!>TODO JPH: do we need another namelist
+!>@todo JPH: do we need another namelist
 ! JPH cam_template_filename comes from the namelist and should look like
 ! a generic restart file.
 domain_id = add_domain(cam_template_filename, nfields, var_names, kind_list, &
                        clamp_vals, update_list )
 
+!>@todo JPH we may need to call map_qtys. where do we call this?
 call fill_cam_stagger_info(grid_stagger)
 
 if (debug > 2) call state_structure_info(domain_id)
 
 end subroutine set_cam_variable_info
+
 
 !-----------------------------------------------------------------------
 !>
@@ -986,9 +880,8 @@ end subroutine fill_cam_stagger_info
 !>
 
 
-subroutine read_grid_info(grid_file, phis_file, grid )
+subroutine read_grid_info(grid_file, grid )
 character(len=*), intent(in)  :: grid_file
-character(len=*), intent(in)  :: phis_file
 type(cam_grid),   intent(out) :: grid
 
 integer :: ncid
@@ -998,20 +891,19 @@ call nc_check( nf90_open(grid_file, NF90_NOWRITE, ncid), &
                'read_grid_info', 'open '//trim(grid_file))
 
 ! Get the grid info
-call get_grid_dimensions(ncid)
-
-!#! call get_grid()
+call get_cam_grid(ncid)
 
 call nc_check( nf90_close(ncid), 'read_grid_info', 'close '//trim(grid_file))
 
 end subroutine read_grid_info
+
 
 !-----------------------------------------------------------------------
 !>
 !> 
 !>   
 
-subroutine get_grid_dimensions(ncid)
+subroutine get_cam_grid(ncid)
 integer, intent(in) :: ncid
 
 call fill_cam_1d_array(ncid, 'lon',  grid_data%lon)
@@ -1027,10 +919,33 @@ call fill_cam_1d_array(ncid, 'hyam', grid_data%hyam)
 call fill_cam_1d_array(ncid, 'hybm', grid_data%hybm)
 
 ! P0 is a scalar with no dimensionality
-allocate(grid_data%P0%vals(1))
-grid_data%P0%nsize = 1
+call fill_cam_0d_array(ncid, 'P0',   grid_data%P0) 
 
-end subroutine get_grid_dimensions
+
+end subroutine get_cam_grid
+
+
+!-----------------------------------------------------------------------
+!>
+!> 
+!>   
+
+
+subroutine fill_cam_0d_array(ncid, varname, grid_array)
+integer,            intent(in)    :: ncid
+character(len=*),   intent(in)    :: varname
+type(cam_1d_array), intent(inout) :: grid_array
+
+grid_array%nsize = 1
+allocate(grid_array%vals(grid_array%nsize))
+
+call nc_get_variable(ncid, varname, grid_array%vals)
+
+if (debug > 10) then
+   print*, 'variable name ', trim(varname), grid_array%vals
+endif
+
+end subroutine fill_cam_0d_array
 
 
 !-----------------------------------------------------------------------
@@ -1051,7 +966,7 @@ allocate(grid_array%vals(grid_array%nsize))
 call nc_get_variable(ncid, varname, grid_array%vals)
 
 if (debug > 10) then
-   print*, 'variable name', trim(varname), grid_array%vals
+   print*, 'variable name ', trim(varname), grid_array%vals
 endif
 
 end subroutine fill_cam_1d_array
@@ -1060,7 +975,6 @@ end subroutine fill_cam_1d_array
 !>
 !> 
 !>   
-
 
 subroutine free_cam_1d_array(grid_array)
 type(cam_1d_array), intent(inout) :: grid_array
@@ -1071,6 +985,29 @@ grid_array%nsize = -1
 
 end subroutine free_cam_1d_array
 
+
+!-----------------------------------------------------------------------
+!>
+!> 
+!>   
+
+
+subroutine read_cam_phis_array(phis_filename)
+character(len=*),   intent(in)    :: phis_filename
+
+integer :: ncid, nsize(2)
+
+call nc_check( nf90_open(phis_filename, NF90_NOWRITE, ncid), &
+               'read_cam_phis_array', 'open '//trim(phis_filename))
+
+call nc_get_variable_size(ncid, 'PHIS', nsize(:))
+allocate( phis(nsize(1), nsize(2)) )
+
+call nc_get_variable(ncid, 'PHIS', phis)
+
+call nc_check( nf90_close(ncid), 'read_cam_phis_array', 'close '//trim(phis_filename))
+
+end subroutine read_cam_phis_array
 
 !===================================================================
 ! End of model_mod
