@@ -908,7 +908,7 @@ character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
 
 character(len=*), parameter :: routine = 'nc_get_variable_size_1d'
-integer :: ret, varid, dimids(NF90_MAX_DIMS)
+integer :: ret, varid, dimids(NF90_MAX_VAR_DIMS)
 
 ret = nf90_inq_varid(ncid, varname, varid)
 call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename)
@@ -932,7 +932,7 @@ character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
 
 character(len=*), parameter :: routine = 'nc_get_variable_size_Nd'
-integer :: ret, varid, dimids(NF90_MAX_DIMS)
+integer :: ret, varid, dimids(NF90_MAX_VAR_DIMS)
 
 ret = nf90_inq_varid(ncid, varname, varid)
 call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename)
