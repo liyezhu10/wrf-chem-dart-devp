@@ -25,8 +25,7 @@ use        random_seq_mod
 use  ensemble_manager_mod
 use distributed_state_mod
 use   state_structure_mod
-use  netcdf_utilities_mod,  only : nc_check, nc_get_variable, nc_get_variable_size!, &
-                                   
+use  netcdf_utilities_mod,  only : nc_check, nc_get_variable, nc_get_variable_size
 use       location_io_mod
 use     default_model_mod,  only : adv_1step, init_time, init_conditions, &
                                    nc_write_model_vars, pert_model_copies
@@ -78,14 +77,14 @@ integer  :: vert_localization_coord      = VERTISPRESSURE
 integer  :: debug = 0   ! turn up for more and more debug messages
 logical  :: minimal_output = .false.
 character(len=256) :: cam_template_filename = 'caminput.nc' ! template restart file
-character(len=256) :: cam_grid_filename     = 'caminput.nc' ! JPH probably delete?
+!#! character(len=256) :: cam_grid_filename     = 'caminput.nc' ! JPH probably delete?
 character(len=256) :: cam_phis_filename     = 'camphis.nc'
 
 namelist /model_nml/  &
+!#!    cam_grid_filename,           &
    assimilation_period_days,    &
    assimilation_period_seconds, &
    cam_template_filename,       &
-   cam_grid_filename,           &
    cam_phis_filename,           &
    vert_localization_coord,     &
    minimal_output,              &
@@ -724,9 +723,9 @@ end function read_model_time
 !>
 
 subroutine get_grid()
-
-integer  :: ncid, VarID
-
+!#! 
+!#! integer  :: ncid, VarID
+!#! 
 !#! real(r8), parameter :: all_land = 0.001_r8
 !#! 
 !#! if (.not. allocated(ULAT)) allocate(ULAT(Nxi_u, Neta_u))
@@ -830,7 +829,7 @@ integer  :: ncid, VarID
 !#!     write(string3,*)    'min/max TDEP ',minval(TDEP), maxval(TDEP)
 !#!     call error_handler(E_MSG,'get_grid',string1, text2=string2, text3=string3)
 !#! endif
-
+!#! 
 end subroutine get_grid
 
 
@@ -932,20 +931,20 @@ end subroutine set_cam_variable_info
 
 
 subroutine read_grid_info(grid_file, phis_file, grid )
-character,      intent(in)  :: grid_file
-character,      intent(in)  :: phis_file
-type(cam_grid), intent(out) :: grid
+character(len=*), intent(in)  :: grid_file
+character(len=*), intent(in)  :: phis_file
+type(cam_grid),   intent(out) :: grid
 
 integer :: ncid
 
 ! put this in a subroutine that deals with the grid
-call nc_check( nf90_open(trim(grid_file), NF90_NOWRITE, ncid), &
+call nc_check( nf90_open(grid_file, NF90_NOWRITE, ncid), &
                'read_grid_info', 'open '//trim(grid_file))
 
 ! Get the grid info
 call get_grid_dimensions(ncid)
 
-! call get_grid()
+!#! call get_grid()
 
 call nc_check( nf90_close(ncid), 'read_grid_info', 'close '//trim(grid_file))
 

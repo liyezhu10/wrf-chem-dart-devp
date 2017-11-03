@@ -131,6 +131,35 @@
    output_forward_op_errors   = .false.,
    /
 
+&model_nml
+   cam_template_filename       = 'caminput.nc' 
+   cam_phis_filename           = 'cam_phis.nc'
+   state_variables             = 'T' 'QTY_TEMPERATURE', 'NA', 'NA', 'UPDATE'
+   assimilation_period_seconds = 21600,
+   assimilation_period_days    = 0,
+   vert_localization_coord     = 3
+   minimal_output              = .false.
+   debug                       = 0
+   /
+
+   vert_coord          = 'log_invP'
+   pert_names          = 'T'
+   pert_sd             = 0.1,
+   pert_base_vals      = -888888.0d0,
+   highest_obs_pressure_Pa   = 300.0,
+   highest_state_pressure_Pa = 300.0,
+   max_obs_lat_degree        = 90.0,
+   model_version       = 'cam5.4.101',
+   state_num_0d        = 0,
+   state_num_1d        = 0,
+   state_num_2d        = 1,
+   state_num_3d        = 6,
+   state_names_2d      = 'PS'
+   state_names_3d      = 'T','US','VS','Q','CLDLIQ','CLDICE'
+   which_vert_1d       = 0,
+   which_vert_2d       = -1,
+   which_vert_3d       = 6*1,
+
 &state_vector_io_nml
   buffer_state_io         = .false.
   single_precision_output = .false.
@@ -241,30 +270,7 @@
 #         100000. for allowing upper levels to be pulled towards the obs.
 #========================================================================
 
-&model_nml
-   model_version       = 'cam5.4.101',
-   model_config_file   = 'caminput.nc' 
-   cam_phis            = 'cam_phis.nc'
-   state_num_0d        = 0,
-   state_num_1d        = 0,
-   state_num_2d        = 1,
-   state_num_3d        = 6,
-   state_names_2d      = 'PS'
-   state_names_3d      = 'T','US','VS','Q','CLDLIQ','CLDICE'
-   which_vert_1d       = 0,
-   which_vert_2d       = -1,
-   which_vert_3d       = 6*1,
-   vert_coord          = 'log_invP'
-   pert_names          = 'T'
-   pert_sd             = 0.1,
-   pert_base_vals      = -888888.0d0,
-   highest_obs_pressure_Pa   = 300.0,
-   highest_state_pressure_Pa = 300.0,
-   max_obs_lat_degree        = 90.0,
-   Time_step_seconds         = 21600,
-   Time_step_days            = 0,
-   print_details             = .false.,
-   /
+
 
 &location_nml
    horiz_dist_only             = .false.,
@@ -531,7 +537,7 @@
 
 &model_mod_check_nml
    verbose               = .FALSE.
-   test1thru             = 5
+   test1thru             = 1
    loc_of_interest       = 320.0, 18.0, 5.0
    x_ind                 = 10
    kind_of_interest      = 'QTY_U_CURRENT_COMPONENT'
