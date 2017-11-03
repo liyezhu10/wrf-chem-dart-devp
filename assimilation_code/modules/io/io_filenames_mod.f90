@@ -35,7 +35,7 @@ module io_filenames_mod
 
 use types_mod,            only : r4, r8, MISSING_R8, MAX_NUM_DOMS, digits12
 use utilities_mod,        only : file_exist, E_ERR, E_MSG, E_WARN, error_handler,&
-                                 nc_check, open_file, close_file, find_textfile_dims, &
+                                 open_file, close_file, find_textfile_dims, &
                                  do_output
 use time_manager_mod,     only : time_type
 use mpi_utilities_mod,    only : my_task_id
@@ -45,6 +45,7 @@ use state_structure_mod,  only : get_num_domains, get_dim_length, get_dim_name, 
                                  get_FillValue, get_xtype, get_add_offset, get_scale_factor, &
                                  get_has_missing_value, do_io_update
 use ensemble_manager_mod, only : ensemble_type
+use netcdf_utilities_mod, only : nc_check
 
 use netcdf
 

@@ -17,7 +17,9 @@ use             types_mod, only : r8, i8, missing_r8, metadatalength, MAX_NUM_DO
 use         utilities_mod, only : register_module, error_handler, E_MSG, E_ERR, &
                                   initialize_utilities, finalize_utilities,     &
                                   find_namelist_in_file, check_namelist_read,   &
-                                  nc_check, E_MSG, open_file, close_file, do_output
+                                  E_MSG, open_file, close_file, do_output
+
+use  netcdf_utilities_mod, only : nc_check
 
 use     mpi_utilities_mod, only : initialize_mpi_utilities, finalize_mpi_utilities
 

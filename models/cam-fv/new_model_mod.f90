@@ -25,7 +25,8 @@ use        random_seq_mod
 use  ensemble_manager_mod
 use distributed_state_mod
 use   state_structure_mod
-use  netcdf_utilities_mod,  only : nc_check, nc_get_variable
+use  netcdf_utilities_mod,  only : nc_check, nc_get_variable, nc_get_variable_size!, &
+                                   
 use       location_io_mod
 use     default_model_mod,  only : adv_1step, init_time, init_conditions, &
                                    nc_write_model_vars, pert_model_copies
@@ -611,12 +612,13 @@ real(digits12)  :: run_duration
 
 if ( .not. module_initialized ) call static_init_model
 
+!>@todo need to put code to write cam model time
+
 if (present(adv_to_time)) then
-   string3 = time_to_string(adv_to_time)
    write(string1,*)'CAM/DART not configured to advance CAM.'
-   write(string2,*)'called with optional advance_to_time of'
+   write(string2,*)'called with optional advance_to_time '
    call error_handler(E_ERR, 'write_model_time', string1, &
-              source, revision, revdate, text2=string2,text3=string3)
+              source, revision, revdate, text2=string2)
 endif
 
 end subroutine write_model_time
@@ -634,6 +636,9 @@ character(len=*), intent(in) :: filename
 type(time_type)              :: read_model_time
 
 integer :: ncid
+integer :: timesize
+integer :: datefull, datesec
+integer :: iyear, imonth, iday, ihour, imin, isec, rem
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -649,56 +654,41 @@ call nc_check( nf90_open(trim(filename), NF90_NOWRITE, ncid), &
 ! 'time' (the unlimited dimension): date, datesec
 ! This code require that the time length be size 1
 
-call nc_check(nf90_inq_dimid(ncid, 'time', dimid), &
-        'read_cam_init', 'inq_dimid time '//trim(file_name))
-call nc_check(nf90_inquire_dimension(ncid, dimid, len=dimlen), &
-        'read_cam_init', 'inquire_dimension time '//trim(file_name))
+call nc_get_variable_size(ncid, 'time', timesize)
 
-if (dimlen /= 1) then
-   write(string1,*)trim(file_name),' has',dimlen,'times. Require exactly 1.'
-   call error_handler(E_ERR, 'read_cam_init', string1, source, revision, revdate)
-endif
+!>@todo do we really need to ceck this if it is never going to happen.
+!#! if (timesize /= 1) then
+!#!    write(string1,*) trim(filename),' has',timesize,'times. Require exactly 1.'
+!#!    call error_handler(E_ERR, 'read_model_time', string1, source, revision, revdate)
+!#! endif
 
-allocate(datetmp(dimlen), datesec(dimlen))
 
-call nc_check(nf90_inq_varid(ncid, 'date', varid), &
-       'read_cam_init', 'inq_varid date '//trim(file_name))
-call nc_check(nf90_get_var(ncid, varid, values=datetmp), &
-       'read_cam_init', 'get_var date '//trim(file_name))
-
-call nc_check(nf90_inq_varid(ncid, 'datesec', varid), &
-       'read_cam_init', 'inq_varid datesec '//trim(file_name))
-call nc_check(nf90_get_var(ncid, varid, values=datesec), &
-       'read_cam_init', 'get_var datesec '//trim(file_name))
-
-! for future extensibility, presume we find a 'timeindex' that we want.
-! Since we only support 1 timestep in the file, this is easy.
-
-timestep = 1
+call nc_get_variable(ncid, 'date',    datefull)
+call nc_get_variable(ncid, 'datesec', datesec)
 
 ! The 'date' is YYYYMMDD ... datesec is 'current seconds of current day'
-iyear  = datetmp(timestep) / 10000
-rem    = datetmp(timestep) - iyear*10000
+iyear  = datefull / 10000
+rem    = datefull - iyear*10000
 imonth = rem / 100
 iday   = rem - imonth*100
 
-ihour  = datesec(timestep) / 3600
-rem    = datesec(timestep) - ihour*3600
+ihour  = datesec / 3600
+rem    = datesec - ihour*3600
 imin   = rem / 60
 isec   = rem - imin*60
 
-deallocate(datetmp, datesec)
-
 ! some cam files are from before the start of the gregorian calendar.
 ! since these are 'arbitrary' years, just change the offset.
-
 if (iyear < 1601) then
    write(string1,*)' '
-   write(string2,*)'WARNING - ',trim(file_name),' changing year from ',iyear,'to',iyear+1601
-   call error_handler(E_MSG, 'read_cam_init', string1, source, revision, &
-                revdate, text2=string2,text3='to make it a valid Gregorian date.')
+   write(string2,*)'WARNING - ',trim(filename),' changing year from ', &
+                   iyear,'to',iyear+1601
+
+   call error_handler(E_MSG, 'read_model_time', string1, source, revision, &
+                      revdate, text2=string2,text3='to make it a valid Gregorian date.')
+
    write(string1,*)' '
-   call error_handler(E_MSG, 'read_cam_init', string1, source, revision)
+   call error_handler(E_MSG, 'read_model_time', string1, source, revision)
    iyear = iyear + 1601
 endif
 
