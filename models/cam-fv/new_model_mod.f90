@@ -114,7 +114,7 @@ integer :: domain_id
 
 type cam_1d_array
    integer  :: nsize
-   real(r8), allocatable :: vals(:) 
+   real(r8), allocatable :: vals(:)
 end type
 
 type cam_grid
@@ -134,6 +134,18 @@ end type
 
 type(cam_grid) :: grid_data
 
+
+integer, parameter :: STAGGER_NONE = -1
+integer, parameter :: STAGGER_U    =  1
+integer, parameter :: STAGGER_V    =  2
+integer, parameter :: STAGGER_W    =  3 
+integer, parameter :: STAGGER_UV   =  4
+
+type cam_stagger
+   integer, allocatable :: qty_stagger(:)
+end type
+
+type(cam_stagger) :: grid_stagger
 
 contains
 
@@ -184,6 +196,7 @@ call check_namelist_read(iunit, io, 'model_nml')
 if (do_nml_file()) write(logfileunit, nml=model_nml)
 if (do_nml_term()) write(     *     , nml=model_nml)
 
+call set_calendar_type('GREGORIAN')
 
 call read_grid_info(cam_template_filename, cam_phis_filename, grid_data)
 
@@ -244,21 +257,26 @@ call get_model_variable_indices(index_in, iloc, jloc, vloc, var_id=myvarid)
 
 myqty = get_kind_index(domain_id, myvarid)
 
-select case (myqty)
-  case (QTY_U_WIND_COMPONENT)
-   location = set_location(grid_data%slon%vals(iloc), &
-                           grid_data%lat%vals(jloc), &
-                           grid_data%lev%vals(vloc), VERTISLEVEL)
-
-  case (QTY_V_WIND_COMPONENT)
+select case (grid_stagger%qty_stagger(myqty))
+  case (STAGGER_U)
    location = set_location(grid_data%lon%vals(iloc), &
                            grid_data%slat%vals(jloc), &
-                           grid_data%lev%vals(vloc), VERTISLEVEL)
+                           real(vloc,r8), VERTISLEVEL)
 
+  case (STAGGER_V)
+   location = set_location(grid_data%slon%vals(iloc), &
+                           grid_data%lat%vals(jloc), &
+                           real(vloc,r8), VERTISLEVEL)
+   
+  !>@todo not sure what to do yet. ? +-1/2 ?
+  case (STAGGER_W)
+   location = set_location(grid_data%lon%vals(iloc), &
+                           grid_data%lat%vals(jloc), &
+                           real(vloc,r8), VERTISLEVEL)
   case default
    location = set_location(grid_data%lon%vals(iloc), &
                            grid_data%lat%vals(jloc), &
-                           grid_data%lev%vals(vloc), VERTISLEVEL)
+                           real(vloc,r8), VERTISLEVEL)
 
 end select
 
@@ -323,8 +341,6 @@ function shortest_time_between_assimilations()
 type(time_type) :: shortest_time_between_assimilations
 
 if ( .not. module_initialized ) call static_init_model
-
-call set_calendar_type('GREGORIAN')
 
 shortest_time_between_assimilations = set_time(assimilation_period_seconds, &
                                                assimilation_period_days)
@@ -914,9 +930,49 @@ endif
 domain_id = add_domain(cam_template_filename, nfields, var_names, kind_list, &
                        clamp_vals, update_list )
 
+call fill_cam_stagger_info(grid_stagger)
+
 if (debug > 2) call state_structure_info(domain_id)
 
 end subroutine set_cam_variable_info
+
+!-----------------------------------------------------------------------
+!>
+!> Fill table to tell what type of stagger the variable has
+!>
+
+
+subroutine fill_cam_stagger_info(stagger)
+type(cam_stagger), intent(inout) :: stagger
+
+integer :: ivar, jdim, qty_index
+
+allocate(stagger%qty_stagger(0:get_num_quantities()))
+
+stagger%qty_stagger = STAGGER_NONE
+
+do ivar = 1, get_num_variables(domain_id)
+   do jdim = 1, get_num_dims(domain_id, ivar)
+
+      if (get_dim_name(domain_id, ivar, jdim) == 'slat') then
+         qty_index = get_kind_index(domain_id, ivar) ! qty is kind
+         stagger%qty_stagger(qty_index) = STAGGER_U
+      endif
+
+      if (get_dim_name(domain_id, ivar, jdim) == 'slon') then
+         qty_index = get_kind_index(domain_id, ivar)
+         stagger%qty_stagger(qty_index) = STAGGER_V
+      endif
+
+      if (get_dim_name(domain_id, ivar, jdim) == 'ilev') then
+         qty_index = get_kind_index(domain_id, ivar)
+         stagger%qty_stagger(qty_index) = STAGGER_W
+      endif
+
+   enddo
+enddo
+
+end subroutine fill_cam_stagger_info
 
 
 !-----------------------------------------------------------------------
@@ -994,8 +1050,11 @@ allocate(grid_array%vals(grid_array%nsize))
 
 call nc_get_variable(ncid, varname, grid_array%vals)
 
-end subroutine fill_cam_1d_array
+if (debug > 10) then
+   print*, 'variable name', trim(varname), grid_array%vals
+endif
 
+end subroutine fill_cam_1d_array
 
 !-----------------------------------------------------------------------
 !>

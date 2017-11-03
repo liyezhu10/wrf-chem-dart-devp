@@ -1685,7 +1685,7 @@ end subroutine set_dart_kinds
 !-------------------------------------------------------------------------------
 !> Returns the variable dart kind index
 
-
+!>@todo need to switch all kinds to qty
 function get_kind_index(dom_id, var_id)
 
 integer, intent(in) :: dom_id ! domain

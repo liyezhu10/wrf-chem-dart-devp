@@ -134,12 +134,15 @@
 &model_nml
    cam_template_filename       = 'caminput.nc' 
    cam_phis_filename           = 'cam_phis.nc'
-   state_variables             = 'T' 'QTY_TEMPERATURE', 'NA', 'NA', 'UPDATE'
+   state_variables             = 'T'  'QTY_TEMPERATURE',       'NA', 'NA', 'UPDATE'
+                                 'US' 'QTY_U_WIND_COMPONENT',  'NA', 'NA', 'UPDATE'
+                                 'VS' 'QTY_V_WIND_COMPONENT',  'NA', 'NA', 'UPDATE'
+                                 'Q'  'QTY_SPECIFIC_HUMIDITY', 'NA', 'NA', 'UPDATE'
    assimilation_period_seconds = 21600,
    assimilation_period_days    = 0,
    vert_localization_coord     = 3
    minimal_output              = .false.
-   debug                       = 0
+   debug                       = 3
    /
 
    vert_coord          = 'log_invP'
@@ -536,11 +539,13 @@
   /
 
 &model_mod_check_nml
+   input_state_files     = 'caminput.nc'
+   output_state_files    = 'mmc_output.nc'
    verbose               = .FALSE.
-   test1thru             = 1
+   test1thru             = 3
    loc_of_interest       = 320.0, 18.0, 5.0
-   x_ind                 = 10
-   kind_of_interest      = 'QTY_U_CURRENT_COMPONENT'
+   x_ind                 = 359435
+   kind_of_interest      = 'QTY_U_WIND_COMPONENT'
    interp_test_lonrange  = 0.0, 359.0
    interp_test_dlon      = 1.0
    interp_test_latrange  = -89.0, 89.0
