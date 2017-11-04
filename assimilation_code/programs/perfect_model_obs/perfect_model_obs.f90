@@ -9,13 +9,16 @@ program perfect_model_obs
 ! Program to build an obs_sequence file from simulated observations.
 
 use        types_mod,     only : r8, i8, metadatalength, MAX_NUM_DOMS
-use    utilities_mod,     only : initialize_utilities, register_module, error_handler, &
+
+use    utilities_mod,     only : register_module, error_handler, &
                                  find_namelist_in_file, check_namelist_read,           &
                                  E_ERR, E_MSG, E_DBG, nmlfileunit, timestamp,          &
                                  do_nml_file, do_nml_term, logfileunit, &
-                                 open_file, close_file, finalize_utilities
+                                 open_file, close_file
+
 use time_manager_mod,     only : time_type, get_time, set_time, operator(/=), print_time,   &
                                  generate_seed
+
 use obs_sequence_mod,     only : read_obs_seq, obs_type, obs_sequence_type,                 &
                                  get_obs_from_key, set_copy_meta_data, get_obs_def,         &
                                  get_time_range_keys, set_obs_values, set_qc, set_obs,      &
@@ -26,29 +29,33 @@ use obs_sequence_mod,     only : read_obs_seq, obs_type, obs_sequence_type,     
                                  
 
 use      obs_def_mod,     only : obs_def_type, get_obs_def_error_variance, get_obs_def_time
+
 use    obs_model_mod,     only : move_ahead, advance_state, set_obs_model_trace
+
 use  assim_model_mod,     only : static_init_assim_model, get_model_size,                    &
                                  get_initial_condition
    
-use mpi_utilities_mod,    only : task_count, task_sync, initialize_mpi_utilities, &
+use mpi_utilities_mod,    only : task_sync, initialize_mpi_utilities, &
                                  finalize_mpi_utilities
 
 use   random_seq_mod,     only : random_seq_type, init_random_seq, random_gaussian
+
 use ensemble_manager_mod, only : init_ensemble_manager,               &
                                  end_ensemble_manager, ensemble_type,  &
-                                 get_my_num_copies, get_ensemble_time, prepare_to_write_to_vars,      &
+                                 get_my_num_copies, get_ensemble_time, &
                                  prepare_to_read_from_vars, allocate_vars,  &
                                  all_vars_to_all_copies, &
                                  all_copies_to_all_vars
 
-use           filter_mod, only : filter_set_initial_time, filter_sync_keys_time
+! JPH Should these be moved?  ! utilities_mod perhaps?
+use          filter_mod,   only : filter_set_initial_time, filter_sync_keys_time 
 
 use state_vector_io_mod,   only : state_vector_io_init, &
                                   read_state, write_state
 
-use io_filenames_mod,      only : io_filenames_init, file_info_type, file_info_dump, &
-                                  combine_file_info, set_file_metadata,  &
-                                  set_io_copy_flag, check_file_info_variable_shape, &
+use    io_filenames_mod,   only : io_filenames_init, file_info_type, &
+                                  set_file_metadata,  &
+                                  set_io_copy_flag, &
                                   READ_COPY, WRITE_COPY
                                   
 use direct_netcdf_mod,     only : finalize_single_file_io
@@ -59,9 +66,9 @@ use ensemble_manager_mod,  only : set_num_extra_copies ! should this be through 
 
 use distributed_state_mod, only : create_state_window, free_state_window
 
-use forward_operator_mod, only : get_expected_obs_distrib_state
+use forward_operator_mod,  only : get_expected_obs_distrib_state
 
-use mpi_utilities_mod,    only : my_task_id
+use mpi_utilities_mod,     only : my_task_id
 
 implicit none
 
@@ -265,44 +272,64 @@ has_cycling = single_file_out
 ! Initialize file names:
 
 ! this routine allocates the second argument to be the correct length
-call parse_filenames(input_state_files,  input_filelist,  nfilesin)
+call parse_filenames( input_state_files,  input_filelist, nfilesin)
 call parse_filenames(output_state_files, output_filelist, nfilesout)
 
-allocate(true_state_filelist(nfilesout))
-
-! mutiple domains ( this is very unlikely to be the case, but in order to
-! set_file_metadata we need to have a file list that has the same number
-! of files as domains.
+! had code true_state.nc.  This contains multiple time steps in the 
+! case of cycling.
 if (nfilesout > 1) then
+  ! mutiple domains ( this is very unlikely to be the case, but in order to
+  ! set_file_metadata we need to have a file list that has the same number
+  ! of files as domains.
+   allocate(true_state_filelist(nfilesout))
    do i = 1, nfilesout
       write(true_state_filelist(i),'(a,i0.2)') 'true_state_d',i
    enddo
 else
+   allocate(true_state_filelist(1))
    true_state_filelist(1) = 'true_state.nc'
 endif
 
-!> @todo FIXME  if nfilesout == 0 and write_output_state_to_file is .false.
-!> that shouldn't be an error.  if nfilesin == 0 and read_input_state_from_file
-!> is false, that also shouldn't be an error.  (unless you're writing the mean
-!> and sd, and then maybe we should have a different name for output of input values.)
-if (nfilesin == 0 .or. nfilesout == 0 ) then
-   msgstring = 'must specify both "input_state_files" and "output_state_files" in the namelist'
+if (.not. read_input_state_from_file .and. single_file_in) then
+   msgstring = 'ignoring input_state_files and generating ics from the model_mod'
+   call error_handler(E_MSG,'perfect_main',msgstring,source,revision,revdate)
+endif
+
+if (.not. write_output_state_to_file .and. nfilesout > 0) then
+   msgstring = 'ignoring output_state_files '//output_state_files(1)
+   call error_handler(E_MSG,'perfect_main',msgstring,source,revision,revdate)
+endif
+
+! either you can set your initial conditions through the model mod if 
+! read_input_state_from_file = .false. or you must specify the name
+! of at least one restart file.
+if (read_input_state_from_file .and. nfilesin == 0) then
+   msgstring = 'must specify at least one restart file in the "input_state_files" namelist'
    call error_handler(E_ERR,'perfect_main',msgstring,source,revision,revdate)
 endif
 
-call io_filenames_init(file_info_input,  1, cycling=has_cycling, single_file=single_file_in)
-call set_file_metadata(file_info_input,  1, input_filelist, 'perfect_input', 'pmo initial condition')
-call set_io_copy_flag( file_info_input,  1, READ_COPY) 
+if(write_output_state_to_file .and. nfilesout == 0 ) then
+   msgstring = 'must specify at least one restart file in the "output_state_files" namelist'
+   call error_handler(E_ERR,'perfect_main',msgstring,source,revision,revdate)
+endif 
 
-! True State
-call io_filenames_init(file_info_true, 1, cycling=has_cycling, single_file=single_file_out)
-call set_file_metadata(file_info_true, 1, true_state_filelist, 'true_state', 'true state')
-call set_io_copy_flag( file_info_true, 1, 1, WRITE_COPY, num_output_ens=1)
+if (read_input_state_from_file) then
+   call io_filenames_init(file_info_input,  1, cycling=single_file_in, single_file=single_file_in)
+   call set_file_metadata(file_info_input,  1, input_filelist, 'perfect_input', 'pmo initial condition')
+   call set_io_copy_flag( file_info_input,  1, READ_COPY) 
+endif
 
-! Perfect Restart
-call io_filenames_init(file_info_output, 1, cycling=has_cycling, single_file=single_file_out)
-call set_file_metadata(file_info_output, 1, output_filelist, 'perfect_restart', 'pmo restart')
-call set_io_copy_flag( file_info_output, 1, 1, WRITE_COPY, num_output_ens=1)
+if (write_output_state_to_file) then
+   ! True State
+   call io_filenames_init(file_info_true, 1, cycling=has_cycling, single_file=single_file_out)
+   call set_file_metadata(file_info_true, 1, true_state_filelist, 'true_state', 'true state')
+   call set_io_copy_flag( file_info_true, 1, 1, WRITE_COPY, num_output_ens=1)
+   
+   ! Perfect Restart (Single time stamp for filter)
+   call io_filenames_init(file_info_output, 1, cycling=has_cycling, single_file=single_file_out)
+   call set_file_metadata(file_info_output, 1, output_filelist, 'perfect_restart', 'pmo restart')
+   call set_io_copy_flag( file_info_output, 1, 1, WRITE_COPY, num_output_ens=1)
+endif
 
 ! Set a time type for initial time if namelist inputs are not negative
 call filter_set_initial_time(init_time_days, init_time_seconds, time1, read_time_from_file)
@@ -417,8 +444,8 @@ AdvanceTime: do
       call print_ens_time(ens_handle, 'Ensemble data time before advance')
 
       ! we are going to advance the model - make sure we're doing single file output
-      if (.not. has_cycling) then
-         call error_handler(E_ERR,'filter:', &
+      if (.not. has_cycling .and. write_output_state_to_file) then
+         call error_handler(E_ERR,'perfect_model_obs:', &
              'advancing the model inside PMO and multiple file output not currently supported', &
              source, revision, revdate, text2='support will be added in subsequent releases', &
              text3='set "single_file_out=.true" for PMO to advance the model, or advance the model outside PMO')
@@ -473,12 +500,15 @@ AdvanceTime: do
 
    ! Output the true state to the netcdf file
    if((output_interval > 0) .and. &
-      (time_step_number / output_interval * output_interval == time_step_number)) then
+      (time_step_number / output_interval * output_interval == time_step_number) .and. &
+      write_output_state_to_file) then
 
       call trace_message('Before updating true state')
+
       if(has_cycling) then
          call write_state(ens_handle, file_info_true)
       endif
+
       call trace_message('After  updating true state')
 
    endif
@@ -595,14 +625,15 @@ if(output_forward_op_errors) call close_file(forward_unit)
 
 call trace_message('End of main evaluation loop, starting cleanup', 'perfect_model_obs:', -1)
 
+! free the rma access window
+call free_state_window(ens_handle, fwd_op_ens_handle, qc_ens_handle)
+
 ! Write out the sequence
 call trace_message('Before writing output sequence file')
 if (ens_handle%my_pe == 0) call write_obs_seq(seq, obs_seq_out_file_name)
-call end_ensemble_manager(fwd_op_ens_handle)
-call end_ensemble_manager(qc_ens_handle)
 call trace_message('After  writing output sequence file')
 
-! Output a restart file if requested
+! Output a restart file if requested at the last time stamp.
 call trace_message('Before writing state restart file if requested')
 if(write_output_state_to_file) then
    call write_state(ens_handle, file_info_output)
@@ -611,16 +642,18 @@ if(write_output_state_to_file) then
 endif
 
 ! Write the last time step to the true state file
-if (single_file_out) then
+if (has_cycling .and. write_output_state_to_file) then
    call write_state(ens_handle, file_info_true)
-   call finalize_single_file_io(file_info_true)
+   if (single_file_out) &
+      call finalize_single_file_io(file_info_true)
 endif
-
 call trace_message('After  writing state restart file if requested')
-call trace_message('Before ensemble and obs memory cleanup')
 
+call trace_message('Before ensemble and obs memory cleanup')
 !  Release storage for ensemble
 call end_ensemble_manager(ens_handle)
+call end_ensemble_manager(fwd_op_ens_handle)
+call end_ensemble_manager(qc_ens_handle)
 
 ! Free up the observation kind and obs sequence
 call destroy_obs(obs)
@@ -629,8 +662,6 @@ call trace_message('After  ensemble and obs memory cleanup')
 
 call trace_message('Perfect_model done')
 call timestamp_message('Perfect_model done')
-
-!call error_handler(E_MSG,'perfect_main','FINISHED',source,revision,revdate)
 
 ! closes the log file.
 call finalize_mpi_utilities()
