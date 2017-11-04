@@ -583,7 +583,8 @@ integer, allocatable :: reg_list_lat(:,:,:)
 real(r8) :: u_c_lons(4), u_c_lats(4), pole_row_lon
 integer  :: i, j, k, pindex, nx, ny, nrx, nry, istatus
 integer  :: reg_lon_ind(2), reg_lat_ind(2), u_total, u_index
-logical  :: cyclic, xlim
+logical  :: cyclic
+integer  :: xlim
 
 allocate(reg_list_lon(h%ii%num_reg_x, h%ii%num_reg_y, h%ii%max_reg_list_num))
 allocate(reg_list_lat(h%ii%num_reg_x, h%ii%num_reg_y, h%ii%max_reg_list_num))
@@ -611,7 +612,8 @@ if (.not. h%opt%global_grid) then
       else
          write(string1,*)'min_lon, max_lon, lon_width, spans_lon_zero: ', &
                     h%ii%min_lon, h%ii%max_lon, h%ii%lon_width, h%opt%spans_lon_zero
-         call error_handler(E_ERR,'init_irreg_interp','regional grid with bad longitudes', &                            source, revision, revdate, text2=string1)
+         call error_handler(E_ERR,'init_irreg_interp','regional grid with bad longitudes', &                            
+                            source, revision, revdate, text2=string1)
       endif
    endif
 

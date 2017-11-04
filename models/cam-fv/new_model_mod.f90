@@ -25,12 +25,15 @@ use        random_seq_mod
 use  ensemble_manager_mod
 use distributed_state_mod
 use   state_structure_mod
-use  netcdf_utilities_mod,  only : nc_check, nc_get_variable, nc_get_variable_size
+use  netcdf_utilities_mod,  only : nc_check, nc_get_variable, nc_get_variable_size, &
+                                   nc_add_attribute_to_variable, nc_define_real_variable, &
+                                   nc_add_global_creation_time, nc_add_global_attribute, &
+                                   nc_define_dimension, nc_put_variable, nc_sync, nc_enddef, &
+                                   nc_redef
 use       location_io_mod
 use        quad_utils_mod
 use     default_model_mod,  only : adv_1step, init_time, init_conditions, &
                                    nc_write_model_vars, pert_model_copies
-
 use netcdf
 
 implicit none
@@ -401,233 +404,150 @@ end subroutine end_model
 !> This includes coordinate variables and some metadata, but NOT the
 !> actual DART state.
 !>
-!> @param ncid the netCDF handle of the DART diagnostic file opened by
-!>                 assim_model_mod:init_diag_output
-!> @param model_writes_state have the state structure write out all of the
-!>                 state variables
+!> @param ncid    the netCDF handle of the DART diagnostic file opened by
+!>                assim_model_mod:init_diag_output
 
-subroutine nc_write_model_atts(ncid, domain_id)
+subroutine nc_write_model_atts(ncid, dom_id)
 
 integer, intent(in) :: ncid      ! netCDF file identifier
-integer, intent(in) :: domain_id
-
-integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
+integer, intent(in) :: dom_id
 
 ! for the dimensions and coordinate variables
-integer :: nxirhoDimID, nxiuDimID, nxivDimID
-integer :: netarhoDimID, netauDimID, netavDimID
-integer :: nsrhoDimID, nswDimID
-integer :: VarID
+integer :: NlonDimID, NlatDimID, NzDimID
+integer :: ulonVarID, ulatVarID, tlonVarID, tlatVarID, ZGVarID, ZCVarID
+integer :: KMTVarID, KMUVarID
 
-! local variables
+!----------------------------------------------------------------------
+! local variables 
+!----------------------------------------------------------------------
 
-character(len=256) :: filename
+character(len=*), parameter :: routine = 'nc_write_model_atts'
+integer     :: i
 
 if ( .not. module_initialized ) call static_init_model
 
-! we only have a netcdf handle here so we do not know the filename
-! or the fortran unit number.  but construct a string with at least
-! the netcdf handle, so in case of error we can trace back to see
-! which netcdf file is involved.
+!-------------------------------------------------------------------------------
+! Write Global Attributes 
+!-------------------------------------------------------------------------------
+call nc_redef(ncid)
 
-write(filename,*) 'ncid', ncid
+call nc_add_global_creation_time(ncid)
 
-!#! ! Write Global Attributes
-!#! 
-!#! !>@todo FIXME  make writing the grid info optional.
-!#! !> based on a namelist setting.  if not writing grid,
-!#! !> this routine has nothing to do.
-!#! 
-!#! if (minimal_output) return
-!#! 
-!#! ! add grid info
-!#! call nc_redef(ncid)
-!#! 
-!#! call nc_add_global_creation_time(ncid)
-!#! 
-!#! call nc_add_global_attribute(ncid, "model_source", source)
-!#! call nc_add_global_attribute(ncid, "model_revision", revision)
-!#! call nc_add_global_attribute(ncid, "model_revdate", revdate)
-!#! 
-!#! call nc_add_global_attribute(ncid, "model", "CAM")
-!#! 
-!#! ! We need to output the grid information
-!#! ! Define the new dimensions IDs
-!#! 
-!#! call nc_check(nf90_def_dim(ncid, name='xi_rho',  len = Nxi_rho, &
-!#!      dimid = nxirhoDimID),'nc_write_model_atts', 'xi_rho def_dim '//trim(filename))
-!#! 
-!#! call nc_check(nf90_def_dim(ncid, name='eta_rho', len = Neta_rho,&
-!#!      dimid = netarhoDimID),'nc_write_model_atts', 'eta_rho def_dim '//trim(filename))
-!#! 
-!#! call nc_check(nf90_def_dim(ncid, name='s_rho',   len = Ns_rho,&
-!#!      dimid = nsrhoDimID),'nc_write_model_atts', 's_rho def_dim '//trim(filename))
-!#! 
-!#! call nc_check(nf90_def_dim(ncid, name='s_w',   len = Ns_w,&
-!#!      dimid = nswDimID),'nc_write_model_atts', 's_w def_dim '//trim(filename))
-!#! 
-!#! call nc_check(nf90_def_dim(ncid, name='xi_u',    len = Nxi_u,&
-!#!      dimid = nxiuDimID),'nc_write_model_atts', 'xi_u def_dim '//trim(filename))
-!#! 
-!#! call nc_check(nf90_def_dim(ncid, name='xi_v',    len = Nxi_v,&
-!#!      dimid = nxivDimID),'nc_write_model_atts', 'xi_v def_dim '//trim(filename))
-!#! 
-!#! call nc_check(nf90_def_dim(ncid, name='eta_u',   len = Neta_u,&
-!#!      dimid = netauDimID),'nc_write_model_atts', 'eta_u def_dim '//trim(filename))
-!#! 
-!#! call nc_check(nf90_def_dim(ncid, name='eta_v',   len = Neta_v,&
-!#!      dimid = netavDimID),'nc_write_model_atts', 'eta_v def_dim '//trim(filename))
-!#! 
-!#! ! Create the Coordinate Variables and give them Attributes
-!#! ! The values will be added in a later block of code.
-!#! 
-!#! call nc_check(nf90_def_var(ncid,name='lon_rho', xtype=nf90_double, &
-!#!               dimids=(/ nxirhoDimID, netarhoDimID /), varid=VarID),&
-!#!               'nc_write_model_atts', 'lon_rho def_var '//trim(filename))
-!#! call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'rho longitudes'), &
-!#!               'nc_write_model_atts', 'lon_rho long_name '//trim(filename))
-!#! call nc_check(nf90_put_att(ncid,  VarID, 'units', 'degrees_east'), &
-!#!               'nc_write_model_atts', 'lon_rho units '//trim(filename))
-!#! 
-!#! call nc_check(nf90_def_var(ncid,name='lat_rho', xtype=nf90_double, &
-!#!               dimids=(/ nxirhoDimID, netarhoDimID /), varid=VarID),&
-!#!               'nc_write_model_atts', 'lat_rho def_var '//trim(filename))
-!#! call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'rho latitudes'), &
-!#!               'nc_write_model_atts', 'lat_rho long_name '//trim(filename))
-!#! call nc_check(nf90_put_att(ncid,  VarID, 'units', 'degrees_north'), &
-!#!               'nc_write_model_atts', 'lat_rho units '//trim(filename))
-!#! 
-!#! call nc_check(nf90_def_var(ncid,name='lon_u', xtype=nf90_double, &
-!#!               dimids=(/ nxiuDimID, netauDimID /), varid=VarID),&
-!#!               'nc_write_model_atts', 'lon_u def_var '//trim(filename))
-!#! call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'u longitudes'), &
-!#!               'nc_write_model_atts', 'lon_u long_name '//trim(filename))
-!#! call nc_check(nf90_put_att(ncid,  VarID, 'units', 'degrees_east'), &
-!#!               'nc_write_model_atts', 'lon_u units '//trim(filename))
-!#! 
-!#! call nc_check(nf90_def_var(ncid,name='lat_u', xtype=nf90_double, &
-!#!               dimids=(/ nxiuDimID, netauDimID /), varid=VarID),&
-!#!               'nc_write_model_atts', 'lat_u def_var '//trim(filename))
-!#! call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'u latitudes'), &
-!#!               'nc_write_model_atts', 'lat_u long_name '//trim(filename))
-!#! call nc_check(nf90_put_att(ncid,  VarID, 'units', 'degrees_north'), &
-!#!               'nc_write_model_atts', 'lat_u units '//trim(filename))
-!#! 
-!#! call nc_check(nf90_def_var(ncid,name='lon_v', xtype=nf90_double, &
-!#!               dimids=(/ nxivDimID, netavDimID /), varid=VarID),&
-!#!               'nc_write_model_atts', 'lon_v def_var '//trim(filename))
-!#! call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'v longitudes'), &
-!#!               'nc_write_model_atts', 'lon_v long_name '//trim(filename))
-!#! call nc_check(nf90_put_att(ncid,  VarID, 'units', 'degrees_east'), &
-!#!               'nc_write_model_atts', 'lon_v units '//trim(filename))
-!#! 
-!#! call nc_check(nf90_def_var(ncid,name='lat_v', xtype=nf90_double, &
-!#!               dimids=(/ nxivDimID, netavDimID /), varid=VarID),&
-!#!               'nc_write_model_atts', 'lat_v def_var '//trim(filename))
-!#! call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'v latitudes'), &
-!#!               'nc_write_model_atts', 'lat_v long_name '//trim(filename))
-!#! call nc_check(nf90_put_att(ncid,  VarID, 'units', 'degrees_north'), &
-!#!               'nc_write_model_atts', 'lat_v units '//trim(filename))
-!#! 
-!#! call nc_check(nf90_def_var(ncid,name='z_rho', xtype=nf90_double, &
-!#!               dimids=(/ nxirhoDimID, netarhoDimID, nsrhoDimID /), varid=VarID),&
-!#!               'nc_write_model_atts', 'z_rho def_var '//trim(filename))
-!#! call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'z at rho'), &
-!#!               'nc_write_model_atts', 'z_rho long_name '//trim(filename))
-!#! call nc_check(nf90_put_att(ncid,  VarID, 'units', 'm'), &
-!#!               'nc_write_model_atts', 'z_rho units '//trim(filename))
-!#! 
-!#! call nc_check(nf90_def_var(ncid,name='z_u', xtype=nf90_double, &
-!#!               dimids=(/ nxiuDimID, netauDimID, nsrhoDimID /), varid=VarID),&
-!#!               'nc_write_model_atts', 'z_u def_var '//trim(filename))
-!#! call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'z at rho'), &
-!#!               'nc_write_model_atts', 'z_u long_name '//trim(filename))
-!#! call nc_check(nf90_put_att(ncid,  VarID, 'units', 'm'), &
-!#!               'nc_write_model_atts', 'z_u units '//trim(filename))
-!#! 
-!#! call nc_check(nf90_def_var(ncid,name='z_v', xtype=nf90_double, &
-!#!               dimids=(/ nxivDimID, netavDimID, nsrhoDimID /), varid=VarID),&
-!#!               'nc_write_model_atts', 'z_v def_var '//trim(filename))
-!#! call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'z at rho'), &
-!#!               'nc_write_model_atts', 'z_v long_name '//trim(filename))
-!#! call nc_check(nf90_put_att(ncid,  VarID, 'units', 'm'), &
-!#!               'nc_write_model_atts', 'z_v units '//trim(filename))
-!#! 
-!#! call nc_check(nf90_def_var(ncid,name='z_w', xtype=nf90_double, &
-!#!               dimids=(/ nxirhoDimID, netarhoDimID, nswDimID /), varid=VarID),&
-!#!               'nc_write_model_atts', 'z_w def_var '//trim(filename))
-!#! call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'z at rho'), &
-!#!               'nc_write_model_atts', 'z_w long_name '//trim(filename))
-!#! call nc_check(nf90_put_att(ncid,  VarID, 'units', 'm'), &
-!#!               'nc_write_model_atts', 'z_w units '//trim(filename))
-!#! 
-!#! ! Finished with dimension/variable definitions, must end 'define' mode to fill.
-!#! 
-!#! call nc_enddef(ncid)
-!#! 
-!#! ! Fill the coordinate variable values
-!#! 
-!#! ! the RHO grid
-!#! 
-!#! call nc_check(NF90_inq_varid(ncid, 'lon_rho', VarID), &
-!#!               'nc_write_model_atts', 'lon_rho inq_varid '//trim(filename))
-!#! call nc_check(nf90_put_var(ncid, VarID, TLON ), &
-!#!              'nc_write_model_atts', 'lon_rho put_var '//trim(filename))
-!#! 
-!#! call nc_check(NF90_inq_varid(ncid, 'lat_rho', VarID), &
-!#!               'nc_write_model_atts', 'lat_rho inq_varid '//trim(filename))
-!#! call nc_check(nf90_put_var(ncid, VarID, TLAT ), &
-!#!              'nc_write_model_atts', 'lat_rho put_var '//trim(filename))
-!#! 
-!#! call nc_check(NF90_inq_varid(ncid, 'z_rho', VarID), &
-!#!               'nc_write_model_atts', 'z_rho inq_varid '//trim(filename))
-!#! call nc_check(nf90_put_var(ncid, VarID, TDEP ), &
-!#!              'nc_write_model_atts', 'z_rho put_var '//trim(filename))
-!#! 
-!#! ! the U grid
-!#! 
-!#! call nc_check(NF90_inq_varid(ncid, 'lon_u', VarID), &
-!#!               'nc_write_model_atts', 'lon_u inq_varid '//trim(filename))
-!#! call nc_check(nf90_put_var(ncid, VarID, ULON ), &
-!#!              'nc_write_model_atts', 'lon_u put_var '//trim(filename))
-!#! 
-!#! call nc_check(NF90_inq_varid(ncid, 'lat_u', VarID), &
-!#!               'nc_write_model_atts', 'lat_u inq_varid '//trim(filename))
-!#! call nc_check(nf90_put_var(ncid, VarID, ULAT ), &
-!#!              'nc_write_model_atts', 'lat_u put_var '//trim(filename))
-!#! 
-!#! call nc_check(NF90_inq_varid(ncid, 'z_u', VarID), &
-!#!               'nc_write_model_atts', 'z_u inq_varid '//trim(filename))
-!#! call nc_check(nf90_put_var(ncid, VarID, UDEP ), &
-!#!              'nc_write_model_atts', 'z_u put_var '//trim(filename))
-!#! 
-!#! ! the V grid
-!#! 
-!#! call nc_check(NF90_inq_varid(ncid, 'lon_v', VarID), &
-!#!               'nc_write_model_atts', 'lon_v inq_varid '//trim(filename))
-!#! call nc_check(nf90_put_var(ncid, VarID, VLON ), &
-!#!              'nc_write_model_atts', 'lon_v put_var '//trim(filename))
-!#! 
-!#! call nc_check(NF90_inq_varid(ncid, 'lat_v', VarID), &
-!#!               'nc_write_model_atts', 'lat_v inq_varid '//trim(filename))
-!#! call nc_check(nf90_put_var(ncid, VarID, VLAT ), &
-!#!              'nc_write_model_atts', 'lat_v put_var '//trim(filename))
-!#! 
-!#! call nc_check(NF90_inq_varid(ncid, 'z_v', VarID), &
-!#!               'nc_write_model_atts', 'z_v inq_varid '//trim(filename))
-!#! call nc_check(nf90_put_var(ncid, VarID, VDEP ), &
-!#!              'nc_write_model_atts', 'z_v put_var '//trim(filename))
-!#! 
-!#! ! the W grid
-!#! 
-!#! call nc_check(NF90_inq_varid(ncid, 'z_w', VarID), &
-!#!               'nc_write_model_atts', 'z_w inq_varid '//trim(filename))
-!#! call nc_check(nf90_put_var(ncid, VarID, WDEP ), &
-!#!              'nc_write_model_atts', 'z_w put_var '//trim(filename))
-!#! 
-!#! ! Flush the buffer and leave netCDF file open
-!#! call nc_sync(ncid)
+call nc_add_global_attribute(ncid, "model_source", source )
+call nc_add_global_attribute(ncid, "model_revision", revision )
+call nc_add_global_attribute(ncid, "model_revdate", revdate )
 
+call nc_add_global_attribute(ncid, "model", "CAM")
+
+!----------------------------------------------------------------------------
+! Output the grid variables.
+!----------------------------------------------------------------------------
+! Define the new dimensions IDs
+!----------------------------------------------------------------------------
+
+call nc_define_dimension(ncid, 'lon',  grid_data%lon%nsize,  routine)
+call nc_define_dimension(ncid, 'lat',  grid_data%lat%nsize,  routine)
+call nc_define_dimension(ncid, 'slon', grid_data%slon%nsize, routine)
+call nc_define_dimension(ncid, 'slat', grid_data%slat%nsize, routine)
+call nc_define_dimension(ncid, 'lev',  grid_data%lev%nsize,  routine)
+call nc_define_dimension(ncid, 'ilev', grid_data%ilev%nsize, routine)
+call nc_define_dimension(ncid, 'gw',   grid_data%gw%nsize,   routine)
+call nc_define_dimension(ncid, 'hyam', grid_data%hyam%nsize, routine)
+call nc_define_dimension(ncid, 'hybm', grid_data%hybm%nsize, routine)
+call nc_define_dimension(ncid, 'hyai', grid_data%hyai%nsize, routine)
+call nc_define_dimension(ncid, 'hybi', grid_data%hybi%nsize, routine)
+
+!----------------------------------------------------------------------------
+! Create the Coordinate Variables and the Attributes
+! The contents will be written in a later block of code.
+!----------------------------------------------------------------------------
+
+! U,V Grid Longitudes
+call nc_define_real_variable(     ncid, 'lon', (/ 'lon' /),                 routine)
+call nc_add_attribute_to_variable(ncid, 'lon', 'long_name', 'longitude',    routine)
+call nc_add_attribute_to_variable(ncid, 'lon', 'units',     'degrees_east', routine)
+
+
+call nc_define_real_variable(     ncid, 'slon', (/ 'slon' /),                       routine)
+call nc_add_attribute_to_variable(ncid, 'slon', 'long_name', 'staggered longitude', routine)
+call nc_add_attribute_to_variable(ncid, 'slon', 'units',     'degrees_east',        routine)
+
+! U,V Grid Latitudes
+call nc_define_real_variable(     ncid, 'lat', (/ 'lat' /),                  routine)
+call nc_add_attribute_to_variable(ncid, 'lat', 'long_name', 'latitude',      routine)
+call nc_add_attribute_to_variable(ncid, 'lat', 'units',     'degrees_north', routine)
+
+
+call nc_define_real_variable(     ncid, 'slat', (/ 'slon' /),                      routine)
+call nc_add_attribute_to_variable(ncid, 'slat', 'long_name', 'staggered latitude', routine)
+call nc_add_attribute_to_variable(ncid, 'slat', 'units',     'degrees_north',      routine)
+
+! Vertical Grid Latitudes
+call nc_define_real_variable(     ncid, 'lev', (/ 'lev' /),                                                     routine)
+call nc_add_attribute_to_variable(ncid, 'lev', 'long_name', 'hybrid level at midpoints (1000*(A+B))',           routine)
+call nc_add_attribute_to_variable(ncid, 'lev', 'units',          'level',                                       routine)
+call nc_add_attribute_to_variable(ncid, 'lev', 'positive',       'down',                                        routine)
+call nc_add_attribute_to_variable(ncid, 'lev', 'standard_name',  'atmosphere_hybrid_sigma_pressure_coordinate', routine)
+call nc_add_attribute_to_variable(ncid, 'lev', 'formula_terms',  'a: hyam b: hybm p0: P0 ps: PS',                routine)
+
+
+call nc_define_real_variable(     ncid, 'ilev', (/ 'ilev' /),                                                    routine)
+call nc_add_attribute_to_variable(ncid, 'ilev', 'long_name', 'hybrid level at interfaces (1000*(A+B))',          routine)
+call nc_add_attribute_to_variable(ncid, 'ilev', 'units',          'level',                                       routine)
+call nc_add_attribute_to_variable(ncid, 'ilev', 'positive',       'down',                                        routine)
+call nc_add_attribute_to_variable(ncid, 'ilev', 'standard_name',  'atmosphere_hybrid_sigma_pressure_coordinate', routine)
+call nc_add_attribute_to_variable(ncid, 'ilev', 'formula_terms',  'a: hyai b: hybi p0: P0 ps: PS',               routine)
+
+! Hybrid Coefficients
+call nc_define_real_variable(     ncid, 'hyam', (/ 'lev' /),                                            routine)
+call nc_add_attribute_to_variable(ncid, 'hyam', 'long_name', 'hybrid A coefficient at layer midpoints', routine)
+
+call nc_define_real_variable(     ncid, 'hybm', (/ 'lev' /),                                            routine)
+call nc_add_attribute_to_variable(ncid, 'hybm', 'long_name', 'hybrid B coefficient at layer midpoints', routine)
+
+
+call nc_define_real_variable(     ncid, 'hyai', (/ 'ilev' /),                                            routine)
+call nc_add_attribute_to_variable(ncid, 'hyai', 'long_name', 'hybrid A coefficient at layer interfaces', routine)
+
+
+call nc_define_real_variable(     ncid, 'hybi', (/ 'ilev' /),                                            routine)
+call nc_add_attribute_to_variable(ncid, 'hybi', 'long_name', 'hybrid B coefficient at layer interfaces', routine)
+
+! Gaussian Wave
+call nc_define_real_variable(     ncid, 'gw', (/ 'lat' /),                  routine)
+call nc_add_attribute_to_variable(ncid, 'gw', 'long_name', 'gauss weights', routine)
+
+! Finished with dimension/variable definitions, must end 'define' mode to fill.
+
+call nc_enddef(ncid)
+
+!----------------------------------------------------------------------------
+! Fill the coordinate variables
+!----------------------------------------------------------------------------
+
+call nc_put_variable(ncid, 'lon',  grid_data%lon%vals,  routine)
+call nc_put_variable(ncid, 'lat',  grid_data%lat%vals,  routine)
+call nc_put_variable(ncid, 'slon', grid_data%slon%vals, routine)
+call nc_put_variable(ncid, 'slat', grid_data%slat%vals, routine)
+call nc_put_variable(ncid, 'lev',  grid_data%lev%vals,  routine)
+call nc_put_variable(ncid, 'ilev', grid_data%ilev%vals, routine)
+call nc_put_variable(ncid, 'gw',   grid_data%gw%vals,   routine)
+call nc_put_variable(ncid, 'hyam', grid_data%hyam%vals, routine)
+call nc_put_variable(ncid, 'hybm', grid_data%hybm%vals, routine)
+call nc_put_variable(ncid, 'hyai', grid_data%hyai%vals, routine)
+call nc_put_variable(ncid, 'hybi', grid_data%hybi%vals, routine)
+
+!-------------------------------------------------------------------------------
+! Flush the buffer and leave netCDF file open
+!-------------------------------------------------------------------------------
+call nc_sync(ncid)
+! Reference Pressure
+
+!#! !>@todo JPH what to do for scalar variables?
+!#! call nc_define_real_variable(ncid, 'P0', (/ 'lat' /), routine)
+!#! 
+!#! call nc_add_attribute_to_variable(ncid, 'P0', 'long_name', 'reference pressure', routine)
+!#! call nc_add_attribute_to_variable(ncid, 'P0', 'units',     'Pa',                 routine)
 
 end subroutine nc_write_model_atts
 
@@ -774,7 +694,7 @@ real(r8) ::  clamp_vals(MAX_STATE_VARIABLES,2) = MISSING_R8
 
 
 nfields = 0
-MyLoop : do i = 1, MAX_STATE_VARIABLES
+ParseVariables : do i = 1, MAX_STATE_VARIABLES
 
    varname   = trim(variable_array(num_state_table_columns*i-4))
    dartstr   = trim(variable_array(num_state_table_columns*i-3))
@@ -782,10 +702,10 @@ MyLoop : do i = 1, MAX_STATE_VARIABLES
    maxvalstr = trim(variable_array(num_state_table_columns*i-1))
    updatestr = trim(variable_array(num_state_table_columns*i  ))
 
-   if ( varname == ' ' .and. dartstr == ' ' ) exit MyLoop ! Found end of list.
+   if ( varname == ' ' .and. dartstr == ' ' ) exit ParseVariables ! Found end of list.
 
    if ( varname == ' ' .or.  dartstr == ' ' ) then
-      string1 = 'model_nml:model "variables" not fully specified'
+      string1 = 'model_nml:model "state_variables" not fully specified'
       call error_handler(E_ERR,'set_cam_variable_info:',string1,source,revision,revdate)
    endif
 
@@ -808,7 +728,7 @@ MyLoop : do i = 1, MAX_STATE_VARIABLES
 
    nfields = nfields + 1
 
-enddo MyLoop
+enddo ParseVariables
 
 if (nfields == MAX_STATE_VARIABLES) then
    write(string1,'(2A)') 'WARNING: There is a possibility you need to increase ', &
@@ -821,9 +741,6 @@ if (nfields == MAX_STATE_VARIABLES) then
                       source,revision,revdate,text2=string2)
 endif
 
-!>@todo JPH: do we need another namelist
-! JPH cam_template_filename comes from the namelist and should look like
-! a generic restart file.
 domain_id = add_domain(cam_template_filename, nfields, var_names, kind_list, &
                        clamp_vals, update_list )
 
@@ -837,9 +754,9 @@ end subroutine set_cam_variable_info
 
 !-----------------------------------------------------------------------
 !>
-!> Fill table to tell what type of stagger the variable has
+!> Fill the qty_stagger array to tell what type of stagger each variable 
+!> has. This will be useful for interpolating observations.
 !>
-
 
 subroutine fill_cam_stagger_info(stagger)
 type(cam_stagger), intent(inout) :: stagger
@@ -854,7 +771,7 @@ do ivar = 1, get_num_variables(domain_id)
    do jdim = 1, get_num_dims(domain_id, ivar)
 
       if (get_dim_name(domain_id, ivar, jdim) == 'slat') then
-         qty_index = get_kind_index(domain_id, ivar) ! qty is kind
+         qty_index = get_kind_index(domain_id, ivar) ! get_kind_index actualy returns the qty
          stagger%qty_stagger(qty_index) = STAGGER_U
       endif
 
@@ -876,13 +793,8 @@ end subroutine fill_cam_stagger_info
 
 !-----------------------------------------------------------------------
 !>
-!> Read type(cam_grid) information
-!>
-!>
-!>
-!>
-!>
-!>
+!> Given a generic CAM restart file, that contains grid information and populate
+!> the grid information
 
 
 subroutine read_grid_info(grid_file, grid)
@@ -905,6 +817,79 @@ call nc_check( nf90_close(ncid), 'read_grid_info', 'close '//trim(grid_file))
 
 end subroutine read_grid_info
 
+
+!-----------------------------------------------------------------------
+!>
+!> fill in the various cam grid arrays 
+!> 
+
+subroutine get_cam_grid(ncid, grid)
+integer,        intent(in)  :: ncid
+type(cam_grid), intent(out) :: grid
+
+call fill_cam_1d_array(ncid, 'lon',  grid%lon)
+call fill_cam_1d_array(ncid, 'lat',  grid%lat)
+call fill_cam_1d_array(ncid, 'lev',  grid%lev)
+call fill_cam_1d_array(ncid, 'ilev', grid%ilev) ! for staggered vertical grid
+call fill_cam_1d_array(ncid, 'slon', grid%slon)
+call fill_cam_1d_array(ncid, 'slat', grid%slat)
+call fill_cam_1d_array(ncid, 'gw',   grid%gw)   ! gauss weights
+call fill_cam_1d_array(ncid, 'hyai', grid%hyai)
+call fill_cam_1d_array(ncid, 'hybi', grid%hybi)
+call fill_cam_1d_array(ncid, 'hyam', grid%hyam)
+call fill_cam_1d_array(ncid, 'hybm', grid%hybm)
+
+! P0 is a scalar with no dimensionality
+call fill_cam_0d_array(ncid, 'P0',   grid%P0) 
+
+end subroutine get_cam_grid
+
+
+!-----------------------------------------------------------------------
+!>
+!> allocate space for a scalar variable and read values into the grid_array
+!>   
+
+
+subroutine fill_cam_0d_array(ncid, varname, grid_array)
+integer,            intent(in)    :: ncid
+character(len=*),   intent(in)    :: varname
+type(cam_1d_array), intent(inout) :: grid_array
+
+grid_array%nsize = 1
+allocate(grid_array%vals(grid_array%nsize))
+
+call nc_get_variable(ncid, varname, grid_array%vals)
+
+if (debug > 10) then
+   print*, 'variable name ', trim(varname), grid_array%vals
+endif
+
+end subroutine fill_cam_0d_array
+
+
+!-----------------------------------------------------------------------
+!>
+!> allocate space for a scalar variable and read values into the grid_array
+!>   
+
+
+subroutine fill_cam_1d_array(ncid, varname, grid_array)
+integer,            intent(in)    :: ncid
+character(len=*),   intent(in)    :: varname
+type(cam_1d_array), intent(inout) :: grid_array
+
+!>@todo need to check that this exists
+call nc_get_variable_size(ncid, varname, grid_array%nsize)
+allocate(grid_array%vals(grid_array%nsize))
+
+call nc_get_variable(ncid, varname, grid_array%vals)
+
+if (debug > 10) then
+   print*, 'variable name ', trim(varname), grid_array%vals
+endif
+
+end subroutine fill_cam_1d_array
 
 !-----------------------------------------------------------------------
 !>
@@ -937,80 +922,6 @@ call init_quad_interp(GRID_QUAD_IRREG_SPACED_REGULAR, grid%slon%nsize, grid%lat%
 call set_quad_coords(interp_v_staggered, grid%slon%vals, grid%lat%vals)
 
 end subroutine setup_interpolation
-
-!-----------------------------------------------------------------------
-!>
-!> 
-!>   
-
-subroutine get_cam_grid(ncid, grid)
-integer,        intent(in)  :: ncid
-type(cam_grid), intent(out) :: grid
-
-call fill_cam_1d_array(ncid, 'lon',  grid%lon)
-call fill_cam_1d_array(ncid, 'lat',  grid%lat)
-call fill_cam_1d_array(ncid, 'lev',  grid%lev)
-call fill_cam_1d_array(ncid, 'ilev', grid%ilev) ! for staggered vertical grid
-call fill_cam_1d_array(ncid, 'slon', grid%slon)
-call fill_cam_1d_array(ncid, 'slat', grid%slat)
-call fill_cam_1d_array(ncid, 'gw',   grid%gw)   ! gauss weights
-call fill_cam_1d_array(ncid, 'hyai', grid%hyai)
-call fill_cam_1d_array(ncid, 'hybi', grid%hybi)
-call fill_cam_1d_array(ncid, 'hyam', grid%hyam)
-call fill_cam_1d_array(ncid, 'hybm', grid%hybm)
-
-! P0 is a scalar with no dimensionality
-call fill_cam_0d_array(ncid, 'P0',   grid%P0) 
-
-
-end subroutine get_cam_grid
-
-
-!-----------------------------------------------------------------------
-!>
-!> 
-!>   
-
-
-subroutine fill_cam_0d_array(ncid, varname, grid_array)
-integer,            intent(in)    :: ncid
-character(len=*),   intent(in)    :: varname
-type(cam_1d_array), intent(inout) :: grid_array
-
-grid_array%nsize = 1
-allocate(grid_array%vals(grid_array%nsize))
-
-call nc_get_variable(ncid, varname, grid_array%vals)
-
-if (debug > 10) then
-   print*, 'variable name ', trim(varname), grid_array%vals
-endif
-
-end subroutine fill_cam_0d_array
-
-
-!-----------------------------------------------------------------------
-!>
-!> 
-!>   
-
-
-subroutine fill_cam_1d_array(ncid, varname, grid_array)
-integer,            intent(in)    :: ncid
-character(len=*),   intent(in)    :: varname
-type(cam_1d_array), intent(inout) :: grid_array
-
-!>@todo need to check that this exists
-call nc_get_variable_size(ncid, varname, grid_array%nsize)
-allocate(grid_array%vals(grid_array%nsize))
-
-call nc_get_variable(ncid, varname, grid_array%vals)
-
-if (debug > 10) then
-   print*, 'variable name ', trim(varname), grid_array%vals
-endif
-
-end subroutine fill_cam_1d_array
 
 !-----------------------------------------------------------------------
 !>
