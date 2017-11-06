@@ -344,19 +344,20 @@ integer,            intent(out) :: istatus(ens_size)
 real(r8),           intent(out) :: interp_val(ens_size) !< array of interpolated values
 
 integer  :: varid
+integer  :: lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract
 real(r8) :: lon_lat_vert(3)
+type(quad_interp_handle) :: interp_handle
 
 if ( .not. module_initialized ) call static_init_model
 
 ! Successful istatus is 0
 interp_val = MISSING_R8
-istatus = 99
-
-lon_lat_vert = get_location(location)
+istatus    = 99
 
 varid = get_varid_from_kind(domain_id, obs_qty)
 
-if (varid < 0) then
+if (varid < 0) then !>@todo FIXME there may be things we need to compute that
+                    !> has multiple variables involved
    if(debug > 12) then
       write(string1,*)'did not find obs_qty ', obs_qty, ' in the state'
       call error_handler(E_MSG,'model_interpolate:',string1,source,revision,revdate)
@@ -364,12 +365,73 @@ if (varid < 0) then
    return
 endif
 
-write(string1,*)'model_interpolate should not be called.'
-write(string2,*)'we are getting forward observations directly from CAM'
-call error_handler(E_MSG,'model_interpolate:',string1,source,revision,revdate, text2=string2)
+lon_lat_vert = get_location(location)
+
+interp_handle = get_interp_handle(obs_qty)
+
+! call quad interpolate for the horizontal
+call quad_lon_lat_locate(interp_handle, lon_lat_vert(1), lon_lat_vert(2) , &
+                         lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &
+                         istatus)
+
+if (istatus /= 0) return
+
+! get values of data at lon/lat bot/top indices, counterclockwise around quad
+invals(1) = find_vertical_levels(lon_bot, lat_bot)
+invals(2) = find_vertical_levels(lon_top, lat_bot)
+invals(3) = find_vertical_levels(lon_top, lat_top)
+invals(4) = find_vertical_levels(lon_bot, lat_top)
+
+get_dart_vector_index(lon_bot, lat_bot, lev_bot, domain_id, varid) 
+
+invals(1) = grid_data(lon_bot, lat_bot)
+invals(2) = grid_data(lon_top, lat_bot)
+invals(3) = grid_data(lon_top, lat_top)
+invals(4) = grid_data(lon_bot, lat_top)
+
+call quad_lon_lat_evaluate(interp_u_staggered, lon, lat, &
+            lon_bot, lat_bot, lon_top, lat_top, nitems, invals, outvals, istatus)
+
+if (istatus == 0) then
+   interp_data(i, j) = outval
+else
+   interp_data(i, j) = MISSING_R8
+endif
+
+!>@todo FIXME also need for the vertical ....
 
 end subroutine model_interpolate
 
+!-----------------------------------------------------------------------
+!>
+!> 
+
+function get_interp_handle(obs_quantity)
+integer, intent(in) :: obs_quantity
+type(quad_interp)   :: get_interp_handle
+
+select case (grid_stagger%qty_stagger(obs_quantity))
+   case ( STAGGER_U ) 
+      get_interp_handle = interp_u_staggered
+   case ( STAGGER_V ) 
+      get_interp_handle = interp_v_staggered
+   case ( STAGGER_NONE )
+      get_interp_handle = interp_nonstaggered
+   case ( STAGGER_W ) 
+      write(string1,*) 'w stagger -- not supported yet'
+      call error_handler(E_ERR,'get_interp_handle', &
+                         string1,source,revision,revdate)
+   case ( STAGGER_UV ) 
+      write(string1,*) 'uv stagger -- not supported yet'
+      call error_handler(E_ERR,'get_interp_handle', &
+                         string1,source,revision,revdate)
+   case default
+      write(string1,*) 'unknown stagger -- this should never happen'
+      call error_handler(E_ERR,'get_interp_handle', &
+                         string1,source,revision,revdate)
+end select
+                      
+end function get_interp_handle
 
 !-----------------------------------------------------------------------
 !>
