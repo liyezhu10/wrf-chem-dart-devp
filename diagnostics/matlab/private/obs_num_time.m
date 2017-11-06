@@ -17,8 +17,8 @@ function obs_num_time(ddir)
 %
 % obs_num_time
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -136,7 +136,7 @@ for ivar = 1:plotdat.nvars,
       % outm     cell array for the text in the legend
       nlines = length(outm);
       outm{nlines + 1} = Regions{iregion};
-      [~, ~, outh, outm] = legend([outh; h],outm,0);
+      [~, ~, outh, outm] = legend([outh; h],outm,'Location','NorthEast');
    end
 
    legend boxoff
@@ -251,4 +251,3 @@ set(h,'HorizontalAlignment','center', ...
 % $URL$
 % $Revision$
 % $Date$
-

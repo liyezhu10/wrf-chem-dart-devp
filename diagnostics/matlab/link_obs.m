@@ -34,8 +34,7 @@ function link_obs(fname, ObsTypeString, ObsCopyString, CopyString, QCString, reg
 %
 % EXAMPLE 1:
 % fname         = '/ptmp/thoar/POP/CAM/POP8/obs_epoch_001.nc';
-% fname = '/Users/thoar/svn/DART/trunk/models/POP/work/obs_epoch_001.nc';
-% ObsTypeString = 'FLOAT_TEMPERATURE';
+% ObsTypeString = 'APB_TEMPERATURE';
 % ObsCopyString = 'WOD observation';
 % CopyString    = 'prior ensemble mean';
 % QCString      = 'DART quality control';
@@ -44,9 +43,9 @@ function link_obs(fname, ObsTypeString, ObsCopyString, CopyString, QCString, reg
 % link_obs(fname, ObsTypeString, ObsCopyString, CopyString, QCString, region)
 %
 % EXAMPLE 2:
-% fname         = 'obs_epoch_002.nc';
-% ObsTypeString = 'ACARS_U_WIND_COMPONENT';
-% ObsCopyString = 'observation';
+% fname         = 'obs_epoch_001.nc';
+% ObsTypeString = 'RADIOSONDE_TEMPERATURE';
+% ObsCopyString = 'NCEP BUFR observation';
 % CopyString    = 'prior ensemble mean';
 % QCString      = 'DART quality control';
 % region        = [220 300 20 60 -Inf Inf];
@@ -67,8 +66,8 @@ function link_obs(fname, ObsTypeString, ObsCopyString, CopyString, QCString, reg
 % the the Workspace window to generate a spreadsheet-like view of the 
 % observations which is also linked to the data brushing.
 
-%% DART software - Copyright 2004 - 2013 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
 % DART $Id$
@@ -97,6 +96,13 @@ obs.ObsCopyString = obs.CopyString;
 obs.CopyString    = copy.CopyString;
 obs.region(5)     = min(obs.z); % use observation Z to specify vertical region
 obs.region(6)     = max(obs.z);
+
+% Some observations are all at same z value. Cannot use same value for
+% upper and lower axis bounds.
+if (obs.region(5) == obs.region(6))
+    obs.region(5) = obs.region(5) - 0.5;
+    obs.region(6) = obs.region(6) + 0.5;
+end
 
 %% Now pack the data in the same fashion as the cell array of column labels.
 
@@ -136,11 +142,10 @@ if iscalculated
 end
 
 %% create the linked plots
-linked_observations(obs);
+linked_observations(obs)
 
 
 % <next few lines under version control, do not edit>
 % $URL$
 % $Revision$
 % $Date$
-
