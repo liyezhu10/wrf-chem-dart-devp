@@ -271,34 +271,48 @@ call get_model_variable_indices(index_in, iloc, jloc, vloc, var_id=myvarid)
 
 myqty = get_kind_index(domain_id, myvarid)
 
-select case (grid_stagger%qty_stagger(myqty))
-  case (STAGGER_U)
-   location = set_location(grid_data%lon%vals(iloc), &
-                           grid_data%slat%vals(jloc), &
-                           real(vloc,r8), VERTISLEVEL)
-
-  case (STAGGER_V)
-   location = set_location(grid_data%slon%vals(iloc), &
-                           grid_data%lat%vals(jloc), &
-                           real(vloc,r8), VERTISLEVEL)
-   
-  !>@todo not sure what to do yet. ? +-1/2 ?
-  case (STAGGER_W)
-   location = set_location(grid_data%lon%vals(iloc), &
-                           grid_data%lat%vals(jloc), &
-                           real(vloc,r8), VERTISLEVEL)
-  case default
-   location = set_location(grid_data%lon%vals(iloc), &
-                           grid_data%lat%vals(jloc), &
-                           real(vloc,r8), VERTISLEVEL)
-
-end select
+location = get_location_from_index(iloc, jloc, vloc, myvarid)
 
 ! return state quantity for this index if requested
 if (present(var_type)) var_type = myqty
 
 end subroutine get_state_meta_data
 
+!-----------------------------------------------------------------------
+
+function get_location_from_index(i, j, k, q)
+integer, intent(in) :: i
+integer, intent(in) :: j
+integer, intent(in) :: k
+integer, intent(in) :: q
+type(location_type) :: get_location_from_index
+
+
+select case (grid_stagger%qty_stagger(q))
+  case (STAGGER_U)
+   get_location_from_index = set_location(grid_data%lon%vals(i), &
+                                          grid_data%slat%vals(j), &
+                                          real(k,r8), VERTISLEVEL)
+
+  case (STAGGER_V)
+   get_location_from_index = set_location(grid_data%slon%vals(i), &
+                                          grid_data%lat%vals(j), &
+                                          real(k,r8), VERTISLEVEL)
+   
+  !>@todo not sure what to do yet. ? +-1/2 ?
+  case (STAGGER_W)
+   get_location_from_index = set_location(grid_data%lon%vals(i), &
+                                          grid_data%lat%vals(j), &
+                                          real(k,r8)-0.5_r8, VERTISLEVEL)
+  ! no stagger - cell centers
+  case default
+   get_location_from_index = set_location(grid_data%lon%vals(i), &
+                                          grid_data%lat%vals(j), &
+                                          real(k,r8), VERTISLEVEL)
+
+end select
+
+end function get_location_from_index
 
 !-----------------------------------------------------------------------
 !>
@@ -438,6 +452,16 @@ call nc_add_global_attribute(ncid, "model_revision", revision )
 call nc_add_global_attribute(ncid, "model_revdate", revdate )
 
 call nc_add_global_attribute(ncid, "model", "CAM")
+
+! this option is for users who want the smallest output
+! or diagnostic files - only the state vector data will
+! be written.   otherwise, if you want to plot this data
+! the rest of this routine writes out enough grid info
+! to make the output file look like the input.
+if (minimal_output) then
+   call nc_enddef(ncid)
+   return
+endif
 
 !----------------------------------------------------------------------------
 ! Output the grid variables.
@@ -879,14 +903,21 @@ integer,            intent(in)    :: ncid
 character(len=*),   intent(in)    :: varname
 type(cam_1d_array), intent(inout) :: grid_array
 
+integer :: i, per_line
 !>@todo need to check that this exists
 call nc_get_variable_size(ncid, varname, grid_array%nsize)
 allocate(grid_array%vals(grid_array%nsize))
 
 call nc_get_variable(ncid, varname, grid_array%vals)
 
+!>@todo FIXME this should be an array_dump() routine
+!> in a utilities routine somewhere. 
 if (debug > 10) then
-   print*, 'variable name ', trim(varname), grid_array%vals
+   per_line = 5
+   print*, 'variable name ', trim(varname)
+   do i=1, grid_array%nsize, per_line
+      print*,  grid_array%vals(i:min(grid_array%nsize,i+per_line-1))
+   enddo
 endif
 
 end subroutine fill_cam_1d_array
