@@ -69,6 +69,7 @@ interface nc_define_integer_variable
 end interface
 
 interface nc_define_real_variable
+   module procedure nc_define_var_real_scalar
    module procedure nc_define_var_real_1d
    module procedure nc_define_var_real_Nd
 end interface
@@ -421,6 +422,24 @@ endif
 call nc_check(ret, routine, 'define integer variable '//trim(varname), context, filename)
 
 end subroutine nc_define_var_int_Nd
+
+!--------------------------------------------------------------------
+
+subroutine nc_define_var_real_scalar(ncid, varname, ndim, context, filename)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in) :: varname
+integer,          intent(in) :: ndim ! ignore for now
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_define_var_real_scalar'
+integer :: ret, varid
+
+ret = nf90_def_var(ncid, varname, nf90_real, varid=varid)
+call nc_check(ret, routine, 'define real variable '//trim(varname), context, filename)
+
+end subroutine nc_define_var_real_scalar
 
 !--------------------------------------------------------------------
 

@@ -516,7 +516,7 @@ call nc_add_attribute_to_variable(ncid, 'lev', 'formula_terms',  'a: hyam b: hyb
 
 
 call nc_define_real_variable(     ncid, 'ilev', (/ 'ilev' /),                                                    routine)
-call nc_add_attribute_to_variable(ncid, 'ilev', 'long_name', 'hybrid level at interfaces (1000*(A+B))',          routine)
+call nc_add_attribute_to_variable(ncid, 'ilev', 'long_name',      'hybrid level at interfaces (1000*(A+B))',     routine)
 call nc_add_attribute_to_variable(ncid, 'ilev', 'units',          'level',                                       routine)
 call nc_add_attribute_to_variable(ncid, 'ilev', 'positive',       'down',                                        routine)
 call nc_add_attribute_to_variable(ncid, 'ilev', 'standard_name',  'atmosphere_hybrid_sigma_pressure_coordinate', routine)
@@ -541,6 +541,10 @@ call nc_add_attribute_to_variable(ncid, 'hybi', 'long_name', 'hybrid B coefficie
 call nc_define_real_variable(     ncid, 'gw', (/ 'lat' /),                  routine)
 call nc_add_attribute_to_variable(ncid, 'gw', 'long_name', 'gauss weights', routine)
 
+call nc_define_real_variable(ncid, 'P0', 0, routine)
+call nc_add_attribute_to_variable(ncid, 'P0', 'long_name', 'reference pressure', routine)
+call nc_add_attribute_to_variable(ncid, 'P0', 'units',     'Pa',                 routine)
+
 ! Finished with dimension/variable definitions, must end 'define' mode to fill.
 
 call nc_enddef(ncid)
@@ -560,6 +564,7 @@ call nc_put_variable(ncid, 'hyam', grid_data%hyam%vals, routine)
 call nc_put_variable(ncid, 'hybm', grid_data%hybm%vals, routine)
 call nc_put_variable(ncid, 'hyai', grid_data%hyai%vals, routine)
 call nc_put_variable(ncid, 'hybi', grid_data%hybi%vals, routine)
+call nc_put_variable(ncid, 'P0',   grid_data%P0%vals,   routine)
 
 !-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
@@ -567,11 +572,6 @@ call nc_put_variable(ncid, 'hybi', grid_data%hybi%vals, routine)
 call nc_sync(ncid)
 ! Reference Pressure
 
-!#! !>@todo JPH what to do for scalar variables?
-!#! call nc_define_real_variable(ncid, 'P0', (/ 'lat' /), routine)
-!#! 
-!#! call nc_add_attribute_to_variable(ncid, 'P0', 'long_name', 'reference pressure', routine)
-!#! call nc_add_attribute_to_variable(ncid, 'P0', 'units',     'Pa',                 routine)
 
 end subroutine nc_write_model_atts
 
