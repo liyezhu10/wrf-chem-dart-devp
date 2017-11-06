@@ -33,7 +33,8 @@ use  netcdf_utilities_mod,  only : nc_check, nc_get_variable, nc_get_variable_si
 use       location_io_mod
 use        quad_utils_mod
 use     default_model_mod,  only : adv_1step, init_time, init_conditions, &
-                                   nc_write_model_vars, pert_model_copies
+                                   nc_write_model_vars, pert_model_copies, &
+                                   convert_vertical_obs, convert_vertical_state
 use netcdf
 
 implicit none
@@ -46,23 +47,23 @@ private
 public :: static_init_model,             &
           get_model_size,                &
           get_state_meta_data,           &
-          model_interpolate,             &
+          model_interpolate,             & ! big todo
           shortest_time_between_assimilations, &
-          convert_vertical_obs,          &
-          convert_vertical_state,        &
           nc_write_model_atts,           &
-          write_model_time,              &
+          write_model_time,              & ! todo
           read_model_time,               &
           end_model
 
 ! code for these routines are in other modules
 public :: nc_write_model_vars,           &
-          pert_model_copies,             &
+          pert_model_copies,             & ! todo
           adv_1step,                     &
           init_time,                     &
-          init_conditions,               &
-          get_close_obs,                 &
-          get_close_state
+          init_conditions,               & 
+          convert_vertical_obs,          & ! todo
+          convert_vertical_state,        & ! todo
+          get_close_obs,                 & ! todo
+          get_close_state                  ! todo
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &

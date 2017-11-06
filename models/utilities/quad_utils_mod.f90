@@ -591,8 +591,8 @@ allocate(reg_list_lat(h%ii%num_reg_x, h%ii%num_reg_y, h%ii%max_reg_list_num))
 
 ! poles?  span?
 cyclic = h%opt%spans_lon_zero
-nx = h%nlon
-ny = h%nlat
+nx  = h%nlon
+ny  = h%nlat
 nrx = h%ii%num_reg_x
 nry = h%ii%num_reg_y
 

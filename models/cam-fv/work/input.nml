@@ -209,7 +209,7 @@
    /
 
 &obs_sequence_nml
-   write_binary_obs_sequence = .true.
+   write_binary_obs_sequence = .false.
    /
 
 &quality_control_nml
