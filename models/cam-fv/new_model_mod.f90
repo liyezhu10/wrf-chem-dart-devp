@@ -348,11 +348,12 @@ real(r8),           intent(out) :: interp_vals(ens_size) !< array of interpolate
 integer,            intent(out) :: istatus(ens_size)
 
 integer  :: varid
-integer  :: lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract
+integer  :: lon_bot, lat_bot, lon_top, lat_top
+real(r8) :: lon_fract, lat_fract
 real(r8) :: lon_lat_vert(3), botvals(ens_size), topvals(ens_size)
 integer  :: which_vert, status1, status2, status_array(ens_size)
 type(quad_interp_handle) :: interp_handle
-integer  :: ijk(3)
+integer  :: ijk(3), i
 integer  :: four_lons(4), four_lats(4)
 integer  :: two_bots(2), two_tops(2)
 real(r8) :: two_horiz_fracts(2)
@@ -473,7 +474,7 @@ do i=1, 4
       return
    endif
    
-   call vert_interp(botvals, topvals, four_vert_fracts(i, :), &
+   call vert_interp(ens_size, botvals, topvals, four_vert_fracts(i, :), &
                     quad_vals(i, :), status_array)
 
    if (any(status_array /= 0)) then
@@ -533,7 +534,7 @@ integer(i8) :: state_indx
 !>@todo FIXME find unique level indices here (see new wrf code)
 
 state_indx = get_dart_vector_index(lon_index, lat_index, lev_index(1), domain_id, varid)
-vals       = get_state(state_handle, state_indx)
+vals       = get_state(state_indx, state_handle)
 
 my_status = 0
 
@@ -549,7 +550,7 @@ end subroutine find_values
 
 subroutine index_setup(lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &
                        four_lons, four_lats, two_horiz_fracts)
-integer,  intent(in)  :: lon_bot, lat_box, lon_top, lat_top
+integer,  intent(in)  :: lon_bot, lat_bot, lon_top, lat_top
 real(r8), intent(in)  :: lon_fract, lat_fract
 integer,  intent(out) :: four_lons(4), four_lats(4)
 real(r8), intent(out) :: two_horiz_fracts(2)
@@ -598,11 +599,10 @@ my_status(:) = 0
 
 select case (which_vert)
    case(VERTISPRESSURE)
-      hyam  
    case(VERTISHEIGHT)
    case(VERTISLEVEL)
    case(VERTISSURFACE)
-   case(VERTISUNDEFINED)
+   case(VERTISUNDEF)
    case default
 end select
 
@@ -628,7 +628,7 @@ end subroutine find_pressure_levels
 
 function get_interp_handle(obs_quantity)
 integer, intent(in)     :: obs_quantity
-type(quad_interp_handl) :: get_interp_handle
+type(quad_interp_handle) :: get_interp_handle
 
 select case (grid_stagger%qty_stagger(obs_quantity))
    case ( STAGGER_U ) 
