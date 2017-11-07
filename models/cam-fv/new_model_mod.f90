@@ -494,8 +494,11 @@ end subroutine model_interpolate
 
 !>@todo FIXME i left off here
 subroutine vert_interp(botvals, topvals, four_vert_fracts(i, j), quad_vals(i, j), status)
+ integer, intent(in) :: botvals(4)
+ integer, intent(in) :: topvals(4)
 
 end subroutine vert_interp
+
 !-----------------------------------------------------------------------
 !>
 !> 
