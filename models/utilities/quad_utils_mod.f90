@@ -2231,11 +2231,10 @@ end subroutine quad_lon_lat_evaluate_ii_array
 !------------------------------------------------------------------
 !> single item wrapper
 
-subroutine quad_lon_lat_evaluate_ir_single(interp_handle, lon_bot, lat_bot, &
-               lon_top, lat_top, lon_fract, lat_fract, invals, outval, istatus)
+subroutine quad_lon_lat_evaluate_ir_single(interp_handle, lon_fract, lat_fract, &
+                                           invals, outval, istatus)
 
 type(quad_interp_handle), intent(in)  :: interp_handle
-integer,                  intent(in)  :: lon_bot, lat_bot, lon_top, lat_top
 real(r8),                 intent(in)  :: lon_fract, lat_fract
 real(r8),                 intent(in)  :: invals(4)
 real(r8),                 intent(out) :: outval
@@ -2245,8 +2244,8 @@ real(r8) :: in_array(4, 1), out_array(1)
 integer  :: stat(1)
 
 in_array(:, 1) = invals
-call quad_lon_lat_evaluate_ir_array(interp_handle, lon_bot, lat_bot, lon_top, &
-              lat_top, lon_fract, lat_fract, 1, in_array, out_array, stat)
+call quad_lon_lat_evaluate_ir_array(interp_handle, lon_fract, lat_fract, &
+                                    1, in_array, out_array, stat)
 outval = out_array(1)
 istatus = stat(1)
 
@@ -2254,14 +2253,13 @@ end subroutine quad_lon_lat_evaluate_ir_single
 
 !------------------------------------------------------------
 
-!> This is a different interface because for the regular case you need
-!> the fractions across the quads.
+!> In the regular, orthogonal case you only need the fractions
+!> across the quad at this point.
 
-subroutine quad_lon_lat_evaluate_ir_array(interp_handle, lon_bot, lat_bot, &
-           lon_top, lat_top, lon_fract, lat_fract, nitems, invals, outvals, istatus)
+subroutine quad_lon_lat_evaluate_ir_array(interp_handle, lon_fract, lat_fract, &
+                                          nitems, invals, outvals, istatus)
 
 type(quad_interp_handle), intent(in)  :: interp_handle
-integer,                  intent(in)  :: lon_bot, lat_bot, lon_top, lat_top
 real(r8),                 intent(in)  :: lon_fract, lat_fract
 integer,                  intent(in)  :: nitems
 real(r8),                 intent(in)  :: invals(4, nitems)
@@ -2289,7 +2287,7 @@ endif
 !> not needed.  should it call allow_missing_in_state() on init and
 !> key off that?  (i think yes.)
  
-if (.true.) then
+if (.false.) then
 
    ! have to do the items individually because some items might
    ! have missing and others not.
@@ -2316,7 +2314,6 @@ else
    istatus(:) = 0
 
 endif
-
 
 end subroutine quad_lon_lat_evaluate_ir_array
 

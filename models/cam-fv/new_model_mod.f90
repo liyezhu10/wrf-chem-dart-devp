@@ -160,6 +160,7 @@ type(quad_interp_handle) :: interp_nonstaggered, &
                             interp_u_staggered, &
                             interp_v_staggered
 
+
 contains
 
 
@@ -318,87 +319,172 @@ end function get_location_from_index
 !-----------------------------------------------------------------------
 !>
 !> Model interpolate will interpolate any DART state variable
-!> (i.e. S, T, U, V, Eta) to the given location given a state vector.
-!> The type of the variable being interpolated is obs_qty since
-!> normally this is used to find the expected value of an observation
-!> at some location. The interpolated value is returned in interp_vals
-!> and istatus is 0 for success. NOTE: This is a workhorse routine and is
-!> the basis for all the forward observation operator code.
+!> to the given location.
 !>
 !> @param state_handle DART ensemble handle
 !> @param ens_size DART ensemble size
 !> @param location the location of interest
 !> @param obs_qty the DART KIND of interest
-!> @param interp_val the estimated value of the DART state at the location
+!> @param interp_vals the estimated value of the DART state at the location
 !>          of interest (the interpolated value).
 !> @param istatus interpolation status ... 0 == success, /=0 is a failure
 !>
+!> istatus = 2    asked to interpolate an unknown/unsupported quantity
+!> istatus = 3    cannot locate horizontal quad
+!> istatus = 4    cannot locate enclosing vertical levels
+!> istatus = 5    cannot retrieve state vector values
+!> istatus = 6    cannot do vertical interpolation
+!> istatus = X
+!> istatus = 99   unknown error - shouldn't happen
+!>
 
-subroutine model_interpolate(state_handle, ens_size, location, obs_qty, interp_val, istatus)
+subroutine model_interpolate(state_handle, ens_size, location, obs_qty, interp_vals, istatus)
 
 type(ensemble_type), intent(in) :: state_handle
 integer,             intent(in) :: ens_size
 type(location_type), intent(in) :: location
 integer,             intent(in) :: obs_qty
+real(r8),           intent(out) :: interp_vals(ens_size) !< array of interpolated values
 integer,            intent(out) :: istatus(ens_size)
-real(r8),           intent(out) :: interp_val(ens_size) !< array of interpolated values
 
 integer  :: varid
 integer  :: lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract
-real(r8) :: lon_lat_vert(3)
+real(r8) :: lon_lat_vert(3), botvals(ens_size), topvals(ens_size)
+integer  :: which_vert, status, status1, status2, status_array(ens_size)
 type(quad_interp_handle) :: interp_handle
+integer  :: ijk(3)
+integer  :: four_lons(4), four_lats(4)
+integer  :: two_bots(2), two_tops(2)
+real(r8) :: two_horiz_fracts(2)
+integer  :: four_bot_levs(4, ens_size), four_top_levs(4, ens_size)
+real(r8) :: four_vert_fracts(4, ens_size)
+real(r8) :: quad_vals(4, ens_size)
 
 if ( .not. module_initialized ) call static_init_model
 
-! Successful istatus is 0
-interp_val = MISSING_R8
-istatus    = 99
+! the overall strategy:
+! 1. figure out if the quantity to interpolate is
+! in the state.  if so, compute and return the value.
+! if not, is it something that is a simple function of
+! items in the state that we should compute here instead
+! of computing it in a separate forward operator?  ok, we'll
+! do it.. else error.
+! (if there *are* functions of state vars or others that we
+! need to compute here, put the rest of the interp code into
+! a separate subroutine for reuse.)
+! 2. compute the 4 horizontal i,j indices for the quad corners
+! that enclose the obs location.
+! 3. for each of the 4 quad corners compute the 2 vertical levels 
+! that enclose the obs in the vertical. also return the fraction
+! in the vertical - this needs a linear/log option.  (how set?)
+! 4. now we have 8 i,j,k index numbers and 3 fractions.
+! 5. compute the data values at each of the 4 horizontal i,j quad
+! corners, interpolating in the vertical using the k fraction
+! 6. compute the final horizontal obs value based on the i,j fractions
 
+
+! Successful istatus is 0
+interp_vals(:) = MISSING_R8
+istatus(:)    = 99
+
+! See if the state contains the obs quantity 
 varid = get_varid_from_kind(domain_id, obs_qty)
 
-if (varid < 0) then !>@todo FIXME there may be things we need to compute that
-                    !> has multiple variables involved
+! If not, for now return an error.  if there are other quantities
+! that we can return that aren't part of the state then add code here.
+! (make the rest of this routine into a separate subroutine that can
+! be reused?)
+if (varid < 0) then  
+   !>@todo FIXME there may be things we need to compute that
+   !> has multiple variables involved
+   ! e.g. phis (elevation?)
+
+   ! generally the interpolation code should not print or error out if
+   ! it is asked to interpolate a quantity it cannot do.  this is then just
+   ! a failed forward operator.  (some forward operators try one quantity
+   ! and if that fails, then they compute what they need using different quantities.)
    if(debug > 12) then
-      write(string1,*)'did not find obs_qty ', obs_qty, ' in the state'
+      write(string1,*)'did not find observation quantity ', obs_qty, ' in the state vector'
       call error_handler(E_MSG,'model_interpolate:',string1,source,revision,revdate)
    endif
+   istatus(:) = 2   ! this quantity not in the state vector
    return
 endif
 
+! unpack the location type into lon, lat, vert
+! also may need the vert type?
 lon_lat_vert = get_location(location)
+which_vert = nint(query_location(location))  ! default is to return the vertical type
 
+! get the grid handle for the right staggered grid
 interp_handle = get_interp_handle(obs_qty)
 
-! call quad interpolate for the horizontal
+! get the indices for the 4 corners of the quad in the horizontal, plus
+! the fraction across the quad for the obs location
 call quad_lon_lat_locate(interp_handle, lon_lat_vert(1), lon_lat_vert(2) , &
                          lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &
-                         istatus)
-
-if (istatus /= 0) return
-
-! get values of data at lon/lat bot/top indices, counterclockwise around quad
-invals(1) = find_vertical_levels(lon_bot, lat_bot)
-invals(2) = find_vertical_levels(lon_top, lat_bot)
-invals(3) = find_vertical_levels(lon_top, lat_top)
-invals(4) = find_vertical_levels(lon_bot, lat_top)
-
-get_dart_vector_index(lon_bot, lat_bot, lev_bot, domain_id, varid) 
-
-invals(1) = grid_data(lon_bot, lat_bot)
-invals(2) = grid_data(lon_top, lat_bot)
-invals(3) = grid_data(lon_top, lat_top)
-invals(4) = grid_data(lon_bot, lat_top)
-
-call quad_lon_lat_evaluate(interp_u_staggered, lon, lat, &
-            lon_bot, lat_bot, lon_top, lat_top, nitems, invals, outvals, istatus)
-
-if (istatus == 0) then
-   interp_data(i, j) = outval
-else
-   interp_data(i, j) = MISSING_R8
+                         status)
+if (status /= 0) then
+   istatus(:) = 3  ! cannot locate enclosing horizontal quad
+   return
 endif
 
-!>@todo FIXME also need for the vertical ....
+! the order of the returned vertical info is counterclockwise around 
+! the quad starting at lon/lat bot:
+!  (lon_bot, lat_bot), (lon_top, lat_bot), (lon_top, lat_top), (lon_bot, lat_top)
+! stuff this info into arrays of length 4 so we can loop over them easier.
+
+call index_setup(lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &
+                 four_lons, four_lats, two_horiz_fracts)
+
+
+! and now here potentially we have different results for different
+! ensemble members.  the things that can vary are dimensioned by ens_size.
+do i=1, 4
+   call find_vertical_levels(four_lons(i), four_lats(i), lon_lat_vert(3), &
+                             which_vert, obs_qty, state_handle, ens_size, &
+                             four_bot_levs(i, ens_size), four_top_levs(i, ens_size), &
+                             four_vert_fracts(i, ens_size), status_array)
+   if (any(status_array /= 0)) then
+      istatus(:) = 4   ! cannot locate enclosing vertical levels  !>@todo FIXME
+      return
+   endif
+enddo
+
+! we have all the indices and fractions we could ever want.
+! now start looking up data values and actually interpolating, finally.
+do i=1, 4
+   call find_vertical_values(four_lons(i), four_lats(i), four_bot_levs(i, j), varid, botvals, status_array)
+   if (any(status_array /= 0)) then
+      istatus(:) = 5   ! cannot retrieve values
+      return
+   endif
+   
+   call find_vertical_values(four_lons(i), four_lats(i), four_top_levs(i, j), varid, topvals, status_array)
+   if (any(status_array /= 0)) then
+      istatus(:) = 5   ! cannot retrieve values
+      return
+   endif
+   
+   call vert_interp(botvals, topvals, four_vert_fracts(i, j), quad_vals(i, j), status)
+
+   if (any(status_array /= 0)) then
+      istatus(:) = 6   ! cannot do vertical interpolation
+      return
+   endif
+enddo
+
+! do the horizontal interpolation for each ensemble member
+call quad_lon_lat_evaluate(interp_handle, lon_fract, lat_fract, ens_size, &
+                           quad_vals, interp_vals, status_array)
+
+if (any(status_array /= 0)) then
+   istatus(:) = 7   ! cannot evaluate in the quad
+   return
+endif
+
+! all interp values should be set by now.  set istatus
+istatus(:) = 0
 
 end subroutine model_interpolate
 
@@ -406,9 +492,101 @@ end subroutine model_interpolate
 !>
 !> 
 
+!>@todo FIXME i left off here
+subroutine vert_interp(botvals, topvals, four_vert_fracts(i, j), quad_vals(i, j), status)
+
+end subroutine vert_interp
+!-----------------------------------------------------------------------
+!>
+!> 
+
+subroutine find_vertical_values(state_handle, ens_size, lon_index, lat_index, lev_index, &
+                                varid, vals, status)
+type(ensemble_type), intent(in)  :: state_handle
+integer,  intent(in)  :: ens_size
+integer,  intent(in)  :: lon_index
+integer,  intent(in)  :: lat_index
+integer,  intent(in)  :: lev_index(ens_size)
+integer,  intent(in)  :: varid
+real(r8), intent(out) :: vals(ens_size)
+integer,  intent(out) :: status
+
+integer(i8) :: state_indx
+
+!>@todo FIXME find unique level indices here (see new wrf code)
+
+state_indx = get_dart_vector_index(lon_index, lat_index, lev_index(1), domain_id, varid)
+vals = get_state(state_handle, state_indx)
+
+end subroutine find_vertical_values
+
+!-----------------------------------------------------------------------
+!>
+!> 
+
+! populate arrays with the 4 combinations of bot/top vs lon/lat
+! to make it easier below to loop over the corners.
+! no rocket science here.
+
+subroutine index_setup(lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &
+                       four_lons, four_lats, two_horiz_fracts)
+integer,  intent(in)  :: lon_bot, lat_box, lon_top, lat_top
+real(r8), intent(in)  :: lon_fract, lat_fract
+integer,  intent(out) :: four_lons(4), four_lats(4)
+real(r8), intent(out) :: two_horiz_fracts(2)
+
+! order is counterclockwise around the quad:
+!  (lon_bot, lat_bot), (lon_top, lat_bot), (lon_top, lat_top), (lon_bot, lat_top)
+
+four_lons(1) = lon_bot
+four_lons(2) = lon_top
+four_lons(3) = lon_bot
+four_lons(4) = lon_top
+
+four_lats(1) = lat_bot
+four_lats(2) = lat_bot
+four_lats(3) = lat_top
+four_lats(4) = lat_top
+
+two_horiz_fracts(1) = lon_fract
+two_horiz_fracts(2) = lat_fract
+
+end subroutine index_setup
+
+!-----------------------------------------------------------------------
+!>
+!> 
+
+subroutine find_vertical_levels(lon_index, lat_index, vert_val, &
+                                which_vert, obs_qty, state_handle, ens_size, &
+                                bot_levs, top_levs, vert_fracts, status)
+integer,             intent(in)  :: lon_index, lat_index
+real(r8),            intent(in)  :: vert_val
+integer,             intent(in)  :: which_vert
+integer,             intent(in)  :: obs_qty
+type(ensemble_type), intent(in)  :: state_handle
+integer,             intent(in)  :: ens_size
+integer,             intent(out) :: bot_levs(ens_size)
+integer,             intent(out) :: top_levs(ens_size)
+real(r8),            intent(out) :: vert_fracts(ens_size)
+integer,             intent(out) :: status(ens_size)
+
+!>@todo FIXME does this really need the state vector yet?
+bot_levs(:) = 10
+top_levs(:) = 9
+vert_fracts(:) = 0.5
+status(:) = 0
+
+end subroutine find_vertical_levels
+
+!-----------------------------------------------------------------------
+!>
+!> 
+
+
 function get_interp_handle(obs_quantity)
-integer, intent(in) :: obs_quantity
-type(quad_interp)   :: get_interp_handle
+integer, intent(in)     :: obs_quantity
+type(quad_interp_handl) :: get_interp_handle
 
 select case (grid_stagger%qty_stagger(obs_quantity))
    case ( STAGGER_U ) 
@@ -633,8 +811,6 @@ call nc_put_variable(ncid, 'P0',   grid_data%P0%vals,   routine)
 ! Flush the buffer and leave netCDF file open
 !-------------------------------------------------------------------------------
 call nc_sync(ncid)
-! Reference Pressure
-
 
 end subroutine nc_write_model_atts
 
@@ -661,6 +837,21 @@ real(digits12)  :: run_duration
 if ( .not. module_initialized ) call static_init_model
 
 !>@todo need to put code to write cam model time
+
+! invert this code: (this is the read)
+!#! call nc_get_variable(ncid, 'date',    datefull)
+!#! call nc_get_variable(ncid, 'datesec', datesec)
+!#! 
+!#! ! The 'date' is YYYYMMDD ... datesec is 'current seconds of current day'
+!#! iyear  = datefull / 10000
+!#! rem    = datefull - iyear*10000
+!#! imonth = rem / 100
+!#! iday   = rem - imonth*100
+!#! 
+!#! ihour  = datesec / 3600
+!#! rem    = datesec - ihour*3600
+!#! imin   = rem / 60
+!#! isec   = rem - imin*60
 
 if (present(adv_to_time)) then
    write(string1,*)'CAM/DART not configured to advance CAM.'
