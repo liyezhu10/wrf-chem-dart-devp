@@ -596,6 +596,7 @@ real(r8),            intent(out) :: vert_fracts(ens_size)
 integer,             intent(out) :: my_status(ens_size)
 
 integer :: bot1, top1, i, nlevels, varid
+integer :: level_one
 integer(i8) :: state_indx
 real(r8) :: fract1
 real(r8) :: surf_pressure(ens_size)
@@ -609,6 +610,7 @@ my_status(:) = 98
 
 ! number of vertical levels (midlayer points)
 nlevels = grid_data%lev%nsize
+level_one = 1
 
 select case (which_vert)
 
@@ -616,7 +618,7 @@ select case (which_vert)
       ! construct a pressure column here and find the model levels
       ! that enclose this value
       varid = get_varid_from_kind(domain_id, QTY_SURFACE_PRESSURE)
-      state_indx = get_dart_vector_index(lon_index, lat_index, 1, domain_id, varid)
+      state_indx = get_dart_vector_index(lon_index, lat_index, level_one, domain_id, varid)
       surf_pressure(:) = get_state(state_indx, state_handle)
 
       !>@todo FIXME: should we figure out now or later? how many unique levels we have?
@@ -632,6 +634,9 @@ select case (which_vert)
    case(VERTISHEIGHT)
       ! construct a height column here and find the model levels
       ! that enclose this value
+      write(string1, *) 'we have not written the code yet for vertical type: ', which_vert
+      call error_handler(E_ERR,'find_vertical_levels', &
+                         string1,source,revision,revdate)
 
    case(VERTISLEVEL)
       ! this routine returns false if the level number is out of range.
@@ -646,8 +651,14 @@ select case (which_vert)
       top_levs(:) = top1
       vert_fracts(:) = fract1
 
+   ! 2d fields
    case(VERTISSURFACE)
-   case(VERTISUNDEF)
+   case(VERTISUNDEF)  
+      !>@todo FIXME  OR  all levels = 1?  for a 2d field and get_state_index()?
+      bot_levs(:) = nlevels
+      top_levs(:) = nlevels - 1
+      vert_fracts(:) = 1.0_r8
+
    case default
       !>@todo FIXME: do nothing or error out here?
 
@@ -722,12 +733,15 @@ levloop: do this_lev = 2, nlevels
    bot_lev = this_lev
    fract = (p_val - pressures(top_lev)) / (pressures(bot_lev) - pressures(top_lev))
    my_status = 0
-   exit levloop
+   return
 enddo levloop
 
+! you shouldn't get here
 if (bot_lev == MISSING_I) then
-   my_status = 10
-   return
+  write(string1,*) 'should not happen - contact dart support'
+  write(string2,*) 'pressure value ', p_val, ' was not found in pressure column'
+  call error_handler(E_ERR,'pressure_to_level', &
+                         string1,source,revision,revdate,text2=string2)
 endif
 
 end subroutine pressure_to_level
@@ -747,7 +761,7 @@ integer,  intent(out) :: top
 real(r8), intent(out) :: fract
 logical               :: range_set
 
-integer :: whole_level
+integer :: integer_level
 real(r8) :: fract_level
 
 ! be a pessimist, then you're never disappointed
@@ -756,8 +770,8 @@ bot = MISSING_I
 top = MISSING_I
 fract = MISSING_R8
 
-whole_level = floor(vert_value)         ! potential top
-fract_level = vert_value - whole_level 
+integer_level = floor(vert_value)         ! potential top
+fract_level = vert_value - integer_level 
 
 ! cam levels start at the top so level 1 is
 ! the highest level and increase on the way down.
@@ -771,13 +785,13 @@ fract_level = vert_value - whole_level
 if (vert_value < 1.0_r8 .or. vert_value > valid_range) return
 
 if (vert_value /= valid_range) then
-   top = whole_level
+   top = integer_level
    bot = top + 1
    fract = fract_level
 else   
-   ! equal to the top level
-   top = whole_level - 1
-   bot = whole_level
+   ! equal to the bottom level
+   top = integer_level - 1
+   bot = integer_level
    fract = 1.0_r8
 endif
 
