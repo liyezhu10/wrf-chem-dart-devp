@@ -1,18 +1,18 @@
 ! DART software - Copyright UCAR. This open source software is provided
-! by UCAR, "as is", without charge, subject to all terms of use at
-! http://www.image.ucar.edu/DAReS/DART/DART_download
+! by ucar, "as is", without charge, subject to all terms of use at
+! http://www.image.ucar.edu/dares/dart/dart_download
 !
-! $Id$
+! $id: new_model_mod.f90 12058 2017-11-07 16:42:42z nancy@ucar.edu $
 !----------------------------------------------------------------
 !>
-!> This is the interface between the CAM-FV atmosphere model and DART.
-!> The required public interfaces and arguments CANNOT be changed.
+!> this is the interface between the cam-fv atmosphere model and dart.
+!> the required public interfaces and arguments cannot be changed.
 !>
 !----------------------------------------------------------------
 
 module model_mod
 
-!>@todo FIXME fill in the actual names we use after we've gotten
+!>@todo fixme fill in the actual names we use after we've gotten
 !>further into writing the coded
 
 use             types_mod
@@ -41,7 +41,7 @@ implicit none
 private
 
 ! these routines must be public and you cannot change
-! the arguments - they will be called *from* the DART code.
+! the arguments - they will be called *from* the dart code.
 
 ! routines in this list have code in this module
 public :: static_init_model,             &
@@ -350,7 +350,7 @@ integer,            intent(out) :: istatus(ens_size)
 integer  :: varid
 integer  :: lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract
 real(r8) :: lon_lat_vert(3), botvals(ens_size), topvals(ens_size)
-integer  :: which_vert, status, status1, status2, status_array(ens_size)
+integer  :: which_vert, status1, status2, status_array(ens_size)
 type(quad_interp_handle) :: interp_handle
 integer  :: ijk(3)
 integer  :: four_lons(4), four_lats(4)
@@ -414,7 +414,7 @@ endif
 ! unpack the location type into lon, lat, vert
 ! also may need the vert type?
 lon_lat_vert = get_location(location)
-which_vert = nint(query_location(location))  ! default is to return the vertical type
+which_vert = nint(query_location(location))  ! default is to return the vertical type (JPH nint - nearist int)
 
 ! get the grid handle for the right staggered grid
 interp_handle = get_interp_handle(obs_qty)
@@ -423,8 +423,9 @@ interp_handle = get_interp_handle(obs_qty)
 ! the fraction across the quad for the obs location
 call quad_lon_lat_locate(interp_handle, lon_lat_vert(1), lon_lat_vert(2) , &
                          lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &
-                         status)
-if (status /= 0) then
+                         status1)
+
+if (status1 /= 0) then
    istatus(:) = 3  ! cannot locate enclosing horizontal quad
    return
 endif
@@ -441,32 +442,39 @@ call index_setup(lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &
 ! and now here potentially we have different results for different
 ! ensemble members.  the things that can vary are dimensioned by ens_size.
 do i=1, 4
-   call find_vertical_levels(four_lons(i), four_lats(i), lon_lat_vert(3), &
-                             which_vert, obs_qty, state_handle, ens_size, &
-                             four_bot_levs(i, ens_size), four_top_levs(i, ens_size), &
-                             four_vert_fracts(i, ens_size), status_array)
+   !^>@todo FIXME build a vertical column to find vertical numbers... # need option for linear or log scale?
+   call find_vertical_levels(state_handle, ens_size, &
+                             four_lons(i), four_lats(i), lon_lat_vert(3), &
+                             which_vert, obs_qty, &
+                             four_bot_levs(i, :), four_top_levs(i, :), &
+                             four_vert_fracts(i, :), status_array)
+   
    if (any(status_array /= 0)) then
-      istatus(:) = 4   ! cannot locate enclosing vertical levels  !>@todo FIXME
+      istatus(:) = 4   ! cannot locate enclosing vertical levels  !>@todo FIXME use where statements?
       return
    endif
+
 enddo
 
 ! we have all the indices and fractions we could ever want.
 ! now start looking up data values and actually interpolating, finally.
 do i=1, 4
-   call find_vertical_values(four_lons(i), four_lats(i), four_bot_levs(i, j), varid, botvals, status_array)
+   call find_values(state_handle,  ens_size, four_lons(i), four_lats(i), &
+                    four_bot_levs(i, :), varid, botvals, status_array)
    if (any(status_array /= 0)) then
       istatus(:) = 5   ! cannot retrieve values
       return
    endif
    
-   call find_vertical_values(four_lons(i), four_lats(i), four_top_levs(i, j), varid, topvals, status_array)
+   call find_values(state_handle,  ens_size, four_lons(i), four_lats(i), &
+                    four_top_levs(i, :), varid, topvals, status_array)
    if (any(status_array /= 0)) then
       istatus(:) = 5   ! cannot retrieve values
       return
    endif
    
-   call vert_interp(botvals, topvals, four_vert_fracts(i, j), quad_vals(i, j), status)
+   call vert_interp(botvals, topvals, four_vert_fracts(i, :), &
+                    quad_vals(i, :), status_array)
 
    if (any(status_array /= 0)) then
       istatus(:) = 6   ! cannot do vertical interpolation
@@ -490,12 +498,18 @@ end subroutine model_interpolate
 
 !-----------------------------------------------------------------------
 !>
-!> 
+!>  interpolating first in the horizontal then the vertical
 
-!>@todo FIXME i left off here
-subroutine vert_interp(botvals, topvals, four_vert_fracts(i, j), quad_vals(i, j), status)
- integer, intent(in) :: botvals(4)
- integer, intent(in) :: topvals(4)
+subroutine vert_interp(nitems, botvals, topvals, vert_fracts, out_vals, my_status)
+integer,  intent(in)  :: nitems
+real(r8), intent(in)  :: botvals(nitems)
+real(r8), intent(in)  :: topvals(nitems)
+real(r8), intent(in)  :: vert_fracts(nitems)
+real(r8), intent(out) :: out_vals(nitems)
+integer,  intent(out) :: my_status(nitems)
+
+! vert_fracts is is 1 is the bottom level and the inverse is the top
+out_vals(:) = (botvals(:)* vert_fracts(:)) + (topvals(:) * (1.0_r8-vert_fracts(:)))
 
 end subroutine vert_interp
 
@@ -503,8 +517,8 @@ end subroutine vert_interp
 !>
 !> 
 
-subroutine find_vertical_values(state_handle, ens_size, lon_index, lat_index, lev_index, &
-                                varid, vals, status)
+subroutine find_values(state_handle, ens_size, lon_index, lat_index, lev_index, &
+                       varid, vals, my_status)
 type(ensemble_type), intent(in)  :: state_handle
 integer,  intent(in)  :: ens_size
 integer,  intent(in)  :: lon_index
@@ -512,16 +526,18 @@ integer,  intent(in)  :: lat_index
 integer,  intent(in)  :: lev_index(ens_size)
 integer,  intent(in)  :: varid
 real(r8), intent(out) :: vals(ens_size)
-integer,  intent(out) :: status
+integer,  intent(out) :: my_status(ens_size)
 
 integer(i8) :: state_indx
 
 !>@todo FIXME find unique level indices here (see new wrf code)
 
 state_indx = get_dart_vector_index(lon_index, lat_index, lev_index(1), domain_id, varid)
-vals = get_state(state_handle, state_indx)
+vals       = get_state(state_handle, state_indx)
 
-end subroutine find_vertical_values
+my_status = 0
+
+end subroutine find_values
 
 !-----------------------------------------------------------------------
 !>
@@ -560,27 +576,50 @@ end subroutine index_setup
 !>
 !> 
 
-subroutine find_vertical_levels(lon_index, lat_index, vert_val, &
-                                which_vert, obs_qty, state_handle, ens_size, &
-                                bot_levs, top_levs, vert_fracts, status)
-integer,             intent(in)  :: lon_index, lat_index
+subroutine find_vertical_levels(state_handle, ens_size, lon_index, lat_index, vert_val, &
+                                which_vert, obs_qty, bot_levs, top_levs, vert_fracts, my_status)
+type(ensemble_type), intent(in)  :: state_handle
+integer,             intent(in)  :: ens_size
+integer,             intent(in)  :: lon_index 
+integer,             intent(in)  :: lat_index
 real(r8),            intent(in)  :: vert_val
 integer,             intent(in)  :: which_vert
 integer,             intent(in)  :: obs_qty
-type(ensemble_type), intent(in)  :: state_handle
-integer,             intent(in)  :: ens_size
 integer,             intent(out) :: bot_levs(ens_size)
 integer,             intent(out) :: top_levs(ens_size)
 real(r8),            intent(out) :: vert_fracts(ens_size)
-integer,             intent(out) :: status(ens_size)
+integer,             intent(out) :: my_status(ens_size)
 
 !>@todo FIXME does this really need the state vector yet?
 bot_levs(:) = 10
 top_levs(:) = 9
 vert_fracts(:) = 0.5
-status(:) = 0
+my_status(:) = 0
+
+select case (which_vert)
+   case(VERTISPRESSURE)
+      hyam  
+   case(VERTISHEIGHT)
+   case(VERTISLEVEL)
+   case(VERTISSURFACE)
+   case(VERTISUNDEFINED)
+   case default
+end select
 
 end subroutine find_vertical_levels
+
+
+!-----------------------------------------------------------------------
+!>  Next, get the pressures on the levels for this ps
+!>  Assuming we'll only need pressures on model mid-point levels, not 
+!>  interface levels.  This pressure column will be for the correct grid 
+!> for obs_qty, since p_surf was taken
+!>      from the grid-correct ps[_stagr] grid
+
+subroutine find_pressure_levels()
+real(r8), allocatable :: p_col(:,:)
+
+end subroutine find_pressure_levels
 
 !-----------------------------------------------------------------------
 !>

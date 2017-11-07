@@ -2266,8 +2266,9 @@ real(r8),                 intent(in)  :: invals(4, nitems)
 real(r8),                 intent(out) :: outvals(nitems)
 integer,                  intent(out) :: istatus(nitems)
 
-real(r8) :: xbot(nitems), xtop(nitems), i
+real(r8) :: xbot(nitems), xtop(nitems)
 real(r8) :: x_corners(4), y_corners(4)
+integer  :: i
 
 character(len=*), parameter :: routine = 'quad_lon_lat_evaluate:quad_lon_lat_evaluate_ir_array'
 
