@@ -176,6 +176,12 @@ call set_quad_coords(h, data_start_lon, data_del_lon, data_start_lat, data_del_l
 
 do i=1, nsx
    do j=1, nsy
+
+      !>@todo FIXME should this interface return an array of 4 index combinations 
+      !>so the calling code could do loops from 1 to 4 instead of making combinations
+      !>of lat/lon bot/top in the right order for eval?  locate can output already 
+      !>in the right combinations in the right order.
+
       call quad_lon_lat_locate(h, sample_lons(i,j), sample_lats(i,j), lon_bot, lat_bot, lon_top, lat_top, &
                                lon_fract, lat_fract, istatus)
       if (istatus /= 0) then
@@ -197,8 +203,7 @@ do i=1, nsx
          cycle
       endif
 
-      call quad_lon_lat_evaluate(h, lon_bot, lat_bot, lon_top, lat_top, &
-                                 lon_fract, lat_fract, invals, outval, istatus)
+      call quad_lon_lat_evaluate(h, lon_fract, lat_fract, invals, outval, istatus)
 
       if (istatus == 0) then
          interp_data(i, j) = outval
