@@ -213,7 +213,6 @@ if (do_nml_term()) write(     *     , nml=model_nml)
 call set_calendar_type('GREGORIAN')
 
 call read_grid_info(cam_template_filename, grid_data)
-call read_cam_phis_array(cam_phis_filename)
 
 !>@todo do we need to map_qtys here?
 !>@todo do we need to set the model top related stuff here?
@@ -334,6 +333,10 @@ end function get_location_from_index
 !> istatus = 4    cannot locate enclosing vertical levels
 !> istatus = 5    cannot retrieve state vector values
 !> istatus = 6    cannot do vertical interpolation
+!> istatus = 7    cannot interpolate in the quad to get the values
+!> istatus = 8    cannot get vertical levels for an obs on model levels
+!> istatus = 9    cannot get vertical levels for an obs on pressure levels
+!> istatus = 10   also cannot get vertical levels for an obs on pressure levels
 !> istatus = X
 !> istatus = 99   unknown error - shouldn't happen
 !>
@@ -443,7 +446,7 @@ call index_setup(lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &
 ! and now here potentially we have different results for different
 ! ensemble members.  the things that can vary are dimensioned by ens_size.
 do i=1, 4
-   !^>@todo FIXME build a vertical column to find vertical numbers... # need option for linear or log scale?
+   !>@todo FIXME build a vertical column to find vertical numbers... # need option for linear or log scale?
    call find_vertical_levels(state_handle, ens_size, &
                              four_lons(i), four_lats(i), lon_lat_vert(3), &
                              which_vert, obs_qty, &
@@ -509,7 +512,7 @@ real(r8), intent(in)  :: vert_fracts(nitems)
 real(r8), intent(out) :: out_vals(nitems)
 integer,  intent(out) :: my_status(nitems)
 
-! vert_fracts is is 1 is the bottom level and the inverse is the top
+! vert_fracts of 1 is 100% of the bottom level and 0 is 100% of the top level
 out_vals(:) = (botvals(:)* vert_fracts(:)) + (topvals(:) * (1.0_r8-vert_fracts(:)))
 my_status(:) = 0
 
@@ -592,22 +595,195 @@ integer,             intent(out) :: top_levs(ens_size)
 real(r8),            intent(out) :: vert_fracts(ens_size)
 integer,             intent(out) :: my_status(ens_size)
 
-!>@todo FIXME does this really need the state vector yet?
-bot_levs(:) = 10
-top_levs(:) = 9
-vert_fracts(:) = 0.5
-my_status(:) = 0
+integer :: bot1, top1, i, nlevels, varid
+integer(i8) :: state_indx
+real(r8) :: fract1
+real(r8) :: surf_pressure(ens_size)
+real(r8) :: pressure_array(grid_data%lev%nsize)
+
+! assume the worst
+bot_levs(:) = MISSING_I
+top_levs(:) = MISSING_I
+vert_fracts(:) = MISSING_R8
+my_status(:) = 98
+
+! number of vertical levels (midlayer points)
+nlevels = grid_data%lev%nsize
 
 select case (which_vert)
+
    case(VERTISPRESSURE)
+      ! construct a pressure column here and find the model levels
+      ! that enclose this value
+      varid = get_varid_from_kind(domain_id, QTY_SURFACE_PRESSURE)
+      state_indx = get_dart_vector_index(lon_index, lat_index, 1, domain_id, varid)
+      surf_pressure(:) = get_state(state_indx, state_handle)
+
+      !>@todo FIXME: should we figure out now or later? how many unique levels we have?
+      !> for now - do the unique culling later so we don't have to carry that count around.
+      do i=1, ens_size
+         call cam_pressure_levels(surf_pressure(i), nlevels, grid_data%hyam, grid_data%hybm, &
+                                  grid_data%P0, pressure_array)
+         call pressure_to_level(nlevels, pressure_array, vert_val, &
+                                bot_levs(i), top_levs(i), vert_fracts(i), my_status(i))
+
+      enddo
+
    case(VERTISHEIGHT)
+      ! construct a height column here and find the model levels
+      ! that enclose this value
+
    case(VERTISLEVEL)
+      ! this routine returns false if the level number is out of range.
+      if (range_set(vert_val, nlevels, bot1, top1, fract1)) then
+         my_status(:) = 8
+         return
+      endif
+
+      ! because we're given a model level as input, all the ensemble
+      ! members have the same outgoing values.
+      bot_levs(:) = bot1
+      top_levs(:) = top1
+      vert_fracts(:) = fract1
+
    case(VERTISSURFACE)
    case(VERTISUNDEF)
    case default
+      !>@todo FIXME: do nothing or error out here?
+
+      write(string1, *) 'unsupported vertical type: ', which_vert
+      call error_handler(E_ERR,'find_vertical_levels', &
+                         string1,source,revision,revdate)
+      
 end select
 
 end subroutine find_vertical_levels
+
+!-----------------------------------------------------------------------
+!> Compute the pressures at the layer midpoints
+
+subroutine cam_pressure_levels(surface_pressure, n_levels, hyam, hybm, P0, pressure_array)
+
+real(r8),           intent(in)  :: surface_pressure   ! in pascals
+integer,            intent(in)  :: n_levels
+type(cam_1d_array), intent(in)  :: hyam
+type(cam_1d_array), intent(in)  :: hybm
+type(cam_1d_array), intent(in)  :: P0
+real(r8),           intent(out) :: pressure_array(:)
+
+integer :: k
+
+! Set midpoint pressures.  This array mirrors the order of the
+! cam model levels: 1 is the model top, N is the bottom.
+
+do k=1,n_levels
+   pressure_array(k) = hyam%vals(k)*P0%vals(1) + hybm%vals(k)*surface_pressure
+enddo
+
+end subroutine cam_pressure_levels
+
+
+!-----------------------------------------------------------------------
+!> return the level indices and fraction across the level.
+!> 1 is top, N is bottom, bot is the lower level, top is the upper level
+!> so top value will be smaller than bot.  fract = 0 is the full top,
+!> fract = 1 is the full bot.  return non-zero if value outside the valid range.
+
+subroutine pressure_to_level(nlevels, pressures, p_val, &
+                             bot_lev, top_lev, fract, my_status)
+
+integer,  intent(in)  :: nlevels
+real(r8), intent(in)  :: pressures(:)
+real(r8), intent(in)  :: p_val
+integer,  intent(out) :: bot_lev
+integer,  intent(out) :: top_lev
+real(r8), intent(out) :: fract  
+integer,  intent(out) :: my_status
+
+integer :: this_lev, varid
+
+bot_lev = MISSING_I
+top_lev = MISSING_I
+fract   = MISSING_R8
+
+if (p_val < pressures(1) .or. p_val > pressures(nlevels)) then
+   my_status = 9
+   return
+endif
+
+! search from the top down.  smaller pressures are higher
+! than larger ones.  in theory you can never fall out of
+! this loop without setting the top/bot because we've tested
+! already for p_val out of range.
+levloop: do this_lev = 2, nlevels
+   if (p_val >= pressures(this_lev)) cycle levloop
+
+   top_lev = this_lev - 1
+   bot_lev = this_lev
+   fract = (p_val - pressures(top_lev)) / (pressures(bot_lev) - pressures(top_lev))
+   my_status = 0
+   exit levloop
+enddo levloop
+
+if (bot_lev == MISSING_I) then
+   my_status = 10
+   return
+endif
+
+end subroutine pressure_to_level
+
+!-----------------------------------------------------------------------
+!> in cam level 1 is at the model top, level N is the lowest level
+!> our convention in this code is:  between levels a fraction of 0
+!> is 100% the top level, and fraction of 1 is 100% the bottom level.
+!> the top level is always closer to the model top and so has a *smaller*
+!> level number than the bottom level. stay alert for this!
+
+function range_set(vert_value, valid_range, bot, top, fract)
+real(r8), intent(in)  :: vert_value
+integer,  intent(in)  :: valid_range
+integer,  intent(out) :: bot
+integer,  intent(out) :: top
+real(r8), intent(out) :: fract
+logical               :: range_set
+
+integer :: whole_level
+real(r8) :: fract_level
+
+! be a pessimist, then you're never disappointed
+range_set = .false.
+bot = MISSING_I
+top = MISSING_I
+fract = MISSING_R8
+
+whole_level = floor(vert_value)         ! potential top
+fract_level = vert_value - whole_level 
+
+! cam levels start at the top so level 1 is
+! the highest level and increase on the way down.
+
+!>@todo FIXME might want to add debugging print
+!>might want to allow extrapolation - which means
+!>allowing out of range values here and handling
+!>them correctly in the calling and vert_interp() code.
+
+! out of range checks
+if (vert_value < 1.0_r8 .or. vert_value > valid_range) return
+
+if (vert_value /= valid_range) then
+   top = whole_level
+   bot = top + 1
+   fract = fract_level
+else   
+   ! equal to the top level
+   top = whole_level - 1
+   bot = whole_level
+   fract = 1.0_r8
+endif
+
+range_set = .true.
+
+end function range_set
 
 
 !-----------------------------------------------------------------------
@@ -621,6 +797,7 @@ subroutine find_pressure_levels()
 real(r8), allocatable :: p_col(:,:)
 
 end subroutine find_pressure_levels
+
 
 !-----------------------------------------------------------------------
 !>
@@ -691,7 +868,8 @@ end function shortest_time_between_assimilations
 subroutine end_model()
 
 ! deallocate arrays from grid and anything else
-! deallocate(state_loc)
+
+call free_cam_grid(grid_data)
 
 end subroutine end_model
 
@@ -1128,8 +1306,9 @@ integer :: ncid
 call nc_check( nf90_open(grid_file, NF90_NOWRITE, ncid), &
                'read_grid_info', 'open '//trim(grid_file))
 
-! Get the grid info
+! Get the grid info plus additional non-state arrays
 call get_cam_grid(ncid, grid)
+call read_cam_phis_array(cam_phis_filename)
 
 ! Set up the interpolation structure for later 
 call setup_interpolation(grid)
@@ -1172,29 +1351,6 @@ end subroutine get_cam_grid
 !>   
 
 
-subroutine fill_cam_0d_array(ncid, varname, grid_array)
-integer,            intent(in)    :: ncid
-character(len=*),   intent(in)    :: varname
-type(cam_1d_array), intent(inout) :: grid_array
-
-grid_array%nsize = 1
-allocate(grid_array%vals(grid_array%nsize))
-
-call nc_get_variable(ncid, varname, grid_array%vals)
-
-if (debug > 10) then
-   print*, 'variable name ', trim(varname), grid_array%vals
-endif
-
-end subroutine fill_cam_0d_array
-
-
-!-----------------------------------------------------------------------
-!>
-!> allocate space for a scalar variable and read values into the grid_array
-!>   
-
-
 subroutine fill_cam_1d_array(ncid, varname, grid_array)
 integer,            intent(in)    :: ncid
 character(len=*),   intent(in)    :: varname
@@ -1218,6 +1374,71 @@ if (debug > 10) then
 endif
 
 end subroutine fill_cam_1d_array
+
+
+!-----------------------------------------------------------------------
+!>
+!> allocate space for a scalar variable and read values into the grid_array
+!>   
+
+
+subroutine fill_cam_0d_array(ncid, varname, grid_array)
+integer,            intent(in)    :: ncid
+character(len=*),   intent(in)    :: varname
+type(cam_1d_array), intent(inout) :: grid_array
+
+grid_array%nsize = 1
+allocate(grid_array%vals(grid_array%nsize))
+
+call nc_get_variable(ncid, varname, grid_array%vals)
+
+if (debug > 10) then
+   print*, 'variable name ', trim(varname), grid_array%vals
+endif
+
+end subroutine fill_cam_0d_array
+
+!-----------------------------------------------------------------------
+!>
+!> free space in the various grid arrays
+!> 
+
+subroutine free_cam_grid(grid)
+
+type(cam_grid), intent(inout) :: grid
+
+call free_cam_1d_array(grid%lon)
+call free_cam_1d_array(grid%lat)
+call free_cam_1d_array(grid%lev)
+call free_cam_1d_array(grid%ilev) 
+call free_cam_1d_array(grid%slon)
+call free_cam_1d_array(grid%slat)
+call free_cam_1d_array(grid%gw)
+call free_cam_1d_array(grid%hyai)
+call free_cam_1d_array(grid%hybi)
+call free_cam_1d_array(grid%hyam)
+call free_cam_1d_array(grid%hybm)
+
+call free_cam_1d_array(grid%P0) 
+
+deallocate(phis)
+
+end subroutine free_cam_grid
+
+
+!-----------------------------------------------------------------------
+!>
+!> 
+!>   
+
+subroutine free_cam_1d_array(grid_array)
+type(cam_1d_array), intent(inout) :: grid_array
+
+deallocate(grid_array%vals)
+grid_array%nsize = -1
+
+end subroutine free_cam_1d_array
+
 
 !-----------------------------------------------------------------------
 !>
@@ -1254,23 +1475,6 @@ end subroutine setup_interpolation
 !-----------------------------------------------------------------------
 !>
 !> 
-!>   
-
-subroutine free_cam_1d_array(grid_array)
-type(cam_1d_array), intent(inout) :: grid_array
-
-deallocate(grid_array%vals)
-
-grid_array%nsize = -1
-
-end subroutine free_cam_1d_array
-
-
-!-----------------------------------------------------------------------
-!>
-!> 
-!>   
-
 
 subroutine read_cam_phis_array(phis_filename)
 character(len=*),   intent(in)    :: phis_filename
@@ -1288,6 +1492,8 @@ call nc_get_variable(ncid, 'PHIS', phis)
 call nc_check( nf90_close(ncid), 'read_cam_phis_array', 'close '//trim(phis_filename))
 
 end subroutine read_cam_phis_array
+
+!-----------------------------------------------------------------------
 
 !===================================================================
 ! End of model_mod

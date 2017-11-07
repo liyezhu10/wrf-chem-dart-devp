@@ -138,6 +138,7 @@
                                  'US' 'QTY_U_WIND_COMPONENT',  'NA', 'NA', 'UPDATE'
                                  'VS' 'QTY_V_WIND_COMPONENT',  'NA', 'NA', 'UPDATE'
                                  'Q'  'QTY_SPECIFIC_HUMIDITY', 'NA', 'NA', 'UPDATE'
+                                 'PS' 'QTY_SURFACE_PRESSURE',  'NA', 'NA', 'UPDATE'
    assimilation_period_seconds = 21600,
    assimilation_period_days    = 0,
    vert_localization_coord     = 3
