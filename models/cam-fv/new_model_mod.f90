@@ -511,6 +511,7 @@ integer,  intent(out) :: my_status(nitems)
 
 ! vert_fracts is is 1 is the bottom level and the inverse is the top
 out_vals(:) = (botvals(:)* vert_fracts(:)) + (topvals(:) * (1.0_r8-vert_fracts(:)))
+my_status(:) = 0
 
 end subroutine vert_interp
 

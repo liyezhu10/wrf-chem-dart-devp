@@ -424,10 +424,12 @@ if (debug > 10) print *, interp_handle%grid_type
 
 select case (interp_handle%grid_type)
    case(GRID_QUAD_FULLY_REGULAR)
-      print *   ! start, del
+      print *,  interp_handle%rr%lon_start, interp_handle%rr%lon_delta, &
+                interp_handle%rr%lat_start, interp_handle%rr%lat_delta
 
    case(GRID_QUAD_IRREG_SPACED_REGULAR)
-      print * !, interp_handle%ir%lats_1D(num_lats), interp_handle%ir%lons_1D(num_lons)
+      print * , interp_handle%ir%lats_1D(interp_handle%nlat), &
+                interp_handle%ir%lons_1D(interp_handle%nlon)
 
    case(GRID_QUAD_FULLY_IRREGULAR)
       print * !, interp_handle%ii%lats_2D(num_lons,num_lats), interp_handle%ii%lons_2D(num_lons, num_lats)
@@ -1332,9 +1334,9 @@ select case (interp_handle%grid_type)
 
  case (GRID_QUAD_IRREG_SPACED_REGULAR)
    ! This is an irregular grid (irregular == spacing; still completely orthogonal)
-   call get_irreg_box(lon, lat, nx, ny, &
+   call get_semireg_box(lon, lat, nx, ny, &
          interp_handle%ir%lons_1d, interp_handle%ir%lats_1d, &
-         cyclic, lon_bot, lat_bot, lon_fract, lat_fract, istatus)
+         lon_bot, lat_bot, lon_fract, lat_fract, istatus)
 
  case (GRID_QUAD_FULLY_REGULAR)
    ! evenly spaced and orthogonal
@@ -1454,6 +1456,44 @@ endif
 call lon_bounds(lon, nx, lon_array, .true., found_x, lon_top, lon_fract, istatus)
 
 end subroutine get_reg_box
+
+
+!------------------------------------------------------------
+!> Given a longitude and latitude array for irregular spaced,
+!> orthogonal grids, get the lower left indices of the grid box
+!> that contains the point and the fractions along each direction
+!> for interpolation.
+
+subroutine get_semireg_box(lon, lat, nx, ny, lon_array, lat_array, &
+                           found_x, found_y, lon_fract, lat_fract, istatus)
+
+real(r8),   intent(in) :: lon, lat
+integer,    intent(in) :: nx, ny
+real(r8),   intent(in) :: lon_array(:), lat_array(:)
+integer,   intent(out) :: found_x, found_y
+real(r8),  intent(out) :: lon_fract, lat_fract
+integer,   intent(out) :: istatus
+
+! Local storage
+integer  :: lat_status, lon_top, lat_top, i
+
+! Succesful return has istatus of 0
+istatus = 0
+
+! Get latitude box boundaries
+!>@todo FIXME check on the pole wrap and cyclic flags
+call lat_bounds(lat, ny, lat_array, .false., found_y, lat_top, lat_fract, lat_status)
+
+! Check for error on the latitude interpolation
+if(lat_status /= 0) then
+   istatus = 1
+   return
+endif
+
+! Find out what longitude box and fraction - FIXME: cyclic flag
+call lon_bounds(lon, nx, lon_array, .true., found_x, lon_top, lon_fract, istatus)
+
+end subroutine get_semireg_box
 
 !------------------------------------------------------------
 !> assumes longitudes can be described by a single 1D array.
