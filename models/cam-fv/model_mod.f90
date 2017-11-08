@@ -634,6 +634,11 @@ select case (which_vert)
    case(VERTISHEIGHT)
       ! construct a height column here and find the model levels
       ! that enclose this value
+      !@>todo put in arguments and write height_to_level
+      call cam_height_levels()
+      call height_to_level()
+      
+
       write(string1, *) 'we have not written the code yet for vertical type: ', which_vert
       call error_handler(E_ERR,'find_vertical_levels', &
                          string1,source,revision,revdate)
@@ -669,6 +674,70 @@ select case (which_vert)
 end select
 
 end subroutine find_vertical_levels
+
+!-----------------------------------------------------------------------
+!> Compute the heights at pressure midpoints
+
+subroutine cam_height_levels(state_handle, ens_size, lon_index, lat_index, nlevels, height_array, my_status) 
+type(ensemble_type), intent(in)  :: state_handle
+integer,             intent(in)  :: ens_size
+real(r8),            intent(in)  :: lon_index
+real(r8),            intent(in)  :: lat_index
+integer,             intent(in)  :: nlevels
+real(r8),            intent(out) :: height_array(nlevels, ens_size)
+integer,             intent(out) :: my_status
+
+integer :: k, varid, level_one
+real(r8) :: temperature(ens_size), specific_humidity(ens_size), surface_pressure(ens_size)
+real(r8) :: phi(ens_size, nlevels)
+real(r8) :: surface_elevation
+
+!>@todo this should come from a model specific constant module.
+!> the forward operators and model_mod should use it.
+real(r8), parameter :: rd = 287.05_r8 ! dry air gas constant
+real(r8), parameter :: rv = 461.51_r8 ! wet air gas constant
+real(r8), parameter :: rr_factor = (rv/rd) - 1.0_r8
+
+! this is for surface obs
+level_one = 1
+
+!@>todo make into a subroutine
+! get the surface pressure from the state_handle
+varid = get_varid_from_kind(domain_id, QTY_SURFACE_PRESSURE)
+state_indx = get_dart_vector_index(lon_index, lat_index, level_one, domain_id, varid)
+surface_pressure(:) = get_state(state_indx, state_handle)
+
+! get the surface elevation from the phis
+surface_elevation = phis(lon_index, lat_index)
+
+do k = 1, nlevels
+   ! temperature
+   varid = get_varid_from_kind(domain_id, QTY_TEMPERATURE)
+   state_indx = get_dart_vector_index(lon_index, lat_index, k, domain_id, varid)
+   temperature(:) = get_state(state_indx, state_handle)
+
+   ! specific humidity
+   varid = get_varid_from_kind(domain_id, QTY_SPECIFIC_HUMIDITY)
+   state_indx = get_dart_vector_index(lon_index, lat_index, k, domain_id, varid)
+   specific_humidity(:) = get_state(state_indx, state_handle)
+   
+   !>@todo rename tv to something that mens something to users
+   tv(:,k) = temperature(:)*(1.0_r8 + rr_factor*specific_humidity(:))
+enddo
+
+! need to convert to geopotential height
+do imem = 1, ens_size
+   !>@todo refacfor to just put out geometric height
+   call dcz2(nlevels, surface_pressure(imem), surface_elevation, tv(imem,:), &
+             grid_data%P0%vals(1), hybrid_As, hybrid_Bs, phi(imem,:))
+   do k = 1,nlevels
+      height_array(k, imem) = gph2gmh(phi(imem,k), grid_data%lat%vals(lat_index))
+   enddo
+enddo
+
+istatus = 0
+
+end subroutine cam_height_levels
 
 !-----------------------------------------------------------------------
 !> Compute the pressures at the layer midpoints
@@ -1508,6 +1577,168 @@ call nc_check( nf90_close(ncid), 'read_cam_phis_array', 'close '//trim(phis_file
 end subroutine read_cam_phis_array
 
 !-----------------------------------------------------------------------
+
+subroutine dcz2(kmax,p_surf,h_surf,tv,hprb,hybrid_As,hybrid_Bs,z2)
+
+! Compute geopotential height for a CESM hybrid coordinate column.
+! All arrays except hybrid_As, hybrid_Bs are oriented top to bottom.
+! hybrid_[AB]s first subscript:
+!  = 1 for layer interfaces
+!  = 2 for layer midpoints
+! hybrid_As coord coeffs for P0 reference pressure term in plevs_cam
+! hybrid_Bs coord coeffs for surf pressure term in plevs_cam (in same format as hybrid_As)
+
+integer,  intent(in)  :: kmax                ! Number of vertical levels
+real(r8), intent(in)  :: p_surf              ! Surface pressure           (pascals)
+real(r8), intent(in)  :: h_surf               ! Surface height (m)
+real(r8), intent(in)  :: tv(kmax)            ! Virtual temperature, top to bottom
+real(r8), intent(in)  :: hprb                ! Hybrid base pressure       (pascals)
+real(r8), intent(in)  :: hybrid_As(kmax+1,2)
+real(r8), intent(in)  :: hybrid_Bs(kmax+1,2)
+real(r8), intent(out) :: z2(kmax)            ! Geopotential height, top to bottom
+
+! Local variables
+
+!>@todo have a model constants module?
+real(r8), parameter :: r = 287.04_r8    ! Different than model_heights ! dry air gas constant.
+real(r8), parameter :: g0 = 9.80616_r8  ! Different than model_heights:gph2gmh:G !
+real(r8), parameter :: rbyg=r/g0
+real(r8) :: pterm(kmax)         ! pressure profile
+real(r8) :: pmln(kmax+1)        ! logs of midpoint pressures
+
+integer  :: i,k,l
+real(r8) :: ARG
+
+! Compute intermediate quantities using scratch space
+
+! DEBUG: z2 was unassigned in previous code.
+z2(:) = MISSING_R8
+
+! Invert vertical loop
+! Compute top only if top interface pressure is nonzero.
+!
+! newFIXME; p_col could be used here, instead of (re)calculating it in ARG
+do K = kmax+1, 1, -1
+   i = kmax-K+2
+   ARG = hprb*hybrid_As(i,2) + p_surf *hybrid_Bs(i,2)
+   if (ARG > 0.0_r8) THEN
+       pmln(K) = LOG(ARG)
+   else
+       pmln(K) = 0.0_r8
+   endif
+enddo
+
+do K = 2,kmax - 1
+   pterm(k) = rbyg*tv(k)*0.5_r8* (pmln(k+1)-pmln(k-1))
+enddo
+
+! Initialize z2 to sum of ground height and thickness of top half layer
+! this is NOT adding the thickness of the 'top' half layer.
+!    it's adding the thickness of the half layer at level K,
+do K = 1,kmax - 1
+   z2(k) = h_surf + rbyg*tv(k)*0.5_r8* (pmln(K+1)-pmln(K))
+enddo
+z2(kmax) = h_surf + rbyg*tv(kmax)* (log(p_surf*hybrid_Bs(1,1))-pmln(kmax))
+
+! THIS is adding the half layer at the BOTTOM.
+do k = 1,kmax - 1
+    z2(k) = z2(k) + rbyg*tv(kmax)* (log(p_surf*hybrid_Bs(1,1))-0.5_r8* &
+                                       (pmln(kmax-1)+pmln(kmax)))
+enddo
+
+! Add thickness of the remaining full layers
+! (i.e., integrate from ground to highest layer interface)
+
+do K = 1,kmax - 2
+    do L = K+1, kmax-1
+       z2(K) = z2(K) + pterm(L)
+    enddo
+enddo
+
+end subroutine dcz2
+
+!-----------------------------------------------------------------------
+
+function gph2gmh(h, lat)
+
+!  Convert a list of geopotential altitudes to mean sea level altitude.
+
+real(r8), intent(in) :: h         ! geopotential altitude (in m)
+real(r8), intent(in) :: lat       ! latitude  of profile in degrees.
+real(r8)             :: gph2gmh   ! MSL altitude, in km.
+
+real(r8), parameter ::  be = 6356751.6_r8        ! min earth radius, m
+real(r8), parameter ::  ae = 6378136.3_r8        ! max earth radius, m
+real(r8), parameter ::  pi = 3.14159265358979_r8
+
+! FIXME; another definition of gravitational acceleration.  
+! See g0 and gravity_constant elsewhere.
+real(r8), parameter ::  G = 9.80665_r8 ! WMO reference g value, m/s**2, at 45.542N(S)
+
+real(r8) :: g0
+real(r8) :: r0
+real(r8) :: latr
+
+latr = lat * (pi/180.0_r8)           ! in radians
+call gravity(latr, 0.0_r8, g0)
+
+! compute local earth's radius using ellipse equation
+
+r0 = sqrt( ae**2 * cos(latr)**2 + be**2 * sin(latr)**2)
+
+! Compute altitude above sea level
+gph2gmh = (r0 * h) / (((g0*r0)/G) - h)
+
+end function gph2gmh
+
+!-----------------------------------------------------------------------
+
+subroutine gravity(xlat,alt,galt)
+
+!- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+! This subroutine computes the Earth's gravity at any altitude
+! and latitude.  The model assumes the Earth is an oblate
+! spheriod rotating at a the Earth's spin rate.  The model
+! was taken from "Geophysical Geodesy, Kurt Lambeck, 1988".
+!
+!  input:    xlat, latitude in radians
+!            alt,  altitude above the reference ellipsiod, km
+!  output:   galt, gravity at the given lat and alt, m/sec**2
+!
+! Compute acceleration due to the Earth's gravity at any latitude/altitude
+! author     Bill Schreiner   5/95
+!- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+real(r8), intent(in)  :: xlat
+real(r8), intent(in)  :: alt
+real(r8), intent(out) :: galt
+
+real(r8),parameter :: xmu = 398600.4415_r8         ! km^3/s^2
+real(r8),parameter :: ae  = 6378.1363_r8           ! km
+real(r8),parameter :: f   = 1.0_r8/298.2564_r8
+real(r8),parameter :: w   = 7.292115e-05_r8        ! rad/s
+real(r8),parameter :: xm  = 0.003468_r8            !
+real(r8),parameter :: f2  = 5.3481622134089e-03_r8 ! f2 = -f + 5.0* 0.50*xm - 17.0/14.0*f*xm + 15.0/4.0*xm**2
+real(r8),parameter :: f4  = 2.3448248012911e-05_r8 ! f4 = -f**2* 0.50 + 5.0* 0.50*f*xm
+
+real(r8) :: ge
+real(r8) :: g
+
+
+! compute gravity at the equator, km/s2
+ge = xmu/ae**2/(1.0_r8 - f + 1.5_r8*xm - 15.0_r8/14.0_r8*xm*f)
+
+! compute gravity at any latitude, km/s2
+g = ge*(1.0_r8 + f2*(sin(xlat))**2 - 1.0_r8/4.0_r8*f4*(sin(2.0_r8*xlat))**2)
+
+! compute gravity at any latitude and at any height, km/s2
+galt = g - 2.0_r8*ge*alt/ae*(1.0_r8 + f + xm + (-3.0_r8*f + 5.0_r8* 0.50_r8*xm)*  &
+                          (sin(xlat))**2) + 3.0_r8*ge*alt**2/ae**2
+! convert to meters/s2
+galt = galt*1000.0_r8
+
+end subroutine gravity
+
 
 !===================================================================
 ! End of model_mod
