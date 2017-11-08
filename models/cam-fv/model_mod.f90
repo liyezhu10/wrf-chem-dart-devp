@@ -701,7 +701,7 @@ real(r8), parameter :: rr_factor = (rv/rd) - 1.0_r8
 ! this is for surface obs
 level_one = 1
 
-!@>todo make into a subroutine
+!@>todo make into a subroutine get_val or something similar
 ! get the surface pressure from the state_handle
 varid = get_varid_from_kind(domain_id, QTY_SURFACE_PRESSURE)
 state_indx = get_dart_vector_index(lon_index, lat_index, level_one, domain_id, varid)
