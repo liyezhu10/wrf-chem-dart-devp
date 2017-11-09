@@ -38,11 +38,17 @@ public :: nc_check,                       &
           nc_define_integer_variable,     &
           nc_define_real_variable,        &
           nc_define_double_variable,      &
+          nc_global_attribute_exists,     &
+          nc_dimension_exists,            &
+          nc_variable_exists,             &
           nc_put_variable,                &
           nc_get_variable,                &
           nc_add_global_creation_time,    &
           nc_get_variable_num_dimensions, &
           nc_get_variable_size,           &
+          nc_open_readonly,               &
+          nc_open_readwrite,              &
+          nc_close,                       &
           nc_redef,                       &
           nc_enddef,                      &
           nc_sync
@@ -64,6 +70,7 @@ interface nc_add_attribute_to_variable
 end interface
 
 interface nc_define_integer_variable
+   module procedure nc_define_var_int_scalar
    module procedure nc_define_var_int_1d
    module procedure nc_define_var_int_Nd
 end interface
@@ -75,6 +82,7 @@ interface nc_define_real_variable
 end interface
 
 interface nc_define_double_variable
+   module procedure nc_define_var_double_scalar
    module procedure nc_define_var_double_1d
    module procedure nc_define_var_double_Nd
 end interface
@@ -225,7 +233,7 @@ end subroutine nc_add_global_real_array_att
 
 !------------------------------------------------------------------
 !--------------------------------------------------------------------
-! adding attribute to a variable section
+! adding attributes to variables section
 
 subroutine nc_add_char_att_to_var(ncid, varname, attname, val, context, filename)
 
@@ -358,6 +366,24 @@ end subroutine nc_define_dimension
 !--------------------------------------------------------------------
 !--------------------------------------------------------------------
 ! defining variables section
+
+subroutine nc_define_var_int_scalar(ncid, varname, ndim, context, filename)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in) :: varname
+integer,          intent(in) :: ndim ! ignore for now
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_define_var_int_scalar'
+integer :: ret, varid
+
+ret = nf90_def_var(ncid, varname, nf90_int, varid=varid)
+call nc_check(ret, routine, 'define int variable '//trim(varname), context, filename)
+
+end subroutine nc_define_var_int_scalar
+
+!--------------------------------------------------------------------
 
 subroutine nc_define_var_int_1d(ncid, varname, dimname, context, filename)
 
@@ -509,6 +535,24 @@ end subroutine nc_define_var_real_Nd
 
 !--------------------------------------------------------------------
 
+subroutine nc_define_var_double_scalar(ncid, varname, ndim, context, filename)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in) :: varname
+integer,          intent(in) :: ndim ! ignore for now
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_define_var_double_scalar'
+integer :: ret, varid
+
+ret = nf90_def_var(ncid, varname, nf90_double, varid=varid)
+call nc_check(ret, routine, 'define double variable '//trim(varname), context, filename)
+
+end subroutine nc_define_var_double_scalar
+
+!--------------------------------------------------------------------
+
 subroutine nc_define_var_double_1d(ncid, varname, dimname, context, filename)
 
 integer,          intent(in) :: ncid
@@ -572,6 +616,69 @@ endif
 call nc_check(ret, routine, 'define double variable '//trim(varname), context, filename)
 
 end subroutine nc_define_var_double_Nd
+
+!--------------------------------------------------------------------
+!--------------------------------------------------------------------
+! check if vars, dims, or global atts exist (without error if not)
+! these are functions, unlike the rest of these routines.
+
+function nc_global_attribute_exists(ncid, attname)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in) :: attname
+logical                      :: nc_global_attribute_exists
+
+character(len=*), parameter :: routine = 'nc_global_attribute_exists'
+integer :: ret
+
+ret = nf90_inquire_attribute(ncid, NF90_GLOBAL, attname)
+if (ret == NF90_NOERR) then
+   nc_global_attribute_exists = .true.
+else
+   nc_global_attribute_exists = .false.
+endif
+
+end function nc_global_attribute_exists
+
+!--------------------------------------------------------------------
+
+function nc_dimension_exists(ncid, dimname)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in) :: dimname
+logical                      :: nc_dimension_exists
+
+character(len=*), parameter :: routine = 'nc_dimension_exists'
+integer :: ret, dimid
+
+ret = nf90_inq_dimid(ncid, dimname, dimid)
+if (ret == NF90_NOERR) then
+   nc_dimension_exists = .true.
+else
+   nc_dimension_exists = .false.
+endif
+
+end function nc_dimension_exists
+
+!--------------------------------------------------------------------
+
+function nc_variable_exists(ncid, varname)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in) :: varname
+logical                      :: nc_variable_exists
+
+character(len=*), parameter :: routine = 'nc_variable_exists'
+integer :: ret, varid
+
+ret = nf90_inq_varid(ncid, varname, varid)
+if (ret == NF90_NOERR) then
+   nc_variable_exists = .true.
+else
+   nc_variable_exists = .false.
+endif
+
+end function nc_variable_exists
 
 !--------------------------------------------------------------------
 !--------------------------------------------------------------------
@@ -1036,6 +1143,67 @@ write(str1,'(''YYYY MM DD HH MM SS = '',i4,5(1x,i2.2))') &
 call nc_add_global_char_att(ncid, "creation_date", str1, context, filename)
 
 end subroutine nc_add_global_creation_time
+
+!--------------------------------------------------------------------
+
+! the opens are the only routines in which filename is not the last argument.
+! all other start with ncid.  this one starts with filename and it's required.
+! it is also a function that returns an integer.  (caller doesn't need netcdf)
+
+function nc_open_readonly(filename, context)
+
+character(len=*), intent(in)  :: filename
+character(len=*), intent(in), optional :: context
+integer                       :: nc_open_readonly
+
+character(len=*), parameter :: routine = 'nc_open_readonly'
+integer :: ret, ncid
+
+ret = nf90_Open(filename, NF90_NOWRITE, ncid)
+
+call nc_check(ret, routine, 'open '//trim(filename)//' read only', context)
+
+nc_open_readonly = ncid
+
+end function nc_open_readonly
+
+!--------------------------------------------------------------------
+
+! the opens are the only routines in which filename is not the last argument.
+! all other start with ncid.  this one starts with filename and it's required.
+
+function nc_open_readwrite(filename, context)
+
+character(len=*), intent(in)  :: filename
+character(len=*), intent(in), optional :: context
+integer                       :: nc_open_readwrite
+
+character(len=*), parameter :: routine = 'nc_open_readwrite'
+integer :: ret, ncid
+
+ret = nf90_Open(filename, NF90_WRITE, ncid)
+
+call nc_check(ret, routine, 'open '//trim(filename)//' read/write', context)
+
+nc_open_readwrite = ncid
+
+end function nc_open_readwrite
+
+!--------------------------------------------------------------------
+
+subroutine nc_close(ncid, context, filename)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_close'
+integer :: ret
+
+ret = nf90_Close(ncid)
+call nc_check(ret, routine, 'close file', context, filename)
+
+end subroutine nc_close
 
 !--------------------------------------------------------------------
 
