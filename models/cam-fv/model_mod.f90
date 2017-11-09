@@ -1228,7 +1228,7 @@ integer,         intent(in) :: ncid
 type(time_type), intent(in) :: model_time
 
 integer :: iyear, imonth, iday, ihour, iminute, isecond
-integer :: cam_date, cam_tod
+integer :: cam_date(1), cam_tod(1)
 integer :: ios, VarID
 
 character(len=*), parameter :: routine = 'write_model_time'
@@ -1246,9 +1246,9 @@ if (.not. nc_variable_exists(ncid, "date")) then
                       source, revision, revdate, text2='creating one')
 
    call nc_redef(ncid)
-   call nc_define_integer_variable(ncid, 'date', 0, routine)
+   call nc_define_integer_variable(ncid, 'date', (/ 'time' /), routine)
    call nc_enddef(ncid)
-   call nc_put_variable(ncid, 'date', cam_date, 0, routine)
+   call nc_put_variable(ncid, 'date', cam_date, routine)
 endif
 
 ! if the file doesn't already have a "datesec" variable, so we make one
@@ -1258,9 +1258,9 @@ if (.not. nc_variable_exists(ncid, "datesec")) then
                       source, revision, revdate, text2='creating one')
 
    call nc_redef(ncid)
-   call nc_define_integer_variable(ncid, 'datesec', 0, routine)
+   call nc_define_integer_variable(ncid, 'datesec', (/ 'time' /), routine)
    call nc_enddef(ncid)
-   call nc_put_variable(ncid, 'datesec', cam_tod,  0, routine)
+   call nc_put_variable(ncid, 'datesec', cam_tod,  routine)
 endif
 
 end subroutine write_model_time
