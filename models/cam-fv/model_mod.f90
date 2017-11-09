@@ -1119,50 +1119,37 @@ call nc_sync(ncid)
 end subroutine nc_write_model_atts
 
 !-----------------------------------------------------------------------
-!> writes the time of the current state and (optionally) the time
-!> to be conveyed to ROMS to dictate the length of the forecast.
-!> This file is then used by scripts to modify the ROMS run.
-!> The format in the time information is totally at your discretion.
+!> writes CAM's model date and time of day into file.  CAM uses
+!> integer date values and interger time of day measured in seconds
 !>
-!> @param ncfile_out name of the file
-!> @param model_time the current time of the model state
-!> @param adv_to_time the time in the future of the next assimilation.
+!> @param ncid         name of the file
+!> @param model_time   the current time of the model state
 !>
 
-subroutine write_model_time(ncid, model_time, adv_to_time)
-integer,         intent(in)           :: ncid
-type(time_type), intent(in)           :: model_time
-type(time_type), intent(in), optional :: adv_to_time
+subroutine write_model_time(ncid, model_time)
+integer,         intent(in) :: ncid
+type(time_type), intent(in) :: model_time
 
-integer :: io, varid, seconds, days
-type(time_type) :: origin_time, deltatime
-real(digits12)  :: run_duration
+integer :: year, month, day, hour, minute, second
+integer :: cam_date, cam_tod
 
 if ( .not. module_initialized ) call static_init_model
 
-!>@todo need to put code to write cam model time
+call get_date(model_time, year, month, day, hour, minute, second)
 
-! invert this code: (this is the read)
-!#! call nc_get_variable(ncid, 'date',    datefull)
-!#! call nc_get_variable(ncid, 'datesec', datesec)
-!#! 
-!#! ! The 'date' is YYYYMMDD ... datesec is 'current seconds of current day'
-!#! iyear  = datefull / 10000
-!#! rem    = datefull - iyear*10000
-!#! imonth = rem / 100
-!#! iday   = rem - imonth*100
-!#! 
-!#! ihour  = datesec / 3600
-!#! rem    = datesec - ihour*3600
-!#! imin   = rem / 60
-!#! isec   = rem - imin*60
+cam_date = year*10000 + month*100 + day
+cam_tod  = hour*3600  + minute*60 + second
 
-if (present(adv_to_time)) then
-   write(string1,*)'CAM/DART not configured to advance CAM.'
-   write(string2,*)'called with optional advance_to_time '
-   call error_handler(E_ERR, 'write_model_time', string1, &
-              source, revision, revdate, text2=string2)
-endif
+! begin define mode
+call nc_check(nf90_Redef(ncid),"redef")
+
+call nc_check( nf90_put_att(ncid, NF90_GLOBAL, 'date', cam_date), &
+                       'write_model_time', 'put_att date')
+
+call nc_check( nf90_put_att(ncid, NF90_GLOBAL, 'datesec', cam_tod), &
+                       'write_model_time', 'put_att datesec')
+
+call nc_check( nf90_Enddef(ncid),"write_model_time", "Enddef" )
 
 end subroutine write_model_time
 
