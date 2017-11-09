@@ -25,11 +25,14 @@ use        random_seq_mod
 use  ensemble_manager_mod
 use distributed_state_mod
 use   state_structure_mod
-use  netcdf_utilities_mod,  only : nc_check, nc_get_variable, nc_get_variable_size, &
-                                   nc_add_attribute_to_variable, nc_define_real_variable, &
-                                   nc_add_global_creation_time, nc_add_global_attribute, &
-                                   nc_define_dimension, nc_put_variable, nc_sync, nc_enddef, &
-                                   nc_redef
+use  netcdf_utilities_mod,  only : nc_get_variable, nc_get_variable_size, &
+                                   nc_add_attribute_to_variable, &
+                                   nc_define_real_variable, &
+                                   nc_add_global_creation_time, &
+                                   nc_add_global_attribute, &
+                                   nc_define_dimension, nc_put_variable, &
+                                   nc_sync, nc_enddef, nc_redef, nc_open, &
+                                   nc_close, nc_variable_exists
 use       location_io_mod
 use        quad_utils_mod
 use     default_model_mod,  only : adv_1step, init_time, init_conditions, &
@@ -1224,26 +1227,39 @@ subroutine write_model_time(ncid, model_time)
 integer,         intent(in) :: ncid
 type(time_type), intent(in) :: model_time
 
-integer :: year, month, day, hour, minute, second
+integer :: iyear, imonth, iday, ihour, iminute, isecond
 integer :: cam_date, cam_tod
+integer :: ios, VarID
+
+character(len=*), parameter :: routine = 'write_model_time'
 
 if ( .not. module_initialized ) call static_init_model
 
-call get_date(model_time, year, month, day, hour, minute, second)
+call get_date(model_time, iyear, imonth, iday, ihour, iminute, isecond)
 
-cam_date = year*10000 + month*100 + day
-cam_tod  = hour*3600  + minute*60 + second
+cam_date = iyear*10000 + imonth*100 + iday
+cam_tod  = ihour*3600  + iminute*60 + isecond
 
-! begin define mode
-call nc_check(nf90_Redef(ncid),"redef")
+! if the file doesn't already have a "date" variable, so we make one
+if (.not. nc_variable_exists(ncid, "date")) then
+   call error_handler(E_MSG, routine,'"date" variable not found in file ', &
+                      source, revision, revdate, text2='creating one')
 
-call nc_check( nf90_put_att(ncid, NF90_GLOBAL, 'date', cam_date), &
-                       'write_model_time', 'put_att date')
+   call nc_redef(ncid)
+   call nc_put_variable(ncid, 'date', cam_date, routine)
+   call nc_enddef(ncid)
+endif
 
-call nc_check( nf90_put_att(ncid, NF90_GLOBAL, 'datesec', cam_tod), &
-                       'write_model_time', 'put_att datesec')
+! if the file doesn't already have a "datesec" variable, so we make one
+if (.not. nc_variable_exists(ncid, "datesec")) then
 
-call nc_check( nf90_Enddef(ncid),"write_model_time", "Enddef" )
+   call error_handler(E_MSG, routine,'"datesec" variable not found in file ', &
+                      source, revision, revdate, text2='creating one')
+
+   call nc_redef(ncid)
+   call nc_put_variable(ncid, 'datesec', cam_tod,  routine)
+   call nc_enddef(ncid)
+endif
 
 end subroutine write_model_time
 
@@ -1261,18 +1277,19 @@ type(time_type)              :: read_model_time
 
 integer :: ncid
 integer :: timesize
-integer :: datefull, datesec
+integer :: cam_date, cam_tod
 integer :: iyear, imonth, iday, ihour, imin, isec, rem
+
+character(len=*), parameter :: routine = 'read_model_time'
 
 if ( .not. module_initialized ) call static_init_model
 
 if ( .not. file_exist(filename) ) then
    write(string1,*) trim(filename), ' does not exist.'
-   call error_handler(E_ERR,'read_model_time',string1,source,revision,revdate)
+   call error_handler(E_ERR,routine,string1,source,revision,revdate)
 endif
 
-call nc_check( nf90_open(trim(filename), NF90_NOWRITE, ncid), &
-                  'read_model_time', 'open '//trim(filename))
+ncid = nc_open_readonly(filename, routine)
 
 ! CAM initial files have two variables of length 
 ! 'time' (the unlimited dimension): date, datesec
@@ -1286,18 +1303,17 @@ call nc_get_variable_size(ncid, 'time', timesize)
 !#!    call error_handler(E_ERR, 'read_model_time', string1, source, revision, revdate)
 !#! endif
 
+call nc_get_variable(ncid, 'date',    cam_date)
+call nc_get_variable(ncid, 'datesec', cam_tod)
 
-call nc_get_variable(ncid, 'date',    datefull)
-call nc_get_variable(ncid, 'datesec', datesec)
-
-! The 'date' is YYYYMMDD ... datesec is 'current seconds of current day'
-iyear  = datefull / 10000
-rem    = datefull - iyear*10000
+! The 'date' is YYYYMMDD ... cam_tod is 'current seconds of current day'
+iyear  = cam_date / 10000
+rem    = cam_date - iyear*10000
 imonth = rem / 100
 iday   = rem - imonth*100
 
-ihour  = datesec / 3600
-rem    = datesec - ihour*3600
+ihour  = cam_tod / 3600
+rem    = cam_tod - ihour*3600
 imin   = rem / 60
 isec   = rem - imin*60
 
@@ -1308,17 +1324,17 @@ if (iyear < 1601) then
    write(string2,*)'WARNING - ',trim(filename),' changing year from ', &
                    iyear,'to',iyear+1601
 
-   call error_handler(E_MSG, 'read_model_time', string1, source, revision, &
+   call error_handler(E_MSG, routine, string1, source, revision, &
                       revdate, text2=string2,text3='to make it a valid Gregorian date.')
 
    write(string1,*)' '
-   call error_handler(E_MSG, 'read_model_time', string1, source, revision)
+   call error_handler(E_MSG, routine, string1, source, revision)
    iyear = iyear + 1601
 endif
 
 read_model_time = set_date(iyear,imonth,iday,ihour,imin,isec)
 
-call nc_check( nf90_close(ncid), 'read_model_time', 'close '//trim(filename))
+call nc_close(ncid, routine)
 
 end function read_model_time
 
@@ -1464,11 +1480,12 @@ subroutine read_grid_info(grid_file, grid)
 character(len=*), intent(in)  :: grid_file
 type(cam_grid),   intent(out) :: grid
 
+character(len=*), parameter :: routine = 'read_grid_info'
+
 integer :: ncid
 
 ! put this in a subroutine that deals with the grid
-call nc_check( nf90_open(grid_file, NF90_NOWRITE, ncid), &
-               'read_grid_info', 'open '//trim(grid_file))
+ncid = nc_open_readonly(grid_file, routine)
 
 ! Get the grid info plus additional non-state arrays
 call get_cam_grid(ncid, grid)
@@ -1477,7 +1494,7 @@ call read_cam_phis_array(cam_phis_filename)
 ! Set up the interpolation structure for later 
 call setup_interpolation(grid)
 
-call nc_check( nf90_close(ncid), 'read_grid_info', 'close '//trim(grid_file))
+call nc_close(ncid, routine)
 
 end subroutine read_grid_info
 
@@ -1674,17 +1691,18 @@ end subroutine setup_interpolation
 subroutine read_cam_phis_array(phis_filename)
 character(len=*),   intent(in)    :: phis_filename
 
+character(len=*), parameter :: routine = 'read_cam_phis_array'
+
 integer :: ncid, nsize(2)
 
-call nc_check( nf90_open(phis_filename, NF90_NOWRITE, ncid), &
-               'read_cam_phis_array', 'open '//trim(phis_filename))
+ncid = nc_open_readonly(phis_filename, routine)
 
 call nc_get_variable_size(ncid, 'PHIS', nsize(:))
 allocate( phis(nsize(1), nsize(2)) )
 
 call nc_get_variable(ncid, 'PHIS', phis)
 
-call nc_check( nf90_close(ncid), 'read_cam_phis_array', 'close '//trim(phis_filename))
+call nc_close(ncid, routine)
 
 end subroutine read_cam_phis_array
 
