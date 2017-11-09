@@ -71,42 +71,45 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
+! model_nml namelist variables and default values
+character(len=256) :: cam_template_filename           = 'caminput.nc'
+character(len=256) :: cam_phis_filename               = 'camphis.nc'
+character(len=32)  :: vert_localization_coord         = 'PRESSURE'
+integer            :: assimilation_period_days        = 0
+integer            :: assimilation_period_seconds     = 21600
+integer            :: no_assim_above_this_model_level = 5
+logical            :: use_damping_ramp_at_model_top   = .false.  
+integer            :: debug_level                     = 0
+logical            :: suppress_grid_info_in_output    = .false.
+
+! state_variables defines the contents of the state vector.
+! each line of this input should have the form:
+!    netcdf_variable_name, dart_quantity, clamp_min, clamp_max, update_variable
+! all items must be strings (even if numerical values).
+! for no clamping, use the string 'NA'
+! to have the assimilation change the variable use 'UPDATE', else 'NO_UPDATE'
+
+integer, parameter :: MAX_STATE_VARIABLES = 100
+integer, parameter :: num_state_table_columns = 5
+character(len=vtablenamelength) :: state_variables(MAX_STATE_VARIABLES * &
+                                                   num_state_table_columns ) = ' '
+
+namelist /model_nml/  &
+   cam_template_filename,           &
+   cam_phis_filename,               &
+   vert_localization_coord,         &
+   state_variables,                 &
+   assimilation_period_days,        &
+   assimilation_period_seconds,     &
+   no_assim_above_this_model_level, &
+   use_damping_ramp_at_model_top,   &
+   suppress_grid_info_in_output,    &
+   debug_level
+
+
 ! global variables
 character(len=512) :: string1, string2, string3
 logical, save      :: module_initialized = .false.
-
-! model_nml namelist variables
-integer  :: assimilation_period_days     = 0
-integer  :: assimilation_period_seconds  = 21600
-integer  :: vert_localization_coord      = VERTISPRESSURE
-integer  :: debug = 0   ! turn up for more and more debug messages
-logical  :: minimal_output = .false.
-character(len=256) :: cam_template_filename = 'caminput.nc' ! template restart file
-!#! character(len=256) :: cam_grid_filename     = 'caminput.nc' ! JPH probably delete?
-character(len=256) :: cam_phis_filename     = 'camphis.nc'
-
-namelist /model_nml/  &
-!#!    cam_grid_filename,           &
-   assimilation_period_days,    &
-   assimilation_period_seconds, &
-   cam_template_filename,       &
-   cam_phis_filename,           &
-   vert_localization_coord,     &
-   minimal_output,              &
-   debug,                       &
-   state_variables
-
-! the number of state variables allowed in the state.  this may need to change
-! depending on the number of variables that you are using.
-integer, parameter :: MAX_STATE_VARIABLES = 100
-! column variables should be the same as the cam_template_file and
-! have the same shape as the restarts being used. For no clamping use 'NA'
-!
-!    variable_name, variable_type, clamp_min, clamp_max, update_variable
-integer, parameter :: num_state_table_columns = 5
-!>@todo JPH what should vtablenamelength be?
-character(len=vtablenamelength) :: state_variables(MAX_STATE_VARIABLES * &
-                                                   num_state_table_columns ) = ' '
 
 ! domain id for the cam model.  this allows us access to all of the state structure
 ! info and is require for getting state variables.
@@ -120,6 +123,7 @@ integer :: domain_id
 type cam_1d_array
    integer  :: nsize
    real(r8), allocatable :: vals(:)
+   !>@todo FIXME do we need a string name here anymore?
 end type
 
 type cam_grid
@@ -219,6 +223,7 @@ call read_grid_info(cam_template_filename, grid_data)
 
 ! set_cam_variable_info() fills var_names, kind_list, clamp_vals, update_list
 ! from the &model_mod_nml state_variables
+
 call set_cam_variable_info(state_variables, nfields)
 
 end subroutine static_init_model
@@ -332,11 +337,12 @@ end function get_location_from_index
 !> istatus = 3    cannot locate horizontal quad
 !> istatus = 4    cannot locate enclosing vertical levels
 !> istatus = 5    cannot retrieve state vector values
-!> istatus = 6    cannot do vertical interpolation
-!> istatus = 7    cannot interpolate in the quad to get the values
-!> istatus = 8    cannot get vertical levels for an obs on model levels
-!> istatus = 9    cannot get vertical levels for an obs on pressure levels
-!> istatus = 10   also cannot get vertical levels for an obs on pressure levels
+!> istatus = 6    cannot do vertical interpolation for bottom layer
+!> istatus = 7    cannot do vertical interpolation for top layer
+!> istatus = 8    cannot interpolate in the quad to get the values
+!> istatus = 9    cannot get vertical levels for an obs on model levels
+!> istatus = 10   cannot get vertical levels for an obs on pressure levels
+!> istatus = 11   cannot get vertical levels for an obs on height levels
 !> istatus = X
 !> istatus = 99   unknown error - shouldn't happen
 !>
@@ -356,7 +362,7 @@ real(r8) :: lon_fract, lat_fract
 real(r8) :: lon_lat_vert(3), botvals(ens_size), topvals(ens_size)
 integer  :: which_vert, status1, status2, status_array(ens_size)
 type(quad_interp_handle) :: interp_handle
-integer  :: ijk(3), i
+integer  :: ijk(3), icorner, imember
 integer  :: four_lons(4), four_lats(4)
 integer  :: two_bots(2), two_tops(2)
 real(r8) :: two_horiz_fracts(2)
@@ -407,7 +413,7 @@ if (varid < 0) then
    ! it is asked to interpolate a quantity it cannot do.  this is then just
    ! a failed forward operator.  (some forward operators try one quantity
    ! and if that fails, then they compute what they need using different quantities.)
-   if(debug > 12) then
+   if(debug_level > 12) then
       write(string1,*)'did not find observation quantity ', obs_qty, ' in the state vector'
       call error_handler(E_MSG,'model_interpolate:',string1,source,revision,revdate)
    endif
@@ -434,6 +440,8 @@ if (status1 /= 0) then
    return
 endif
 
+!>@todo FIXME move this into quad_lon_lat_locate() interface so these are the
+!>items directly returned.
 ! the order of the returned vertical info is counterclockwise around 
 ! the quad starting at lon/lat bot:
 !  (lon_bot, lat_bot), (lon_top, lat_bot), (lon_top, lat_top), (lon_bot, lat_top)
@@ -445,14 +453,19 @@ call index_setup(lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &
 
 ! and now here potentially we have different results for different
 ! ensemble members.  the things that can vary are dimensioned by ens_size.
-do i=1, 4
-   !>@todo FIXME build a vertical column to find vertical numbers... # need option for linear or log scale?
+do icorner=1, 4
+   ! build a column to find vertical level numbers
+   !>@doto FIXME this needs an option for linear or log scale.  affects fraction only.
    call find_vertical_levels(state_handle, ens_size, &
-                             four_lons(i), four_lats(i), lon_lat_vert(3), &
+                             four_lons(icorner), four_lats(icorner), lon_lat_vert(3), &
                              which_vert, obs_qty, &
-                             four_bot_levs(i, :), four_top_levs(i, :), &
-                             four_vert_fracts(i, :), status_array)
+                             four_bot_levs(icorner, :), four_top_levs(icorner, :), &
+                             four_vert_fracts(icorner, :), status_array)
    
+   !>@todo FIXME should we let the process continue if at least one
+   !>member has failed?  pro: save work  con: don't get forward operator
+   !>values for members that could compute them
+   !>(this is true for all the subsequent returns from this routine)
    if (any(status_array /= 0)) then
       istatus(:) = 4   ! cannot locate enclosing vertical levels  !>@todo FIXME use where statements?
       return
@@ -461,27 +474,29 @@ do i=1, 4
 enddo
 
 ! we have all the indices and fractions we could ever want.
-! now start looking up data values and actually interpolating, finally.
-do i=1, 4
-   call find_values(state_handle,  ens_size, four_lons(i), four_lats(i), &
-                    four_bot_levs(i, :), varid, botvals, status_array)
+! now get the data values at the bottom levels, the top levels, 
+! and do vertical interpolation to get the final result.
+
+do icorner=1, 4
+   call find_values(state_handle,  ens_size, four_lons(icorner), four_lats(icorner), &
+                    four_bot_levs(icorner, :), varid, botvals, status_array)
    if (any(status_array /= 0)) then
-      istatus(:) = 5   ! cannot retrieve values
+      istatus(:) = 5   ! cannot retrieve bottom values
       return
    endif
    
-   call find_values(state_handle,  ens_size, four_lons(i), four_lats(i), &
-                    four_top_levs(i, :), varid, topvals, status_array)
+   call find_values(state_handle,  ens_size, four_lons(icorner), four_lats(icorner), &
+                    four_top_levs(icorner, :), varid, topvals, status_array)
    if (any(status_array /= 0)) then
-      istatus(:) = 5   ! cannot retrieve values
+      istatus(:) = 6   ! cannot retrieve top values
       return
    endif
    
-   call vert_interp(ens_size, botvals, topvals, four_vert_fracts(i, :), &
-                    quad_vals(i, :), status_array)
+   call vert_interp(ens_size, botvals, topvals, four_vert_fracts(icorner, :), &
+                    quad_vals(icorner, :), status_array)
 
    if (any(status_array /= 0)) then
-      istatus(:) = 6   ! cannot do vertical interpolation
+      istatus(:) = 7   ! cannot do vertical interpolation
       return
    endif
 enddo
@@ -491,7 +506,7 @@ call quad_lon_lat_evaluate(interp_handle, lon_fract, lat_fract, ens_size, &
                            quad_vals, interp_vals, status_array)
 
 if (any(status_array /= 0)) then
-   istatus(:) = 7   ! cannot evaluate in the quad
+   istatus(:) = 8   ! cannot evaluate in the quad
    return
 endif
 
@@ -512,7 +527,11 @@ real(r8), intent(in)  :: vert_fracts(nitems)
 real(r8), intent(out) :: out_vals(nitems)
 integer,  intent(out) :: my_status(nitems)
 
-! vert_fracts of 1 is 100% of the bottom level and 0 is 100% of the top level
+!>@todo FIXME does this need a status return if it cannot fail?
+
+! vert_fracts: 1 is 100% of the bottom level and 
+!              0 is 100% of the top level
+
 out_vals(:) = (botvals(:)* vert_fracts(:)) + (topvals(:) * (1.0_r8-vert_fracts(:)))
 my_status(:) = 0
 
@@ -535,12 +554,14 @@ integer,  intent(out) :: my_status(ens_size)
 
 integer(i8) :: state_indx
 
+!>@todo FIXME add error checking?  is state_indx < 0 how it indicates error?
+
 !>@todo FIXME find unique level indices here (see new wrf code)
 
 state_indx = get_dart_vector_index(lon_index, lat_index, lev_index(1), domain_id, varid)
 vals       = get_state(state_indx, state_handle)
 
-my_status = 0
+my_status(:) = 0
 
 end subroutine find_values
 
@@ -595,18 +616,21 @@ integer,             intent(out) :: top_levs(ens_size)
 real(r8),            intent(out) :: vert_fracts(ens_size)
 integer,             intent(out) :: my_status(ens_size)
 
-integer :: bot1, top1, i, nlevels, varid
+integer :: bot1, top1, imember, nlevels, varid
 integer :: level_one
 integer(i8) :: state_indx
 real(r8) :: fract1
 real(r8) :: surf_pressure(ens_size)
 real(r8) :: pressure_array(grid_data%lev%nsize)
+real(r8) :: height_array(grid_data%lev%nsize, ens_size)
 
 ! assume the worst
 bot_levs(:) = MISSING_I
 top_levs(:) = MISSING_I
 vert_fracts(:) = MISSING_R8
 my_status(:) = 98
+
+!>@todo FIXME we need nlevels everywhere - should we have a global var for it?
 
 ! number of vertical levels (midlayer points)
 nlevels = grid_data%lev%nsize
@@ -623,11 +647,11 @@ select case (which_vert)
 
       !>@todo FIXME: should we figure out now or later? how many unique levels we have?
       !> for now - do the unique culling later so we don't have to carry that count around.
-      do i=1, ens_size
-         call cam_pressure_levels(surf_pressure(i), nlevels, grid_data%hyam, grid_data%hybm, &
+      do imember=1, ens_size
+         call cam_pressure_levels(surf_pressure(imember), nlevels, grid_data%hyam, grid_data%hybm, &
                                   grid_data%P0, pressure_array)
          call pressure_to_level(nlevels, pressure_array, vert_val, &
-                                bot_levs(i), top_levs(i), vert_fracts(i), my_status(i))
+                                bot_levs(imember), top_levs(imember), vert_fracts(imember), my_status(imember))
 
       enddo
 
@@ -635,8 +659,13 @@ select case (which_vert)
       ! construct a height column here and find the model levels
       ! that enclose this value
       !@>todo put in arguments and write height_to_level
-      call cam_height_levels()
-      call height_to_level()
+      call cam_height_levels(state_handle, ens_size, lon_index, lat_index, nlevels, height_array, my_status)
+      if (any(my_status /= 0)) return   !>@todo FIXME let successful members continue?
+      do imember=1, ens_size
+         !>@todo FIXME somewhere cull out unique levels and only get_state() for those. (see wrf)
+         call height_to_level(nlevels, height_array(:, imember), vert_val, &
+                              bot_levs(imember), top_levs(imember), vert_fracts(imember), my_status(imember))
+      enddo
       
 
       write(string1, *) 'we have not written the code yet for vertical type: ', which_vert
@@ -677,26 +706,33 @@ end subroutine find_vertical_levels
 
 !-----------------------------------------------------------------------
 !> Compute the heights at pressure midpoints
+!>
+!> this version does all ensemble members at once.
 
 subroutine cam_height_levels(state_handle, ens_size, lon_index, lat_index, nlevels, height_array, my_status) 
 type(ensemble_type), intent(in)  :: state_handle
 integer,             intent(in)  :: ens_size
-real(r8),            intent(in)  :: lon_index
-real(r8),            intent(in)  :: lat_index
+integer,             intent(in)  :: lon_index
+integer,             intent(in)  :: lat_index
 integer,             intent(in)  :: nlevels
 real(r8),            intent(out) :: height_array(nlevels, ens_size)
-integer,             intent(out) :: my_status
+integer,             intent(out) :: my_status(ens_size)
 
-integer :: k, varid, level_one
-real(r8) :: temperature(ens_size), specific_humidity(ens_size), surface_pressure(ens_size)
-real(r8) :: phi(ens_size, nlevels)
-real(r8) :: surface_elevation
+integer     :: k, varid, level_one, imember
+real(r8)    :: temperature(ens_size), specific_humidity(ens_size), surface_pressure(ens_size)
+real(r8)    :: phi(ens_size, nlevels)
+real(r8)    :: surface_elevation
+real(r8)    :: tv(ens_size, nlevels+1)  !>@todo FIXME  ????           ! Virtual temperature, top to bottom
+integer(i8) :: state_indx
 
 !>@todo this should come from a model specific constant module.
 !> the forward operators and model_mod should use it.
 real(r8), parameter :: rd = 287.05_r8 ! dry air gas constant
 real(r8), parameter :: rv = 461.51_r8 ! wet air gas constant
 real(r8), parameter :: rr_factor = (rv/rd) - 1.0_r8
+
+!>@todo FIXME: these need to be replaced by hyam, hymb, hyai, hybi -- VERY VERY CAREFULLY
+real(r8) ::hybrid_As(nlevels+1,2), hybrid_Bs(nlevels+1,2)
 
 ! this is for surface obs
 level_one = 1
@@ -726,16 +762,16 @@ do k = 1, nlevels
 enddo
 
 ! need to convert to geopotential height
-do imem = 1, ens_size
+do imember = 1, ens_size
    !>@todo refacfor to just put out geometric height
-   call dcz2(nlevels, surface_pressure(imem), surface_elevation, tv(imem,:), &
-             grid_data%P0%vals(1), hybrid_As, hybrid_Bs, phi(imem,:))
+   call dcz2(nlevels, surface_pressure(imember), surface_elevation, tv(imember,:), &
+             grid_data%P0%vals(1), hybrid_As, hybrid_Bs, phi(imember,:))
    do k = 1,nlevels
-      height_array(k, imem) = gph2gmh(phi(imem,k), grid_data%lat%vals(lat_index))
+      height_array(k, imember) = gph2gmh(phi(imember,k), grid_data%lat%vals(lat_index))
    enddo
 enddo
 
-istatus = 0
+my_status(:) = 0
 
 end subroutine cam_height_levels
 
@@ -787,7 +823,7 @@ top_lev = MISSING_I
 fract   = MISSING_R8
 
 if (p_val < pressures(1) .or. p_val > pressures(nlevels)) then
-   my_status = 9
+   my_status = 10
    return
 endif
 
@@ -814,6 +850,58 @@ if (bot_lev == MISSING_I) then
 endif
 
 end subroutine pressure_to_level
+
+!-----------------------------------------------------------------------
+!> return the level indices and fraction across the level.
+!> 1 is top, N is bottom, bot is the lower level, top is the upper level
+!> so top value will be larger than bot.  fract = 0 is the full top,
+!> fract = 1 is the full bot.  return non-zero if value outside the valid range.
+
+subroutine height_to_level(nlevels, heights, h_val, &
+                           bot_lev, top_lev, fract, my_status)
+
+integer,  intent(in)  :: nlevels
+real(r8), intent(in)  :: heights(:)
+real(r8), intent(in)  :: h_val
+integer,  intent(out) :: bot_lev
+integer,  intent(out) :: top_lev
+real(r8), intent(out) :: fract  
+integer,  intent(out) :: my_status
+
+integer :: this_lev, varid
+
+bot_lev = MISSING_I
+top_lev = MISSING_I
+fract   = MISSING_R8
+
+if (h_val < heights(1) .or. h_val > heights(nlevels)) then
+   my_status = 11
+   return
+endif
+
+! search from the top down.  larger heights are higher
+! than smaller ones.  in theory you can never fall out of
+! this loop without setting the top/bot because we've tested
+! already for h_val out of range.
+levloop: do this_lev = 2, nlevels
+   if (h_val < heights(this_lev)) cycle levloop
+
+   top_lev = this_lev - 1
+   bot_lev = this_lev
+   fract = (h_val - heights(top_lev)) / (heights(bot_lev) - heights(top_lev))
+   my_status = 0
+   return
+enddo levloop
+
+! you shouldn't get here
+if (bot_lev == MISSING_I) then
+  write(string1,*) 'should not happen - contact dart support'
+  write(string2,*) 'height value ', h_val, ' was not found in height column'
+  call error_handler(E_ERR,'height_to_level', &
+                         string1,source,revision,revdate,text2=string2)
+endif
+
+end subroutine height_to_level
 
 !-----------------------------------------------------------------------
 !> in cam level 1 is at the model top, level N is the lowest level
@@ -981,7 +1069,6 @@ integer :: KMTVarID, KMUVarID
 !----------------------------------------------------------------------
 
 character(len=*), parameter :: routine = 'nc_write_model_atts'
-integer     :: i
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1003,7 +1090,7 @@ call nc_add_global_attribute(ncid, "model", "CAM")
 ! be written.   otherwise, if you want to plot this data
 ! the rest of this routine writes out enough grid info
 ! to make the output file look like the input.
-if (minimal_output) then
+if (suppress_grid_info_in_output) then
    call nc_enddef(ncid)
    return
 endif
@@ -1316,7 +1403,7 @@ domain_id = add_domain(cam_template_filename, nfields, var_names, kind_list, &
 !>@todo JPH we may need to call map_qtys. where do we call this?
 call fill_cam_stagger_info(grid_stagger)
 
-if (debug > 2) call state_structure_info(domain_id)
+if (debug_level > 2) call state_structure_info(domain_id)
 
 end subroutine set_cam_variable_info
 
@@ -1435,7 +1522,7 @@ call nc_get_variable(ncid, varname, grid_array%vals)
 
 !>@todo FIXME this should be an array_dump() routine
 !> in a utilities routine somewhere. 
-if (debug > 10) then
+if (debug_level > 10) then
    per_line = 5
    print*, 'variable name ', trim(varname)
    do i=1, grid_array%nsize, per_line
@@ -1462,7 +1549,7 @@ allocate(grid_array%vals(grid_array%nsize))
 
 call nc_get_variable(ncid, varname, grid_array%vals)
 
-if (debug > 10) then
+if (debug_level > 10) then
    print*, 'variable name ', trim(varname), grid_array%vals
 endif
 
@@ -1667,7 +1754,7 @@ real(r8) :: r0
 real(r8) :: latr
 
 latr = lat * (pi/180.0_r8)           ! in radians
-call gravity(latr, 0.0_r8, g0)
+call compute_gravity(latr, 0.0_r8, g0)
 
 ! compute local earth's radius using ellipse equation
 
@@ -1680,21 +1767,22 @@ end function gph2gmh
 
 !-----------------------------------------------------------------------
 
-subroutine gravity(xlat,alt,galt)
+!> This subroutine computes the Earth's gravity at any altitude
+!> and latitude.  The model assumes the Earth is an oblate
+!> spheriod rotating at a the Earth's spin rate.  The model
+!> was taken from "Geophysical Geodesy, Kurt Lambeck, 1988".
+!>
+!>  input:    xlat, latitude in radians
+!>            alt,  altitude above the reference ellipsiod, km
+!>  output:   galt, gravity at the given lat and alt, m/sec**2
+!>
+!> Compute acceleration due to the Earth's gravity at any latitude/altitude
+!> author     Bill Schreiner   5/95
+!>
+!> changed from using kilometers to meters since that is our native unit.
+!>
 
-!- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-! This subroutine computes the Earth's gravity at any altitude
-! and latitude.  The model assumes the Earth is an oblate
-! spheriod rotating at a the Earth's spin rate.  The model
-! was taken from "Geophysical Geodesy, Kurt Lambeck, 1988".
-!
-!  input:    xlat, latitude in radians
-!            alt,  altitude above the reference ellipsiod, km
-!  output:   galt, gravity at the given lat and alt, m/sec**2
-!
-! Compute acceleration due to the Earth's gravity at any latitude/altitude
-! author     Bill Schreiner   5/95
-!- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+subroutine compute_gravity(xlat,alt,galt)
 
 real(r8), intent(in)  :: xlat
 real(r8), intent(in)  :: alt
@@ -1724,7 +1812,7 @@ galt = g - 2.0_r8*ge*alt/ae*(1.0_r8 + f + xm + (-3.0_r8*f + 5.0_r8* 0.50_r8*xm)*
 ! convert to meters/s2
 galt = galt*1000.0_r8
 
-end subroutine gravity
+end subroutine compute_gravity
 
 
 !===================================================================
