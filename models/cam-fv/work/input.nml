@@ -134,35 +134,37 @@
 &model_nml
    cam_template_filename       = 'caminput.nc' 
    cam_phis_filename           = 'cam_phis.nc'
+   vert_localization_coord     = 'PRESSURE'
    state_variables             = 'T'  'QTY_TEMPERATURE',       'NA', 'NA', 'UPDATE'
                                  'US' 'QTY_U_WIND_COMPONENT',  'NA', 'NA', 'UPDATE'
                                  'VS' 'QTY_V_WIND_COMPONENT',  'NA', 'NA', 'UPDATE'
                                  'Q'  'QTY_SPECIFIC_HUMIDITY', 'NA', 'NA', 'UPDATE'
                                  'PS' 'QTY_SURFACE_PRESSURE',  'NA', 'NA', 'UPDATE'
-   assimilation_period_seconds = 21600,
-   assimilation_period_days    = 0,
-   vert_localization_coord     = 3
-   minimal_output              = .false.
-   debug                       = 13
+   assimilation_period_seconds = 21600
+   assimilation_period_days    = 0
+   no_assim_above_this_model_level = 5
+   use_damping_ramp_at_model_top = .false.
+   suppress_grid_info_in_output  = .false.
+   debug_level                 = 13
    /
 
-   vert_coord          = 'log_invP'
-   pert_names          = 'T'
-   pert_sd             = 0.1,
-   pert_base_vals      = -888888.0d0,
-   highest_obs_pressure_Pa   = 300.0,
-   highest_state_pressure_Pa = 300.0,
-   max_obs_lat_degree        = 90.0,
-   model_version       = 'cam5.4.101',
-   state_num_0d        = 0,
-   state_num_1d        = 0,
-   state_num_2d        = 1,
-   state_num_3d        = 6,
-   state_names_2d      = 'PS'
-   state_names_3d      = 'T','US','VS','Q','CLDLIQ','CLDICE'
-   which_vert_1d       = 0,
-   which_vert_2d       = -1,
-   which_vert_3d       = 6*1,
+!#!    vert_coord          = 'log_invP'
+!#!    pert_names          = 'T'
+!#!    pert_sd             = 0.1,
+!#!    pert_base_vals      = -888888.0d0,
+!#!    highest_obs_pressure_Pa   = 300.0,
+!#!    highest_state_pressure_Pa = 300.0,
+!#!    max_obs_lat_degree        = 90.0,
+!#!    model_version       = 'cam5.4.101',
+!#!    state_num_0d        = 0,
+!#!    state_num_1d        = 0,
+!#!    state_num_2d        = 1,
+!#!    state_num_3d        = 6,
+!#!    state_names_2d      = 'PS'
+!#!    state_names_3d      = 'T','US','VS','Q','CLDLIQ','CLDICE'
+!#!    which_vert_1d       = 0,
+!#!    which_vert_2d       = -1,
+!#!    which_vert_3d       = 6*1,
 
 &state_vector_io_nml
   buffer_state_io         = .false.
