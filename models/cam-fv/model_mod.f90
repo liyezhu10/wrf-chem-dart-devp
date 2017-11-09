@@ -31,14 +31,13 @@ use  netcdf_utilities_mod,  only : nc_get_variable, nc_get_variable_size, &
                                    nc_add_global_creation_time, &
                                    nc_add_global_attribute, &
                                    nc_define_dimension, nc_put_variable, &
-                                   nc_sync, nc_enddef, nc_redef, nc_open, &
+                                   nc_sync, nc_enddef, nc_redef, nc_open_readonly, &
                                    nc_close, nc_variable_exists
 use       location_io_mod
 use        quad_utils_mod
 use     default_model_mod,  only : adv_1step, init_time, init_conditions, &
                                    nc_write_model_vars, pert_model_copies, &
                                    convert_vertical_obs, convert_vertical_state
-use netcdf
 
 implicit none
 private
@@ -1246,7 +1245,7 @@ if (.not. nc_variable_exists(ncid, "date")) then
                       source, revision, revdate, text2='creating one')
 
    call nc_redef(ncid)
-   call nc_put_variable(ncid, 'date', cam_date, routine)
+   call nc_put_variable(ncid, 'date', cam_date, 0, routine)
    call nc_enddef(ncid)
 endif
 
@@ -1257,7 +1256,7 @@ if (.not. nc_variable_exists(ncid, "datesec")) then
                       source, revision, revdate, text2='creating one')
 
    call nc_redef(ncid)
-   call nc_put_variable(ncid, 'datesec', cam_tod,  routine)
+   call nc_put_variable(ncid, 'datesec', cam_tod,  0, routine)
    call nc_enddef(ncid)
 endif
 
@@ -1360,11 +1359,12 @@ integer,          intent(out) :: nfields
 
 integer :: i
 
-character(len=NF90_MAX_NAME) :: varname    ! column 1, NetCDF variable name
-character(len=NF90_MAX_NAME) :: dartstr    ! column 2, DART KIND
-character(len=NF90_MAX_NAME) :: minvalstr  ! column 3, Clamp min val
-character(len=NF90_MAX_NAME) :: maxvalstr  ! column 4, Clamp max val
-character(len=NF90_MAX_NAME) :: updatestr  ! column 5, Update output or not
+!>@todo FIXME what should these be?  hardcode to 128 just for a hack.
+character(len=128) :: varname    ! column 1, NetCDF variable name
+character(len=128) :: dartstr    ! column 2, DART KIND
+character(len=128) :: minvalstr  ! column 3, Clamp min val
+character(len=128) :: maxvalstr  ! column 4, Clamp max val
+character(len=128) :: updatestr  ! column 5, Update output or not
 
 character(len=vtablenamelength) :: var_names(MAX_STATE_VARIABLES) = ' '
 logical  :: update_list(MAX_STATE_VARIABLES)   = .FALSE.
@@ -1375,11 +1375,11 @@ real(r8) ::  clamp_vals(MAX_STATE_VARIABLES,2) = MISSING_R8
 nfields = 0
 ParseVariables : do i = 1, MAX_STATE_VARIABLES
 
-   varname   = trim(variable_array(num_state_table_columns*i-4))
-   dartstr   = trim(variable_array(num_state_table_columns*i-3))
-   minvalstr = trim(variable_array(num_state_table_columns*i-2))
-   maxvalstr = trim(variable_array(num_state_table_columns*i-1))
-   updatestr = trim(variable_array(num_state_table_columns*i  ))
+   varname   = variable_array(num_state_table_columns*i-4)
+   dartstr   = variable_array(num_state_table_columns*i-3)
+   minvalstr = variable_array(num_state_table_columns*i-2)
+   maxvalstr = variable_array(num_state_table_columns*i-1)
+   updatestr = variable_array(num_state_table_columns*i  )
 
    if ( varname == ' ' .and. dartstr == ' ' ) exit ParseVariables ! Found end of list.
 
