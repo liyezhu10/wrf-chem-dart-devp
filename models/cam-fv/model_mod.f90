@@ -27,6 +27,7 @@ use distributed_state_mod
 use   state_structure_mod
 use  netcdf_utilities_mod,  only : nc_get_variable, nc_get_variable_size, &
                                    nc_add_attribute_to_variable, &
+                                   nc_define_integer_variable, &
                                    nc_define_real_variable, &
                                    nc_add_global_creation_time, &
                                    nc_add_global_attribute, &
@@ -1245,8 +1246,9 @@ if (.not. nc_variable_exists(ncid, "date")) then
                       source, revision, revdate, text2='creating one')
 
    call nc_redef(ncid)
-   call nc_put_variable(ncid, 'date', cam_date, 0, routine)
+   call nc_define_integer_variable(ncid, 'date', 0, routine)
    call nc_enddef(ncid)
+   call nc_put_variable(ncid, 'date', cam_date, 0, routine)
 endif
 
 ! if the file doesn't already have a "datesec" variable, so we make one
@@ -1256,8 +1258,9 @@ if (.not. nc_variable_exists(ncid, "datesec")) then
                       source, revision, revdate, text2='creating one')
 
    call nc_redef(ncid)
-   call nc_put_variable(ncid, 'datesec', cam_tod,  0, routine)
+   call nc_define_integer_variable(ncid, 'datesec', 0, routine)
    call nc_enddef(ncid)
+   call nc_put_variable(ncid, 'datesec', cam_tod,  0, routine)
 endif
 
 end subroutine write_model_time
