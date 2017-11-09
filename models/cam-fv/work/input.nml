@@ -134,7 +134,7 @@
 &model_nml
    cam_template_filename       = 'caminput.nc' 
    cam_phis_filename           = 'cam_phis.nc'
-   vert_localization_coord     = 'PRESSURE'
+   vertical_localization_coord = 'PRESSURE'
    state_variables             = 'T'  'QTY_TEMPERATURE',       'NA', 'NA', 'UPDATE'
                                  'US' 'QTY_U_WIND_COMPONENT',  'NA', 'NA', 'UPDATE'
                                  'VS' 'QTY_V_WIND_COMPONENT',  'NA', 'NA', 'UPDATE'

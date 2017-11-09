@@ -74,7 +74,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 ! model_nml namelist variables and default values
 character(len=256) :: cam_template_filename           = 'caminput.nc'
 character(len=256) :: cam_phis_filename               = 'camphis.nc'
-character(len=32)  :: vert_localization_coord         = 'PRESSURE'
+character(len=32)  :: vertical_localization_coord     = 'PRESSURE'
 integer            :: assimilation_period_days        = 0
 integer            :: assimilation_period_seconds     = 21600
 integer            :: no_assim_above_this_model_level = 5
@@ -97,7 +97,7 @@ character(len=vtablenamelength) :: state_variables(MAX_STATE_VARIABLES * &
 namelist /model_nml/  &
    cam_template_filename,           &
    cam_phis_filename,               &
-   vert_localization_coord,         &
+   vertical_localization_coord,     &
    state_variables,                 &
    assimilation_period_days,        &
    assimilation_period_seconds,     &
@@ -114,6 +114,10 @@ logical, save      :: module_initialized = .false.
 ! domain id for the cam model.  this allows us access to all of the state structure
 ! info and is require for getting state variables.
 integer :: domain_id
+
+! this one must match the threed_sphere codes for VERTISxx
+! default to pressure (2)
+integer :: vert_local_coord = VERTISPRESSURE
 
 !> Everything needed to describe a variable. Basically all the metadata from
 !> a netCDF file is stored here as well as all the information about where
@@ -225,6 +229,9 @@ call read_grid_info(cam_template_filename, grid_data)
 ! from the &model_mod_nml state_variables
 
 call set_cam_variable_info(state_variables, nfields)
+
+! convert from string to integer
+call set_vert_localization(vertical_localization_coord, vert_local_coord)
 
 end subroutine static_init_model
 
@@ -1596,6 +1603,37 @@ grid_array%nsize = -1
 
 end subroutine free_cam_1d_array
 
+!-----------------------------------------------------------------------
+!>
+!> 
+!>   
+
+subroutine set_vert_localization(typename, vcoord)
+character(len=*), intent(in)  :: typename
+integer,          intent(out) :: vcoord
+
+character(len=32) :: ucasename
+
+ucasename = typename
+call to_upper(ucasename)
+
+select case (ucasename)
+  case ("PRESSURE")
+     vcoord = VERTISPRESSURE
+  case ("HEIGHT")
+     vcoord = VERTISHEIGHT
+  case ("SCALEHEIGHT", "SCALE_HEIGHT")
+     vcoord = VERTISSCALEHEIGHT
+  case ("LEVEL", "MODEL_LEVEL")
+     vcoord = VERTISLEVEL
+  case default
+     write(string1,*)'unrecognized vertical localization coordinate type: '//trim(typename)
+     write(string2,*)'valid values are: PRESSURE, HEIGHT, SCALEHEIGHT, LEVEL'
+     call error_handler(E_ERR,'set_vert_localization:',string1, &
+                        source,revision,revdate,text2=string2)
+end select
+ 
+end subroutine set_vert_localization
 
 !-----------------------------------------------------------------------
 !>
