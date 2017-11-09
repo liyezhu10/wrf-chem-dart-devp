@@ -332,6 +332,61 @@ end function get_location_from_index
 
 !-----------------------------------------------------------------------
 !>
+!> 
+
+subroutine get_values_from_qty(state_handle, ens_size, qty, lon_index, lat_index, lev_index, vals, my_status)
+type(ensemble_type), intent(in) :: state_handle
+integer,             intent(in) :: ens_size
+integer,             intent(in) :: qty
+integer,             intent(in) :: lon_index
+integer,             intent(in) :: lat_index
+integer,             intent(in) :: lev_index
+real(r8),            intent(out) :: vals(ens_size)
+integer,             intent(out) :: my_status
+
+integer :: varid
+integer(i8) :: state_indx
+
+varid      = get_varid_from_kind(domain_id, qty)
+state_indx = get_dart_vector_index(lon_index, lat_index, lev_index, domain_id, varid)
+vals(:)    = get_state(state_indx, state_handle)
+
+if (varid < 0) my_status = 12
+
+end subroutine get_values_from_qty
+
+
+!-----------------------------------------------------------------------
+!>
+!> 
+
+subroutine get_values_from_varid(state_handle, ens_size, lon_index, lat_index, lev_index, &
+                       varid, vals, my_status)
+type(ensemble_type), intent(in)  :: state_handle
+integer,  intent(in)  :: ens_size
+integer,  intent(in)  :: lon_index
+integer,  intent(in)  :: lat_index
+integer,  intent(in)  :: lev_index(ens_size)
+integer,  intent(in)  :: varid
+real(r8), intent(out) :: vals(ens_size)
+integer,  intent(out) :: my_status(ens_size)
+
+integer(i8) :: state_indx
+
+!>@todo FIXME add error checking?  is state_indx < 0 how it indicates error?
+
+!>@todo FIXME find unique level indices here (see new wrf code)
+
+state_indx = get_dart_vector_index(lon_index, lat_index, lev_index(1), domain_id, varid)
+vals       = get_state(state_indx, state_handle)
+
+my_status(:) = 0
+
+end subroutine get_values_from_varid
+
+
+!-----------------------------------------------------------------------
+!>
 !> Model interpolate will interpolate any DART state variable
 !> to the given location.
 !>
@@ -353,6 +408,8 @@ end function get_location_from_index
 !> istatus = 9    cannot get vertical levels for an obs on model levels
 !> istatus = 10   cannot get vertical levels for an obs on pressure levels
 !> istatus = 11   cannot get vertical levels for an obs on height levels
+!> istatus = 12   cannot get values from obs quantity
+!> istatus = 13   can not interpolate values of this quantity
 !> istatus = X
 !> istatus = 99   unknown error - shouldn't happen
 !>
@@ -370,9 +427,10 @@ integer  :: varid
 integer  :: lon_bot, lat_bot, lon_top, lat_top
 real(r8) :: lon_fract, lat_fract
 real(r8) :: lon_lat_vert(3), botvals(ens_size), topvals(ens_size)
+integer  :: level_one_array(ens_size)
 integer  :: which_vert, status1, status2, status_array(ens_size)
 type(quad_interp_handle) :: interp_handle
-integer  :: ijk(3), icorner, imember
+integer  :: ijk(3), icorner, imember, numdims
 integer  :: four_lons(4), four_lats(4)
 integer  :: two_bots(2), two_tops(2)
 real(r8) :: two_horiz_fracts(2)
@@ -405,16 +463,15 @@ if ( .not. module_initialized ) call static_init_model
 
 ! Successful istatus is 0
 interp_vals(:) = MISSING_R8
-istatus(:)    = 99
+istatus(:)     = 99
 
-! See if the state contains the obs quantity 
-varid = get_varid_from_kind(domain_id, obs_qty)
+call ok_to_interpolate(obs_qty, varid, status1)
 
 ! If not, for now return an error.  if there are other quantities
 ! that we can return that aren't part of the state then add code here.
 ! (make the rest of this routine into a separate subroutine that can
 ! be reused?)
-if (varid < 0) then  
+if (status1 /= 0) then  
    !>@todo FIXME there may be things we need to compute that
    !> has multiple variables involved
    ! e.g. phis (elevation?)
@@ -434,7 +491,7 @@ endif
 ! unpack the location type into lon, lat, vert
 ! also may need the vert type?
 lon_lat_vert = get_location(location)
-which_vert = nint(query_location(location))  ! default is to return the vertical type (JPH nint - nearist int)
+which_vert   = nint(query_location(location))  ! default is to return the vertical type
 
 ! get the grid handle for the right staggered grid
 interp_handle = get_interp_handle(obs_qty)
@@ -460,56 +517,90 @@ endif
 call index_setup(lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &
                  four_lons, four_lats, two_horiz_fracts)
 
+! need to consider the case for 2d vs 3d variables
+numdims = get_dims_from_qty(obs_qty, varid)
 
-! and now here potentially we have different results for different
-! ensemble members.  the things that can vary are dimensioned by ens_size.
-do icorner=1, 4
-   ! build a column to find vertical level numbers
-   !>@doto FIXME this needs an option for linear or log scale.  affects fraction only.
-   call find_vertical_levels(state_handle, ens_size, &
-                             four_lons(icorner), four_lats(icorner), lon_lat_vert(3), &
-                             which_vert, obs_qty, &
-                             four_bot_levs(icorner, :), four_top_levs(icorner, :), &
-                             four_vert_fracts(icorner, :), status_array)
+if (numdims > 2 ) then
+   ! and now here potentially we have different results for different
+   ! ensemble members.  the things that can vary are dimensioned by ens_size.
+   do icorner=1, 4
+      ! build a column to find vertical level numbers
+      !>@doto FIXME this needs an option for linear or log scale.  affects fraction only.
+      call find_vertical_levels(state_handle, ens_size, &
+                                four_lons(icorner), four_lats(icorner), lon_lat_vert(3), &
+                                which_vert, obs_qty, &
+                                four_bot_levs(icorner, :), four_top_levs(icorner, :), &
+                                four_vert_fracts(icorner, :), status_array)
+      
+      !>@todo FIXME should we let the process continue if at least one
+      !>member has failed?  pro: save work  con: don't get forward operator
+      !>values for members that could compute them
+      !>(this is true for all the subsequent returns from this routine)
+      if (any(status_array /= 0)) then
+         istatus(:) = 4   ! cannot locate enclosing vertical levels  !>@todo FIXME use where statements?
+         return
+      endif
+   enddo
    
-   !>@todo FIXME should we let the process continue if at least one
-   !>member has failed?  pro: save work  con: don't get forward operator
-   !>values for members that could compute them
-   !>(this is true for all the subsequent returns from this routine)
-   if (any(status_array /= 0)) then
-      istatus(:) = 4   ! cannot locate enclosing vertical levels  !>@todo FIXME use where statements?
-      return
+   if (varid > 0) then
+      ! we have all the indices and fractions we could ever want.
+      ! now get the data values at the bottom levels, the top levels, 
+      ! and do vertical interpolation to get the final result.
+      
+      do icorner=1, 4
+         call get_values_from_varid(state_handle,  ens_size, &
+                                    four_lons(icorner), four_lats(icorner), &
+                                    four_bot_levs(icorner, :), varid, botvals, status_array)
+         if (any(status_array /= 0)) then
+            istatus(:) = 5   ! cannot retrieve bottom values
+            return
+         endif
+         
+         call get_values_from_varid(state_handle,  ens_size, &
+                                    four_lons(icorner), four_lats(icorner), &
+                                    four_top_levs(icorner, :), varid, topvals, status_array)
+         if (any(status_array /= 0)) then
+            istatus(:) = 6   ! cannot retrieve top values
+            return
+         endif
+
+         call vert_interp(ens_size, botvals, topvals, four_vert_fracts(icorner, :), &
+                          quad_vals(icorner, :), status_array)
+  
+         if (any(status_array /= 0)) then
+            istatus(:) = 7   ! cannot do vertical interpolation
+            return
+         endif
+      enddo
+   else ! get 3d special variables in another ways ( like QTY_PRESSURE )
+      ! fill topvals and botvals somehow
+      do icorner=1, 4
+         call vert_interp(ens_size, botvals, topvals, four_vert_fracts(icorner, :), &
+                          quad_vals(icorner, :), status_array)
+      
+         if (any(status_array /= 0)) then
+            istatus(:) = 7   ! cannot do vertical interpolation
+            return
+         endif
+      enddo
+   endif
+else ! 2 dimensional variable
+   if (varid > 0) then
+      level_one_array(:) = 1
+      do icorner=1, 4
+         call get_values_from_varid(state_handle,  ens_size, &
+                                    four_lons(icorner), four_lats(icorner), &
+                                    level_one_array, varid, quad_vals(icorner,:), status_array)
+         
+      enddo
+   else ! special 2d case
+      do icorner=1, 4
+         call get_quad_corners(ens_size, four_lons(icorner), four_lats(icorner), &
+                               obs_qty, quad_vals(icorner,:), status1)
+      enddo
    endif
 
-enddo
-
-! we have all the indices and fractions we could ever want.
-! now get the data values at the bottom levels, the top levels, 
-! and do vertical interpolation to get the final result.
-
-do icorner=1, 4
-   call find_values(state_handle,  ens_size, four_lons(icorner), four_lats(icorner), &
-                    four_bot_levs(icorner, :), varid, botvals, status_array)
-   if (any(status_array /= 0)) then
-      istatus(:) = 5   ! cannot retrieve bottom values
-      return
-   endif
-   
-   call find_values(state_handle,  ens_size, four_lons(icorner), four_lats(icorner), &
-                    four_top_levs(icorner, :), varid, topvals, status_array)
-   if (any(status_array /= 0)) then
-      istatus(:) = 6   ! cannot retrieve top values
-      return
-   endif
-   
-   call vert_interp(ens_size, botvals, topvals, four_vert_fracts(icorner, :), &
-                    quad_vals(icorner, :), status_array)
-
-   if (any(status_array /= 0)) then
-      istatus(:) = 7   ! cannot do vertical interpolation
-      return
-   endif
-enddo
+endif
 
 ! do the horizontal interpolation for each ensemble member
 call quad_lon_lat_evaluate(interp_handle, lon_fract, lat_fract, ens_size, &
@@ -524,6 +615,91 @@ endif
 istatus(:) = 0
 
 end subroutine model_interpolate
+
+!-----------------------------------------------------------------------
+!>
+!>  
+
+function get_dims_from_qty(obs_quantity, var_id)
+integer, intent(in) :: obs_quantity
+integer, intent(in) :: var_id
+integer :: get_dims_from_qty
+
+if (var_id > 0) then
+   get_dims_from_qty = get_num_dims(domain_id,var_id)
+else
+   select case (obs_quantity)
+      case (QTY_SURFACE_ELEVATION)
+         get_dims_from_qty = 2
+      case default 
+         write(string1, *) 'we can not interpolate qty', obs_quantity, &
+                           ' if the dimension is not known'
+         call error_handler(E_ERR,'get_dims_from_qty', &
+                            string1,source,revision,revdate)
+    end select
+endif
+
+end function get_dims_from_qty
+
+!-----------------------------------------------------------------------
+!>
+!>  
+
+subroutine ok_to_interpolate(obs_qty, varid, my_status)
+integer, intent(in)  :: obs_qty
+integer, intent(out) :: varid
+integer, intent(out) :: my_status
+
+! See if the state contains the obs quantity 
+varid = get_varid_from_kind(domain_id, obs_qty)
+
+! in the state vector
+if (varid > 0) then
+   my_status = 0
+   return
+endif
+   
+
+! add any quantities that can be interpolated to this list if they
+! are not in the state vector.
+select case (obs_qty)
+   case (QTY_SURFACE_ELEVATION)
+      my_status = 0
+   case default
+      my_status = 13
+
+end select
+
+
+end subroutine ok_to_interpolate
+
+
+!-----------------------------------------------------------------------
+!>
+!>  This is for 2d special observations quantities not in the state
+
+subroutine get_quad_corners(ens_size, lon_index, lat_index, obs_quantity, vals, my_status)
+integer,  intent(in) :: ens_size
+integer,  intent(in) :: lon_index
+integer,  intent(in) :: lat_index
+integer,  intent(in) :: obs_quantity
+real(r8), intent(out) :: vals(ens_size) 
+integer,  intent(out) :: my_status
+
+character(len=*), parameter :: routine = 'get_quad_corners'
+
+select case (obs_quantity)
+   case (QTY_SURFACE_ELEVATION)
+      vals(:) = phis(lon_index, lat_index) / gravity
+   case default 
+      write(string1, *) 'we can not interpolate qty', obs_quantity
+      call error_handler(E_ERR,routine,string1,source,revision,revdate)
+end select
+
+my_status = 0
+
+end subroutine get_quad_corners
+
 
 !-----------------------------------------------------------------------
 !>
@@ -546,34 +722,6 @@ out_vals(:) = (botvals(:)* vert_fracts(:)) + (topvals(:) * (1.0_r8-vert_fracts(:
 my_status(:) = 0
 
 end subroutine vert_interp
-
-!-----------------------------------------------------------------------
-!>
-!> 
-
-subroutine find_values(state_handle, ens_size, lon_index, lat_index, lev_index, &
-                       varid, vals, my_status)
-type(ensemble_type), intent(in)  :: state_handle
-integer,  intent(in)  :: ens_size
-integer,  intent(in)  :: lon_index
-integer,  intent(in)  :: lat_index
-integer,  intent(in)  :: lev_index(ens_size)
-integer,  intent(in)  :: varid
-real(r8), intent(out) :: vals(ens_size)
-integer,  intent(out) :: my_status(ens_size)
-
-integer(i8) :: state_indx
-
-!>@todo FIXME add error checking?  is state_indx < 0 how it indicates error?
-
-!>@todo FIXME find unique level indices here (see new wrf code)
-
-state_indx = get_dart_vector_index(lon_index, lat_index, lev_index(1), domain_id, varid)
-vals       = get_state(state_indx, state_handle)
-
-my_status(:) = 0
-
-end subroutine find_values
 
 !-----------------------------------------------------------------------
 !>
@@ -627,7 +775,7 @@ real(r8),            intent(out) :: vert_fracts(ens_size)
 integer,             intent(out) :: my_status(ens_size)
 
 integer :: bot1, top1, imember, nlevels, varid
-integer :: level_one
+integer :: level_one, status1
 integer(i8) :: state_indx
 real(r8) :: fract1
 real(r8) :: surf_pressure(ens_size)
@@ -651,9 +799,8 @@ select case (which_vert)
    case(VERTISPRESSURE)
       ! construct a pressure column here and find the model levels
       ! that enclose this value
-      varid = get_varid_from_kind(domain_id, QTY_SURFACE_PRESSURE)
-      state_indx = get_dart_vector_index(lon_index, lat_index, level_one, domain_id, varid)
-      surf_pressure(:) = get_state(state_indx, state_handle)
+      call get_values_from_qty(state_handle, ens_size, QTY_SURFACE_PRESSURE, &
+                               lon_index, lat_index, level_one, surf_pressure, status1)
 
       !>@todo FIXME: should we figure out now or later? how many unique levels we have?
       !> for now - do the unique culling later so we don't have to carry that count around.
@@ -669,7 +816,8 @@ select case (which_vert)
       ! construct a height column here and find the model levels
       ! that enclose this value
       !@>todo put in arguments and write height_to_level
-      call cam_height_levels(state_handle, ens_size, lon_index, lat_index, nlevels, height_array, my_status)
+      call cam_height_levels(state_handle, ens_size, lon_index, lat_index, nlevels, &
+                             height_array, my_status)
       if (any(my_status /= 0)) return   !>@todo FIXME let successful members continue?
       do imember=1, ens_size
          !>@todo FIXME somewhere cull out unique levels and only get_state() for those. (see wrf)
@@ -728,7 +876,7 @@ integer,             intent(in)  :: nlevels
 real(r8),            intent(out) :: height_array(nlevels, ens_size)
 integer,             intent(out) :: my_status(ens_size)
 
-integer     :: k, varid, level_one, imember
+integer     :: k, varid, level_one, imember, status1
 real(r8)    :: temperature(ens_size), specific_humidity(ens_size), surface_pressure(ens_size)
 real(r8)    :: phi(ens_size, nlevels)
 real(r8)    :: surface_elevation
@@ -749,23 +897,21 @@ level_one = 1
 
 !@>todo make into a subroutine get_val or something similar
 ! get the surface pressure from the state_handle
-varid = get_varid_from_kind(domain_id, QTY_SURFACE_PRESSURE)
-state_indx = get_dart_vector_index(lon_index, lat_index, level_one, domain_id, varid)
-surface_pressure(:) = get_state(state_indx, state_handle)
+call get_values_from_qty(state_handle, ens_size, QTY_SURFACE_PRESSURE, &
+                         lon_index, lat_index, level_one, surface_pressure, status1)
+
 
 ! get the surface elevation from the phis
 surface_elevation = phis(lon_index, lat_index)
 
 do k = 1, nlevels
    ! temperature
-   varid = get_varid_from_kind(domain_id, QTY_TEMPERATURE)
-   state_indx = get_dart_vector_index(lon_index, lat_index, k, domain_id, varid)
-   temperature(:) = get_state(state_indx, state_handle)
+   call get_values_from_qty(state_handle, ens_size, QTY_TEMPERATURE, &
+                                     lon_index, lat_index, k, temperature, status1)
 
    ! specific humidity
-   varid = get_varid_from_kind(domain_id, QTY_SPECIFIC_HUMIDITY)
-   state_indx = get_dart_vector_index(lon_index, lat_index, k, domain_id, varid)
-   specific_humidity(:) = get_state(state_indx, state_handle)
+   call get_values_from_qty(state_handle, ens_size, QTY_SPECIFIC_HUMIDITY, &
+                                     lon_index, lat_index, k, specific_humidity, status1)
    
    !>@todo rename tv to something that mens something to users
    tv(:,k) = temperature(:)*(1.0_r8 + rr_factor*specific_humidity(:))
@@ -1267,7 +1413,7 @@ end subroutine write_model_time
 
 !--------------------------------------------------------------------
 !>
-!> read the time from the input file
+!> Read the time from the input file
 !>
 !> @param filename name of file that contains the time
 !>
