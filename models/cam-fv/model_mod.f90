@@ -2053,7 +2053,7 @@ do i=1,num
       case (VERTISPRESSURE)
          call convert_to_pressure(ens_handle, ens_size, locs(i), loc_indx(i))
       case (VERTISHEIGHT)
-         call convert_to_pressure(ens_handle, ens_size, locs(i), loc_indx(i))
+         call convert_to_height(ens_handle, ens_size, locs(i), loc_indx(i))
       case (VERTISLEVEL)
          call convert_to_pressure(ens_handle, ens_size, locs(i), loc_indx(i))
       case (VERTISSCALEHEIGHT)
@@ -2104,6 +2104,43 @@ end subroutine state_level_to_pressure
 
 !--------------------------------------------------------------------
 
+subroutine  convert_to_height(ens_handle, ens_size, location, location_indx)
+type(ensemble_type), intent(in)    :: ens_handle
+integer,             intent(in)    :: ens_size
+type(location_type), intent(inout) :: location
+integer(i8),         intent(in)    :: location_indx
+
+!>@todo FIXME move up to convert_vertical_state ?
+call state_level_to_height(ens_handle, ens_size, location, location_indx)
+
+end subroutine  convert_to_height
+
+!--------------------------------------------------------------------
+
+subroutine state_level_to_height(ens_handle, ens_size, location, location_indx)
+type(ensemble_type), intent(in)    :: ens_handle
+integer,             intent(in)    :: ens_size
+type(location_type), intent(inout) :: location
+integer(i8),         intent(in)    :: location_indx
+
+
+integer  :: iloc, jloc, vloc, my_status(ens_size)
+real(r8) :: height_array(  grid_data%lev%nsize, ens_size)
+real(r8) :: pressure_array(grid_data%lev%nsize)
+
+! build a height column and a pressure column and find the levels?
+call get_model_variable_indices(location_indx, iloc, jloc, vloc)
+
+call cam_height_levels(ens_handle, ens_size, iloc, jloc, grid_data%lev%nsize, &
+                       height_array, my_status) 
+
+!>@todo FIXME this can only be used if ensemble size is 1
+call set_vertical(location, height_array(vloc,1), VERTISHEIGHT)
+
+end subroutine state_level_to_height
+
+!--------------------------------------------------------------------
+
 subroutine obs_height_to_pressure(ens_handle, ens_size, location, location_indx)
 type(ensemble_type), intent(in)    :: ens_handle
 integer,             intent(in)    :: ens_size
@@ -2112,7 +2149,7 @@ integer(i8),         intent(in)    :: location_indx
 
 
 integer  :: iloc, jloc, vloc, my_status(ens_size)
-real(r8) :: height_array(grid_data%lev%nsize, ens_size)
+real(r8) :: height_array(  grid_data%lev%nsize, ens_size)
 real(r8) :: pressure_array(grid_data%lev%nsize)
 
 ! build a height column and a pressure column and find the levels?
