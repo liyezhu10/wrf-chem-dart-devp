@@ -545,8 +545,8 @@
    input_state_files     = 'caminput.nc'
    output_state_files    = 'mmc_output.nc'
    verbose               = .FALSE.
-   test1thru             = 4
-   loc_of_interest       = 320.0, 18.0, 5.0
+   test1thru             = 6
+   loc_of_interest       = 320.0, 18.0, 50000.0
    x_ind                 = 359435
    kind_of_interest      = 'QTY_U_WIND_COMPONENT'
    interp_test_lonrange  = 0.0, 359.0

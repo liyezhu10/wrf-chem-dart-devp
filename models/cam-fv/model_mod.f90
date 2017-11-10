@@ -309,6 +309,7 @@ integer, intent(in) :: k
 integer, intent(in) :: q
 type(location_type) :: get_location_from_index
 
+real(r8) :: slon_val
 
 select case (grid_stagger%qty_stagger(q))
   case (STAGGER_U)
@@ -317,7 +318,10 @@ select case (grid_stagger%qty_stagger(q))
                                           real(k,r8), VERTISLEVEL)
 
   case (STAGGER_V)
-   get_location_from_index = set_location(grid_data%slon%vals(i), &
+   slon_val = grid_data%slon%vals(i)
+   if (slon_val <   0) slon_val = slon_val + 360.0_r8
+   if (slon_val > 360) slon_val = slon_val - 360.0_r8
+   get_location_from_index = set_location(slon_val, &
                                           grid_data%lat%vals(j), &
                                           real(k,r8), VERTISLEVEL)
    
