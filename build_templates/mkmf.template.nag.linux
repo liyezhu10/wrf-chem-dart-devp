@@ -108,8 +108,8 @@
 
 MPIFC = mpif90
 MPILD = mpif90
-FC = ifort
-LD = ifort
+FC = nagfor
+LD = nagfor
 
 # DISCUSSION ABOUT NETCDF. DART works with both V3 and V4 flavors of netCDF.
 # Some V4 installations also require the HDF5 libraries. Some don't.
@@ -131,6 +131,7 @@ LD = ifort
 # are found for the netcdf files that match this compiler.
 #
 # NETCDF = /opt/local
+NETCDF = /usr/local/netcdf_c-4.3.2_f-4.4.1-nag-6.0
 
 INCS = -I$(NETCDF)/include
 LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf
