@@ -17,7 +17,12 @@ module model_mod
 
 use             types_mod
 use      time_manager_mod
-use          location_mod
+use          location_mod, only : location_type, set_vertical, set_location, &
+                                  get_location,get_close_obs, get_close_state, & 
+                                  query_location, &
+                                  VERTISUNDEF, VERTISSURFACE, VERTISLEVEL, &
+                                  VERTISPRESSURE, VERTISHEIGHT, &
+                                  VERTISSCALEHEIGHT
 use         utilities_mod
 use          obs_kind_mod
 use     mpi_utilities_mod
@@ -37,8 +42,7 @@ use  netcdf_utilities_mod,  only : nc_get_variable, nc_get_variable_size, &
 use       location_io_mod
 use        quad_utils_mod
 use     default_model_mod,  only : adv_1step, init_time, init_conditions, &
-                                   nc_write_model_vars, pert_model_copies, &
-                                   convert_vertical_obs, convert_vertical_state
+                                   nc_write_model_vars, pert_model_copies
 
 implicit none
 private
@@ -64,7 +68,7 @@ public :: nc_write_model_vars,           &
           init_time,                     &
           init_conditions,               & 
           convert_vertical_obs,          & ! todo
-          convert_vertical_state,        & ! todo
+          convert_vertical_state,        & ! doing
           get_close_obs,                 & ! todo
           get_close_state                  ! todo
 
@@ -334,8 +338,8 @@ end function get_location_from_index
 !>
 !> 
 
-subroutine get_values_from_qty(state_handle, ens_size, qty, lon_index, lat_index, lev_index, vals, my_status)
-type(ensemble_type), intent(in) :: state_handle
+subroutine get_values_from_qty(ens_handle, ens_size, qty, lon_index, lat_index, lev_index, vals, my_status)
+type(ensemble_type), intent(in) :: ens_handle
 integer,             intent(in) :: ens_size
 integer,             intent(in) :: qty
 integer,             intent(in) :: lon_index
@@ -349,7 +353,7 @@ integer(i8) :: state_indx
 
 varid      = get_varid_from_kind(domain_id, qty)
 state_indx = get_dart_vector_index(lon_index, lat_index, lev_index, domain_id, varid)
-vals(:)    = get_state(state_indx, state_handle)
+vals(:)    = get_state(state_indx, ens_handle)
 
 if (varid < 0) my_status = 12
 
@@ -360,9 +364,9 @@ end subroutine get_values_from_qty
 !>
 !> 
 
-subroutine get_values_from_varid(state_handle, ens_size, lon_index, lat_index, lev_index, &
+subroutine get_values_from_varid(ens_handle, ens_size, lon_index, lat_index, lev_index, &
                        varid, vals, my_status)
-type(ensemble_type), intent(in)  :: state_handle
+type(ensemble_type), intent(in)  :: ens_handle
 integer,  intent(in)  :: ens_size
 integer,  intent(in)  :: lon_index
 integer,  intent(in)  :: lat_index
@@ -378,7 +382,7 @@ integer(i8) :: state_indx
 !>@todo FIXME find unique level indices here (see new wrf code)
 
 state_indx = get_dart_vector_index(lon_index, lat_index, lev_index(1), domain_id, varid)
-vals       = get_state(state_indx, state_handle)
+vals       = get_state(state_indx, ens_handle)
 
 my_status(:) = 0
 
@@ -760,9 +764,9 @@ end subroutine index_setup
 !>
 !> 
 
-subroutine find_vertical_levels(state_handle, ens_size, lon_index, lat_index, vert_val, &
+subroutine find_vertical_levels(ens_handle, ens_size, lon_index, lat_index, vert_val, &
                                 which_vert, obs_qty, bot_levs, top_levs, vert_fracts, my_status)
-type(ensemble_type), intent(in)  :: state_handle
+type(ensemble_type), intent(in)  :: ens_handle
 integer,             intent(in)  :: ens_size
 integer,             intent(in)  :: lon_index 
 integer,             intent(in)  :: lat_index
@@ -799,16 +803,20 @@ select case (which_vert)
    case(VERTISPRESSURE)
       ! construct a pressure column here and find the model levels
       ! that enclose this value
-      call get_values_from_qty(state_handle, ens_size, QTY_SURFACE_PRESSURE, &
-                               lon_index, lat_index, level_one, surf_pressure, status1)
+      call get_values_from_qty(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
+                               lon_index, lat_index, level_one, &
+                               surf_pressure, status1)
 
       !>@todo FIXME: should we figure out now or later? how many unique levels we have?
       !> for now - do the unique culling later so we don't have to carry that count around.
       do imember=1, ens_size
-         call cam_pressure_levels(surf_pressure(imember), nlevels, grid_data%hyam, grid_data%hybm, &
-                                  grid_data%P0, pressure_array)
+         call build_cam_pressure_column(surf_pressure(imember), nlevels, &
+                                        grid_data%hyam, grid_data%hybm, &
+                                        grid_data%P0, pressure_array)
+
          call pressure_to_level(nlevels, pressure_array, vert_val, &
-                                bot_levs(imember), top_levs(imember), vert_fracts(imember), my_status(imember))
+                                bot_levs(imember), top_levs(imember), &
+                                vert_fracts(imember), my_status(imember))
 
       enddo
 
@@ -816,7 +824,7 @@ select case (which_vert)
       ! construct a height column here and find the model levels
       ! that enclose this value
       !@>todo put in arguments and write height_to_level
-      call cam_height_levels(state_handle, ens_size, lon_index, lat_index, nlevels, &
+      call cam_height_levels(ens_handle, ens_size, lon_index, lat_index, nlevels, &
                              height_array, my_status)
       if (any(my_status /= 0)) return   !>@todo FIXME let successful members continue?
       do imember=1, ens_size
@@ -867,8 +875,8 @@ end subroutine find_vertical_levels
 !>
 !> this version does all ensemble members at once.
 
-subroutine cam_height_levels(state_handle, ens_size, lon_index, lat_index, nlevels, height_array, my_status) 
-type(ensemble_type), intent(in)  :: state_handle
+subroutine cam_height_levels(ens_handle, ens_size, lon_index, lat_index, nlevels, height_array, my_status) 
+type(ensemble_type), intent(in)  :: ens_handle
 integer,             intent(in)  :: ens_size
 integer,             intent(in)  :: lon_index
 integer,             intent(in)  :: lat_index
@@ -896,8 +904,8 @@ real(r8) ::hybrid_As(nlevels+1,2), hybrid_Bs(nlevels+1,2)
 level_one = 1
 
 !@>todo make into a subroutine get_val or something similar
-! get the surface pressure from the state_handle
-call get_values_from_qty(state_handle, ens_size, QTY_SURFACE_PRESSURE, &
+! get the surface pressure from the ens_handle
+call get_values_from_qty(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
                          lon_index, lat_index, level_one, surface_pressure, status1)
 
 
@@ -906,11 +914,11 @@ surface_elevation = phis(lon_index, lat_index)
 
 do k = 1, nlevels
    ! temperature
-   call get_values_from_qty(state_handle, ens_size, QTY_TEMPERATURE, &
+   call get_values_from_qty(ens_handle, ens_size, QTY_TEMPERATURE, &
                                      lon_index, lat_index, k, temperature, status1)
 
    ! specific humidity
-   call get_values_from_qty(state_handle, ens_size, QTY_SPECIFIC_HUMIDITY, &
+   call get_values_from_qty(ens_handle, ens_size, QTY_SPECIFIC_HUMIDITY, &
                                      lon_index, lat_index, k, specific_humidity, status1)
    
    !>@todo rename tv to something that mens something to users
@@ -934,7 +942,7 @@ end subroutine cam_height_levels
 !-----------------------------------------------------------------------
 !> Compute the pressures at the layer midpoints
 
-subroutine cam_pressure_levels(surface_pressure, n_levels, hyam, hybm, P0, pressure_array)
+subroutine build_cam_pressure_column(surface_pressure, n_levels, hyam, hybm, P0, pressure_array)
 
 real(r8),           intent(in)  :: surface_pressure   ! in pascals
 integer,            intent(in)  :: n_levels
@@ -952,7 +960,7 @@ do k=1,n_levels
    pressure_array(k) = hyam%vals(k)*P0%vals(1) + hybm%vals(k)*surface_pressure
 enddo
 
-end subroutine cam_pressure_levels
+end subroutine build_cam_pressure_column
 
 
 !-----------------------------------------------------------------------
@@ -2019,6 +2027,156 @@ galt = galt*1000.0_r8
 
 end subroutine compute_gravity
 
+!-----------------------------------------------------------------------
+
+subroutine convert_vertical_state(ens_handle, num, locs, loc_qtys, loc_indx, &
+                                  which_vert, istatus)
+
+type(ensemble_type), intent(in)    :: ens_handle
+integer,             intent(in)    :: num
+type(location_type), intent(inout) :: locs(:)
+integer,             intent(in)    :: loc_qtys(:)
+integer(i8),         intent(in)    :: loc_indx(:)
+integer,             intent(in)    :: which_vert
+integer,             intent(out)   :: istatus
+
+integer :: current_vert_type, ens_size, i
+
+ens_size = 1
+
+do i=1,num
+   current_vert_type = nint(query_location(locs(i)))
+
+   if ( current_vert_type == which_vert ) cycle
+
+   select case (which_vert)
+      case (VERTISPRESSURE)
+         call convert_to_pressure(ens_handle, ens_size, locs(i), loc_indx(i))
+      case (VERTISHEIGHT)
+         call convert_to_pressure(ens_handle, ens_size, locs(i), loc_indx(i))
+      case (VERTISLEVEL)
+         call convert_to_pressure(ens_handle, ens_size, locs(i), loc_indx(i))
+      case (VERTISSCALEHEIGHT)
+         call convert_to_pressure(ens_handle, ens_size, locs(i), loc_indx(i))
+      case default
+         print*, ' can not convert vert'
+   end select
+enddo
+istatus = 0
+
+end subroutine convert_vertical_state
+
+!--------------------------------------------------------------------
+
+subroutine  convert_to_pressure(ens_handle, ens_size, location, location_indx)
+type(ensemble_type), intent(in)    :: ens_handle
+integer,             intent(in)    :: ens_size
+type(location_type), intent(inout) :: location
+integer(i8),         intent(in)    :: location_indx
+
+!>@todo FIXME move up to convert_vertical_state ?
+call state_level_to_pressure(ens_handle, ens_size, location, location_indx)
+
+end subroutine  convert_to_pressure
+
+!--------------------------------------------------------------------
+
+subroutine state_level_to_pressure(ens_handle, ens_size, location, location_indx)
+type(ensemble_type), intent(in)    :: ens_handle
+integer,             intent(in)    :: ens_size
+type(location_type), intent(inout) :: location
+integer(i8),         intent(in)    :: location_indx
+
+integer  :: iloc, jloc, vloc, my_status(ens_size)
+real(r8) :: height_array(grid_data%lev%nsize, ens_size)
+real(r8) :: pressure_array(grid_data%lev%nsize)
+
+! build a height column and a pressure column and find the levels?
+call get_model_variable_indices(location_indx, iloc, jloc, vloc)
+
+call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, grid_data%lev%nsize, &
+                       pressure_array, my_status)
+
+call set_vertical(location, pressure_array(vloc), VERTISPRESSURE)
+
+end subroutine state_level_to_pressure
+
+
+!--------------------------------------------------------------------
+
+subroutine obs_height_to_pressure(ens_handle, ens_size, location, location_indx)
+type(ensemble_type), intent(in)    :: ens_handle
+integer,             intent(in)    :: ens_size
+type(location_type), intent(inout) :: location
+integer(i8),         intent(in)    :: location_indx
+
+
+integer  :: iloc, jloc, vloc, my_status(ens_size)
+real(r8) :: height_array(grid_data%lev%nsize, ens_size)
+real(r8) :: pressure_array(grid_data%lev%nsize)
+
+! build a height column and a pressure column and find the levels?
+call get_model_variable_indices(location_indx, iloc, jloc, vloc)
+
+call cam_height_levels(ens_handle, ens_size, iloc, jloc, grid_data%lev%nsize, &
+                       height_array, my_status) 
+
+call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, grid_data%lev%nsize, &
+                       pressure_array, my_status)
+
+call set_vertical(location, pressure_array(vloc), VERTISPRESSURE)
+
+end subroutine obs_height_to_pressure
+
+
+!-----------------------------------------------------------------------
+!> Compute the pressure values at midpoint levels
+!>
+!> this version does all ensemble members at once.
+
+subroutine cam_pressure_levels(ens_handle, ens_size, lon_index, lat_index, nlevels, pressure_array, my_status) 
+type(ensemble_type), intent(in)  :: ens_handle
+integer,             intent(in)  :: ens_size
+integer,             intent(in)  :: lon_index
+integer,             intent(in)  :: lat_index
+integer,             intent(in)  :: nlevels
+real(r8),            intent(out) :: pressure_array(nlevels, ens_size)
+integer,             intent(out) :: my_status(ens_size)
+
+integer     :: level_one, status1, imember
+real(r8)    :: surface_pressure(ens_size)
+
+! this is for surface obs
+level_one = 1
+
+! get the surface pressure from the ens_handle
+call get_values_from_qty(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
+                         lon_index, lat_index, level_one, surface_pressure, status1)
+
+do imember=1, ens_size
+   call build_cam_pressure_column(surface_pressure(imember), grid_data%lev%nsize, &
+                                  grid_data%hyam, grid_data%hybm, grid_data%P0, &
+                                  pressure_array(:,imember))
+enddo
+my_status(:) = 0
+
+end subroutine cam_pressure_levels
+
+!--------------------------------------------------------------------
+
+subroutine convert_vertical_obs(ens_handle, num, locs, loc_qtys, loc_types, &
+                                which_vert, status)
+
+type(ensemble_type), intent(in)    :: ens_handle
+integer,             intent(in)    :: num
+type(location_type), intent(inout) :: locs(:)
+integer,             intent(in)    :: loc_qtys(:), loc_types(:)
+integer,             intent(in)    :: which_vert
+integer,             intent(out)   :: status(:)
+
+status(:) = 0
+
+end subroutine convert_vertical_obs
 
 !===================================================================
 ! End of model_mod
