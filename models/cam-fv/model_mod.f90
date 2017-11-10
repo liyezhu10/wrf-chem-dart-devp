@@ -51,14 +51,14 @@ private
 ! the arguments - they will be called *from* the dart code.
 
 ! routines in this list have code in this module
-public :: static_init_model,             &
-          get_model_size,                &
-          get_state_meta_data,           &
-          model_interpolate,             & ! big todo
+public :: static_init_model,                   &
+          get_model_size,                      &
+          get_state_meta_data,                 &
+          model_interpolate,                   & ! big todo
           shortest_time_between_assimilations, &
-          nc_write_model_atts,           &
-          write_model_time,              & ! todo
-          read_model_time,               &
+          nc_write_model_atts,                 &
+          write_model_time,                    & ! todo
+          read_model_time,                     &
           end_model
 
 ! code for these routines are in other modules
@@ -91,7 +91,9 @@ logical            :: suppress_grid_info_in_output    = .false.
 
 ! state_variables defines the contents of the state vector.
 ! each line of this input should have the form:
+!
 !    netcdf_variable_name, dart_quantity, clamp_min, clamp_max, update_variable
+!
 ! all items must be strings (even if numerical values).
 ! for no clamping, use the string 'NA'
 ! to have the assimilation change the variable use 'UPDATE', else 'NO_UPDATE'
@@ -388,6 +390,52 @@ my_status(:) = 0
 
 end subroutine get_values_from_varid
 
+!-----------------------------------------------------------------------
+!> this is just for 3d fields
+
+subroutine get_values_from_nonstate_fields(ens_handle, ens_size, lon_index, lat_index, lev_index, obs_quantity, vals, my_status)
+type(ensemble_type),  intent(in)  :: ens_handle
+integer,              intent(in)  :: ens_size
+integer,              intent(in)  :: lon_index
+integer,              intent(in)  :: lat_index
+integer,              intent(in)  :: lev_index(ens_size)
+integer,              intent(in)  :: obs_quantity
+real(r8),             intent(out) :: vals(ens_size)
+integer,              intent(out) :: my_status(ens_size)
+
+integer  :: imember
+real(r8) :: vals_array(grid_data%lev%nsize,ens_size)
+
+vals(:) = MISSING_R8
+
+select case (obs_quantity)
+   case (QTY_PRESSURE, QTY_GEOMETRIC_HEIGHT) 
+      if (obs_quantity == QTY_PRESSURE) then
+         call cam_pressure_levels(ens_handle, ens_size, &
+                                  lon_index, lat_index, grid_data%lev%nsize, &
+                                  vals_array, my_status)
+      else
+         call cam_height_levels(ens_handle, ens_size, &
+                                lon_index, lat_index, grid_data%lev%nsize, &
+                                vals_array, my_status) 
+      endif
+
+      if (any(my_status /= 0)) return
+
+      do imember=1,ens_size
+         vals(imember) = vals_array(lev_index(imember), imember)
+      enddo
+
+   case (QTY_VERTLEVEL)
+      vals(:)      = lev_index(:)
+      my_status(:) = 0
+
+   case default
+      print*, 'should not go here'
+
+end select
+
+end subroutine get_values_from_nonstate_fields
 
 !-----------------------------------------------------------------------
 !>
@@ -524,6 +572,13 @@ call index_setup(lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &
 ! need to consider the case for 2d vs 3d variables
 numdims = get_dims_from_qty(obs_qty, varid)
 
+!>@todo FIXME need to be refactored
+! if variable is in the state
+!    do 2d and 3d
+
+! if variable is not in the state
+!    do 2d and 3d
+
 if (numdims > 2 ) then
    ! and now here potentially we have different results for different
    ! ensemble members.  the things that can vary are dimensioned by ens_size.
@@ -579,6 +634,22 @@ if (numdims > 2 ) then
    else ! get 3d special variables in another ways ( like QTY_PRESSURE )
       ! fill topvals and botvals somehow
       do icorner=1, 4
+         call get_values_from_nonstate_fields(state_handle,  ens_size, &
+                                    four_lons(icorner), four_lats(icorner), &
+                                    four_bot_levs(icorner, :), varid, botvals, status_array)
+         if (any(status_array /= 0)) then
+            istatus(:) = 5   ! cannot retrieve bottom values
+            return
+         endif
+
+         call get_values_from_nonstate_fields(state_handle,  ens_size, &
+                                    four_lons(icorner), four_lats(icorner), &
+                                    four_top_levs(icorner, :), varid, topvals, status_array)
+         if (any(status_array /= 0)) then
+            istatus(:) = 6   ! cannot retrieve top values
+            return
+         endif
+
          call vert_interp(ens_size, botvals, topvals, four_vert_fracts(icorner, :), &
                           quad_vals(icorner, :), status_array)
       
@@ -595,7 +666,6 @@ else ! 2 dimensional variable
          call get_values_from_varid(state_handle,  ens_size, &
                                     four_lons(icorner), four_lats(icorner), &
                                     level_one_array, varid, quad_vals(icorner,:), status_array)
-         
       enddo
    else ! special 2d case
       do icorner=1, 4
@@ -667,11 +737,10 @@ endif
 ! add any quantities that can be interpolated to this list if they
 ! are not in the state vector.
 select case (obs_qty)
-   case (QTY_SURFACE_ELEVATION)
+   case (QTY_SURFACE_ELEVATION, QTY_PRESSURE, QTY_GEOMETRIC_HEIGHT, QTY_VERTLEVEL)
       my_status = 0
    case default
       my_status = 13
-
 end select
 
 
@@ -2055,13 +2124,14 @@ do i=1,num
       case (VERTISHEIGHT)
          call convert_to_height(ens_handle, ens_size, locs(i), loc_indx(i))
       case (VERTISLEVEL)
-         call convert_to_pressure(ens_handle, ens_size, locs(i), loc_indx(i))
+         call convert_to_level(ens_handle, ens_size, locs(i), loc_indx(i))
       case (VERTISSCALEHEIGHT)
-         call convert_to_pressure(ens_handle, ens_size, locs(i), loc_indx(i))
+         call convert_to_scaleheight(ens_handle, ens_size, locs(i), loc_indx(i))
       case default
          print*, ' can not convert vert'
    end select
 enddo
+
 istatus = 0
 
 end subroutine convert_vertical_state
@@ -2074,18 +2144,22 @@ integer,             intent(in)    :: ens_size
 type(location_type), intent(inout) :: location
 integer(i8),         intent(in)    :: location_indx
 
+real(r8) :: pressure
+
 !>@todo FIXME move up to convert_vertical_state ?
-call state_level_to_pressure(ens_handle, ens_size, location, location_indx)
+call state_level_to_pressure(ens_handle, ens_size, location_indx, pressure)
+
+call set_vertical(location, pressure, VERTISPRESSURE)
 
 end subroutine  convert_to_pressure
 
 !--------------------------------------------------------------------
 
-subroutine state_level_to_pressure(ens_handle, ens_size, location, location_indx)
+subroutine state_level_to_pressure(ens_handle, ens_size, location_indx, pressure)
 type(ensemble_type), intent(in)    :: ens_handle
 integer,             intent(in)    :: ens_size
-type(location_type), intent(inout) :: location
 integer(i8),         intent(in)    :: location_indx
+real(r8),            intent(out)   :: pressure
 
 integer  :: iloc, jloc, vloc, my_status(ens_size)
 real(r8) :: height_array(grid_data%lev%nsize, ens_size)
@@ -2095,16 +2169,16 @@ real(r8) :: pressure_array(grid_data%lev%nsize)
 call get_model_variable_indices(location_indx, iloc, jloc, vloc)
 
 call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, grid_data%lev%nsize, &
-                       pressure_array, my_status)
+                         pressure_array, my_status)
 
-call set_vertical(location, pressure_array(vloc), VERTISPRESSURE)
+pressure = pressure_array(vloc)
 
 end subroutine state_level_to_pressure
 
 
 !--------------------------------------------------------------------
 
-subroutine  convert_to_height(ens_handle, ens_size, location, location_indx)
+subroutine convert_to_height(ens_handle, ens_size, location, location_indx)
 type(ensemble_type), intent(in)    :: ens_handle
 integer,             intent(in)    :: ens_size
 type(location_type), intent(inout) :: location
@@ -2125,8 +2199,7 @@ integer(i8),         intent(in)    :: location_indx
 
 
 integer  :: iloc, jloc, vloc, my_status(ens_size)
-real(r8) :: height_array(  grid_data%lev%nsize, ens_size)
-real(r8) :: pressure_array(grid_data%lev%nsize)
+real(r8) :: height_array(grid_data%lev%nsize, ens_size)
 
 ! build a height column and a pressure column and find the levels?
 call get_model_variable_indices(location_indx, iloc, jloc, vloc)
@@ -2141,6 +2214,83 @@ end subroutine state_level_to_height
 
 !--------------------------------------------------------------------
 
+subroutine  convert_to_scaleheight(ens_handle, ens_size, location, location_indx)
+type(ensemble_type), intent(in)    :: ens_handle
+integer,             intent(in)    :: ens_size
+type(location_type), intent(inout) :: location
+integer(i8),         intent(in)    :: location_indx
+
+call state_level_to_scaleheight(ens_handle, ens_size, location, location_indx)
+
+end subroutine  convert_to_scaleheight
+
+!--------------------------------------------------------------------
+
+subroutine  convert_to_level(ens_handle, ens_size, location, location_indx)
+type(ensemble_type), intent(in)    :: ens_handle
+integer,             intent(in)    :: ens_size
+type(location_type), intent(inout) :: location
+integer(i8),         intent(in)    :: location_indx
+
+call state_level_to_level(ens_handle, ens_size, location, location_indx)
+
+end subroutine  convert_to_level
+
+!--------------------------------------------------------------------
+
+subroutine state_level_to_level(ens_handle, ens_size, location, location_indx)
+type(ensemble_type), intent(in)    :: ens_handle
+integer,             intent(in)    :: ens_size
+type(location_type), intent(inout) :: location
+integer(i8),         intent(in)    :: location_indx
+
+integer  :: iloc, jloc, vloc, my_status(ens_size)
+real(r8) :: height_array(grid_data%lev%nsize, ens_size)
+real(r8) :: level(grid_data%lev%nsize)
+
+! build a height column and a level column and find the levels?
+call get_model_variable_indices(location_indx, iloc, jloc, vloc)
+
+call set_vertical(location, real(vloc,r8), VERTISLEVEL)
+
+end subroutine state_level_to_level
+
+
+
+!--------------------------------------------------------------------
+
+subroutine state_level_to_scaleheight(ens_handle, ens_size, location, location_indx)
+type(ensemble_type), intent(in)    :: ens_handle
+integer,             intent(in)    :: ens_size
+type(location_type), intent(inout) :: location
+integer(i8),         intent(in)    :: location_indx
+
+integer  :: iloc, jloc, vloc, level_one, status1, my_status(ens_size)
+real(r8) :: height_array(grid_data%lev%nsize, ens_size)
+real(r8) :: pressure_array(grid_data%lev%nsize)
+real(r8) :: surface_pressure(1), scaleheight
+
+level_one = 1
+
+! build a height column and a scaleheight column and find the levels?
+call get_model_variable_indices(location_indx, iloc, jloc, vloc)
+
+! get the surface pressure from the ens_handle
+call get_values_from_qty(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
+                         iloc, jloc, level_one, surface_pressure, status1)
+
+call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, grid_data%lev%nsize, &
+                         pressure_array, my_status)
+
+scaleheight = log(pressure_array(vloc)/surface_pressure(1))
+
+call set_vertical(location, scaleheight, VERTISSCALEHEIGHT)
+
+end subroutine state_level_to_scaleheight
+
+!--------------------------------------------------------------------
+!> this only works for ens_size = 1
+
 subroutine obs_height_to_pressure(ens_handle, ens_size, location, location_indx)
 type(ensemble_type), intent(in)    :: ens_handle
 integer,             intent(in)    :: ens_size
@@ -2150,7 +2300,7 @@ integer(i8),         intent(in)    :: location_indx
 
 integer  :: iloc, jloc, vloc, my_status(ens_size)
 real(r8) :: height_array(  grid_data%lev%nsize, ens_size)
-real(r8) :: pressure_array(grid_data%lev%nsize)
+real(r8) :: pressure_array(grid_data%lev%nsize, ens_size)
 
 ! build a height column and a pressure column and find the levels?
 call get_model_variable_indices(location_indx, iloc, jloc, vloc)
@@ -2161,7 +2311,7 @@ call cam_height_levels(ens_handle, ens_size, iloc, jloc, grid_data%lev%nsize, &
 call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, grid_data%lev%nsize, &
                        pressure_array, my_status)
 
-call set_vertical(location, pressure_array(vloc), VERTISPRESSURE)
+call set_vertical(location, pressure_array(vloc,1), VERTISPRESSURE)
 
 end subroutine obs_height_to_pressure
 
@@ -2202,18 +2352,160 @@ end subroutine cam_pressure_levels
 !--------------------------------------------------------------------
 
 subroutine convert_vertical_obs(ens_handle, num, locs, loc_qtys, loc_types, &
-                                which_vert, status)
+                                which_vert, my_status)
 
 type(ensemble_type), intent(in)    :: ens_handle
 integer,             intent(in)    :: num
 type(location_type), intent(inout) :: locs(:)
 integer,             intent(in)    :: loc_qtys(:), loc_types(:)
 integer,             intent(in)    :: which_vert
-integer,             intent(out)   :: status(:)
+integer,             intent(out)   :: my_status(:)
 
-status(:) = 0
+integer :: current_vert_type, i, ens_size
+
+ens_size = 1
+
+do i=1,num
+   current_vert_type = nint(query_location(locs(i)))
+
+   if ( current_vert_type == which_vert ) cycle
+
+   select case (which_vert)
+      case (VERTISPRESSURE)
+         call convert_obs_to_pressure(ens_handle, ens_size, locs(i))
+      case (VERTISHEIGHT)
+         call convert_obs_to_height(ens_handle, ens_size, locs(i))
+      case (VERTISLEVEL)
+         call convert_obs_to_level(ens_handle, ens_size, locs(i))
+      case (VERTISSCALEHEIGHT)
+         call convert_obs_to_scaleheight(ens_handle, ens_size, locs(i))
+      case default
+         print*, ' can not convert vert'
+   end select
+enddo
+
+my_status(:) = 0
 
 end subroutine convert_vertical_obs
+
+!--------------------------------------------------------------------
+
+subroutine convert_obs_to_pressure(ens_handle, ens_size, location)
+
+type(ensemble_type), intent(in)    :: ens_handle
+integer,             intent(in)    :: ens_size
+type(location_type), intent(inout) :: location
+
+call obs_vertical_to_pressure(ens_handle, ens_size, location)
+
+end subroutine  convert_obs_to_pressure
+
+!--------------------------------------------------------------------
+
+subroutine obs_vertical_to_pressure(ens_handle, ens_size, location)
+type(ensemble_type), intent(in)    :: ens_handle
+integer,             intent(in)    :: ens_size
+type(location_type), intent(inout) :: location
+
+integer  :: iloc, jloc, vloc, my_status(ens_size)
+real(r8) :: pressure_array(grid_data%lev%nsize)
+
+call model_interpolate(ens_handle, ens_size, location, QTY_PRESSURE, pressure_array(:), my_status(:))
+
+call set_vertical(location, pressure_array(1), VERTISPRESSURE)
+
+end subroutine obs_vertical_to_pressure
+
+!--------------------------------------------------------------------
+
+subroutine convert_obs_to_height(ens_handle, ens_size, location)
+
+type(ensemble_type), intent(in)    :: ens_handle
+integer,             intent(in)    :: ens_size
+type(location_type), intent(inout) :: location
+
+call obs_vertical_to_height(ens_handle, ens_size, location)
+
+end subroutine  convert_obs_to_height
+
+!--------------------------------------------------------------------
+
+subroutine obs_vertical_to_height(ens_handle, ens_size, location)
+type(ensemble_type), intent(in)    :: ens_handle
+integer,             intent(in)    :: ens_size
+type(location_type), intent(inout) :: location
+
+integer  :: iloc, jloc, vloc, my_status(ens_size)
+real(r8) :: height_array(ens_size)
+
+call model_interpolate(ens_handle, ens_size, location, QTY_GEOMETRIC_HEIGHT, height_array(:), my_status(:))
+
+call set_vertical(location, height_array(1), VERTISHEIGHT)
+
+end subroutine obs_vertical_to_height
+
+!--------------------------------------------------------------------
+
+subroutine convert_obs_to_level(ens_handle, ens_size, location)
+
+type(ensemble_type), intent(in)    :: ens_handle
+integer,             intent(in)    :: ens_size
+type(location_type), intent(inout) :: location
+
+call obs_vertical_to_level(ens_handle, ens_size, location)
+
+end subroutine  convert_obs_to_level
+
+!--------------------------------------------------------------------
+
+subroutine obs_vertical_to_level(ens_handle, ens_size, location)
+type(ensemble_type), intent(in)    :: ens_handle
+integer,             intent(in)    :: ens_size
+type(location_type), intent(inout) :: location
+
+integer  :: iloc, jloc, vloc, my_status(ens_size)
+real(r8) :: level_array(ens_size)
+
+call model_interpolate(ens_handle, ens_size, location, QTY_VERTLEVEL, level_array(:), my_status(:))
+
+call set_vertical(location, level_array(1), VERTISLEVEL)
+
+end subroutine obs_vertical_to_level
+
+!--------------------------------------------------------------------
+
+subroutine convert_obs_to_scaleheight(ens_handle, ens_size, location)
+
+type(ensemble_type), intent(in)    :: ens_handle
+integer,             intent(in)    :: ens_size
+type(location_type), intent(inout) :: location
+
+call obs_vertical_to_scaleheight(ens_handle, ens_size, location)
+
+end subroutine  convert_obs_to_scaleheight
+
+!--------------------------------------------------------------------
+
+subroutine obs_vertical_to_scaleheight(ens_handle, ens_size, location)
+type(ensemble_type), intent(in)    :: ens_handle
+integer,             intent(in)    :: ens_size
+type(location_type), intent(inout) :: location
+
+integer  :: iloc, jloc, vloc, my_status(ens_size)
+real(r8) :: pressure_array(ens_size)
+real(r8) :: surface_pressure_array(ens_size)
+real(r8) :: scaleheight
+
+call model_interpolate(ens_handle, ens_size, location, QTY_PRESSURE,         pressure_array(:),         my_status(:))
+call model_interpolate(ens_handle, ens_size, location, QTY_SURFACE_PRESSURE, surface_pressure_array(:), my_status(:))
+
+scaleheight = log(pressure_array(1)/surface_pressure_array(1))
+
+call set_vertical(location, scaleheight, VERTISSCALEHEIGHT)
+
+end subroutine obs_vertical_to_scaleheight
+
+!--------------------------------------------------------------------
 
 !===================================================================
 ! End of model_mod
