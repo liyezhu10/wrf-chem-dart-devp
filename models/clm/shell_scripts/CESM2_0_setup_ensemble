@@ -26,6 +26,7 @@
 setenv CASE           clm5_startup
 setenv resolution     f09_g16
 setenv compset        I2000Clm50BgcCrop
+setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
 setenv cesmtag        clm_dev_branch
 setenv num_instances  4
 
@@ -332,7 +333,7 @@ endif
 # DEBUG = TRUE implies turning on run and compile time debugging.
 # INFO_DBUG level of debug output, 0=minimum, 1=normal, 2=more, 3=too much.
 ./xmlchange DEBUG=FALSE
-./xmlchange DEBUGINFO_DBUG=FALSE
+./xmlchange INFO_DBUG=FALSE
 
 @ inst = 1
 while ( $inst <= $num_instances )
