@@ -24,6 +24,5 @@ models/utilities/default_model_mod.f90
 observations/forward_operators/obs_def_mod.f90
 observations/forward_operators/obs_def_utilities_mod.f90
 observations/obs_converters/EASE-Grid/EASE_utilities_mod.f90
-observations/obs_converters/EASE-Grid/HDF5_utilities_mod.f90
 observations/obs_converters/EASE-Grid/ascii_table_converter.f90
 observations/obs_converters/utilities/obs_utilities_mod.f90
