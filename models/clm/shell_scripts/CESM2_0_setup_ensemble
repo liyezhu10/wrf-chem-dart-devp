@@ -23,7 +23,7 @@
 # num_instances The number of ensemble members.
 # ==============================================================================
 
-setenv CASE           ys_test
+setenv CASE           clm5_startup
 setenv resolution     f09_g16
 setenv compset        I2000Clm50BgcCrop
 setenv cesmtag        clm_dev_branch
@@ -58,14 +58,30 @@ setenv project     P86850054
 setenv machine      yellowstone
 setenv cesmdata     /glade/p/cesm/cseg/inputdata
 setenv cesmroot     /glade/p/work/${USER}/CESM/$cesmtag
-setenv SCRATCH      /glade/scratch/${USER}
 setenv caseroot     /glade/p/work/${USER}/cases/$cesmtag/${CASE}
 setenv rundir       /glade/scratch/${USER}/$cesmtag/${CASE}/run
 setenv exeroot      /glade/scratch/${USER}/$cesmtag/${CASE}/bld
 setenv archdir      /glade/scratch/${USER}/$cesmtag/${CASE}/archive
 
-setenv dartroot     /glade/u/home/thoar/svn/DART/rma_trunk
+setenv dartroot     /glade/p/work/thoar/DART/cesm_clm
 setenv baseobsdir   /glade/p/image/Observations/land/SMAP
+
+# ==============================================================================
+# job settings:
+#
+# queue      can be changed during a series by changing the case.run
+#            Cheyenne has limited queues in the early months:
+#               capability (> 1152 NODES), regular (<= 1152 nodes), share (< 16 PROCS).
+# timewall   can be changed during a series by changing the case.run
+#
+# TJH: Advancing 30 instances for 6 hours and assimilating took
+#      less than 10 minutes on yellowstone using 1800 pes (120 nodes)
+# ==============================================================================
+
+setenv queue        regular
+setenv timewall     0:20
+setenv short_term_archiver off
+
 # ==============================================================================
 # standard commands:
 #
@@ -116,6 +132,7 @@ endif
 echo "removing old files from ${caseroot}"
 echo "removing old files from ${exeroot}"
 echo "removing old files from ${rundir}"
+
 ${REMOVE} ${caseroot}
 ${REMOVE} ${exeroot}
 ${REMOVE} ${rundir}
@@ -124,7 +141,6 @@ ${cesmroot}/cime/scripts/create_newcase  --res  ${resolution} \
                                          --compset ${compset} \
                                          --case ${caseroot} \
                                          --project ${project} \
-                                         --output-root $SCRATCH/$cesmtag \
                                          --run-unsupported \
                                          --ninst ${num_instances} || exit 1
 
@@ -141,6 +157,7 @@ ${COPY} $ThisFileName ${caseroot}/${ThisFileName}.original
 if (   -e ${dartroot}/models/clm/shell_scripts/CESM2_0_DART_config ) then
    sed -e "s#BOGUS_DART_ROOT_STRING#${dartroot}#" \
        -e "s#BOGUS_DART_OBS_STRING#${baseobsdir}#" \
+       -e "s#BOGUS_CASEROOT_STRING#${caseroot}#" \
           ${dartroot}/models/clm/shell_scripts/CESM2_0_DART_config \
            >! ${caseroot}/CESM_DART_config  || exit 20
    chmod 755  ${caseroot}/CESM_DART_config
@@ -161,9 +178,28 @@ foreach FILE ( *xml )
    endif
 end
 
-setenv MAX_TASKS_PER_NODE `./xmlquery MAX_TASKS_PER_NODE -value`
-@ ptile = $MAX_TASKS_PER_NODE / 2
-@ nthreads = 1
+# Get a bunch of environment variables.
+# If any of these are changed by xmlchange calls in this program,
+# then they must be explicty changed with setenv calls too.  
+#
+setenv TEST_MPI           `./xmlquery MPI_RUN_COMMAND    --value`
+setenv CLM_CONFIG_OPTS    `./xmlquery CLM_CONFIG_OPTS    --value`
+setenv COMPSET            `./xmlquery COMPSET            --value`
+setenv MAX_TASKS_PER_NODE `./xmlquery MAX_TASKS_PER_NODE --value`
+setenv COMP_ATM           `./xmlquery COMP_ATM           --value`
+setenv CIMEROOT           `./xmlquery CIMEROOT           --value`
+setenv CASEROOT           `./xmlquery CASEROOT           --value`
+setenv MAX_TASKS_PER_NODE `./xmlquery MAX_TASKS_PER_NODE --value`
+
+# Make sure the case is configured with a data ocean.
+
+if ( ${COMP_ATM} != datm ) then
+   echo " "
+   echo "ERROR: This setup script is not appropriate for active atmospheric compsets."
+   echo "ERROR: Please use the models/CESM/shell_scripts examples for that case."
+   echo " "
+   exit 40
+endif
 
 #> @TODO stream template files & multiple years. Do we need to specify
 #> year 1 and year N (performance penalty?). Can we change years on-the-fly
@@ -180,29 +216,22 @@ set stream_year_align = 1998
 set stream_year_first = 1998
 set stream_year_last  = 2010
 
-# Turn off short-term archiving for now
-./xmlchange DOUT_S=FALSE
-
-# Turn on archiving interm restart files
-./xmlchange DOUT_S_SAVE_INTERIM_RESTART_FILES=TRUE
-
+./xmlchange CALENDAR=GREGORIAN
 ./xmlchange EXEROOT="$exeroot"
-# ./xmlchange CESMSCRATCHROOT="${SCRATCH}/${cesmtag}"
+./xmlchange RUNDIR="$rundir"
+
 ./xmlchange STOP_OPTION=ndays
 ./xmlchange STOP_N=1
 ./xmlchange RESUBMIT=0
 
 ./xmlchange REST_OPTION=ndays
 ./xmlchange REST_N=1
-./xmlchange JOB_QUEUE=regular
-./xmlchange JOB_WALLCLOCK_TIME=00:20
 
 ./xmlchange DATM_MODE=CPLHISTForcing
 ./xmlchange DATM_CPLHIST_YR_START=$stream_year_first
 ./xmlchange DATM_CPLHIST_YR_END=$stream_year_last
 ./xmlchange DATM_CPLHIST_YR_ALIGN=$stream_year_align
 
-# TODO FIXME set the calendar to Gregorian ... defaults to noLeap
 
 #      --- In a hybrid run the model is initialized as a startup, BUT uses
 #      initialization datasets FROM A PREVIOUS case.  This
@@ -229,8 +258,8 @@ setenv startdate 1998-01-01
 ./xmlchange RUN_REFDATE=${refdate}
 ./xmlchange RUN_STARTDATE=${startdate}
 
-#netcdf
 ./xmlchange PIO_TYPENAME=netcdf
+
 #set start_year  = ${stream_year_first}
 #set start_month = "01"
 #set start_day =  "01"
@@ -240,6 +269,8 @@ setenv startdate 1998-01-01
 # turn it on by running CASEROOT/CESM_DART_config
 
 @ nodes_per_instance = 1
+@ ptile = $MAX_TASKS_PER_NODE / 2
+@ nthreads = 1
 
 @ atm_tasks = $ptile * $nodes_per_instance * $num_instances
 @ lnd_tasks = $ptile * $nodes_per_instance * $num_instances
@@ -261,11 +292,47 @@ setenv startdate 1998-01-01
 ./xmlchange ROOTPE_WAV=0,NTHRDS_WAV=$nthreads,NTASKS_WAV=$wav_tasks,NINST_WAV=1
 ./xmlchange ROOTPE_ESP=0,NTHRDS_ESP=$nthreads,NTASKS_ESP=$esp_tasks,NINST_ESP=1
 
-./xmlchange DATA_ASSIMILATION=FALSE
+# Before CESM1_5 we ran in DART mode without assimilating by editing case.run to choose
+# no_assimilate.csh or assimilate.csh.  Now the script to be run is determined by 
+# CESM's env_run.xml DATA_ASSIMILATION* variables.
+# Having DATA_ASSIMILATION = true. and specifying what script you want to run
+# is always correct.
+#
+# DATA_ASSIMILATION_CYCLES says how many cycles to run in each job before a RESUBMIT.
+# Set to 1 for the first cycle.
+# When the job (not each cycle) is finished the short_term archiver will run and, 
+# if RESUBMIT > 0, (re)submit a new case.run job.
+
+./xmlchange DATA_ASSIMILATION=TRUE
+./xmlchange DATA_ASSIMILATION_CYCLES=1
+
+# ./xmlchange DATA_ASSIMILATION_SCRIPT=${CASEROOT}/assimilate.csh
+./xmlchange DATA_ASSIMILATION_SCRIPT=${CASEROOT}/no_assimilate.csh
+
+
 ./case.setup || exit 9
 echo "case setup finished"
 
 # ====================================
+
+./xmlchange --subgroup case.run        --id JOB_QUEUE          --val ${queue}
+./xmlchange --subgroup case.run        --id JOB_WALLCLOCK_TIME --val ${timewall}
+./xmlchange --subgroup case.st_archive --id JOB_WALLCLOCK_TIME --val 1:00
+
+# These are archiving options that may be used.
+# You can turn the short/long term archivers on or off ({short,long}_term_archiver),
+# but these settings should be made in either event.
+
+if ($short_term_archiver == 'off') then
+   ./xmlchange DOUT_S=FALSE
+else
+   ./xmlchange DOUT_S=TRUE
+endif
+
+# DEBUG = TRUE implies turning on run and compile time debugging.
+# INFO_DBUG level of debug output, 0=minimum, 1=normal, 2=more, 3=too much.
+./xmlchange DEBUG=FALSE
+./xmlchange DEBUGINFO_DBUG=0ALSE
 
 @ inst = 1
 while ( $inst <= $num_instances )
