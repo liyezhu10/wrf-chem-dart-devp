@@ -127,7 +127,7 @@ setenv case                 clm1_2_1_hybrid
 setenv compset              I_2000_CN
 setenv resolution           f09_f09
 setenv cesmtag              cesm1_2_1
-setenv num_instances        80
+setenv num_instances        4
 
 # ==============================================================================
 # machines and directories:
@@ -254,7 +254,7 @@ setenv stop_n              24
 #      an assimilation step took about 10 minutes on yellowstone.
 # ==============================================================================
 
-setenv ACCOUNT      NIMGxxxx
+setenv ACCOUNT      P86850054
 setenv queue        economy
 setenv timewall     0:30
 

@@ -1,0 +1,390 @@
+#!/bin/csh
+#
+# 
+# provided by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# DART $Id: $
+
+#-----------------------------------------------------------------------
+# Purpose, describe things here, etc.
+#-----------------------------------------------------------------------
+
+# ==============================================================================
+# Options defining the experiment:
+#
+# CASE          The value of "CASE" will be used many ways; directory and file
+#               names both locally and (possibly) on the HPSS, and script names;
+#               so consider its length and information content.
+# compset       Defines the vertical resolution and physics packages to be used.
+#               Must be a standard CESM compset; see the CESM documentation.
+# resolution    Defines the horizontal resolution and dynamics; see CESM docs.
+# cesmtag       The version of the CESM source code to use when building the code.
+# num_instances The number of ensemble members.
+# ==============================================================================
+
+setenv CASE           ys_test
+setenv resolution     f09_g16
+setenv compset        I2000Clm50BgcCrop
+setenv cesmtag        clm_dev_branch
+setenv num_instances  4
+
+# ==============================================================================
+# Directories:
+# cesmdata        Location of some supporting CESM data files.
+# cesmroot        Location of the CESM code base.  This version of the script
+#                 only supports version cesm1_5_beta06c.
+# caseroot        Defines the CESM case directory - where the CESM+DART
+#                 configuration files will be stored.  This should probably not
+#                 be in scratch (on yellowstone, your 'work' partition is suggested).
+#                 This script will delete any existing caseroot, so this script,
+#                 and other useful things should be kept elsewhere.
+# rundir          Defines the location of the CESM run directory.  Will need large
+#                 amounts of disk space, generally on a scratch partition.
+# exeroot         Defines the location of the CESM executable directory , where the
+#                 CESM executables will be built.  Medium amount of space
+#                 needed, generally on a scratch partition.
+# archdir         Defines the location of the CESM short-term archive directories.
+#                 Requires large amounts of disk space, may be on a scratch partition if
+#                 the long-term archiver is invoked to move these files to permanent storage.
+#                 Files will remain here until the long-term archiver moves it to permanent storage.
+# dartroot        Location of the root of _your_ DART installation
+# baseobsdir      Part of the directory name containing the obs_seq.out files to be used in the 
+#                 assimilation. The year, month, and filename will be provided in assimilate.csh.
+#                 Will be inherited by CESM#_#_DART_config and inserted into assimilate.csh
+# ==============================================================================
+
+setenv project     P86850054
+setenv machine      yellowstone
+setenv cesmdata     /glade/p/cesm/cseg/inputdata
+setenv cesmroot     /glade/p/work/${USER}/CESM/$cesmtag
+setenv SCRATCH      /glade/scratch/${USER}
+setenv caseroot     /glade/p/work/${USER}/cases/$cesmtag/${CASE}
+setenv rundir       /glade/scratch/${USER}/$cesmtag/${CASE}/run
+setenv exeroot      /glade/scratch/${USER}/$cesmtag/${CASE}/bld
+setenv archdir      /glade/scratch/${USER}/$cesmtag/${CASE}/archive
+
+setenv dartroot     /glade/u/home/thoar/svn/DART/rma_trunk
+setenv baseobsdir   /glade/p/image/Observations/land/SMAP
+# ==============================================================================
+# standard commands:
+#
+# If you are running on a machine where the standard commands are not in the
+# expected location, add a case for them below.
+# ==============================================================================
+
+set nonomatch       # suppress "rm" warnings if wildcard does not match anything
+
+# The FORCE options are not optional.
+# The VERBOSE options are useful for debugging though
+# some systems don't like the -v option to any of the following
+switch ("`hostname`")
+   case ys*:
+         # NCAR "yellowstone"
+         set   MOVE = '/bin/mv -v'
+         set   COPY = '/bin/cp -v --preserve=timestamps'
+         set   LINK = '/bin/ln -vs'
+         set REMOVE = '/bin/rm -rf'
+      breaksw
+   case be*:
+         # NCAR "bluefire"
+         set   MOVE = '/usr/local/bin/mv -v'
+         set   COPY = '/usr/local/bin/cp -v --preserve=timestamps'
+         set   LINK = '/usr/local/bin/ln -vs'
+         set REMOVE = '/usr/local/bin/rm -rf'
+      breaksw
+   default:
+         # NERSC "hopper", TACC "stampede" ... many more
+         set   MOVE = 'mv -v'
+         set   COPY = 'cp -v --preserve=timestamps'
+         set   LINK = 'ln -vs'
+         set REMOVE = 'rm -rf'
+      breaksw
+endsw
+
+# FATAL idea to make caseroot the same dir as where this setup script is
+# since the build process removes all files in the caseroot dir before
+# populating it.  try to prevent shooting yourself in the foot.
+
+if ( ${caseroot} == `pwd` ) then
+   echo "ERROR: the setup script should not be located in the caseroot"
+   echo "directory, because all files in the caseroot dir will be removed"
+   echo "before creating the new case.  move the script to a safer place."
+   exit 11
+endif
+
+echo "removing old files from ${caseroot}"
+echo "removing old files from ${exeroot}"
+echo "removing old files from ${rundir}"
+${REMOVE} ${caseroot}
+${REMOVE} ${exeroot}
+${REMOVE} ${rundir}
+${cesmroot}/cime/scripts/create_newcase  --res  ${resolution} \
+                                         --mach ${machine} \
+                                         --compset ${compset} \
+                                         --case ${caseroot} \
+                                         --project ${project} \
+                                         --output-root $SCRATCH/$cesmtag \
+                                         --run-unsupported \
+                                         --ninst ${num_instances} || exit 1
+
+# ==============================================================================
+# Preserve a copy of this script as it was run.
+# Copy the DART setup script (CESM_DART_config) to CASEROOT.
+# Since we know the DARTROOT and BASEOBSDIR now, record them into 
+# CASEROOT/CESM_DART_config now.
+# ==============================================================================
+
+set ThisFileName = $0:t
+${COPY} $ThisFileName ${caseroot}/${ThisFileName}.original
+
+if (   -e ${dartroot}/models/clm/shell_scripts/CESM2_0_DART_config ) then
+   sed -e "s#BOGUS_DART_ROOT_STRING#${dartroot}#" \
+       -e "s#BOGUS_DART_OBS_STRING#${baseobsdir}#" \
+          ${dartroot}/models/clm/shell_scripts/CESM2_0_DART_config \
+           >! ${caseroot}/CESM_DART_config  || exit 20
+   chmod 755  ${caseroot}/CESM_DART_config
+else
+   echo "ERROR: the script to configure for data assimilation is not available."
+   echo "       ${dartroot}/models/clm/shell_scripts/CESM2_0_DART_config MUST exist."
+   exit 21
+endif
+
+# ==============================================================================
+cd ${caseroot}
+# ==============================================================================
+
+# Save a copy for debug purposes
+foreach FILE ( *xml )
+   if ( ! -e        ${FILE}.original ) then
+      ${COPY} $FILE ${FILE}.original
+   endif
+end
+
+setenv MAX_TASKS_PER_NODE `./xmlquery MAX_TASKS_PER_NODE -value`
+@ ptile = $MAX_TASKS_PER_NODE / 2
+@ nthreads = 1
+
+#> @TODO stream template files & multiple years. Do we need to specify
+#> year 1 and year N (performance penalty?). Can we change years on-the-fly
+#> during a run
+
+setenv resubmit            1
+setenv stop_option         nhours
+setenv stop_n              24
+
+@ clm_dtime = 1800
+@ h1nsteps = $stop_n * 3600 / $clm_dtime
+
+set stream_year_align = 1998
+set stream_year_first = 1998
+set stream_year_last  = 2010
+
+# Turn off short-term archiving for now
+./xmlchange DOUT_S=FALSE
+
+# Turn on archiving interm restart files
+./xmlchange DOUT_S_SAVE_INTERIM_RESTART_FILES=TRUE
+
+./xmlchange EXEROOT="$exeroot"
+# ./xmlchange CESMSCRATCHROOT="${SCRATCH}/${cesmtag}"
+./xmlchange STOP_OPTION=ndays
+./xmlchange STOP_N=1
+./xmlchange RESUBMIT=0
+
+./xmlchange REST_OPTION=ndays
+./xmlchange REST_N=1
+./xmlchange JOB_QUEUE=regular
+./xmlchange JOB_WALLCLOCK_TIME=00:20
+
+./xmlchange DATM_MODE=CPLHISTForcing
+./xmlchange DATM_CPLHIST_YR_START=$stream_year_first
+./xmlchange DATM_CPLHIST_YR_END=$stream_year_last
+./xmlchange DATM_CPLHIST_YR_ALIGN=$stream_year_align
+
+# TODO FIXME set the calendar to Gregorian ... defaults to noLeap
+
+#      --- In a hybrid run the model is initialized as a startup, BUT uses
+#      initialization datasets FROM A PREVIOUS case.  This
+#      is somewhat analogous to a branch run with relaxed restart
+#      constraints.  A hybrid run allows users to bring together combinations
+#      of initial/restart files from a previous case (specified by
+#      RUN_REFCASE) at a given model output date (specified by
+#      RUN_REFDATE). Unlike a branch run, the starting date of a hybrid run
+#      (specified by RUN_STARTDATE) can be modified relative to the reference
+#      case. In a hybrid run, the model does not continue in a bit-for-bit
+#      fashion with respect to the reference case. The resulting climate,
+#      however, should be continuous provided that no model source code or
+#      namelists are changed in the hybrid run.  In a hybrid initialization,
+#      the ocean model does not start until the second ocean coupling
+#      (normally the second day), and the coupler does a cold start without
+#      a restart file.</desc>
+
+setenv refcase cice5_sp2000_ens30
+setenv refdate 1998-01-01
+setenv startdate 1998-01-01
+
+./xmlchange RUN_TYPE=startup
+./xmlchange RUN_REFCASE=${refcase}
+./xmlchange RUN_REFDATE=${refdate}
+./xmlchange RUN_STARTDATE=${startdate}
+
+#netcdf
+./xmlchange PIO_TYPENAME=netcdf
+#set start_year  = ${stream_year_first}
+#set start_month = "01"
+#set start_day =  "01"
+./xmlchange RUN_STARTDATE=${startdate}
+
+# Data assimilation is turned off initially. After things are working, you can 
+# turn it on by running CASEROOT/CESM_DART_config
+
+@ nodes_per_instance = 1
+
+@ atm_tasks = $ptile * $nodes_per_instance * $num_instances
+@ lnd_tasks = $ptile * $nodes_per_instance * $num_instances
+@ ice_tasks = $ptile * $nodes_per_instance
+@ ocn_tasks = $ptile * $nodes_per_instance
+@ cpl_tasks = $ptile * $nodes_per_instance
+@ wav_tasks = $ptile * $nodes_per_instance
+@ esp_tasks = $ptile * $nodes_per_instance
+@ glc_tasks = $ptile * $nodes_per_instance
+@ rof_tasks = $ptile * $nodes_per_instance * $num_instances
+
+./xmlchange ROOTPE_CPL=0,NTHRDS_CPL=$nthreads,NTASKS_CPL=$cpl_tasks
+./xmlchange ROOTPE_ICE=0,NTHRDS_ICE=$nthreads,NTASKS_ICE=$ice_tasks,NINST_ICE=1
+./xmlchange ROOTPE_ATM=0,NTHRDS_ATM=$nthreads,NTASKS_ATM=$atm_tasks,NINST_ATM=$num_instances
+./xmlchange ROOTPE_OCN=0,NTHRDS_OCN=$nthreads,NTASKS_OCN=$ocn_tasks,NINST_OCN=1
+./xmlchange ROOTPE_LND=0,NTHRDS_LND=$nthreads,NTASKS_LND=$lnd_tasks,NINST_LND=$num_instances
+./xmlchange ROOTPE_GLC=0,NTHRDS_GLC=$nthreads,NTASKS_GLC=$glc_tasks,NINST_GLC=1
+./xmlchange ROOTPE_ROF=0,NTHRDS_ROF=$nthreads,NTASKS_ROF=$rof_tasks,NINST_ROF=$num_instances
+./xmlchange ROOTPE_WAV=0,NTHRDS_WAV=$nthreads,NTASKS_WAV=$wav_tasks,NINST_WAV=1
+./xmlchange ROOTPE_ESP=0,NTHRDS_ESP=$nthreads,NTASKS_ESP=$esp_tasks,NINST_ESP=1
+
+./xmlchange DATA_ASSIMILATION=FALSE
+./case.setup || exit 9
+echo "case setup finished"
+
+# ====================================
+
+@ inst = 1
+while ( $inst <= $num_instances )
+
+    set inst_string = `printf %04d $inst`
+
+    # ===========================================================================
+    set fname = "user_nl_datm"_${inst_string}
+    # ===========================================================================
+    # DATM namelist
+
+    echo "streams  = 'datm.streams.txt.CPLHISTForcing.Solar_$inst_string        $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
+    echo "           'datm.streams.txt.CPLHISTForcing.nonSolarFlux_$inst_string $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
+    echo "           'datm.streams.txt.CPLHISTForcing.State1hr_$inst_string     $stream_year_align $stream_year_first $stream_year_last'"  >> ${fname}
+    echo "           'datm.streams.txt.CPLHISTForcing.State3hr_$inst_string     $stream_year_align $stream_year_first $stream_year_last'"  >> ${fname}
+    echo "           'datm.streams.txt.presaero.clim_2000_$inst_string 1 1 1'"  >> ${fname}
+    echo "vectors  = 'u:v' "     >> ${fname}
+    echo "mapmask  = 'nomask', " >> ${fname}
+    echo "           'nomask', " >> ${fname}
+    echo "           'nomask', " >> ${fname}
+    echo "           'nomask'  " >> ${fname}
+    echo "tintalgo = 'coszen', " >> ${fname}
+    echo "           'nearest'," >> ${fname}
+    echo "           'linear', " >> ${fname}
+    echo "           'linear'  " >> ${fname}
+
+    # Create stream files for each ensemble member
+    ${COPY} ${dartroot}/models/clm/shell_scripts/datm.streams.txt.CPLHISTForcing.Solar_complete \
+                                             user_datm.streams.txt.CPLHISTForcing.Solar_${inst_string}
+    ${COPY} ${dartroot}/models/clm/shell_scripts/datm.streams.txt.CPLHISTForcing.nonSolarFlux_complete \
+                                             user_datm.streams.txt.CPLHISTForcing.nonSolarFlux_${inst_string}
+    ${COPY} ${dartroot}/models/clm/shell_scripts/datm.streams.txt.CPLHISTForcing.State1hr_complete \
+                                             user_datm.streams.txt.CPLHISTForcing.State1hr_${inst_string}
+    ${COPY} ${dartroot}/models/clm/shell_scripts/datm.streams.txt.CPLHISTForcing.State3hr_complete \
+                                             user_datm.streams.txt.CPLHISTForcing.State3hr_${inst_string}
+
+    foreach FNAME ( user_datm.streams.txt*_${inst_string} )
+       echo "modifying $FNAME"
+       sed s/NINST/${inst_string}/g $FNAME >! temp
+       sed s/RUNYEAR/${stream_year_first}/g temp >! $FNAME
+    end
+    ${REMOVE} temp
+    
+   # ===========================================================================
+   set fname = "user_nl_clm"_${inst_string}
+   # ===========================================================================
+
+   echo "dtime             = $clm_dtime"              >> ${fname}
+   echo "hist_empty_htapes = .false."                 >> ${fname}
+   echo "hist_fincl1 = 'NEP'"                         >> ${fname}
+   echo "hist_fincl2 = 'NEP','FSH','EFLX_LH_TOT_R'"   >> ${fname}
+   echo "hist_fincl3 = 'TV','TLAI','PBOT','TBOT','TSA','RH2M_R','SNOWDP'" >> ${fname}
+   echo "hist_nhtfrq = -$stop_n,1,-$stop_n"           >> ${fname}
+   echo "hist_mfilt  = 1,$h1nsteps,1"                 >> ${fname}
+   echo "hist_avgflag_pertape = 'A','A','I'"          >> ${fname}
+   echo "hist_dov2xy = .true., .true., .false."       >> ${fname}
+   echo "hist_type1d_pertape = ' ', ' ', ' '"         >> ${fname}
+
+    @ inst = $inst + 1
+end
+
+./preview_namelists
+
+
+#===============================================================================
+# Copy modified CICE codes into SourceMods
+# ==============================================================================
+
+#${COPY} $dartroot/models/cice/SourceMods/ice_restart_driver.F90 $caseroot/SourceMods/src.cice/
+#${COPY} /glade/p/work/yfzhang/cesmcases/cesm2_0_beta05/seq_rest_mod.F90 $caseroot/SourceMods/src.drv/
+#${COPY} /glade/scratch/yfzhang/inputdata_cam/ice/cice/$startdate/* $rundir/
+
+# ./case.build || exit 10
+
+# ==============================================================================
+# What to do next
+# ==============================================================================
+
+cat << EndOfText >! CESM_instructions.txt
+
+-------------------------------------------------------------------------
+Time to check the case.
+
+1) cd ${rundir}
+   and check the compatibility between the namelists/pointer files
+   and the files that were staged.
+
+2) cd ${caseroot}
+
+3) check things
+
+4) run a single day, verify that it works without assimilation
+   ./case.submit
+
+5) IF NEEDED, compile all the DART executables by
+   cd  ${dartroot}/models/clm/work
+   ./quickbuild.csh -mpi
+
+5) configure the case to be able to DART by executing
+   cd ${caseroot}
+   ./CESM_DART_config
+
+6) Make sure the DART-related parts are appropriate. 
+   Check the input.nml
+   Check the assimilate.csh
+   ./case.submit
+
+7) If that works 
+   ./xmlchange CONTINUE_RUN=TRUE
+   that sort of thing
+-------------------------------------------------------------------------
+
+EndOfText
+
+cat CESM_instructions.txt
+
+exit 0
+
+# <next few lines under version control, do not edit>
+# $URL: https://proxy.subversion.ucar.edu/DAReS/DART/branches/rma_trunk/models/cice/shell_scripts/CESM1_5_setup_ensemble $
+# $Revision: 10422 $
+# $Date: 2016-06-28 16:22:06 -0600 (Tue, 28 Jun 2016) $
