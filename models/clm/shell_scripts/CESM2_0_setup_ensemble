@@ -332,7 +332,7 @@ endif
 # DEBUG = TRUE implies turning on run and compile time debugging.
 # INFO_DBUG level of debug output, 0=minimum, 1=normal, 2=more, 3=too much.
 ./xmlchange DEBUG=FALSE
-./xmlchange DEBUGINFO_DBUG=0ALSE
+./xmlchange DEBUGINFO_DBUG=FALSE
 
 @ inst = 1
 while ( $inst <= $num_instances )
