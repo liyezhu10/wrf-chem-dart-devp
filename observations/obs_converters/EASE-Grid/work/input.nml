@@ -32,6 +32,13 @@
    verbose         = .TRUE.
    /
 
+&ascii_table_converter_nml
+   input_file_list = 'file_list.txt'
+   obs_out_file    = 'obs_seq.out'
+   maxgoodqc       = 2
+   verbose         = .TRUE.
+   /
+
 # This is appropriate for a days worth of flux tower observations
 # the obs in the file end 1 second before the time in the name.
 # 2004-01-01-00000 is DART 147192 00000

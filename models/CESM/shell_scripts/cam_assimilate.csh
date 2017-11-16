@@ -153,33 +153,9 @@ if ($?TASKS_PER_NODE) then
 endif
 
 #=========================================================================
-# Block 2: Stage the files needed for SAMPLING ERROR CORRECTION
-#
-# The sampling error correction is a lookup table.
-# The tables were originally in the DART distribution, but should
-# have been staged to $CASEROOT at setup time.
-# Each ensemble size has its own (static) file.
-# It is only needed if
-# input.nml:&assim_tools_nml:sampling_error_correction = .true.,
+# Block 2: The lookup table for SAMPLING ERROR CORRECTION was put in the
+# RUNDIR by the DART_config script - nothing to do now.
 #=========================================================================
-
-set  MYSTRING = `grep sampling_error_correction input.nml`
-set  MYSTRING = `echo $MYSTRING | sed -e "s#[=,'\.]# #g"`
-set  MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
-set SECSTRING = `echo $MYSTRING[2] | tr '[:upper:]' '[:lower:]'`
-
-if ( $SECSTRING == true ) then
-   set SAMP_ERR_FILE = ${CASEROOT}/final_full.${ensemble_size}
-   if (  -e   ${SAMP_ERR_FILE} ) then
-      ${COPY} ${SAMP_ERR_FILE} .
-   else
-      echo "ERROR: no sampling error correction file for this ensemble size."
-      echo "ERROR: looking for ${SAMP_ERR_FILE}"
-      exit -3
-   endif
-else
-   echo "Sampling Error Correction not requested for this assimilation."
-endif
 
 #=========================================================================
 # Block 3: DART INFLATION

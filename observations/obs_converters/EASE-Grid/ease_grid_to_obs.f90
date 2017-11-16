@@ -6,15 +6,31 @@
 
 program ease_grid_to_obs
 
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!
+!=======================================================================
 !   program to convert a series of HDF5 files
 !
 !   created 13 Nov 2017   Tim Hoar NCAR/IMAGe
 !
 ! https://nsidc.org/data/ease/tools
+! https://nsidc.org/data/SPL2SMP/versions/4
 !
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! "This Level-2 (L2) soil moisture product provides estimates of global land 
+! surface conditions retrieved by the Soil Moisture Active Passive (SMAP) 
+! passive microwave radiometer during 6:00 a.m. descending and 6:00 p.m. 
+! ascending half-orbit passes. SMAP L-band brightness temperatures are used  to
+! derive soil moisture data, which are then resampled to an Earth-fixed, global,
+! cylindrical 36 km Equal-Area Scalable Earth Grid, Version 2.0 (EASE-Grid 2.0).
+!
+! Data Set ID: SPL2SMP
+! SMAP L2 Radiometer Half-Orbit 36 km EASE-Grid Soil Moisture, Version 4
+!
+! "Surface soil moisture (0-5 cm) in m3/m3 derived from brightness temperatures
+! (TBs) is output on a fixed global 36 km EASE-Grid 2.0. Also included are 
+! brightness temperatures in kelvin representing the weighted average of 
+! Level-1B brightness temperatures whose boresights fall within a 36 km 
+! EASE-Grid 2.0 cell."
+!
+!=======================================================================
 
 ! /glade/u/home/shimj/DART/observations/obs_converters/EASE-Grid/SMAP_retrival.log
 
@@ -42,10 +58,12 @@ use       location_mod, only : VERTISHEIGHT, set_location
 use  obs_utilities_mod, only : add_obs_to_seq, create_3d_obs
 
 use  netcdf_utilities_mod, only : nc_get_variable, nc_check
+use    HDF5_utilities_mod, only : H5_CRTDAT, H5_RDWT, h5_get_rank, h5_get_dimensions
 
 use       obs_kind_mod, only : SOIL_MOISTURE
 
 use netcdf
+use HDF5
 
 implicit none
 
@@ -55,7 +73,7 @@ character(len=*), parameter :: source   = &
 character(len=*), parameter :: revision = "$Revision$"
 character(len=*), parameter :: revdate  = "$Date$"
 
-!----------------------------------------------------------------
+!-----------------------------------------------------------------------
 ! Namelist input with default values
 
 character(len=256) :: input_file_list = 'file_list.txt'
@@ -65,39 +83,27 @@ logical            :: verbose = .false.
 namelist /ease_grid_to_obs_nml/ &
          input_file_list, obs_out_file, verbose
 
-!----------------------------------------------------------------
+!-----------------------------------------------------------------------
 
 ! MAX_NUM_INPUT_FILES : max number of input files to be processed
 integer, parameter :: MAX_NUM_INPUT_FILES = 500
 integer            :: num_input_files = 0  ! actual number of files
-integer            :: ifile, istatus
+integer            :: ifile
 character(len=256), dimension(MAX_NUM_INPUT_FILES) :: filename_seq_list
 character(len=256) :: filename
 
-! information gleaned from filenaming convention
-integer          :: iyear, idoy
-character(len=2) :: gridarea
-character(len=1) :: passdir
-character(len=1) :: polarization
-logical          :: is_time_file
-real(r8)         :: footprint
-real             :: frequency   ! real type to match EASE type
-
-character(len=256) :: input_line
 character(len=512) :: string1, string2, string3
 
-integer :: oday, osec, iocode, iunit, otype
-integer :: year, month, day, hour, minute, second
+integer :: oday, osec, iocode, iunit
 integer :: num_copies, num_qc, max_obs
-integer :: landcode = 0  ! FIXME ... totally bogus for now
            
-logical  :: first_obs
+logical :: first_obs
 
 ! The EASE grid 
 real(r8),        allocatable, dimension(:) :: longitude
 real(r8),        allocatable, dimension(:) :: latitude
 real(r8),        allocatable, dimension(:) :: observation
-real(r8),        allocatable, dimension(:) :: soil_moisture_error
+real(r8),        allocatable, dimension(:) :: soil_moisture_error_std
 type(time_type), allocatable, dimension(:) :: obs_time
 integer,         allocatable, dimension(:) :: retrieval_flag
 
@@ -105,20 +111,26 @@ integer                      :: dimids(NF90_MAX_DIMS)
 integer                      :: dimlens(NF90_MAX_DIMS)
 character(len=NF90_MAX_NAME) :: dimnames(NF90_MAX_DIMS)
 
-integer :: key, icount, ncid, VarID, io
+integer :: icount, ncid, VarID, io
 integer :: counts = 20000
 
 character(len=NF90_MAX_NAME) :: varname
 integer  :: xtype, ndims, nAtts
 
-real(r8) :: temp, terr, qc
+real(r8) :: qc
 real(r8) :: rlat, rlon, depth_cm, depth_m
 
 type(obs_sequence_type) :: obs_seq
 type(obs_type)          :: obs, prev_obs
-type(time_type)         :: cal_day0, observation_time, prev_time
+type(time_type)         :: prev_time
 
-!----------------------------------------------------------------
+integer(HID_T) :: file_id, dset_id, dspace_id
+integer        :: hdferr
+
+integer(HSIZE_T), allocatable :: dims(:)
+real, allocatable :: data_hdf5(:)
+
+!-----------------------------------------------------------------------
 ! start of executable code
 
 call initialize_utilities('ease_grid_to_obs')
@@ -136,6 +148,54 @@ if (do_nml_file()) write(nmlfileunit, nml=ease_grid_to_obs_nml)
 if (do_nml_term()) write(     *     , nml=ease_grid_to_obs_nml)
 
 num_input_files = Check_Input_Files(input_file_list, filename_seq_list) 
+
+filename = filename_seq_list(1)
+
+! HDF5 exploration block
+
+! initialize the Fortran interface
+call h5open_f(hdferr)
+write(*,*)'h5open_f error status is ',hdferr
+
+! open the file
+call h5fopen_f(filename, H5F_ACC_RDONLY_F, file_id, hdferr)
+write(*,*)'h5fopen_f error status is ',hdferr
+
+! open the dataset
+call h5dopen_f(file_id,'/Soil_Moisture_Retrieval_Data/longitude',dset_id, hdferr)
+write(*,*)'h5dopen_f error status is ',hdferr
+
+! open the dataspace
+call h5dget_space_f(dset_id, dspace_id, hdferr)
+write(*,*)'h5dget_space_f error status is ',hdferr
+
+! get the rank of the dataset
+ndims = h5_get_rank(dspace_id, hdferr)
+
+write(*,*)'main: ndims is ',ndims
+
+allocate(dims(ndims))
+
+! fill the dims array with the dimensions
+call h5_get_dimensions(dspace_id, dims, hdferr)
+
+write(*,*)'main: dims is ',dims
+
+!allocate input data to the dimensions
+allocate(data_hdf5(dims(1)))
+
+! read the data
+call h5dread_f(dset_id, H5T_NATIVE_REAL, data_hdf5, dims, hdferr)
+
+write(*,*)data_hdf5(1:10)
+
+deallocate(data_hdf5, dims)
+
+stop
+
+
+
+
 
 ! each observation in this series will have a single observation value 
 ! and a quality control flag.  the max possible number of obs needs to
@@ -164,7 +224,7 @@ call init_obs_sequence(obs_seq, num_copies, num_qc, max_obs)
 call set_copy_meta_data(obs_seq, 1, 'observation')
 call   set_qc_meta_data(obs_seq, 1,     'Data QC')
 
-! --------------------------------------------------------------------------------
+!-----------------------------------------------------------------------
 ! Loop over all the input data files.
 
 FileLoop: do ifile = 1,num_input_files
@@ -179,12 +239,14 @@ FileLoop: do ifile = 1,num_input_files
    call nc_check(io, 'ease_grid_to_dart', context='nf90_open',filename=filename)
 
    ! Get dimension information from the longitude variable
-
-   io = nf90_inq_varid(ncid,'longitude',VarID)
-   call nc_check(io, 'ease_grid_to_dart', context='inq_varid longitude', filename=filename)
+   
+   varname = 'longitude'
+   varname = '/Soil_Moisture_Retrieval_Data/longitude'
+   io = nf90_inq_varid(ncid,varname,VarID)
+   call nc_check(io, 'ease_grid_to_dart', context='inq_varid "'//trim(varname)//'"', filename=filename)
 
    io = nf90_inquire_variable(ncid, VarID, varname, xtype, ndims, dimids, nAtts)
-   call nc_check(io, 'ease_grid_to_dart', context='inquire_variable longitude', filename=filename)
+   call nc_check(io, 'ease_grid_to_dart', context='inquire_variable "'//trim(varname)//'"', filename=filename)
 
    !>@todo FIXME check to make sure there is only 1 dimension
 
@@ -195,15 +257,15 @@ FileLoop: do ifile = 1,num_input_files
 
    allocate(          longitude(counts))
    allocate(           latitude(counts))
-   allocate(      observation(counts)) 
-   allocate(soil_moisture_error(counts))  
+   allocate(        observation(counts)) 
+   allocate(soil_moisture_error_std(counts))  
    allocate(           obs_time(counts))  
    allocate(     retrieval_flag(counts))  
 
    call nc_get_variable(ncid, 'longitude', longitude, 'ease_grid_to_dart', filename)
    call nc_get_variable(ncid, 'latitude', latitude, 'ease_grid_to_dart', filename)
    call nc_get_variable(ncid, 'soil_moisture', observation, 'ease_grid_to_dart', filename)
-   call nc_get_variable(ncid, 'soil_moisture_error', soil_moisture_error, 'ease_grid_to_dart', filename)
+   call nc_get_variable(ncid, 'soil_moisture_error', soil_moisture_error_std, 'ease_grid_to_dart', filename)
    call nc_get_variable(ncid, 'retrieval_qual_flag', retrieval_flag, 'ease_grid_to_dart', filename)
    call read_observation_times(ncid, filename)
 
@@ -218,14 +280,14 @@ FileLoop: do ifile = 1,num_input_files
       if ( rlat >  90.0_r8 .or. rlat <  -90.0_r8 ) cycle COUNTLOOP
       if ( rlon > 360.0_r8 .or. rlon <    0.0_r8 ) cycle COUNTLOOP
 
-      depth_cm = 5
+      depth_cm = 5.0_r8/2.0_r8
       depth_m = real(depth_cm,r8)/100.0_r8
 
       call get_time(obs_time(icount), osec, oday)
       qc = retrieval_flag(icount)
 
       call create_3d_obs(rlat, rlon, depth_m/1000.0_r8, VERTISHEIGHT, observation(icount), &
-                        SOIL_MOISTURE, soil_moisture_error(icount), oday, osec, qc, obs)
+                        SOIL_MOISTURE, soil_moisture_error_std(icount), oday, osec, qc, obs)
 
       call add_obs_to_seq(obs_seq, obs, obs_time(icount), prev_obs, prev_time, first_obs)
 
@@ -234,7 +296,7 @@ FileLoop: do ifile = 1,num_input_files
    deallocate(longitude)
    deallocate(latitude)
    deallocate(observation)
-   deallocate(soil_moisture_error)
+   deallocate(soil_moisture_error_std)
    deallocate(obs_time)
    deallocate(retrieval_flag)
 
@@ -260,6 +322,7 @@ character(len=*), intent(in)  :: input_list      !> filename containing list
 character(len=*), intent(out) :: output_list(:)
 integer                       :: Check_Input_Files
 
+character(len=256) :: filename
 character(len=256) :: ladjusted
 integer :: iunit, iline, nlines
 
@@ -282,7 +345,7 @@ Check_Input_Files = 0
 FileNameLoop: do iline = 1,nlines ! a lot of lines 
 
    ! read in entire text line into a buffer
-   read(iunit, "(A)", iostat=iocode) input_line
+   read(iunit, "(A)", iostat=iocode) filename
    if (iocode > 0) then 
       write(string1,*) 'While reading ', trim(input_list)
       write(string2,*) 'got read code (iostat) = ', iocode,' around line ',iline
@@ -294,13 +357,13 @@ FileNameLoop: do iline = 1,nlines ! a lot of lines
    else
       Check_Input_Files = Check_Input_Files + 1
 
-      ladjusted = adjustl(input_line)
+      ladjusted = adjustl(filename)
       if ( file_exist(trim(ladjusted)) ) then
-         output_list(Check_Input_Files) = trim(ladjusted)
+         output_list(Check_Input_Files) = ladjusted
       else
-         write(string1,*)'file does not exist.'
-         call error_handler(E_ERR,routine,&
-          string1,source,revision,revdate,text2=ladjusted)
+         write(string1,*)'following file does not exist:'
+         call error_handler(E_ERR, routine, string1, &
+             source, revision, revdate, text2='"'//trim(ladjusted)//'"')
       endif
    endif
 
@@ -309,6 +372,9 @@ enddo FileNameLoop
 end function Check_Input_Files
 
 
+!-----------------------------------------------------------------------
+!> read the observation time array and convert to an array of DART
+!> time_type objects
 
 subroutine read_observation_times(ncid,filename)
 

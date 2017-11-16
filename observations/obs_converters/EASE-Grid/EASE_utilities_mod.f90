@@ -378,7 +378,6 @@ endif
 
 return
 
-100 format (6x,a2,i4,i3,a1,5x)
 200 format (6x,a2,i4,i3,a1,5x,i2,a1)
 
 ! ID2r3-AMSRE-NL2011001D.v03.89H
@@ -474,7 +473,7 @@ integer                              :: read_ease_TIM
 integer, parameter :: i2 = SELECTED_INT_KIND(4)
 
 integer(i2), allocatable, dimension(:,:) :: datmat
-integer :: irow, icol, nrows, ncols, iocode
+integer :: nrows, ncols, iocode
 
 nrows = size(time_matrix,1)
 ncols = size(time_matrix,2)

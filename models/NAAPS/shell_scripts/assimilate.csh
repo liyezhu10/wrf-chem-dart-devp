@@ -69,19 +69,18 @@ set ensemble_size = $FILE[3]
 
 #-------------------------------------------------------------------------
 # This is the file for the sampling error correction.
-# Each ensemble size has its own file.
 # It is static - it does not need to be archived, etc.
-# It is only needed if 
+# It is only used if 
 # input.nml:&assim_tools_nml:sampling_error_correction = .true.,
 #-------------------------------------------------------------------------
 
-set SAMP_ERR_FILE = ${DARTDIR}/system_simulation/final_full.${ensemble_size}
+set SAMP_ERR_FILE = ${DARTDIR}/assimilation_code/programs/gen_sampling_err_table/work/sampling_error_correction_table.nc
 
-if ( -e ${SAMP_ERR_FILE}/ ) then
+if ( -e ${SAMP_ERR_FILE} ) then
    ${COPY} ${SAMP_ERR_FILE} .
 else
-   echo "WARNING: no sampling error correction file for this ensemble size."
-   echo "warning: looking for system_simulation/final_full.${ensemble_size}"
+   echo "WARNING: no sampling error correction file."
+   echo "warning: looking for ${SAMP_ERR_FILE}"
 endif
 
 #-------------------------------------------------------------------------

@@ -48,16 +48,12 @@ $COPY $DART_LMDZ5/shell_scripts/advance_model.csh .
 $COPY $DART_LMDZ5/shell_scripts/run_lmdz.csh .
 
 # Determine the number of ensemble members from input.nml,
- set ENSEMBLESTRING = `grep -A 42 filter_nml input.nml | grep ens_size`
- set ensemble_size  = `echo $ENSEMBLESTRING[3] | sed -e "s#,##"`
- set num_ens        = ${ensemble_size}
- echo "There are ${num_ens} ensemble members."
-# Copy final_full.$num_ens for sampling error corrections
+set ENSEMBLESTRING = `grep -A 42 filter_nml input.nml | grep ens_size`
+set ensemble_size  = `echo $ENSEMBLESTRING[3] | sed -e "s#,##"`
+set num_ens        = ${ensemble_size}
+echo "There are ${num_ens} ensemble members."
  
-if ( $sampling_error_correction == 1) then
-   $COPY $DART_LMDZ5/../../system_simulation/final_full_precomputed_tables/final_full.$num_ens .
-endif
- 
+$COPY $DART_LMDZ5/../../assimilation_code/programs/gen_sampling_err_table/work/sampling_error_correction_table.nc .
 
 #--------copy start_#.nc,startphy_#.nc  & filter_ic_old.### from storage and rename -
 set n = 1

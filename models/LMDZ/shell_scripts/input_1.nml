@@ -66,8 +66,9 @@
    print_every_nth_obs             = 3000,
    adaptive_localization_threshold = -1/
 
-! sampling_error_correction requires an input file final_full.$ens_size
-! get one from DART/system_simulation/final_full_precomputed_tables
+! sampling_error_correction requires a sampling_error_correction_table.nc
+! get one from 
+! <DART>/assimilation_code/programs/gen_sampling_err_table/work
 ! or use the code there to make one for your ensemble size if one does
 ! not already exist.
 

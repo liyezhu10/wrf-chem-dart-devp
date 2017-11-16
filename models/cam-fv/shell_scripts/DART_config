@@ -211,6 +211,9 @@ fi
 
 ${COPY} ${DARTROOT}/models/cam-fv/work/filter            ${EXEROOT}
 ${COPY} ${DARTROOT}/models/cam-fv/work/perfect_model_obs ${EXEROOT}
+${COPY} ${DARTROOT}/assimilation_code/programs/gen_sampling_err_table/work/sampling_error_correction_table.nc ${RUNDIR}
+
+# The file for SAMPLING ERROR CORRECTION  is small and may be needed. Just stage it.
 
 exit 0
 
@@ -272,56 +275,7 @@ chmod 0755 update_dart_namelists
 
 ./update_dart_namelists || exit -9
 
-#=========================================================================
-# Stage the files needed for SAMPLING ERROR CORRECTION - even if not
-# initially requested. The file is static, small, and may be needed later.
-#
-# If it is requested and is not present ... it is an error.
-#
-# The sampling error correction is a lookup table.  Each ensemble size
-# has its own (static) file.  It is only needed if any
-# input.nml:&assim_tools_nml:sampling_error_correction = .true.,
-#=========================================================================
 
-if ( $num_instances > 1 ) then
-   set SAMP_ERR_FILE = ${DARTROOT}/system_simulation/final_full_precomputed_tables/final_full.${num_instances}
-# RMA eventually use single comprehensive file:
-#   set SAMP_ERR_FILE = ${DARTROOT}/system_simulation/sampling_error_correction_table.nc
-
-   if (  -e   ${SAMP_ERR_FILE} ) then
-      ${COPY} ${SAMP_ERR_FILE} .
-   else
-      echo ""
-      echo "WARNING: no final_full.xx file found for an ensemble size of ${num_instances}."
-      echo "         This file is NOT needed unless you want to turn on the"
-      echo "         sampling_error_correction feature in any of the models."
-      echo "         To use it, in addition to setting the namelist to .true., cd to:"
-      echo "         ${DARTROOT}/system_simulation"
-      echo "         and create a final_full.${num_instances} file"
-      echo "         one can be generated for any ensemble size; see docs."
-      echo "         Copy it into ${CASEROOT} before running."
-      echo ""
-   endif
-   
-   foreach N ( input.nml )
-      set  MYSTRING = `grep sampling_error_correction $N`
-      set  MYSTRING = `echo $MYSTRING | sed -e "s#[=,'\.]# #g"`
-      set  MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
-      set SECSTRING = `echo $MYSTRING[2] | tr '[:upper:]' '[:lower:]'`
-   
-      if ( ${SECSTRING} == true ) then
-         if ( ! -e  ${SAMP_ERR_FILE} ) then
-            echo "ERROR: no sampling error correction file for this ensemble size."
-            echo "ERROR: looking for ${SAMP_ERR_FILE} in"
-            echo "ERROR: ${DARTROOT}/system_simulation/final_full_precomputed_tables"
-            echo "ERROR: one can be generated for any ensemble size; see docs."
-            exit -3
-         endif
-      endif
-   end
-else
-   # sampling error correction not used for perfect_model_obs
-endif
 
 # ==============================================================================
 # What to do next

@@ -157,7 +157,7 @@ setenv caseroot     /glade/p/work/${USER}/cases/${case}
 setenv rundir       /glade/scratch/${USER}/${case}/run
 setenv exeroot      /glade/scratch/${USER}/${case}/bld
 setenv archdir      /glade/scratch/${USER}/archive/${case}
-setenv dartroot     /glade/u/home/${USER}/svn/DART/trunk
+setenv dartroot     /glade/u/home/${USER}/svn/DART/rma_trunk
 
 # ==============================================================================
 # configure settings:
@@ -405,31 +405,15 @@ foreach FILE ( *xml )
    endif
 end
 
-if ($num_instances <= 4) then
-
-   # This is only for the purpose of debugging the code.
-   @ atm_tasks = $ptile * $num_instances * 4
-   @ lnd_tasks = $ptile * $num_instances * 4
-   @ ice_tasks = $ptile * $num_instances
-   @ ocn_tasks = $ptile * $num_instances
-   @ cpl_tasks = $ptile * $num_instances
-   @ glc_tasks = $ptile * $num_instances
-   @ rof_tasks = $ptile * $num_instances * 4
-   @ wav_tasks = $ptile * $num_instances
-
-else
-
-   # This works, but a more efficient layout should be used
-   @ atm_tasks = $ptile * $num_instances * 2
-   @ lnd_tasks = $ptile * $num_instances * 2
-   @ ice_tasks = $ptile * $num_instances
-   @ ocn_tasks = $ptile * $num_instances
-   @ cpl_tasks = $ptile * $num_instances
-   @ glc_tasks = $ptile * $num_instances
-   @ rof_tasks = $ptile * $num_instances * 2
-   @ wav_tasks = $ptile * $num_instances
-
-endif
+# This works, but a more efficient layout should be used
+@ atm_tasks = $ptile * $num_instances * 2
+@ lnd_tasks = $ptile * $num_instances * 2
+@ ice_tasks = $ptile * $num_instances
+@ ocn_tasks = $ptile * $num_instances
+@ cpl_tasks = $ptile * $num_instances
+@ glc_tasks = $ptile * $num_instances
+@ rof_tasks = $ptile * $num_instances * 2
+@ wav_tasks = $ptile * $num_instances
 
 # echo "task partitioning ... perhaps ... atm // ocn // lnd+ice+glc+rof"
 # presently, all components run 'serially' - one after another.
