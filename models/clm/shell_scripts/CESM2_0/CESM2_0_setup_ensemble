@@ -23,7 +23,7 @@
 # num_instances The number of ensemble members.
 # ==============================================================================
 
-setenv CASE           clm5_startup
+setenv CASE           clm5_startup_ch
 setenv resolution     f09_g16
 setenv compset        I2000Clm50BgcCrop
 setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
@@ -55,8 +55,8 @@ setenv num_instances  4
 #                 Will be inherited by CESM#_#_DART_config and inserted into assimilate.csh
 # ==============================================================================
 
-setenv project     P86850054
-setenv machine      yellowstone
+setenv project      P86850054
+setenv machine      cheyenne
 setenv cesmdata     /glade/p/cesm/cseg/inputdata
 setenv cesmroot     /glade/p/work/${USER}/CESM/$cesmtag
 setenv caseroot     /glade/p/work/${USER}/cases/$cesmtag/${CASE}
@@ -102,13 +102,6 @@ switch ("`hostname`")
          set   COPY = '/bin/cp -v --preserve=timestamps'
          set   LINK = '/bin/ln -vs'
          set REMOVE = '/bin/rm -rf'
-      breaksw
-   case be*:
-         # NCAR "bluefire"
-         set   MOVE = '/usr/local/bin/mv -v'
-         set   COPY = '/usr/local/bin/cp -v --preserve=timestamps'
-         set   LINK = '/usr/local/bin/ln -vs'
-         set REMOVE = '/usr/local/bin/rm -rf'
       breaksw
    default:
          # NERSC "hopper", TACC "stampede" ... many more
@@ -206,7 +199,7 @@ endif
 #> year 1 and year N (performance penalty?). Can we change years on-the-fly
 #> during a run
 
-setenv resubmit            1
+setenv resubmit            0
 setenv stop_option         nhours
 setenv stop_n              24
 
@@ -333,7 +326,7 @@ endif
 # DEBUG = TRUE implies turning on run and compile time debugging.
 # INFO_DBUG level of debug output, 0=minimum, 1=normal, 2=more, 3=too much.
 ./xmlchange DEBUG=FALSE
-./xmlchange INFO_DBUG=FALSE
+./xmlchange INFO_DBUG=0
 
 @ inst = 1
 while ( $inst <= $num_instances )
