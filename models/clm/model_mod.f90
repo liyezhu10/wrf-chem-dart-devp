@@ -62,11 +62,9 @@ use     obs_kind_mod, only : QTY_SOIL_TEMPERATURE,       &
                              QTY_WATER_TABLE_DEPTH,      &
                              QTY_GEOPOTENTIAL_HEIGHT,    &
                              QTY_VEGETATION_TEMPERATURE, &
-                             QTY_FPAR,                   &
+                             QTY_FRAC_PHOTO_AVAIL_RADIATION, &
                              QTY_FPAR_SUNLIT_DIRECT,     &
                              QTY_FPAR_SUNLIT_DIFFUSE,    &
-                             QTY_FPAR_SHADED_DIRECT,     &
-                             QTY_FPAR_SHADED_DIFFUSE,    &
                              QTY_FPAR_SHADED_DIRECT,     &
                              QTY_FPAR_SHADED_DIFFUSE,    &
                              get_index_for_quantity,      &
@@ -90,8 +88,6 @@ use   state_structure_mod, only : add_domain, state_structure_info,   &
 use obs_def_utilities_mod, only : track_status
 
 use     mpi_utilities_mod, only: my_task_id
-
-use        random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
 
 use     default_model_mod, only : adv_1step, init_time, init_conditions, nc_write_model_vars
 
@@ -149,10 +145,6 @@ logical, save :: module_initialized = .false.
 ! 'Handles' for the different domains.
 integer :: dom_restart, dom_history, dom_vector_history
 
-! Storage for a random sequence for perturbing a single initial state
-
-type(random_seq_type) :: random_seq
-
 !------------------------------------------------------------------
 !
 !  The DART state vector may consist of things like:
@@ -197,7 +189,6 @@ integer :: domain_count = 0
 
 integer            :: assimilation_period_days = 0
 integer            :: assimilation_period_seconds = 60
-real(r8)           :: model_perturbation_amplitude = 0.2
 integer            :: debug = 0   ! turn up for more and more debug messages
 character(len=32)  :: calendar = 'Gregorian'
 character(len=256) :: clm_restart_filename = 'clm_restart.nc'
@@ -212,7 +203,6 @@ namelist /model_nml/            &
    clm_vector_history_filename, &
    assimilation_period_days,    &  ! for now, this is the timestep
    assimilation_period_seconds, &
-   model_perturbation_amplitude,&
    calendar,                    &
    debug,                       &
    clm_variables
@@ -269,11 +259,7 @@ type(gridcellcolumns), allocatable, dimension(:,:), target :: gridCellInfo
 ! For the FV cores, there actually _are_ cells CENTERED at the poles.
 
 integer :: nlon     = -1
-integer :: nlonatm  = -1
-integer :: nlonrof  = -1
 integer :: nlat     = -1
-integer :: nlatatm  = -1
-integer :: nlatrof  = -1
 integer :: nlevgrnd = -1 ! Number of soil levels
 
 real(r8), allocatable :: LEVGRND(:)
@@ -334,13 +320,6 @@ integer,  allocatable, dimension(:) :: lonixy       ! longitude index of parent 
 integer,  allocatable, dimension(:) :: latjxy       ! latitude  index of parent gridcell
 real(r8), allocatable, dimension(:) :: levels       ! depth
 real(r8), allocatable, dimension(:) :: landarea     ! land area ... 'support' ... 'weight'
-
-!------------------------------------------------------------------------------
-! set this to true if you want to print out the current time
-! after each N observations are processed, for benchmarking.
-
-logical :: print_timestamps = .false.
-integer :: print_every_Nth  = 10000
 
 !------------------------------------------------------------------
 ! module storage
@@ -1781,26 +1760,22 @@ call nc_check(nf90_close(ncid_dart),'mark_missing_r8_values','close out'//progva
 end subroutine mark_missing_r8_values
 
 
+!------------------------------------------------------------------
+!> Writes the current time and state variables from a dart state
+!> vector (1d array) into a clm netcdf restart file.
 
 subroutine fill_missing_r8_with_orig(file_dart, file_clm, dart_time)
-!------------------------------------------------------------------
-! Writes the current time and state variables from a dart state
-! vector (1d array) into a clm netcdf restart file.
-!
 
 character(len=*), intent(in) :: file_dart
 character(len=*), intent(in) :: file_clm
 type(time_type),  intent(in) :: dart_time
 
-! temp space to hold data while we are writing it
-integer :: i, ni, nj, ivar
-real(r8), allocatable, dimension(:)   :: data_1d_array
-real(r8), allocatable, dimension(:,:) :: data_2d_array
+integer :: i, ivar
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 character(len=NF90_MAX_NAME)          :: varname
 integer         :: varid_out, VarID, ncNdims, dimlen, numvars
-integer         :: ncid_dart, ncid_clm, create_mode
+integer         :: ncid_dart, ncid_clm
 type(time_type) :: file_time
 
 if ( .not. module_initialized ) call static_init_model
@@ -2031,7 +2006,8 @@ select case( obs_kind )
       call get_grid_vertval(state_handle, ens_size, location, obs_kind, expected_obs, istatus)
 
    case ( QTY_SNOWCOVER_FRAC, QTY_LEAF_AREA_INDEX, QTY_LEAF_CARBON, &
-          QTY_WATER_TABLE_DEPTH, QTY_VEGETATION_TEMPERATURE, QTY_FPAR, &
+          QTY_WATER_TABLE_DEPTH, QTY_VEGETATION_TEMPERATURE, &
+          QTY_FRAC_PHOTO_AVAIL_RADIATION, &
           QTY_FPAR_SUNLIT_DIRECT, QTY_FPAR_SUNLIT_DIFFUSE, &
           QTY_FPAR_SHADED_DIRECT, QTY_FPAR_SHADED_DIFFUSE)
 
@@ -2502,7 +2478,7 @@ integer,  intent(in)  :: ivar
 integer,  intent(in)  :: ncid_dart
 integer,  intent(in)  :: ncid_clm
 
-integer :: VarID, varid_out, num_less
+integer :: VarID, varid_out
 real(r8), allocatable, dimension(:) :: org_array, data_1d_array
 
 ! Replace the DART fill value with the original value and apply any clamping.

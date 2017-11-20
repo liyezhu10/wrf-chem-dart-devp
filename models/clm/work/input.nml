@@ -179,7 +179,6 @@
    clm_vector_history_filename  = 'clm_vector_history.nc'
    assimilation_period_days     = 2
    assimilation_period_seconds  = 3600
-   model_perturbation_amplitude = 0.2
    calendar                     = 'Gregorian'
    debug                        = 0
    clm_variables  = 'frac_sno',    'QTY_SNOWCOVER_FRAC',         'NA' , 'NA', 'restart' , 'NO_COPY_BACK',
@@ -296,13 +295,14 @@
 ! useful input for model_mod_check_nml ...
 
    x_inds    of interest   720, 7000
-   loc_of_interest      = 287.5,  82.48, 0.35
-   loc_of_interest      = 287.5, -40.70, 0.35
-   loc_of_interest      =  90.0,  41.00, 0.35
+   loc_of_interest       = 287.5,  82.48, 0.35
+   loc_of_interest       = 287.5, -40.70, 0.35
+   loc_of_interest       =  90.0,  41.00, 0.35
+   kind_of_interest      = 'QTY_SURFACE_ALBEDO'
 
 &model_mod_check_nml
-   input_state_files     = clm_restart.nc
-   output_state_files    = check_me.nc
+   input_state_files     = 'clm_restart.nc', 'clm_history.nc', 'clm_vector_history.nc'
+   output_state_files    = 'restart_out.nc', 'history_out.nc', 'vector_history_out.nc'
    verbose               = .false.
    test1thru             = 5
    x_ind                 = 720

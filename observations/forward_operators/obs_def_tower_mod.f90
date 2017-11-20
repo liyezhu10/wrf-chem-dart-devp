@@ -5,63 +5,103 @@
 ! $Id$
 
 ! BEGIN DART PREPROCESS KIND LIST
-!WATER_TABLE_DEPTH,              QTY_WATER_TABLE_DEPTH,        COMMON_CODE
-!SOIL_TEMPERATURE,               QTY_SOIL_TEMPERATURE,         COMMON_CODE
-!SOIL_MOISTURE,                  QTY_SOIL_MOISTURE,            COMMON_CODE
-!LAYER_LIQUID_WATER,             QTY_LIQUID_WATER,             COMMON_CODE
-!LAYER_ICE,                      QTY_ICE,                      COMMON_CODE
-!SNOW_THICKNESS,                 QTY_SNOW_THICKNESS,           COMMON_CODE
-!SNOW_WATER,                     QTY_SNOW_WATER,               COMMON_CODE
-!MODIS_SNOWCOVER_FRAC,           QTY_SNOWCOVER_FRAC,           COMMON_CODE
-!MODIS_LEAF_AREA_INDEX,          QTY_LEAF_AREA_INDEX,          COMMON_CODE
-!LEAF_CARBON,                    QTY_LEAF_CARBON,              COMMON_CODE
-!LEAF_AREA_INDEX,                QTY_LEAF_AREA_INDEX,          COMMON_CODE
-!TOWER_AIR_TEMPERATURE,          QTY_TEMPERATURE,              COMMON_CODE
-!TOWER_SOIL_TEMPERATURE,         QTY_TEMPERATURE,              COMMON_CODE
-!TOWER_U_WIND_COMPONENT,         QTY_U_WIND_COMPONENT,         COMMON_CODE
-!TOWER_V_WIND_COMPONENT,         QTY_V_WIND_COMPONENT,         COMMON_CODE
-!TOWER_GLOBAL_RADIATION,         QTY_RADIATION,                COMMON_CODE
-!TOWER_NET_CARBON_FLUX,          QTY_NET_CARBON_FLUX,          COMMON_CODE
+!WATER_TABLE_DEPTH,              QTY_WATER_TABLE_DEPTH,          COMMON_CODE
+!SOIL_TEMPERATURE,               QTY_SOIL_TEMPERATURE,           COMMON_CODE
+!SOIL_MOISTURE,                  QTY_SOIL_MOISTURE,              COMMON_CODE
+!LAYER_LIQUID_WATER,             QTY_LIQUID_WATER,               COMMON_CODE
+!LAYER_ICE,                      QTY_ICE,                        COMMON_CODE
+!SNOW_THICKNESS,                 QTY_SNOW_THICKNESS,             COMMON_CODE
+!SNOW_WATER,                     QTY_SNOW_WATER,                 COMMON_CODE
+!MODIS_SNOWCOVER_FRAC,           QTY_SNOWCOVER_FRAC,             COMMON_CODE
+!MODIS_LEAF_AREA_INDEX,          QTY_LEAF_AREA_INDEX,            COMMON_CODE
+!MODIS_FPAR,                     QTY_FRACTION_ABSORBED_PAR,      COMMON_CODE
+!BIOMASS,                        QTY_BIOMASS,                    COMMON_CODE
+!LEAF_CARBON,                    QTY_LEAF_CARBON,                COMMON_CODE
+!LEAF_AREA_INDEX,                QTY_LEAF_AREA_INDEX,            COMMON_CODE
+!LEAF_NITROGEN,                  QTY_LEAF_NITROGEN,              COMMON_CODE
+!TOWER_AIR_TEMPERATURE,          QTY_TEMPERATURE,                COMMON_CODE
+!TREE_RING_NPP_FLUX,             QTY_NET_PRIMARY_PROD_FLUX,      COMMON_CODE
+!TOWER_SOIL_TEMPERATURE,         QTY_TEMPERATURE,                COMMON_CODE
+!TOWER_U_WIND_COMPONENT,         QTY_U_WIND_COMPONENT,           COMMON_CODE
+!TOWER_V_WIND_COMPONENT,         QTY_V_WIND_COMPONENT,           COMMON_CODE
+!TOWER_GLOBAL_RADIATION,         QTY_RADIATION,                  COMMON_CODE
+!TOWER_NET_CARBON_FLUX,          QTY_NET_CARBON_FLUX,            COMMON_CODE
 !TOWER_LATENT_HEAT_FLUX,         QTY_LATENT_HEAT_FLUX
 !TOWER_SENSIBLE_HEAT_FLUX,       QTY_SENSIBLE_HEAT_FLUX
 !TOWER_NETC_ECO_EXCHANGE,        QTY_NET_CARBON_PRODUCTION
-!MODIS_FPAR,                     QTY_FPAR,                     COMMON_CODE
+!TOWER_GPP_FLUX,                 QTY_GROSS_PRIMARY_PROD_FLUX
+!TOWER_ER_FLUX,                  QTY_ER_FLUX
+!SOIL_RESPIRATION_FLUX,          QTY_SOIL_RESPIRATION_FLUX
+!SURFACE_ALBEDO,                 QTY_SURFACE_ALBEDO
 ! END DART PREPROCESS KIND LIST
 
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
-!  use obs_def_tower_mod, only : get_scalar_from_history
+!  use obs_def_tower_mod, only : get_scalar_from_history, &
+!                                calculate_albedo
 ! END DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
 !-----------------------------------------------------------------------------
 
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 !  case(TOWER_LATENT_HEAT_FLUX)
-!     call get_scalar_from_history('EFLX_LH_TOT_R', state_handle, ens_size, copy_indices, location, obs_time, expected_obs, istatus)
+!     call get_scalar_from_history('EFLX_LH_TOT_R', state_handle, ens_size, &
+!                    copy_indices, location, obs_time, expected_obs, istatus)
 !  case(TOWER_SENSIBLE_HEAT_FLUX)
-!     call get_scalar_from_history('FSH', state_handle, ens_size, copy_indices, location, obs_time, expected_obs, istatus)
+!     call get_scalar_from_history('FSH', state_handle, ens_size, &
+!                    copy_indices, location, obs_time, expected_obs, istatus)
 !  case(TOWER_NETC_ECO_EXCHANGE)
-!     call get_scalar_from_history('NEP', state_handle, ens_size, copy_indices, location, obs_time, expected_obs, istatus)
+!     call get_scalar_from_history('NEP', state_handle, ens_size, &
+!                    copy_indices, location, obs_time, expected_obs, istatus)
+!  case(TOWER_GPP_FLUX)
+!     call get_scalar_from_history('GPP', state_handle, ens_size, &
+!                    copy_indices, location, obs_time, expected_obs, istatus)
+!  case(TOWER_ER_FLUX)
+!     call get_scalar_from_history('ER', state_handle, ens_size, &
+!                    copy_indices, location, obs_time, expected_obs, istatus)
+!  case(SOIL_RESPIRATION_FLUX)
+!     call get_scalar_from_history('SR', state_handle, ens_size, &
+!                    copy_indices, location, obs_time, expected_obs, istatus)
+!  case(SURFACE_ALBEDO)
+!     call calculate_albedo(state_handle, ens_size, location, expected_obs, istatus)
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 !-----------------------------------------------------------------------------
 
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS READ_OBS_DEF
-!    case(TOWER_LATENT_HEAT_FLUX,TOWER_SENSIBLE_HEAT_FLUX,TOWER_NETC_ECO_EXCHANGE)
+!    case(TOWER_LATENT_HEAT_FLUX, &
+!         TOWER_SENSIBLE_HEAT_FLUX, &
+!         TOWER_NETC_ECO_EXCHANGE, &
+!         TOWER_GPP_FLUX, &
+!         TOWER_ER_FLUX, &
+!         SOIL_RESPIRATION_FLUX, &
+!         SURFACE_ALBEDO)
 !       continue
 ! END DART PREPROCESS READ_OBS_DEF
 !-----------------------------------------------------------------------------
 
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS WRITE_OBS_DEF
-!    case(TOWER_LATENT_HEAT_FLUX,TOWER_SENSIBLE_HEAT_FLUX,TOWER_NETC_ECO_EXCHANGE)
+!    case(TOWER_LATENT_HEAT_FLUX, &
+!         TOWER_SENSIBLE_HEAT_FLUX, &
+!         TOWER_NETC_ECO_EXCHANGE, &
+!         TOWER_GPP_FLUX, &
+!         TOWER_ER_FLUX, &
+!         SOIL_RESPIRATION_FLUX, &
+!         SURFACE_ALBEDO)
 !       continue
 ! END DART PREPROCESS WRITE_OBS_DEF
 !-----------------------------------------------------------------------------
 
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS INTERACTIVE_OBS_DEF
-!    case(TOWER_LATENT_HEAT_FLUX,TOWER_SENSIBLE_HEAT_FLUX,TOWER_NETC_ECO_EXCHANGE)
+!    case(TOWER_LATENT_HEAT_FLUX, &
+!         TOWER_SENSIBLE_HEAT_FLUX, &
+!         TOWER_NETC_ECO_EXCHANGE, &
+!         TOWER_GPP_FLUX, &
+!         TOWER_ER_FLUX, &
+!         SOIL_RESPIRATION_FLUX, &
+!         SURFACE_ALBEDO)
 !       continue
 ! END DART PREPROCESS INTERACTIVE_OBS_DEF
 !-----------------------------------------------------------------------------
@@ -80,15 +120,26 @@ module obs_def_tower_mod
 ! 'single column' runs may appear as either lat=lon=1 or lndgrid=1
 !
 use        types_mod, only : r4, r8, digits12, MISSING_R8, PI, deg2rad
+
 use     location_mod, only : location_type, get_location, get_dist, &
-                             set_location, VERTISUNDEF
+                             set_location, write_location, VERTISUNDEF
+
 use time_manager_mod, only : time_type, get_date, set_date, print_date, print_time, &
                              get_time, set_time, operator(-), operator(/=)
+
 use    utilities_mod, only : register_module, E_ERR, E_MSG, error_handler, &
                              check_namelist_read, find_namelist_in_file,   &
                              nmlfileunit, do_output, do_nml_file, do_nml_term, &
                              nc_check, file_exist, is_longitude_between
-use ensemble_manager_mod,  only : ensemble_type
+
+use     obs_kind_mod, only : QTY_RADIATION_VISIBLE_DOWN, &
+                             QTY_RADIATION_NEAR_IR_DOWN, &
+                             QTY_RADIATION_VISIBLE_UP, &
+                             QTY_RADIATION_NEAR_IR_UP
+
+use  assim_model_mod, only : interpolate
+
+use ensemble_manager_mod, only : ensemble_type
 
 use typesizes
 use netcdf
@@ -96,7 +147,8 @@ use netcdf
 implicit none
 private
 
-public :: get_scalar_from_history
+public :: get_scalar_from_history, &
+          calculate_albedo
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -120,7 +172,7 @@ real(r8), parameter :: RAD2KM = 40030.0_r8/(2.0_r8 * PI) ! (mean radius of earth
 ! namelist items
 character(len=256) :: casename = 'clm_dart'
 logical            :: debug = .false.
-integer            :: hist_nhtfrq = -24 
+integer            :: hist_nhtfrq = -24
 ! CLM variable hist_nhtfrq ... controls how often to write out the history files.
 ! Negative value means the output frequency is the absolute value (in hours).
 
@@ -447,6 +499,79 @@ else
 endif
 
 end subroutine get_scalar_from_history
+
+
+!======================================================================
+
+
+subroutine calculate_albedo(state_handle, ens_size, location, obs_val, istatus)
+
+type(ensemble_type), intent(in)  :: state_handle
+integer,             intent(in)  :: ens_size
+type(location_type), intent(in)  :: location
+real(r8),            intent(out) :: obs_val(ens_size)
+integer,             intent(out) :: istatus(ens_size)
+
+real(r8) :: visible_in(ens_size)
+real(r8) :: visible_out(ens_size)
+real(r8) :: nir_in(ens_size)
+real(r8) :: nir_out(ens_size)
+real(r8) :: numer(ens_size), denom(ens_size)
+
+integer :: stat(ens_size,4)
+integer :: imem
+
+istatus = 1           ! 0 == success, anything else is a failure
+obs_val = MISSING_R8
+
+call error_handler(E_ERR,'calculate_albedo','routine untested - stopping.', &
+           source, revision, revdate)
+
+if ( .not. module_initialized ) call initialize_module(state_handle%current_time)
+
+! Intentionally try to compute all required components before failing.
+! The desire is to inform about ALL failed components instead of failing
+! one-by-one.
+
+call interpolate(state_handle, ens_size, location, QTY_RADIATION_VISIBLE_DOWN, &
+        visible_in, stat(:,1))
+call interpolate(state_handle, ens_size, location, QTY_RADIATION_NEAR_IR_DOWN, &
+        nir_in, stat(:,2))
+call interpolate(state_handle, ens_size, location, QTY_RADIATION_VISIBLE_UP, &
+        visible_out, stat(:,3))
+call interpolate(state_handle, ens_size, location, QTY_RADIATION_NEAR_IR_UP, &
+        nir_out, stat(:,4))
+
+if (any(stat /= 0)) then
+   istatus = stat(:,1)*1000 + stat(:,2)*100 + stat(:,3)*10 + stat(:,4)
+   return
+endif
+
+numer = visible_out + nir_out
+denom = visible_in  + nir_in
+
+if (any(denom <= tiny(0.0_r8))) then
+   call write_location(42,location,fform='FORMATTED',charstring=string1)
+   call error_handler(E_MSG,'calculate_albedo','no incoming radiation',text2=string1)
+   return
+endif
+
+obs_val = numer / denom
+
+istatus = 0   ! success
+
+if (debug .and. do_output()) then
+   do imem = 1,ens_size
+      write(string1,*)'incoming (visible nir sum status) ', &
+         visible_in(imem), nir_in(imem), denom(imem), stat(imem,1)*1000 + stat(imem,2)*100
+      write(string2,*)'outgoing (visible nir sum status) ', &
+         visible_out(imem), nir_out(imem), numer(imem), stat(imem,3)*10 + stat(imem,4)
+      write(string3,*)'albedo ', obs_val(imem)
+      call error_handler(E_MSG,'calculate_albedo:',string1,text2=string2,text3=string3)
+   enddo
+endif
+
+end subroutine calculate_albedo
 
 
 !======================================================================
