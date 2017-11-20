@@ -83,13 +83,12 @@ LD = gfortran
 # NETCDF = /opt/local
 
 INCS = -I$(NETCDF)/include
-# LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf -lhdf5_hl -lhdf5 -lhdf5hl_fortran -lhdf5_fortran
 LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf
-# FFLAGS  = -O2 -ffree-line-length-none $(INCS)
+FFLAGS  = -O2 -ffree-line-length-none $(INCS)
 LDFLAGS = $(FFLAGS) $(LIBS)
 
-FFLAGS = -g -Wuninitialized -Wunused -ffree-line-length-none -fbounds-check \
-         -fbacktrace -ffpe-trap=invalid,zero,overflow $(INCS)
+# FFLAGS = -g -Wuninitialized -Wunused -ffree-line-length-none -fbounds-check \
+#          -fbacktrace -ffpe-trap=invalid,zero,overflow $(INCS)
 
 # <next few lines under version control, do not edit>
 # $URL$
