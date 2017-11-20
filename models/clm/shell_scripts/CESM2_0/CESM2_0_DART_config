@@ -20,11 +20,6 @@
 #
 # This script will build the DART executables if they are not found.
 #
-# There are many CESM binary files in big-endian format, and DART reads
-# some of them, so you MUST compile DART accordingly e.g.,
-# ifort -convert big_endian
-# Contact dart@ucar.edu if you want to use another compiler.
-#
 # ---------------------
 # How to set up the script
 # ---------------------
@@ -56,6 +51,23 @@ setenv RUNDIR        `./xmlquery RUNDIR    --value`
 setenv CASEROOT      `./xmlquery CASEROOT  --value`
 setenv CASE          `./xmlquery CASE      --value`
 setenv num_instances `./xmlquery NINST_LND --value`
+
+#>@todo ... if num_instances = 1, the we MUST be pmo ...
+
+# ==============================================================================
+# ==============================================================================
+
+# Now the script to be run is determined by
+# CESM's env_run.xml DATA_ASSIMILATION* variables.
+#
+# DATA_ASSIMILATION_CYCLES says how many cycles to run in each job before a RESUBMIT.
+# Set to 1 for the first cycle.
+# When the job (not each cycle) is finished the short_term archiver will run and,
+# if RESUBMIT > 0, resubmit a new case.run job.
+
+./xmlchange DATA_ASSIMILATION=TRUE
+./xmlchange DATA_ASSIMILATION_CYCLES=1
+./xmlchange DATA_ASSIMILATION_SCRIPT=${CASEROOT}/assimilate.csh
 
 # ==============================================================================
 # Some
@@ -208,6 +220,9 @@ g;num_output_state_members ;s;= .*;= ${num_instances};
 g;num_output_obs_members ;s;= .*;= ${num_instances};
 g;casename ;s;= .*;= "../${CASE}",;
 g;hist_nhtfrq ;s;= .*;= -HISTORY_OUTPUT_INTERVAL,;
+g;clm_restart_filename ;s;= .*;= 'clm_restart.nc';
+g;clm_history_filename ;s;= .*;= 'clm_history.nc';
+g;clm_vector_history_filename ;s;= .*;= 'clm_vector_history.nc';
 wq
 ex_end
 
@@ -256,10 +271,13 @@ Check the DART configuration:
 
 1) The default behavior is to _not_ invoke DART and simply run CESM.
    We recommend that you make sure this works before proceeding.
+   ./xmlchange DATA_ASSIMILATION=FALSE
 
 2) When you want to run DART, 
+   cd ${CASEROOT} 
    ./xmlchange DATA_ASSIMILATION_SCRIPT=${CASEROOT}/assimilate.csh
-   from ${CASEROOT} 
+   -or- 
+   ./xmlchange DATA_ASSIMILATION_SCRIPT=${CASEROOT}/perfect_model.csh
 
 3) Modify what you need to in the DART namelist file, i.e. ${CASEROOT}/input.nml
 

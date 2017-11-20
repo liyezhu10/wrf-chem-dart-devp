@@ -26,22 +26,20 @@
       </domainInfo>
       <fieldInfo>
          <variableNames>
-            a2x6h_Faxa_swndr     swndr
-            a2x6h_Faxa_swvdr     swvdr
-            a2x6h_Faxa_swndf     swndf
-            a2x6h_Faxa_swvdf     swvdf
+            a2x6h_Sa_u           u
+            a2x6h_Sa_v           v
          </variableNames>
          <filePath>
             /glade/p/rda/data/ds199.1
          </filePath>
+         <tInterpAlgo>
+            linear
+         </tInterpAlgo>
          <offset>
-            -21600
+            -10800
          </offset>
          <fileNames>
           CAM_DATM.cpl_NINST.ha2x1dx6h.RUNYEAR.nc
-          CAM_DATM.cpl_NINST.ha2x1dx6h.2001.nc
-          CAM_DATM.cpl_NINST.ha2x1dx6h.2002.nc
-          CAM_DATM.cpl_NINST.ha2x1dx6h.2003.nc
          </fileNames>
       </fieldInfo>
       <build_streams_documentation>

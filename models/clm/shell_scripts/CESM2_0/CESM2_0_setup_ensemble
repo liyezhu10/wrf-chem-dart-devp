@@ -23,7 +23,7 @@
 # num_instances The number of ensemble members.
 # ==============================================================================
 
-setenv CASE           clm5_startup_ch
+setenv CASE           clm5_startup
 setenv resolution     f09_g16
 setenv compset        I2000Clm50BgcCrop
 setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
@@ -136,7 +136,8 @@ ${cesmroot}/cime/scripts/create_newcase  --res  ${resolution} \
                                          --case ${caseroot} \
                                          --project ${project} \
                                          --run-unsupported \
-                                         --ninst ${num_instances} || exit 2
+                                         --ninst ${num_instances} \
+                                         --multi-driver || exit 2
 
 # ==============================================================================
 # Preserve a copy of this script as it was run.
@@ -179,7 +180,6 @@ end
 setenv TEST_MPI           `./xmlquery MPI_RUN_COMMAND    --value`
 setenv CLM_CONFIG_OPTS    `./xmlquery CLM_CONFIG_OPTS    --value`
 setenv COMPSET            `./xmlquery COMPSET            --value`
-setenv MAX_TASKS_PER_NODE `./xmlquery MAX_TASKS_PER_NODE --value`
 setenv COMP_ATM           `./xmlquery COMP_ATM           --value`
 setenv CIMEROOT           `./xmlquery CIMEROOT           --value`
 setenv CASEROOT           `./xmlquery CASEROOT           --value`
@@ -254,13 +254,9 @@ setenv startdate 1998-01-01
 
 ./xmlchange PIO_TYPENAME=netcdf
 
-#set start_year  = ${stream_year_first}
-#set start_month = "01"
-#set start_day =  "01"
-./xmlchange RUN_STARTDATE=${startdate}
-
-# Data assimilation is turned off initially. After things are working, you can
-# turn it on by running CASEROOT/CESM_DART_config
+# Data assimilation is turned off initially.
+# After things are working, it will be turned on when you
+# run CASEROOT/CESM_DART_config
 
 @ nodes_per_instance = 1
 @ ptile = $MAX_TASKS_PER_NODE / 2
@@ -285,24 +281,6 @@ setenv startdate 1998-01-01
 ./xmlchange ROOTPE_ROF=0,NTHRDS_ROF=$nthreads,NTASKS_ROF=$rof_tasks,NINST_ROF=$num_instances
 ./xmlchange ROOTPE_WAV=0,NTHRDS_WAV=$nthreads,NTASKS_WAV=$wav_tasks,NINST_WAV=1
 ./xmlchange ROOTPE_ESP=0,NTHRDS_ESP=$nthreads,NTASKS_ESP=$esp_tasks,NINST_ESP=1
-
-# Before CESM1_5 we ran in DART mode without assimilating by editing case.run to choose
-# no_assimilate.csh or assimilate.csh.  Now the script to be run is determined by
-# CESM's env_run.xml DATA_ASSIMILATION* variables.
-# Having DATA_ASSIMILATION = true. and specifying what script you want to run
-# is always correct.
-#
-# DATA_ASSIMILATION_CYCLES says how many cycles to run in each job before a RESUBMIT.
-# Set to 1 for the first cycle.
-# When the job (not each cycle) is finished the short_term archiver will run and,
-# if RESUBMIT > 0, (re)submit a new case.run job.
-
-./xmlchange DATA_ASSIMILATION=TRUE
-./xmlchange DATA_ASSIMILATION_CYCLES=1
-
-# ./xmlchange DATA_ASSIMILATION_SCRIPT=${CASEROOT}/assimilate.csh
-./xmlchange DATA_ASSIMILATION_SCRIPT=${CASEROOT}/no_assimilate.csh
-
 
 ./case.setup || exit 6
 echo "case setup finished"
@@ -426,13 +404,14 @@ Time to check the case.
    cd  ${dartroot}/models/clm/work
    ./quickbuild.csh -mpi
 
-5) configure the case to be able to DART by executing
+5) Modify the case to enable data assimilation and
+   run DART by executing
    cd ${caseroot}
    ./CESM_DART_config
 
 6) Make sure the DART-related parts are appropriate.
    Check the input.nml
-   Check the assimilate.csh
+   Check the assimilate.csh or perfect_model.csh - as appropriate
    ./case.submit
 
 7) If that works

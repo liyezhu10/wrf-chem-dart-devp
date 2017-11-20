@@ -39,9 +39,6 @@
          </offset>
          <fileNames>
           CAM_DATM.cpl_NINST.ha2x1dx6h.RUNYEAR.nc
-          CAM_DATM.cpl_NINST.ha2x1dx6h.2001.nc
-          CAM_DATM.cpl_NINST.ha2x1dx6h.2002.nc
-          CAM_DATM.cpl_NINST.ha2x1dx6h.2003.nc
          </fileNames>
       </fieldInfo>
       <build_streams_documentation>

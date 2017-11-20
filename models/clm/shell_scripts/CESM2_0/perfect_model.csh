@@ -6,9 +6,10 @@
 #
 # DART $Id$
 
-# This block is an attempt to localize all the machine-specific
-# changes to this script such that the same script can be used
-# on multiple platforms. This will help us maintain the script.
+#=========================================================================
+# Block 0: localize all the machine-specific changes such that the same 
+# script can be used on multiple platforms. Easier to maintain.
+#=========================================================================
 
 echo "`date` -- BEGIN GENERATE CLM TRUE STATE"
 
@@ -56,7 +57,6 @@ switch ("`hostname`")
       set   LINK = '/bin/ln -fvs'
       set REMOVE = '/bin/rm -fr'
 
-      set BASEOBSDIR = ${WORK}/DART/observations/snow/work/obs_seqs
       set  LAUNCHCMD = mpirun.lsf
    breaksw
 
@@ -68,7 +68,6 @@ switch ("`hostname`")
       set REMOVE = 'rm -fr'
       set TASKS_PER_NODE = $MAX_TASKS_PER_NODE
 
-      set BASEOBSDIR = /your/observation/directory/here
       set  LAUNCHCMD = "mpiexec -n $NTASKS"
    breaksw
 
@@ -92,17 +91,16 @@ switch ("`hostname`")
       set   LINK = 'ln -fvs'
       set REMOVE = 'rm -fr'
 
-      set BASEOBSDIR = /scratch/scratchdirs/nscollin/ACARS
       set  LAUNCHCMD = "aprun -n $NTASKS"
    breaksw
 endsw
 
-#-------------------------------------------------------------------------
-# Determine time of model state ... from file name
+#=========================================================================
+# Block 1: Determine time of model state ... from file name
 # of the form "./${CASE}.clm2.r.2000-01-06-00000.nc"
 #
 # Piping stuff through 'bc' strips off any preceeding zeros.
-#-------------------------------------------------------------------------
+#=========================================================================
 
 set FILE = `head -n 1 rpointer.lnd`
 set FILE = $FILE:r
@@ -117,11 +115,14 @@ set LND_HOUR     = `echo $LND_DATE[4] / 3600 | bc`
 echo "valid time of model is $LND_YEAR $LND_MONTH $LND_DAY $LND_SECONDS (seconds)"
 echo "valid time of model is $LND_YEAR $LND_MONTH $LND_DAY $LND_HOUR (hours)"
 
-#-----------------------------------------------------------------------------
+#=========================================================================
+# Block 2: Populate a run-time directory with the input needed to run DART.
+#=========================================================================
+
 # Get observation sequence file ... or die right away.
 # The observation file names have a time that matches the stopping time of CLM.
 #
-# The CLM observations are stowed in two sets of directories.
+# The CLM observations are stored in two sets of directories.
 # If you are stopping every 24 hours or more, the obs are in directories like YYYYMM.
 # In all other situations the observations come from directories like YYYYMM_6H.
 # The only ugly part here is if the first advance and subsequent advances are
@@ -130,7 +131,6 @@ echo "valid time of model is $LND_YEAR $LND_MONTH $LND_DAY $LND_HOUR (hours)"
 # The contents of the file must match the history file contents if one is using
 # the obs_def_tower_mod or could be the 'traditional' +/- 12Z ... or both.
 # Since the history file contains the previous days' history ... so must the obs file.
-#-----------------------------------------------------------------------------
 
 if ($STOP_N >= 24) then
    set OBSDIR = `printf %04d%02d    ${LND_YEAR} ${LND_MONTH}`
@@ -148,32 +148,21 @@ else
    exit -1
 endif
 
-#=========================================================================
-# Block 1: Populate a run-time directory with the input needed to run DART.
-#
-# DART namelist settings required:
-# &perfect_model_obs_nml:  restart_in_file_name    = 'perfect_ics'
-# &perfect_model_obs_nml:  obs_sequence_in_name    = 'obs_seq.in'
-# &perfect_model_obs_nml:  obs_sequence_out_name   = 'obs_seq.perfect'
-# &perfect_model_obs_nml:  init_time_days          = -1,
-# &perfect_model_obs_nml:  init_time_seconds       = -1,
-# &perfect_model_obs_nml:  first_obs_days          = -1,
-# &perfect_model_obs_nml:  first_obs_seconds       = -1,
-# &perfect_model_obs_nml:  last_obs_days           = -1,
-# &perfect_model_obs_nml:  last_obs_seconds        = -1,
-# &clm_to_dart_nml:        clm_to_dart_output_file = 'dart_ics'
-# &model_nml:              clm_restart_filename        = 'clm_restart.nc'
-# &model_nml:              clm_history_filename        = 'clm_history.nc'
-# &model_nml:              clm_vector_history_filename = 'clm_vector_history.nc'
-#=========================================================================
+# Enforce the namelist assumptions used in this script.
 
-if ( ! -e ${CASEROOT}/input.nml ) then
-   echo "ERROR ... DART required file ${CASEROOT}/input.nml not found ... ERROR"
-   echo "ERROR ... DART required file ${CASEROOT}/input.nml not found ... ERROR"
-   exit -2
-endif
-
-sed -e "s#dart_ics#perfect_ics#" < ${CASEROOT}/input.nml >! input.nml
+ex input.nml <<ex_end
+g;read_input_state_from_file ;s;= .*;= .true.;
+g;write_output_state_to_file ;s;= .*;= .false.;
+g;single_file_in ;s;= .*;= .false.;
+g;single_file_out ;s;= .*;= .false.;
+g;input_state_files ;s;= .*;= 'clm_restart.nc', 'clm_history.nc', 'clm_vector_history.nc';
+g;output_state_files ;s;= .*;= 'clm_restart.nc', 'clm_history.nc', 'clm_vector_history.nc';
+g;input_state_file_list ;s;= .*;= '', '';
+g;output_state_file_list ;s;= .*;= '', '';
+g;obs_seq_in_file_name ;s;= .*;= 'obs_seq.in';
+g;obs_seq_out_file_name ;s;= .*;= 'obs_seq.out';
+wq
+ex_end
 
 # DART/CLM routines all need a clm_restart.nc, clm_history.nc, etc.
 # The flux tower forward operator looks for a CLM history file with
@@ -185,14 +174,14 @@ set  LND_VEC_HISTORY_FILENAME = ${CASE}.clm2.h2.${LND_DATE_EXT}.nc
 set     OBS1_HISTORY_FILENAME = ${CASE}.clm2.h1.${LND_DATE_EXT}.nc
 set     OBS2_HISTORY_FILENAME = ${CASE}.clm2_0001.h1.${LND_DATE_EXT}.nc
 
-${LINK} ../$LND_RESTART_FILENAME clm_restart.nc
-${LINK} ../$LND_HISTORY_FILENAME clm_history.nc
+${LINK} $LND_RESTART_FILENAME clm_restart.nc
+${LINK} $LND_HISTORY_FILENAME clm_history.nc
 
-if (  -e   ../$OBS1_HISTORY_FILENAME) then
-   ${LINK} ../$OBS1_HISTORY_FILENAME $OBS2_HISTORY_FILENAME
+if (  -e   $OBS1_HISTORY_FILENAME) then
+   ${LINK} $OBS1_HISTORY_FILENAME $OBS2_HISTORY_FILENAME
 endif
-if (  -e   ../$LND_VEC_HISTORY_FILENAME) then
-   ${LINK} ../$LND_VEC_HISTORY_FILENAME clm_vector_history.nc
+if (  -e   $LND_VEC_HISTORY_FILENAME) then
+   ${LINK} $LND_VEC_HISTORY_FILENAME clm_vector_history.nc
 endif
 
 #=========================================================================
@@ -214,9 +203,9 @@ if ($status != 0) then
    exit -4
 endif
 
-${MOVE} True_State.nc    ../clm_True_State.${LND_DATE_EXT}.nc
-${MOVE} obs_seq.perfect  ../clm_obs_seq.${LND_DATE_EXT}.perfect
-${MOVE} dart_log.out     ../clm_dart_log.${LND_DATE_EXT}.out
+# ${MOVE} True_State.nc    clm_True_State.${LND_DATE_EXT}.nc
+# ${MOVE} obs_seq.perfect  clm_obs_seq.${LND_DATE_EXT}.perfect
+ ${MOVE} dart_log.out     clm_dart_log.${LND_DATE_EXT}.out
 
 echo "`date` -- END   CLM PERFECT_MODEL_OBS"
 

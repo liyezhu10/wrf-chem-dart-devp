@@ -251,7 +251,7 @@ if ( $PRIOR_INF > 0 ) then
       # we are not using an existing inflation file.
       echo "inf_flavor(1) = $PRIOR_INF, using namelist values."
 
-   else if ( -e ../clm_inflation_cookie ) then
+   else if ( -e clm_inflation_cookie ) then
       # We want to use an existing inflation file, but this is
       # the first assimilation so there is no existing inflation
       # file. This is the signal we need to to coerce the namelist
@@ -303,7 +303,7 @@ else
 endif
 
 # Eat the cookie regardless
-${REMOVE} ../clm_inflation_cookie
+${REMOVE} clm_inflation_cookie
 
 #=========================================================================
 # Block 4: Convert N CLM restart files to DART initial condition files.
@@ -375,11 +375,11 @@ echo "`date` -- BEGIN FILTER"
 ${LAUNCHCMD} ${EXEROOT}/filter || exit -7
 echo "`date` -- END FILTER"
 
-# ${MOVE} preassim.nc      ../clm_preassim.${LND_DATE_EXT}.nc
-# ${MOVE} analysis.nc      ../clm_analysis.${LND_DATE_EXT}.nc
+# ${MOVE} preassim.nc      clm_preassim.${LND_DATE_EXT}.nc
+# ${MOVE} analysis.nc      clm_analysis.${LND_DATE_EXT}.nc
 
-${MOVE} obs_seq.final    ../clm_obs_seq.${LND_DATE_EXT}.final
-${MOVE} dart_log.out     ../clm_dart_log.${LND_DATE_EXT}.out
+${MOVE} obs_seq.final    clm_obs_seq.${LND_DATE_EXT}.final
+${MOVE} dart_log.out     clm_dart_log.${LND_DATE_EXT}.out
 
 # Accomodate any possible inflation files.
 # Rename file to reflect current date.
