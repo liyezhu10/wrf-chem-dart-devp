@@ -872,7 +872,7 @@ if ( (modis%Fpar /= MISSING_R8) .and. (modis%FparStdDev /= MISSING_R8) ) then
    endif
    qc    = real(bits567,r8)
    obval = modis%Fpar
-   oerr  = min(0.1_r8, (modis%FparStdDev*modis%Fpar))
+   oerr  = max(0.1_r8, (modis%FparStdDev*modis%Fpar))
 
    call create_3d_obs(latitude, longitude, 0.0_r8, VERTISSURFACE, obval, &
                MODIS_FPAR, oerr, oday, osec, qc, obs)
@@ -891,7 +891,7 @@ if ( (modis%Lai /= MISSING_R8) .and. (modis%LaiStdDev /= MISSING_R8) ) then
    endif
    qc    = real(bits567,r8)
    obval = modis%Lai
-   oerr  = min(0.1_r8, modis%LaiStdDev)
+   oerr  = max(0.1_r8, modis%LaiStdDev)
 
    call create_3d_obs(latitude, longitude, 0.0_r8, VERTISSURFACE, obval, &
                MODIS_LEAF_AREA_INDEX, oerr, oday, osec, qc, obs)
