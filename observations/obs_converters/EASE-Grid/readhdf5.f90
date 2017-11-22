@@ -51,11 +51,7 @@ allocate(longitude(dims(1)))
 ! read the data using the dataset ID
 call h5dread_f(dset_id, H5T_NATIVE_REAL, longitude, dims, hdferr)
 write(*,*)'h5dread_f with dset_id error is ',hdferr
-if (hdferr == 0) write(*,*)longitude(1:10)
 
-! read the data using the dataspace ID
-call h5dread_f(dspace_id, H5T_NATIVE_REAL, longitude, dims, hdferr)
-write(*,*)'h5dread_f with dspace_id error is ',hdferr
 if (hdferr == 0) write(*,*)longitude(1:10)
 
 deallocate(longitude, dims)
