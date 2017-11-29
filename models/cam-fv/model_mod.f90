@@ -15,21 +15,32 @@ module model_mod
 !>@todo fixme fill in the actual names we use after we've gotten
 !>further into writing the coded
 
-use             types_mod
-use      time_manager_mod
+use             types_mod, only : MISSING_R8, MISSING_I, i8, r8, vtablenamelength, &
+                                  gravity  
+use      time_manager_mod, only : set_time, time_type, set_date, &
+                                  set_calendar_type, get_date
 use          location_mod, only : location_type, set_vertical, set_location, &
                                   get_location,get_close_obs, get_close_state, & 
-                                  query_location, &
                                   VERTISUNDEF, VERTISSURFACE, VERTISLEVEL, &
                                   VERTISPRESSURE, VERTISHEIGHT, &
-                                  VERTISSCALEHEIGHT
-use         utilities_mod
-use          obs_kind_mod
-use     mpi_utilities_mod
-use        random_seq_mod
-use  ensemble_manager_mod
-use distributed_state_mod
-use   state_structure_mod
+                                  VERTISSCALEHEIGHT, query_location
+use         utilities_mod, only : find_namelist_in_file, check_namelist_read, &
+                                  string_to_logical, string_to_real,& 
+                                  logfileunit, do_nml_file, do_nml_term, &
+                                  register_module, error_handler, &
+                                  file_exist, to_upper, E_ERR, E_MSG
+use          obs_kind_mod, only : QTY_SURFACE_ELEVATION, QTY_PRESSURE, &
+                                  QTY_GEOMETRIC_HEIGHT, QTY_VERTLEVEL, QTY_SURFACE_PRESSURE, &
+                                  QTY_TEMPERATURE, QTY_SPECIFIC_HUMIDITY, &
+                                  get_index_for_quantity, get_num_quantities
+!#! use     mpi_utilities_mod
+!#! use        random_seq_mod
+use  ensemble_manager_mod,  only : ensemble_type
+use distributed_state_mod,  only : get_state
+use   state_structure_mod,  only : add_domain, get_dart_vector_index, get_domain_size, &
+                                   get_dim_name, get_kind_index, get_num_dims, &
+                                   get_num_variables, get_varid_from_kind, &
+                                   get_model_variable_indices, state_structure_info
 use  netcdf_utilities_mod,  only : nc_get_variable, nc_get_variable_size, &
                                    nc_add_attribute_to_variable, &
                                    nc_define_integer_variable, &
@@ -39,8 +50,13 @@ use  netcdf_utilities_mod,  only : nc_get_variable, nc_get_variable_size, &
                                    nc_define_dimension, nc_put_variable, &
                                    nc_sync, nc_enddef, nc_redef, nc_open_readonly, &
                                    nc_close, nc_variable_exists
-use       location_io_mod
-use        quad_utils_mod
+!#!use       location_io_mod
+use        quad_utils_mod,  only : quad_interp_handle, init_quad_interp, &
+                                   set_quad_coords, &! finalize_quad_interp, &
+                                   !>@todo FIXME need to call finalize_quad_interp
+                                   quad_lon_lat_locate, quad_lon_lat_evaluate, &
+                                   GRID_QUAD_IRREG_SPACED_REGULAR,  &
+                                   QUAD_LOCATED_CELL_CENTERS
 use     default_model_mod,  only : adv_1step, init_time, init_conditions, &
                                    nc_write_model_vars, pert_model_copies
 
@@ -117,7 +133,7 @@ namelist /model_nml/  &
 
 
 ! global variables
-character(len=512) :: string1, string2, string3
+character(len=512) :: string1, string2
 logical, save      :: module_initialized = .false.
 
 ! domain id for the cam model.  this allows us access to all of the state structure
@@ -201,7 +217,6 @@ contains
 subroutine static_init_model()
 
 integer :: iunit, io
-integer :: ncid
 integer :: nfields
 
 if ( module_initialized ) return
@@ -479,16 +494,17 @@ integer,             intent(in) :: obs_qty
 real(r8),           intent(out) :: interp_vals(ens_size) !< array of interpolated values
 integer,            intent(out) :: istatus(ens_size)
 
+character(len=*), parameter :: routine = 'model_interpolate:'
+
 integer  :: varid
 integer  :: lon_bot, lat_bot, lon_top, lat_top
 real(r8) :: lon_fract, lat_fract
 real(r8) :: lon_lat_vert(3), botvals(ens_size), topvals(ens_size)
 integer  :: level_one_array(ens_size)
-integer  :: which_vert, status1, status2, status_array(ens_size)
+integer  :: which_vert, status1, status_array(ens_size)
 type(quad_interp_handle) :: interp_handle
-integer  :: ijk(3), icorner, imember, numdims
+integer  :: icorner, numdims
 integer  :: four_lons(4), four_lats(4)
-integer  :: two_bots(2), two_tops(2)
 real(r8) :: two_horiz_fracts(2)
 integer  :: four_bot_levs(4, ens_size), four_top_levs(4, ens_size)
 real(r8) :: four_vert_fracts(4, ens_size)
@@ -538,7 +554,7 @@ if (status1 /= 0) then
    ! and if that fails, then they compute what they need using different quantities.)
    if(debug_level > 12) then
       write(string1,*)'did not find observation quantity ', obs_qty, ' in the state vector'
-      call error_handler(E_MSG,'model_interpolate:',string1,source,revision,revdate)
+      call error_handler(E_MSG,routine,string1,source,revision,revdate)
    endif
    istatus(:) = 2   ! this quantity not in the state vector
    return
@@ -703,6 +719,8 @@ integer, intent(in) :: obs_quantity
 integer, intent(in) :: var_id
 integer :: get_dims_from_qty
 
+character(len=*), parameter :: routine = 'get_dims_from_qty:'
+
 if (var_id > 0) then
    get_dims_from_qty = get_num_dims(domain_id,var_id)
 else
@@ -712,8 +730,7 @@ else
       case default 
          write(string1, *) 'we can not interpolate qty', obs_quantity, &
                            ' if the dimension is not known'
-         call error_handler(E_ERR,'get_dims_from_qty', &
-                            string1,source,revision,revdate)
+         call error_handler(E_ERR,routine, string1,source,revision,revdate)
     end select
 endif
 
@@ -851,24 +868,24 @@ integer,             intent(out) :: top_levs(ens_size)
 real(r8),            intent(out) :: vert_fracts(ens_size)
 integer,             intent(out) :: my_status(ens_size)
 
-integer :: bot1, top1, imember, nlevels, varid
-integer :: level_one, status1
-integer(i8) :: state_indx
+character(len=*), parameter :: routine = 'find_vertical_levels:'
+
+integer  :: bot1, top1, imember, nlevels, level_one, status1
 real(r8) :: fract1
-real(r8) :: surf_pressure(ens_size)
-real(r8) :: pressure_array(grid_data%lev%nsize)
-real(r8) :: height_array(grid_data%lev%nsize, ens_size)
+real(r8) :: surf_pressure (  ens_size )
+real(r8) :: pressure_array( grid_data%lev%nsize )
+real(r8) :: height_array  ( grid_data%lev%nsize, ens_size )
 
 ! assume the worst
-bot_levs(:) = MISSING_I
-top_levs(:) = MISSING_I
+bot_levs(:)    = MISSING_I
+top_levs(:)    = MISSING_I
 vert_fracts(:) = MISSING_R8
-my_status(:) = 98
+my_status(:)   = 98
 
 !>@todo FIXME we need nlevels everywhere - should we have a global var for it?
 
 ! number of vertical levels (midlayer points)
-nlevels = grid_data%lev%nsize
+nlevels   = grid_data%lev%nsize
 level_one = 1
 
 select case (which_vert)
@@ -908,8 +925,7 @@ select case (which_vert)
       
 
       write(string1, *) 'we have not written the code yet for vertical type: ', which_vert
-      call error_handler(E_ERR,'find_vertical_levels', &
-                         string1,source,revision,revdate)
+      call error_handler(E_ERR,routine,string1,source,revision,revdate)
 
    case(VERTISLEVEL)
       ! this routine returns false if the level number is out of range.
@@ -936,8 +952,7 @@ select case (which_vert)
       !>@todo FIXME: do nothing or error out here?
 
       write(string1, *) 'unsupported vertical type: ', which_vert
-      call error_handler(E_ERR,'find_vertical_levels', &
-                         string1,source,revision,revdate)
+      call error_handler(E_ERR,routine,string1,source,revision,revdate)
       
 end select
 
@@ -957,12 +972,11 @@ integer,             intent(in)  :: nlevels
 real(r8),            intent(out) :: height_array(nlevels, ens_size)
 integer,             intent(out) :: my_status(ens_size)
 
-integer     :: k, varid, level_one, imember, status1
-real(r8)    :: temperature(ens_size), specific_humidity(ens_size), surface_pressure(ens_size)
-real(r8)    :: phi(ens_size, nlevels)
-real(r8)    :: surface_elevation
-real(r8)    :: tv(ens_size, nlevels+1)  !>@todo FIXME  ????           ! Virtual temperature, top to bottom
-integer(i8) :: state_indx
+integer  :: k, level_one, imember, status1
+real(r8) :: surface_elevation
+real(r8) :: temperature(ens_size), specific_humidity(ens_size), surface_pressure(ens_size)
+real(r8) :: phi(ens_size, nlevels)
+real(r8) :: tv(ens_size, nlevels+1)  !>@todo FIXME  ???? ! Virtual temperature, top to bottom
 
 !>@todo this should come from a model specific constant module.
 !> the forward operators and model_mod should use it.
@@ -1053,7 +1067,9 @@ integer,  intent(out) :: top_lev
 real(r8), intent(out) :: fract  
 integer,  intent(out) :: my_status
 
-integer :: this_lev, varid
+character(len=*), parameter :: routine = 'pressure_to_level:'
+
+integer :: this_lev
 
 bot_lev = MISSING_I
 top_lev = MISSING_I
@@ -1080,19 +1096,20 @@ enddo levloop
 
 ! you shouldn't get here
 if (bot_lev == MISSING_I) then
-  write(string1,*) 'should not happen - contact dart support'
+  write(string1,*) 'should not happen - contact DART support'
   write(string2,*) 'pressure value ', p_val, ' was not found in pressure column'
-  call error_handler(E_ERR,'pressure_to_level', &
-                         string1,source,revision,revdate,text2=string2)
+  call error_handler(E_ERR,routine,string1,source,revision,revdate,text2=string2)
 endif
 
 end subroutine pressure_to_level
 
 !-----------------------------------------------------------------------
+!>
 !> return the level indices and fraction across the level.
 !> 1 is top, N is bottom, bot is the lower level, top is the upper level
 !> so top value will be larger than bot.  fract = 0 is the full top,
 !> fract = 1 is the full bot.  return non-zero if value outside the valid range.
+!>
 
 subroutine height_to_level(nlevels, heights, h_val, &
                            bot_lev, top_lev, fract, my_status)
@@ -1105,7 +1122,9 @@ integer,  intent(out) :: top_lev
 real(r8), intent(out) :: fract  
 integer,  intent(out) :: my_status
 
-integer :: this_lev, varid
+character(len=*), parameter :: routine = 'height_to_level:'
+
+integer :: this_lev
 
 bot_lev = MISSING_I
 top_lev = MISSING_I
@@ -1132,10 +1151,9 @@ enddo levloop
 
 ! you shouldn't get here
 if (bot_lev == MISSING_I) then
-  write(string1,*) 'should not happen - contact dart support'
+  write(string1,*) 'should not happen - contact DART support'
   write(string2,*) 'height value ', h_val, ' was not found in height column'
-  call error_handler(E_ERR,'height_to_level', &
-                         string1,source,revision,revdate,text2=string2)
+  call error_handler(E_ERR,routine,string1,source,revision,revdate,text2=string2)
 endif
 
 end subroutine height_to_level
@@ -1194,17 +1212,17 @@ range_set = .true.
 end function range_set
 
 
-!-----------------------------------------------------------------------
-!>  Next, get the pressures on the levels for this ps
-!>  Assuming we'll only need pressures on model mid-point levels, not 
-!>  interface levels.  This pressure column will be for the correct grid 
-!> for obs_qty, since p_surf was taken
-!>      from the grid-correct ps[_stagr] grid
-
-subroutine find_pressure_levels()
-real(r8), allocatable :: p_col(:,:)
-
-end subroutine find_pressure_levels
+!#! !-----------------------------------------------------------------------
+!#! !>  Next, get the pressures on the levels for this ps
+!#! !>  Assuming we'll only need pressures on model mid-point levels, not 
+!#! !>  interface levels.  This pressure column will be for the correct grid 
+!#! !> for obs_qty, since p_surf was taken
+!#! !>      from the grid-correct ps[_stagr] grid
+!#! 
+!#! subroutine find_pressure_levels()
+!#! real(r8), allocatable :: p_col(:,:)
+!#! 
+!#! end subroutine find_pressure_levels
 
 
 !-----------------------------------------------------------------------
@@ -1213,8 +1231,10 @@ end subroutine find_pressure_levels
 
 
 function get_interp_handle(obs_quantity)
-integer, intent(in)     :: obs_quantity
+integer, intent(in)      :: obs_quantity
 type(quad_interp_handle) :: get_interp_handle
+
+character(len=*), parameter :: routine = 'get_interp_handle:'
 
 select case (grid_stagger%qty_stagger(obs_quantity))
    case ( STAGGER_U ) 
@@ -1225,16 +1245,13 @@ select case (grid_stagger%qty_stagger(obs_quantity))
       get_interp_handle = interp_nonstaggered
    case ( STAGGER_W ) 
       write(string1,*) 'w stagger -- not supported yet'
-      call error_handler(E_ERR,'get_interp_handle', &
-                         string1,source,revision,revdate)
+      call error_handler(E_ERR,routine,string1,source,revision,revdate)
    case ( STAGGER_UV ) 
       write(string1,*) 'uv stagger -- not supported yet'
-      call error_handler(E_ERR,'get_interp_handle', &
-                         string1,source,revision,revdate)
+      call error_handler(E_ERR,routine,string1,source,revision,revdate)
    case default
       write(string1,*) 'unknown stagger -- this should never happen'
-      call error_handler(E_ERR,'get_interp_handle', &
-                         string1,source,revision,revdate)
+      call error_handler(E_ERR,routine,string1,source,revision,revdate)
 end select
                       
 end function get_interp_handle
@@ -1250,6 +1267,8 @@ end function get_interp_handle
 
 function shortest_time_between_assimilations()
 
+character(len=*), parameter :: routine = 'shortest_time_between_assimilations:'
+
 type(time_type) :: shortest_time_between_assimilations
 
 if ( .not. module_initialized ) call static_init_model
@@ -1259,9 +1278,7 @@ shortest_time_between_assimilations = set_time(assimilation_period_seconds, &
 
 write(string1,*)'assimilation period is ',assimilation_period_days,   ' days ', &
                                           assimilation_period_seconds,' seconds'
-
-call error_handler(E_MSG,'shortest_time_between_assimilations:', &
-                   string1,source,revision,revdate)
+call error_handler(E_MSG,routine,string1,source,revision,revdate)
 
 end function shortest_time_between_assimilations
 
@@ -1294,12 +1311,7 @@ end subroutine end_model
 subroutine nc_write_model_atts(ncid, dom_id)
 
 integer, intent(in) :: ncid      ! netCDF file identifier
-integer, intent(in) :: dom_id
-
-! for the dimensions and coordinate variables
-integer :: NlonDimID, NlatDimID, NzDimID
-integer :: ulonVarID, ulatVarID, tlonVarID, tlatVarID, ZGVarID, ZCVarID
-integer :: KMTVarID, KMUVarID
+integer, intent(in) :: dom_id    ! not used since there is only one domain
 
 !----------------------------------------------------------------------
 ! local variables 
@@ -1456,7 +1468,6 @@ type(time_type), intent(in) :: model_time
 
 integer :: iyear, imonth, iday, ihour, iminute, isecond
 integer :: cam_date(1), cam_tod(1)
-integer :: ios, VarID
 
 character(len=*), parameter :: routine = 'write_model_time'
 
@@ -1587,6 +1598,8 @@ subroutine set_cam_variable_info( variable_array, nfields )
 character(len=*), intent(in)  :: variable_array(:)
 integer,          intent(out) :: nfields
 
+character(len=*), parameter :: routine = 'set_cam_variable_info:'
+
 integer :: i
 
 !>@todo FIXME what should these be?  hardcode to 128 just for a hack.
@@ -1615,14 +1628,14 @@ ParseVariables : do i = 1, MAX_STATE_VARIABLES
 
    if ( varname == ' ' .or.  dartstr == ' ' ) then
       string1 = 'model_nml:model "state_variables" not fully specified'
-      call error_handler(E_ERR,'set_cam_variable_info:',string1,source,revision,revdate)
+      call error_handler(E_ERR,routine,string1,source,revision,revdate)
    endif
 
    ! Make sure DART kind is valid
 
    if( get_index_for_quantity(dartstr) < 0 ) then
       write(string1,'(3A)') 'there is no obs_kind <', trim(dartstr), '> in obs_kind_mod.f90'
-      call error_handler(E_ERR,'set_cam_variable_info:',string1,source,revision,revdate)
+      call error_handler(E_ERR,routine,string1,source,revision,revdate)
    endif
 
    call to_upper(minvalstr)
@@ -1646,8 +1659,7 @@ if (nfields == MAX_STATE_VARIABLES) then
    write(string2,'(A,i4,A)') 'WARNING: you have specified at least ', nfields, &
                              ' perhaps more'
 
-   call error_handler(E_MSG,'set_cam_variable_info:',string1, &
-                      source,revision,revdate,text2=string2)
+   call error_handler(E_MSG,routine,string1,source,revision,revdate,text2=string2)
 endif
 
 domain_id = add_domain(cam_template_filename, nfields, var_names, kind_list, &
@@ -1859,6 +1871,8 @@ subroutine set_vert_localization(typename, vcoord)
 character(len=*), intent(in)  :: typename
 integer,          intent(out) :: vcoord
 
+character(len=*), parameter :: routine = 'set_vert_localization'
+
 character(len=32) :: ucasename
 
 ucasename = typename
@@ -1876,8 +1890,7 @@ select case (ucasename)
   case default
      write(string1,*)'unrecognized vertical localization coordinate type: '//trim(typename)
      write(string2,*)'valid values are: PRESSURE, HEIGHT, SCALEHEIGHT, LEVEL'
-     call error_handler(E_ERR,'set_vert_localization:',string1, &
-                        source,revision,revdate,text2=string2)
+     call error_handler(E_ERR,routine,string1,source,revision,revdate,text2=string2)
 end select
  
 end subroutine set_vert_localization
@@ -2052,7 +2065,6 @@ gph2gmh = (r0 * h) / (((g0*r0)/G) - h)
 end function gph2gmh
 
 !-----------------------------------------------------------------------
-
 !> This subroutine computes the Earth's gravity at any altitude
 !> and latitude.  The model assumes the Earth is an oblate
 !> spheriod rotating at a the Earth's spin rate.  The model
@@ -2077,7 +2089,7 @@ real(r8), intent(out) :: galt
 real(r8),parameter :: xmu = 398600.4415_r8         ! km^3/s^2
 real(r8),parameter :: ae  = 6378.1363_r8           ! km
 real(r8),parameter :: f   = 1.0_r8/298.2564_r8
-real(r8),parameter :: w   = 7.292115e-05_r8        ! rad/s
+!#! real(r8),parameter :: w   = 7.292115e-05_r8        ! rad/s
 real(r8),parameter :: xm  = 0.003468_r8            !
 real(r8),parameter :: f2  = 5.3481622134089e-03_r8 ! f2 = -f + 5.0* 0.50*xm - 17.0/14.0*f*xm + 15.0/4.0*xm**2
 real(r8),parameter :: f4  = 2.3448248012911e-05_r8 ! f4 = -f**2* 0.50 + 5.0* 0.50*f*xm
@@ -2101,6 +2113,16 @@ galt = galt*1000.0_r8
 end subroutine compute_gravity
 
 !-----------------------------------------------------------------------
+!> This subroutine computes converts vertical state
+!>
+!>  in:    ens_handle  - mean ensemble handle
+!>  in:    num         - number of locations
+!>  inout: locs(:)     - locations
+!>  in:    loc_qtys(:) - location quantities
+!>  in:    loc_indx(:) - location index
+!>  in:    which_vert  - vertical location to convert
+!>  out:   istatus     - return status 0 is a successful conversion
+!>
 
 subroutine convert_vertical_state(ens_handle, num, locs, loc_qtys, loc_indx, &
                                   which_vert, istatus)
@@ -2113,6 +2135,8 @@ integer(i8),         intent(in)    :: loc_indx(:)
 integer,             intent(in)    :: which_vert
 integer,             intent(out)   :: istatus
 
+character(len=*), parameter :: routine = 'convert_vertical_state'
+
 integer :: current_vert_type, ens_size, i
 
 ens_size = 1
@@ -2124,15 +2148,16 @@ do i=1,num
 
    select case (which_vert)
       case (VERTISPRESSURE)
-         call convert_to_pressure(ens_handle, ens_size, locs(i), loc_indx(i))
+         call convert_to_pressure(    ens_handle, ens_size, locs(i), loc_indx(i) )
       case (VERTISHEIGHT)
-         call convert_to_height(ens_handle, ens_size, locs(i), loc_indx(i))
+         call convert_to_height(      ens_handle, ens_size, locs(i), loc_indx(i) )
       case (VERTISLEVEL)
-         call convert_to_level(ens_handle, ens_size, locs(i), loc_indx(i))
+         call convert_to_level(                   ens_size, locs(i), loc_indx(i) )
       case (VERTISSCALEHEIGHT)
-         call convert_to_scaleheight(ens_handle, ens_size, locs(i), loc_indx(i))
+         call convert_to_scaleheight( ens_handle, ens_size, locs(i), loc_indx(i) )
       case default
-         print*, ' can not convert vert'
+         write(string1,*)'unable to convert vertical state "', which_vert, '"'
+         call error_handler(E_MSG,routine,string1,source,revision,revdate)
    end select
 enddo
 
@@ -2160,13 +2185,13 @@ end subroutine  convert_to_pressure
 !--------------------------------------------------------------------
 
 subroutine state_level_to_pressure(ens_handle, ens_size, location_indx, pressure)
-type(ensemble_type), intent(in)    :: ens_handle
-integer,             intent(in)    :: ens_size
-integer(i8),         intent(in)    :: location_indx
-real(r8),            intent(out)   :: pressure
+type(ensemble_type), intent(in)  :: ens_handle
+integer,             intent(in)  :: ens_size
+integer(i8),         intent(in)  :: location_indx
+real(r8),            intent(out) :: pressure
 
-integer  :: iloc, jloc, vloc, my_status(ens_size)
-real(r8) :: height_array(grid_data%lev%nsize, ens_size)
+integer  :: iloc, jloc, vloc
+integer  :: my_status(ens_size)
 real(r8) :: pressure_array(grid_data%lev%nsize)
 
 ! build a height column and a pressure column and find the levels?
@@ -2230,26 +2255,24 @@ end subroutine  convert_to_scaleheight
 
 !--------------------------------------------------------------------
 
-subroutine  convert_to_level(ens_handle, ens_size, location, location_indx)
-type(ensemble_type), intent(in)    :: ens_handle
+subroutine convert_to_level(ens_size, location, location_indx)
 integer,             intent(in)    :: ens_size
 type(location_type), intent(inout) :: location
 integer(i8),         intent(in)    :: location_indx
 
-call state_level_to_level(ens_handle, ens_size, location, location_indx)
+call state_level_to_level(ens_size, location, location_indx)
 
-end subroutine  convert_to_level
+end subroutine convert_to_level
 
 !--------------------------------------------------------------------
 
-subroutine state_level_to_level(ens_handle, ens_size, location, location_indx)
-type(ensemble_type), intent(in)    :: ens_handle
+subroutine state_level_to_level(ens_size, location, location_indx)
 integer,             intent(in)    :: ens_size
 type(location_type), intent(inout) :: location
 integer(i8),         intent(in)    :: location_indx
 
-integer  :: iloc, jloc, vloc, my_status(ens_size)
-real(r8) :: height_array(grid_data%lev%nsize, ens_size)
+integer  :: iloc, jloc, vloc
+integer  :: my_status(ens_size)
 real(r8) :: level(grid_data%lev%nsize)
 
 ! build a height column and a level column and find the levels?
@@ -2270,7 +2293,6 @@ type(location_type), intent(inout) :: location
 integer(i8),         intent(in)    :: location_indx
 
 integer  :: iloc, jloc, vloc, level_one, status1, my_status(ens_size)
-real(r8) :: height_array(grid_data%lev%nsize, ens_size)
 real(r8) :: pressure_array(grid_data%lev%nsize)
 real(r8) :: surface_pressure(1), scaleheight
 
@@ -2361,11 +2383,15 @@ subroutine convert_vertical_obs(ens_handle, num, locs, loc_qtys, loc_types, &
 type(ensemble_type), intent(in)    :: ens_handle
 integer,             intent(in)    :: num
 type(location_type), intent(inout) :: locs(:)
-integer,             intent(in)    :: loc_qtys(:), loc_types(:)
+integer,             intent(in)    :: loc_qtys(:)
+integer,             intent(in)    :: loc_types(:)
 integer,             intent(in)    :: which_vert
 integer,             intent(out)   :: my_status(:)
 
+character(len=*), parameter :: routine = 'convert_vertical_obs'
+
 integer :: current_vert_type, i, ens_size
+
 
 ens_size = 1
 
@@ -2384,7 +2410,8 @@ do i=1,num
       case (VERTISSCALEHEIGHT)
          call convert_obs_to_scaleheight(ens_handle, ens_size, locs(i))
       case default
-         print*, ' can not convert vert'
+         write(string1,*)'unable to convert vertical obs "', which_vert, '"'
+         call error_handler(E_MSG,routine,string1,source,revision,revdate)
    end select
 enddo
 
@@ -2407,11 +2434,12 @@ end subroutine  convert_obs_to_pressure
 !--------------------------------------------------------------------
 
 subroutine obs_vertical_to_pressure(ens_handle, ens_size, location)
+
 type(ensemble_type), intent(in)    :: ens_handle
 integer,             intent(in)    :: ens_size
 type(location_type), intent(inout) :: location
 
-integer  :: iloc, jloc, vloc, my_status(ens_size)
+integer  :: my_status(ens_size)
 real(r8) :: pressure_array(grid_data%lev%nsize)
 
 call model_interpolate(ens_handle, ens_size, location, QTY_PRESSURE, pressure_array(:), my_status(:))
@@ -2439,10 +2467,11 @@ type(ensemble_type), intent(in)    :: ens_handle
 integer,             intent(in)    :: ens_size
 type(location_type), intent(inout) :: location
 
-integer  :: iloc, jloc, vloc, my_status(ens_size)
-real(r8) :: height_array(ens_size)
+integer  :: my_status(    ens_size )
+real(r8) :: height_array( ens_size )
 
-call model_interpolate(ens_handle, ens_size, location, QTY_GEOMETRIC_HEIGHT, height_array(:), my_status(:))
+call model_interpolate(ens_handle, ens_size, location, &
+                       QTY_GEOMETRIC_HEIGHT, height_array(:), my_status(:))
 
 call set_vertical(location, height_array(1), VERTISHEIGHT)
 
@@ -2467,7 +2496,7 @@ type(ensemble_type), intent(in)    :: ens_handle
 integer,             intent(in)    :: ens_size
 type(location_type), intent(inout) :: location
 
-integer  :: iloc, jloc, vloc, my_status(ens_size)
+integer  :: my_status(ens_size)
 real(r8) :: level_array(ens_size)
 
 call model_interpolate(ens_handle, ens_size, location, QTY_VERTLEVEL, level_array(:), my_status(:))
@@ -2495,9 +2524,8 @@ type(ensemble_type), intent(in)    :: ens_handle
 integer,             intent(in)    :: ens_size
 type(location_type), intent(inout) :: location
 
-integer  :: iloc, jloc, vloc, my_status(ens_size)
-real(r8) :: pressure_array(ens_size)
-real(r8) :: surface_pressure_array(ens_size)
+integer  :: my_status(ens_size)
+real(r8) :: pressure_array(ens_size), surface_pressure_array(ens_size)
 real(r8) :: scaleheight
 
 call model_interpolate(ens_handle, ens_size, location, QTY_PRESSURE,         pressure_array(:),         my_status(:))
