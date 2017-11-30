@@ -30,7 +30,8 @@ use         utilities_mod, only : find_namelist_in_file, check_namelist_read, &
                                   register_module, error_handler, &
                                   file_exist, to_upper, E_ERR, E_MSG
 use          obs_kind_mod, only : QTY_SURFACE_ELEVATION, QTY_PRESSURE, &
-                                  QTY_GEOMETRIC_HEIGHT, QTY_VERTLEVEL, QTY_SURFACE_PRESSURE, &
+                                  QTY_GEOMETRIC_HEIGHT, QTY_VERTLEVEL, &
+                                  QTY_SURFACE_PRESSURE, &
                                   QTY_TEMPERATURE, QTY_SPECIFIC_HUMIDITY, &
                                   get_index_for_quantity, get_num_quantities
 !#! use     mpi_utilities_mod
@@ -308,7 +309,7 @@ call get_model_variable_indices(index_in, iloc, jloc, vloc, var_id=myvarid)
 
 myqty = get_kind_index(domain_id, myvarid)
 
-location = get_location_from_index(iloc, jloc, vloc, myvarid)
+location = get_location_from_index(iloc, jloc, vloc, myqty)
 
 ! return state quantity for this index if requested
 if (present(var_type)) var_type = myqty
@@ -450,6 +451,7 @@ select case (obs_quantity)
       my_status(:) = 0
 
    case default
+      !>@todo FIXME
       print*, 'should not go here'
 
 end select
@@ -629,12 +631,14 @@ if (numdims > 2 ) then
       do icorner=1, 4
          call get_values_from_varid(state_handle,  ens_size, &
                                     four_lons(icorner), four_lats(icorner), &
-                                    four_bot_levs(icorner, :), varid, botvals, status_array)
+                                    four_bot_levs(icorner, :), varid, botvals, &
+                                    status_array)
+
          if (any(status_array /= 0)) then
             istatus(:) = 5   ! cannot retrieve bottom values
             return
          endif
-         
+
          call get_values_from_varid(state_handle,  ens_size, &
                                     four_lons(icorner), four_lats(icorner), &
                                     four_top_levs(icorner, :), varid, topvals, status_array)
@@ -645,7 +649,7 @@ if (numdims > 2 ) then
 
          call vert_interp(ens_size, botvals, topvals, four_vert_fracts(icorner, :), &
                           quad_vals(icorner, :), status_array)
-  
+
          if (any(status_array /= 0)) then
             istatus(:) = 7   ! cannot do vertical interpolation
             return
@@ -699,7 +703,6 @@ endif
 ! do the horizontal interpolation for each ensemble member
 call quad_lon_lat_evaluate(interp_handle, lon_fract, lat_fract, ens_size, &
                            quad_vals, interp_vals, status_array)
-
 if (any(status_array /= 0)) then
    istatus(:) = 8   ! cannot evaluate in the quad
    return
@@ -837,8 +840,8 @@ real(r8), intent(out) :: two_horiz_fracts(2)
 
 four_lons(1) = lon_bot
 four_lons(2) = lon_top
-four_lons(3) = lon_bot
-four_lons(4) = lon_top
+four_lons(3) = lon_top
+four_lons(4) = lon_bot
 
 four_lats(1) = lat_bot
 four_lats(2) = lat_bot
