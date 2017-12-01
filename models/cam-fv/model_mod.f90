@@ -408,9 +408,10 @@ select case (stagger)
 
    next_lon = lon_index-1
    if (next_lon < 1) next_lon = grid_data%lon%nsize
-   call get_values_from_qty(ens_handle, ens_size, qty, lon_index, next_lon, lev_index, vals_top, my_status)
+   call get_values_from_qty(ens_handle, ens_size, qty, next_lon, lat_index, lev_index, vals_top, my_status)
 
    vals = (vals_bot + vals_top) / 2.0_r8
+   !print*, 'vals, vals_bot, vals_top', vals, vals_bot, vals_top
 
   ! no stagger - cell centers, or W stagger
   case default
