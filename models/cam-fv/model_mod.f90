@@ -301,15 +301,16 @@ integer, optional,   intent(out) :: var_type
 ! Local variables
 
 integer  :: iloc, vloc, jloc
-integer  :: myvarid, myqty
+integer  :: myvarid, myqty, nd
 
 if ( .not. module_initialized ) call static_init_model
 
 call get_model_variable_indices(index_in, iloc, jloc, vloc, var_id=myvarid)
 
 myqty = get_kind_index(domain_id, myvarid)
+nd = get_num_dims(domain_id, myvarid)
 
-location = get_location_from_index(iloc, jloc, vloc, myqty)
+location = get_location_from_index(iloc, jloc, vloc, myqty, nd)
 
 ! return state quantity for this index if requested
 if (present(var_type)) var_type = myqty
@@ -318,20 +319,31 @@ end subroutine get_state_meta_data
 
 !-----------------------------------------------------------------------
 
-function get_location_from_index(i, j, k, q)
+function get_location_from_index(i, j, k, q, nd)
 integer, intent(in) :: i
 integer, intent(in) :: j
 integer, intent(in) :: k
 integer, intent(in) :: q
+integer, intent(in) :: nd
 type(location_type) :: get_location_from_index
 
 real(r8) :: slon_val
+real(r8) :: use_vert_val
+integer  :: use_vert_type
+
+if (nd == 2) then
+   use_vert_type = VERTISSURFACE
+   use_vert_val  = MISSING_R8  ! could also be surface elevation
+else
+   use_vert_type = VERTISLEVEL
+   use_vert_val  = real(k,r8)
+endif
 
 select case (grid_stagger%qty_stagger(q))
   case (STAGGER_U)
    get_location_from_index = set_location(grid_data%lon%vals(i), &
                                           grid_data%slat%vals(j), &
-                                          real(k,r8), VERTISLEVEL)
+                                          use_vert_val, use_vert_type)
 
   case (STAGGER_V)
    slon_val = grid_data%slon%vals(i)
@@ -339,22 +351,75 @@ select case (grid_stagger%qty_stagger(q))
    if (slon_val > 360) slon_val = slon_val - 360.0_r8
    get_location_from_index = set_location(slon_val, &
                                           grid_data%lat%vals(j), &
-                                          real(k,r8), VERTISLEVEL)
+                                          use_vert_val, use_vert_type)
    
   !>@todo not sure what to do yet. ? +-1/2 ?
   case (STAGGER_W)
    get_location_from_index = set_location(grid_data%lon%vals(i), &
                                           grid_data%lat%vals(j), &
-                                          real(k,r8)-0.5_r8, VERTISLEVEL)
+                                          use_vert_val - 0.5_r8, use_vert_type)
   ! no stagger - cell centers
   case default
    get_location_from_index = set_location(grid_data%lon%vals(i), &
                                           grid_data%lat%vals(j), &
-                                          real(k,r8), VERTISLEVEL)
+                                          use_vert_val, use_vert_type)
 
 end select
 
 end function get_location_from_index
+
+!-----------------------------------------------------------------------
+!>
+!> this routine should be called to get a value from an unstaggered grid
+!> that corresponds to a staggered grid.  e.g. you need the surface pressurre
+!> under a V wind point.
+
+subroutine get_staggered_values_from_qty(ens_handle, ens_size, qty, lon_index, lat_index, lev_index, stagger_qty, vals, my_status)
+type(ensemble_type), intent(in) :: ens_handle
+integer,             intent(in) :: ens_size
+integer,             intent(in) :: qty
+integer,             intent(in) :: lon_index
+integer,             intent(in) :: lat_index
+integer,             intent(in) :: lev_index
+integer,             intent(in) :: stagger_qty
+real(r8),            intent(out) :: vals(ens_size)
+integer,             intent(out) :: my_status
+
+integer :: next_lat, next_lon, stagger
+real(r8) :: vals_bot(ens_size), vals_top(ens_size)
+
+stagger = grid_stagger%qty_stagger(stagger_qty)
+
+!> latitudes:  staggered value N is between N and (N + 1) on the unstaggered grid
+!> longitudes: staggered value N is between N and (N - 1) on the unstaggered grid
+
+select case (stagger)
+  case (STAGGER_U)
+   call get_values_from_qty(ens_handle, ens_size, qty, lon_index, lat_index, lev_index, vals_bot, my_status)
+
+   next_lat = lat_index+1
+   if (next_lat > grid_data%lat%nsize) next_lat = grid_data%lat%nsize
+   call get_values_from_qty(ens_handle, ens_size, qty, lon_index, next_lat, lev_index, vals_top, my_status)
+
+   vals = (vals_bot + vals_top) / 2.0_r8
+
+  case (STAGGER_V)
+   call get_values_from_qty(ens_handle, ens_size, qty, lon_index, lat_index, lev_index, vals_bot, my_status)
+
+   next_lon = lon_index-1
+   if (next_lon < 1) next_lon = grid_data%lon%nsize
+   call get_values_from_qty(ens_handle, ens_size, qty, lon_index, next_lon, lev_index, vals_top, my_status)
+
+   vals = (vals_bot + vals_top) / 2.0_r8
+
+  ! no stagger - cell centers, or W stagger
+  case default
+   call get_values_from_qty(ens_handle, ens_size, qty, lon_index, lat_index, lev_index, vals, my_status)
+
+end select
+
+end subroutine get_staggered_values_from_qty
+
 
 !-----------------------------------------------------------------------
 !>
@@ -374,10 +439,14 @@ integer :: varid
 integer(i8) :: state_indx
 
 varid      = get_varid_from_kind(domain_id, qty)
+if (varid < 0) then
+   vals(:) = MISSING_R8
+   my_status = 12
+   return
+endif
+
 state_indx = get_dart_vector_index(lon_index, lat_index, lev_index, domain_id, varid)
 vals(:)    = get_state(state_indx, ens_handle)
-
-if (varid < 0) my_status = 12
 
 end subroutine get_values_from_qty
 
@@ -387,7 +456,7 @@ end subroutine get_values_from_qty
 !> 
 
 subroutine get_values_from_varid(ens_handle, ens_size, lon_index, lat_index, lev_index, &
-                       varid, vals, my_status)
+                                 varid, vals, my_status)
 type(ensemble_type), intent(in)  :: ens_handle
 integer,  intent(in)  :: ens_size
 integer,  intent(in)  :: lon_index
@@ -433,11 +502,11 @@ select case (obs_quantity)
       if (obs_quantity == QTY_PRESSURE) then
          call cam_pressure_levels(ens_handle, ens_size, &
                                   lon_index, lat_index, grid_data%lev%nsize, &
-                                  vals_array, my_status)
+                                  obs_quantity, vals_array, my_status)
       else
          call cam_height_levels(ens_handle, ens_size, &
                                 lon_index, lat_index, grid_data%lev%nsize, &
-                                vals_array, my_status) 
+                                obs_quantity, vals_array, my_status) 
       endif
 
       if (any(my_status /= 0)) return
@@ -896,9 +965,9 @@ select case (which_vert)
    case(VERTISPRESSURE)
       ! construct a pressure column here and find the model levels
       ! that enclose this value
-      call get_values_from_qty(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
-                               lon_index, lat_index, level_one, &
-                               surf_pressure, status1)
+      call get_staggered_values_from_qty(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
+                                         lon_index, lat_index, level_one, obs_qty, &
+                                         surf_pressure, status1)
 
       !>@todo FIXME: should we figure out now or later? how many unique levels we have?
       !> for now - do the unique culling later so we don't have to carry that count around.
@@ -917,7 +986,7 @@ select case (which_vert)
       ! construct a height column here and find the model levels
       ! that enclose this value
       !@>todo put in arguments and write height_to_level
-      call cam_height_levels(ens_handle, ens_size, lon_index, lat_index, nlevels, &
+      call cam_height_levels(ens_handle, ens_size, lon_index, lat_index, nlevels, obs_qty, &
                              height_array, my_status)
       if (any(my_status /= 0)) return   !>@todo FIXME let successful members continue?
       do imember=1, ens_size
@@ -966,12 +1035,13 @@ end subroutine find_vertical_levels
 !>
 !> this version does all ensemble members at once.
 
-subroutine cam_height_levels(ens_handle, ens_size, lon_index, lat_index, nlevels, height_array, my_status) 
+subroutine cam_height_levels(ens_handle, ens_size, lon_index, lat_index, nlevels, qty, height_array, my_status) 
 type(ensemble_type), intent(in)  :: ens_handle
 integer,             intent(in)  :: ens_size
 integer,             intent(in)  :: lon_index
 integer,             intent(in)  :: lat_index
 integer,             intent(in)  :: nlevels
+integer,             intent(in)  :: qty
 real(r8),            intent(out) :: height_array(nlevels, ens_size)
 integer,             intent(out) :: my_status(ens_size)
 
@@ -995,8 +1065,8 @@ level_one = 1
 
 !@>todo make into a subroutine get_val or something similar
 ! get the surface pressure from the ens_handle
-call get_values_from_qty(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
-                         lon_index, lat_index, level_one, surface_pressure, status1)
+call get_staggered_values_from_qty(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
+                                   lon_index, lat_index, level_one, qty, surface_pressure, status1)
 
 
 ! get the surface elevation from the phis
@@ -2151,13 +2221,13 @@ do i=1,num
 
    select case (which_vert)
       case (VERTISPRESSURE)
-         call convert_to_pressure(    ens_handle, ens_size, locs(i), loc_indx(i) )
+         call convert_to_pressure(    ens_handle, ens_size, locs(i), loc_indx(i), loc_qtys(i) )
       case (VERTISHEIGHT)
-         call convert_to_height(      ens_handle, ens_size, locs(i), loc_indx(i) )
+         call convert_to_height(      ens_handle, ens_size, locs(i), loc_indx(i), loc_qtys(i) )
       case (VERTISLEVEL)
-         call convert_to_level(                   ens_size, locs(i), loc_indx(i) )
+         call convert_to_level(                   ens_size, locs(i), loc_indx(i), loc_qtys(i) )
       case (VERTISSCALEHEIGHT)
-         call convert_to_scaleheight( ens_handle, ens_size, locs(i), loc_indx(i) )
+         call convert_to_scaleheight( ens_handle, ens_size, locs(i), loc_indx(i), loc_qtys(i) )
       case default
          write(string1,*)'unable to convert vertical state "', which_vert, '"'
          call error_handler(E_MSG,routine,string1,source,revision,revdate)
@@ -2170,16 +2240,17 @@ end subroutine convert_vertical_state
 
 !--------------------------------------------------------------------
 
-subroutine  convert_to_pressure(ens_handle, ens_size, location, location_indx)
+subroutine  convert_to_pressure(ens_handle, ens_size, location, location_indx, qty)
 type(ensemble_type), intent(in)    :: ens_handle
 integer,             intent(in)    :: ens_size
 type(location_type), intent(inout) :: location
 integer(i8),         intent(in)    :: location_indx
+integer,             intent(in)    :: qty
 
 real(r8) :: pressure
 
 !>@todo FIXME move up to convert_vertical_state ?
-call state_level_to_pressure(ens_handle, ens_size, location_indx, pressure)
+call state_level_to_pressure(ens_handle, ens_size, location_indx, qty, pressure)
 
 call set_vertical(location, pressure, VERTISPRESSURE)
 
@@ -2187,21 +2258,21 @@ end subroutine  convert_to_pressure
 
 !--------------------------------------------------------------------
 
-subroutine state_level_to_pressure(ens_handle, ens_size, location_indx, pressure)
+subroutine state_level_to_pressure(ens_handle, ens_size, location_indx, qty, pressure)
 type(ensemble_type), intent(in)  :: ens_handle
 integer,             intent(in)  :: ens_size
 integer(i8),         intent(in)  :: location_indx
+integer,             intent(in)  :: qty
 real(r8),            intent(out) :: pressure
 
 integer  :: iloc, jloc, vloc
 integer  :: my_status(ens_size)
 real(r8) :: pressure_array(grid_data%lev%nsize)
 
-! build a height column and a pressure column and find the levels?
 call get_model_variable_indices(location_indx, iloc, jloc, vloc)
 
 call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, grid_data%lev%nsize, &
-                         pressure_array, my_status)
+                         qty, pressure_array, my_status)
 
 pressure = pressure_array(vloc)
 
@@ -2210,24 +2281,26 @@ end subroutine state_level_to_pressure
 
 !--------------------------------------------------------------------
 
-subroutine convert_to_height(ens_handle, ens_size, location, location_indx)
+subroutine convert_to_height(ens_handle, ens_size, location, location_indx, qty)
 type(ensemble_type), intent(in)    :: ens_handle
 integer,             intent(in)    :: ens_size
 type(location_type), intent(inout) :: location
 integer(i8),         intent(in)    :: location_indx
+integer,             intent(in)    :: qty
 
 !>@todo FIXME move up to convert_vertical_state ?
-call state_level_to_height(ens_handle, ens_size, location, location_indx)
+call state_level_to_height(ens_handle, ens_size, location, location_indx, qty)
 
 end subroutine  convert_to_height
 
 !--------------------------------------------------------------------
 
-subroutine state_level_to_height(ens_handle, ens_size, location, location_indx)
+subroutine state_level_to_height(ens_handle, ens_size, location, location_indx, qty)
 type(ensemble_type), intent(in)    :: ens_handle
 integer,             intent(in)    :: ens_size
 type(location_type), intent(inout) :: location
 integer(i8),         intent(in)    :: location_indx
+integer,             intent(in)    :: qty
 
 
 integer  :: iloc, jloc, vloc, my_status(ens_size)
@@ -2237,7 +2310,7 @@ real(r8) :: height_array(grid_data%lev%nsize, ens_size)
 call get_model_variable_indices(location_indx, iloc, jloc, vloc)
 
 call cam_height_levels(ens_handle, ens_size, iloc, jloc, grid_data%lev%nsize, &
-                       height_array, my_status) 
+                       qty, height_array, my_status) 
 
 !>@todo FIXME this can only be used if ensemble size is 1
 call set_vertical(location, height_array(vloc,1), VERTISHEIGHT)
@@ -2246,39 +2319,44 @@ end subroutine state_level_to_height
 
 !--------------------------------------------------------------------
 
-subroutine  convert_to_scaleheight(ens_handle, ens_size, location, location_indx)
+subroutine  convert_to_scaleheight(ens_handle, ens_size, location, location_indx, qty)
 type(ensemble_type), intent(in)    :: ens_handle
 integer,             intent(in)    :: ens_size
 type(location_type), intent(inout) :: location
 integer(i8),         intent(in)    :: location_indx
+integer,             intent(in)    :: qty
 
-call state_level_to_scaleheight(ens_handle, ens_size, location, location_indx)
+call state_level_to_scaleheight(ens_handle, ens_size, location, location_indx, qty)
 
 end subroutine  convert_to_scaleheight
 
 !--------------------------------------------------------------------
 
-subroutine convert_to_level(ens_size, location, location_indx)
+subroutine convert_to_level(ens_size, location, location_indx, qty)
 integer,             intent(in)    :: ens_size
 type(location_type), intent(inout) :: location
 integer(i8),         intent(in)    :: location_indx
+integer,             intent(in)    :: qty
 
-call state_level_to_level(ens_size, location, location_indx)
+call state_level_to_level(ens_size, location, location_indx, qty)
 
 end subroutine convert_to_level
 
 !--------------------------------------------------------------------
 
-subroutine state_level_to_level(ens_size, location, location_indx)
+subroutine state_level_to_level(ens_size, location, location_indx, qty)
 integer,             intent(in)    :: ens_size
 type(location_type), intent(inout) :: location
 integer(i8),         intent(in)    :: location_indx
+integer,             intent(in)    :: qty
 
 integer  :: iloc, jloc, vloc
 integer  :: my_status(ens_size)
-real(r8) :: level(grid_data%lev%nsize)
 
-! build a height column and a level column and find the levels?
+!>@todo FIXME qty is currently unused.  if we need it, its here.
+!>if we really don't need it, we can remove it.  all the other
+!>corresponding routines like this use it.
+
 call get_model_variable_indices(location_indx, iloc, jloc, vloc)
 
 call set_vertical(location, real(vloc,r8), VERTISLEVEL)
@@ -2289,11 +2367,12 @@ end subroutine state_level_to_level
 
 !--------------------------------------------------------------------
 
-subroutine state_level_to_scaleheight(ens_handle, ens_size, location, location_indx)
+subroutine state_level_to_scaleheight(ens_handle, ens_size, location, location_indx, qty)
 type(ensemble_type), intent(in)    :: ens_handle
 integer,             intent(in)    :: ens_size
 type(location_type), intent(inout) :: location
 integer(i8),         intent(in)    :: location_indx
+integer,             intent(in)    :: qty
 
 integer  :: iloc, jloc, vloc, level_one, status1, my_status(ens_size)
 real(r8) :: pressure_array(grid_data%lev%nsize)
@@ -2307,10 +2386,10 @@ call get_model_variable_indices(location_indx, iloc, jloc, vloc)
 ! get the surface pressure from the ens_handle
 call get_values_from_qty(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
                          iloc, jloc, level_one, surface_pressure, status1)
-
+   
 call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, grid_data%lev%nsize, &
-                         pressure_array, my_status)
-
+                         qty, pressure_array, my_status)
+   
 scaleheight = log(pressure_array(vloc)/surface_pressure(1))
 
 call set_vertical(location, scaleheight, VERTISSCALEHEIGHT)
@@ -2320,25 +2399,30 @@ end subroutine state_level_to_scaleheight
 !--------------------------------------------------------------------
 !> this only works for ens_size = 1
 
-subroutine obs_height_to_pressure(ens_handle, ens_size, location, location_indx)
+subroutine obs_height_to_pressure(ens_handle, ens_size, location, location_indx, qty)
 type(ensemble_type), intent(in)    :: ens_handle
 integer,             intent(in)    :: ens_size
 type(location_type), intent(inout) :: location
 integer(i8),         intent(in)    :: location_indx
+integer,             intent(in)    :: qty
 
 
 integer  :: iloc, jloc, vloc, my_status(ens_size)
 real(r8) :: height_array(  grid_data%lev%nsize, ens_size)
 real(r8) :: pressure_array(grid_data%lev%nsize, ens_size)
 
+!>@todo FIXME this isn't done but is not called yet.
+!>it needs to search for the actual height in the first column
+!>and then use that index into the second.
+
 ! build a height column and a pressure column and find the levels?
 call get_model_variable_indices(location_indx, iloc, jloc, vloc)
 
 call cam_height_levels(ens_handle, ens_size, iloc, jloc, grid_data%lev%nsize, &
-                       height_array, my_status) 
+                       qty, height_array, my_status) 
 
 call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, grid_data%lev%nsize, &
-                       pressure_array, my_status)
+                       qty, pressure_array, my_status)
 
 call set_vertical(location, pressure_array(vloc,1), VERTISPRESSURE)
 
@@ -2350,12 +2434,13 @@ end subroutine obs_height_to_pressure
 !>
 !> this version does all ensemble members at once.
 
-subroutine cam_pressure_levels(ens_handle, ens_size, lon_index, lat_index, nlevels, pressure_array, my_status) 
+subroutine cam_pressure_levels(ens_handle, ens_size, lon_index, lat_index, nlevels, qty, pressure_array, my_status) 
 type(ensemble_type), intent(in)  :: ens_handle
 integer,             intent(in)  :: ens_size
 integer,             intent(in)  :: lon_index
 integer,             intent(in)  :: lat_index
 integer,             intent(in)  :: nlevels
+integer,             intent(in)  :: qty
 real(r8),            intent(out) :: pressure_array(nlevels, ens_size)
 integer,             intent(out) :: my_status(ens_size)
 
@@ -2366,8 +2451,8 @@ real(r8)    :: surface_pressure(ens_size)
 level_one = 1
 
 ! get the surface pressure from the ens_handle
-call get_values_from_qty(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
-                         lon_index, lat_index, level_one, surface_pressure, status1)
+call get_staggered_values_from_qty(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
+                         lon_index, lat_index, level_one, qty, surface_pressure, status1)
 
 do imember=1, ens_size
    call build_cam_pressure_column(surface_pressure(imember), grid_data%lev%nsize, &
