@@ -17,7 +17,7 @@ use         utilities_mod, only : register_module, error_handler, E_MSG, E_ERR, 
                                   find_namelist_in_file, check_namelist_read,   &
                                   E_MSG, open_file, close_file, do_output
 
-use  netcdf_utilities_mod, only : nc_check
+use  netcdf_utilities_mod, only : nc_check, nc_add_global_creation_time
 
 use          location_mod, only : location_type, set_location, write_location,  &
                                   get_dist, VERTISUNDEF, VERTISSURFACE,         &
@@ -82,14 +82,10 @@ character(len=metadatalength) :: kind_of_interest
 
 real(r8), allocatable :: lon(:), lat(:), vert(:)
 real(r8), allocatable :: field(:,:,:,:)
+real(r8) :: lonrange_top
 integer :: nlon, nlat, nvert
 integer :: ilon, jlat, kvert, nfailed
 character(len=128) :: ncfilename, txtfilename
-
-character(len=8)      :: crdate      ! needed by F90 DATE_AND_TIME intrinsic
-character(len=10)     :: crtime      ! needed by F90 DATE_AND_TIME intrinsic
-character(len=5)      :: crzone      ! needed by F90 DATE_AND_TIME intrinsic
-integer, dimension(8) :: values      ! needed by F90 DATE_AND_TIME intrinsic
 
 integer :: ncid, nlonDimID, nlatDimID, nvertDimID
 integer :: VarID(ens_size), lonVarID, latVarID, vertVarID
@@ -122,10 +118,15 @@ vertcoord = get_location_index(interp_test_vertcoord)
 write( ncfilename,'(a,a)')trim(output_file),'_interptest.nc'
 write(txtfilename,'(a,a)')trim(output_file),'_interptest.m'
 
+! for longitude, allow wrap.
+lonrange_top = interp_test_lonrange(2)
+if (interp_test_lonrange(2) < interp_test_lonrange(1)) &
+   lonrange_top = interp_test_lonrange(2) + 360.0_r8
+
 ! round down to avoid exceeding the specified range
-nlat  = aint(( interp_test_latrange(2) -  interp_test_latrange(1))/interp_test_dlat) + 1
-nlon  = aint(( interp_test_lonrange(2) -  interp_test_lonrange(1))/interp_test_dlon) + 1
-nvert = aint((interp_test_vertrange(2) -  interp_test_vertrange(1))/interp_test_dvert) + 1
+nlat  = aint(( interp_test_latrange(2) - interp_test_latrange(1))  / interp_test_dlat) + 1
+nlon  = aint((            lonrange_top - interp_test_lonrange(1))  / interp_test_dlon) + 1
+nvert = aint((interp_test_vertrange(2) - interp_test_vertrange(1)) / interp_test_dvert) + 1
 
 iunit = open_file(trim(txtfilename), action='write')
 write(iunit,'(''missingvals = '',f12.4,'';'')')MISSING_R8
@@ -141,6 +142,8 @@ nfailed = 0
 
 do ilon = 1, nlon
    lon(ilon) = interp_test_lonrange(1) + real(ilon-1,r8) * interp_test_dlon
+   if (lon(ilon) >= 360.0_r8) lon(ilon) = lon(ilon) - 360.0_r8
+   if (lon(ilon) < 0.0_r8)   lon(ilon) = lon(ilon) + 360.0_r8
    do jlat = 1, nlat
       lat(jlat) = interp_test_latrange(1) + real(jlat-1,r8) * interp_test_dlat
       do kvert = 1, nvert
@@ -184,14 +187,9 @@ call count_error_codes(all_ios_out, nfailed)
 
 ! Write out the netCDF file for easy exploration.
 
-call DATE_AND_TIME(crdate,crtime,crzone,values)
-write(string1,'(''YYYY MM DD HH MM SS = '',i4,5(1x,i2.2))') &
-                  values(1), values(2), values(3), values(5), values(6), values(7)
-
 call nc_check( nf90_create(path=trim(ncfilename), cmode=NF90_clobber, ncid=ncid), &
                   'test_interpolate_range', 'open '//trim(ncfilename))
-call nc_check( nf90_put_att(ncid, NF90_GLOBAL, 'creation_date' ,trim(string1) ), &
-                  'test_interpolate_range', 'creation put '//trim(ncfilename))
+call nc_add_global_creation_time(ncid, 'test_interpolate_range', 'creation put '//trim(ncfilename))
 
 ! Define dimensions
 

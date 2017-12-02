@@ -541,23 +541,6 @@
   eval_and_assim_can_match = .false.
   /
 
-&model_mod_check_nml
-   input_state_files     = 'caminput.nc'
-   output_state_files    = 'mmc_output.nc'
-   verbose               = .FALSE.
-   test1thru             = 6
-   loc_of_interest       = 320.0, 18.0, 50000.0
-   x_ind                 = 359435
-   kind_of_interest      = 'QTY_U_WIND_COMPONENT'
-   interp_test_lonrange  = 0.0, 359.0
-   interp_test_dlon      = 5.0
-   interp_test_latrange  = -89.0, 89.0
-   interp_test_dlat      = 5.0
-   interp_test_vertrange = 30000.0,  50000.0
-   interp_test_dvert     = 10000.0
-   interp_test_vertcoord = 'VERTISPRESSURE'
-  /
-
 &obs_impact_tool_nml
   input_filename         = 'cross_correlations.txt'
   output_filename        = 'control_impact_runtime.txt'
@@ -582,3 +565,30 @@
 &quad_interpolate_nml
    debug = 0
   /
+
+#   kind_of_interest      = 'QTY_U_WIND_COMPONENT'
+#   kind_of_interest      = 'QTY_V_WIND_COMPONENT'
+#   kind_of_interest      = 'QTY_TEMPERATURE'
+
+&model_mod_check_nml
+   input_state_files     = 'caminput.nc'
+   output_state_files    = 'mmc_output.nc'
+   verbose               = .false.
+   test1thru             = -1
+   run_tests             = 1, 2, 4, 5
+
+   loc_of_interest       = 359.5, 18.0, 50000.0
+   kind_of_interest      = 'QTY_U_WIND_COMPONENT'
+
+   x_ind                 = 359435
+
+   interp_test_lonrange  = 0.0, 360.0
+   interp_test_dlon      = 1.0
+   interp_test_latrange  = -90.0, 90.0
+   interp_test_dlat      = 1.0
+   interp_test_vertrange = 10000.0,  90000.0
+   interp_test_dvert     = 10000.0
+   interp_test_vertcoord = 'VERTISPRESSURE'
+
+  /
+

@@ -402,6 +402,8 @@ call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimname), cont
 ret = nf90_def_var(ncid, varname, nf90_int, dimid, varid)
 call nc_check(ret, routine, 'define integer variable '//trim(varname), context, filename)
 
+print *, trim(varname), varid, trim(dimname), dimid, ret
+
 end subroutine nc_define_var_int_1d
 
 !--------------------------------------------------------------------

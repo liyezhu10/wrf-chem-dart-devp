@@ -43,6 +43,12 @@ public :: get_num_types_of_obs, get_num_quantities
 ! DART system.  Future versions of the preprocess program will be able to
 ! generate this table automatically.
 
+!>@todo FIXME: replace this list with a formatted comment
+!>and have an input to preprocess have a kinds type include list.
+!>it can default to 'all' but it could be grouped by atmosphere,
+!>ocean, land, chemistry, etc?  if you ignore duplicates, these
+!>could be overlapping groups of any resolution you want.
+!
 ! Definition and public access to the observation types/kinds
 ! Unique index values associated with each observation type and
 ! kind strings are defined here.
@@ -307,7 +313,8 @@ integer, parameter, public :: &
     QTY_SFCO                        = 170, &
     QTY_SFCO01                      = 171, &
     QTY_SFCO02                      = 172, &
-    QTY_SFCO03                      = 173
+    QTY_SFCO03                      = 173, &
+    QTY_STATE_VAR_POWER             = 174
 
 
 integer, parameter, public :: &
@@ -735,6 +742,7 @@ obs_kind_names(170) = obs_kind_type(QTY_SFCO,           'QTY_SFCO')
 obs_kind_names(171) = obs_kind_type(QTY_SFCO01,         'QTY_SFCO01')
 obs_kind_names(172) = obs_kind_type(QTY_SFCO02,         'QTY_SFCO02')
 obs_kind_names(173) = obs_kind_type(QTY_SFCO03,         'QTY_SFCO03')
+obs_kind_names(174) = obs_kind_type(QTY_STATE_VAR_POWER,'QTY_STATE_VAR_POWER')
 
 obs_kind_names(200) = obs_kind_type(QTY_AOD,            'QTY_AOD')
 obs_kind_names(201) = obs_kind_type(QTY_CB1,            'QTY_CB1')
