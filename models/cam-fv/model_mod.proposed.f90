@@ -53,8 +53,7 @@ use  netcdf_utilities_mod,  only : nc_get_variable, nc_get_variable_size, &
                                    nc_close, nc_variable_exists
 !#!use       location_io_mod
 use        quad_utils_mod,  only : quad_interp_handle, init_quad_interp, &
-                                   set_quad_coords, &! finalize_quad_interp, &
-                                   !>@todo FIXME need to call finalize_quad_interp
+                                   set_quad_coords, finalize_quad_interp, &
                                    quad_lon_lat_locate, quad_lon_lat_evaluate, &
                                    GRID_QUAD_IRREG_SPACED_REGULAR,  &
                                    QUAD_LOCATED_CELL_CENTERS
@@ -641,7 +640,7 @@ interp_handle = get_interp_handle(obs_qty)
 ! get the indices for the 4 corners of the quad in the horizontal, plus
 ! the fraction across the quad for the obs location
 call quad_lon_lat_locate(interp_handle, lon_lat_vert(1), lon_lat_vert(2) , &
-                         lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &
+                         four_lons, four_lats, lon_fract, lat_fract, &
                          status1)
 
 if (status1 /= 0) then
@@ -656,8 +655,9 @@ endif
 !  (lon_bot, lat_bot), (lon_top, lat_bot), (lon_top, lat_top), (lon_bot, lat_top)
 ! stuff this info into arrays of length 4 so we can loop over them easier.
 
-call index_setup(lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &
-                 four_lons, four_lats, two_horiz_fracts)
+! changed interface to locate - remove me once this tests ok
+!call index_setup(lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &i
+!                 four_lons, four_lats, two_horiz_fracts)
 
 ! need to consider the case for 2d vs 3d variables
 numdims = get_dims_from_qty(obs_qty, varid)
@@ -924,36 +924,37 @@ my_status(:) = 0
 end subroutine vert_interp
 
 !-----------------------------------------------------------------------
+!>@todo REMOVE ME once this tests ok
 !> populate arrays with the 4 combinations of bot/top vs lon/lat
 !> to make it easier below to loop over the corners.
 !>@todo FIXME this should be the return from the quad code
 !>to begin with.
-
-subroutine index_setup(lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &
-                       four_lons, four_lats, two_horiz_fracts)
-integer,  intent(in)  :: lon_bot, lat_bot, lon_top, lat_top
-real(r8), intent(in)  :: lon_fract, lat_fract
-integer,  intent(out) :: four_lons(4), four_lats(4)
-real(r8), intent(out) :: two_horiz_fracts(2)
-
-! order is counterclockwise around the quad:
-!  (lon_bot, lat_bot), (lon_top, lat_bot), (lon_top, lat_top), (lon_bot, lat_top)
-
-four_lons(1) = lon_bot
-four_lons(2) = lon_top
-four_lons(3) = lon_top
-four_lons(4) = lon_bot
-
-four_lats(1) = lat_bot
-four_lats(2) = lat_bot
-four_lats(3) = lat_top
-four_lats(4) = lat_top
-
-two_horiz_fracts(1) = lon_fract
-two_horiz_fracts(2) = lat_fract
-
-end subroutine index_setup
-
+!
+!subroutine index_setup(lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &
+!                       four_lons, four_lats, two_horiz_fracts)
+!integer,  intent(in)  :: lon_bot, lat_bot, lon_top, lat_top
+!real(r8), intent(in)  :: lon_fract, lat_fract
+!integer,  intent(out) :: four_lons(4), four_lats(4)
+!real(r8), intent(out) :: two_horiz_fracts(2)
+!
+!! order is counterclockwise around the quad:
+!!  (lon_bot, lat_bot), (lon_top, lat_bot), (lon_top, lat_top), (lon_bot, lat_top)
+!
+!four_lons(1) = lon_bot
+!four_lons(2) = lon_top
+!four_lons(3) = lon_top
+!four_lons(4) = lon_bot
+!
+!four_lats(1) = lat_bot
+!four_lats(2) = lat_bot
+!four_lats(3) = lat_top
+!four_lats(4) = lat_top
+!
+!two_horiz_fracts(1) = lon_fract
+!two_horiz_fracts(2) = lat_fract
+!
+!end subroutine index_setup
+!
 !-----------------------------------------------------------------------
 !> given lon/lat indices, add one to lat and subtract one from lon
 !> check for wraparound in lon, and north pole at lat.
@@ -1551,6 +1552,10 @@ subroutine end_model()
 ! deallocate arrays from grid and anything else
 
 call free_cam_grid(grid_data)
+
+call finalize_quad_interp(interp_nonstaggered)
+call finalize_quad_interp(interp_u_staggered)
+call finalize_quad_interp(interp_v_staggered)
 
 end subroutine end_model
 
