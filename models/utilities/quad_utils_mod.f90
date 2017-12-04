@@ -1299,22 +1299,21 @@ end subroutine quad_lon_lat_locate_ii
 !> This routine works for either the dipole or a regular lat-lon grid.
 !> Successful interpolation returns istatus=0.
 
-subroutine quad_lon_lat_locate_ir(interp_handle, lon, lat, lon_bot, lat_bot, &
-                            lon_top, lat_top, lon_fract, lat_fract, istatus)
+!>@todo FIXME should this still return lon_fract, lat_fract?
+!>(thinking yes)
+subroutine quad_lon_lat_locate_ir(interp_handle, lon, lat, &
+                                  four_lons, four_lats, lon_fract, lat_fract, istatus)
 
 type(quad_interp_handle), intent(in)  :: interp_handle
 real(r8),                 intent(in)  :: lon, lat
-integer,                  intent(out) :: lon_bot, lat_bot, lon_top, lat_top
+integer,                  intent(out) :: four_lons(4), four_lats(4)
 real(r8),                 intent(out) :: lon_fract, lat_fract
 integer,                  intent(out) :: istatus
-
-! NOTE: Using array sections to pass in the x array may be inefficient on some
-! compiler/platform setups. Might want to pass in the entire array with a base
-! offset value instead of the section if this is an issue.
 
 ! Local storage
 integer  :: nx, ny
 logical  :: cyclic
+integer  :: lon_bot, lat_bot, lon_top, lat_top
 
 character(len=*), parameter :: routine = 'quad_lon_lat_locate:quad_lon_lat_locate_ir'
 
@@ -1370,8 +1369,23 @@ if(lon_top > nx) then
    endif
 endif
 
-! the 6 return values set in this routine are:
+! the 6 values set so far in this routine are:
 !    lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract
+! 
+! now fill arrays so they are easy to process in the calling
+! code in the right order, which is counterclockwise around the quad:
+!
+!  (lon_bot, lat_bot), (lon_top, lat_bot), (lon_top, lat_top), (lon_bot, lat_top)
+
+four_lons(1) = lon_bot
+four_lons(2) = lon_top
+four_lons(3) = lon_top
+four_lons(4) = lon_bot
+
+four_lats(1) = lat_bot
+four_lats(2) = lat_bot
+four_lats(3) = lat_top
+four_lats(4) = lat_top
 
 end subroutine quad_lon_lat_locate_ir
 

@@ -105,7 +105,7 @@ type(random_seq_type) :: ran
 
 integer  :: i, j
 real(r8) :: data_del_lon, data_del_lat, sample_del_lon, sample_del_lat
-integer  :: lon_bot, lat_bot, lon_top, lat_top
+integer  :: lon_indices(4), lat_indices(4)
 real(r8) :: lon_fract, lat_fract
 integer  :: istatus
 real(r8) :: invals(4), outval
@@ -182,20 +182,21 @@ do i=1, nsx
       !>of lat/lon bot/top in the right order for eval?  locate can output already 
       !>in the right combinations in the right order.
 
-      call quad_lon_lat_locate(h, sample_lons(i,j), sample_lats(i,j), lon_bot, lat_bot, lon_top, lat_top, &
+integer  :: lon_indices(4), lat_indices(4)
+      call quad_lon_lat_locate(h, sample_lons(i,j), sample_lats(i,j), lon_indices, lat_indices, &
                                lon_fract, lat_fract, istatus)
       if (istatus /= 0) then
          !print *, 'location outside of grid: ', sample_lons(i,j), sample_lats(i,j)
          interp_data(i, j) = MISSING_R8 
          cycle
       endif
-      if(debug > 0)print *, i, j, lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, sample_lons(i,j), sample_lats(i,j)
+      if(debug > 0)print *, i, j, lon_indices, lat_indices, lon_fract, lat_fract, sample_lons(i,j), sample_lats(i,j)
 
       ! get values of data at lon/lat bot/top indices, counterclockwise around quad
-      invals(1) = grid_data(lon_bot, lat_bot)
-      invals(2) = grid_data(lon_top, lat_bot)
-      invals(3) = grid_data(lon_top, lat_top)
-      invals(4) = grid_data(lon_bot, lat_top)
+      invals(1) = grid_data(lon_indices(1), lat_indices(1))
+      invals(2) = grid_data(lon_indices(2), lat_indices(2))
+      invals(3) = grid_data(lon_indices(3), lat_indices(3))
+      invals(4) = grid_data(lon_indices(4), lat_indices(4))
 
       ! where does this go?  inside quad_lon_lat_evaluate() or here?
       if (any(invals == MISSING_R8)) then

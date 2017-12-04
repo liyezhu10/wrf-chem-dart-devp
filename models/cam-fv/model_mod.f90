@@ -2,7 +2,7 @@
 ! by ucar, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/dares/dart/dart_download
 !
-! $id: new_model_mod.f90 12058 2017-11-07 16:42:42z nancy@ucar.edu $
+! $Id$
 !----------------------------------------------------------------
 !>
 !> this is the interface between the cam-fv atmosphere model and dart.
@@ -16,7 +16,7 @@ module model_mod
 !>further into writing the coded
 
 use             types_mod, only : MISSING_R8, MISSING_I, i8, r8, vtablenamelength, &
-                                  gravity  
+                                  gravity, DEG2RAD
 use      time_manager_mod, only : set_time, time_type, set_date, &
                                   set_calendar_type, get_date
 use          location_mod, only : location_type, set_vertical, set_location, &
@@ -53,8 +53,7 @@ use  netcdf_utilities_mod,  only : nc_get_variable, nc_get_variable_size, &
                                    nc_close, nc_variable_exists
 !#!use       location_io_mod
 use        quad_utils_mod,  only : quad_interp_handle, init_quad_interp, &
-                                   set_quad_coords, &! finalize_quad_interp, &
-                                   !>@todo FIXME need to call finalize_quad_interp
+                                   set_quad_coords, finalize_quad_interp, &
                                    quad_lon_lat_locate, quad_lon_lat_evaluate, &
                                    GRID_QUAD_IRREG_SPACED_REGULAR,  &
                                    QUAD_LOCATED_CELL_CENTERS
@@ -101,6 +100,7 @@ character(len=256) :: cam_phis_filename               = 'camphis.nc'
 character(len=32)  :: vertical_localization_coord     = 'PRESSURE'
 integer            :: assimilation_period_days        = 0
 integer            :: assimilation_period_seconds     = 21600
+logical            :: use_log_vertical_scale          = .false.
 integer            :: no_assim_above_this_model_level = 5
 logical            :: use_damping_ramp_at_model_top   = .false.  
 integer            :: debug_level                     = 0
@@ -385,7 +385,7 @@ integer,             intent(in) :: stagger_qty
 real(r8),            intent(out) :: vals(ens_size)
 integer,             intent(out) :: my_status
 
-integer :: next_lat, next_lon, stagger
+integer :: next_lat, prev_lon, stagger
 real(r8) :: vals_bot(ens_size), vals_top(ens_size)
 
 stagger = grid_stagger%qty_stagger(stagger_qty)
@@ -395,23 +395,20 @@ stagger = grid_stagger%qty_stagger(stagger_qty)
 
 select case (stagger)
   case (STAGGER_U)
+   call stagger_quad(lon_index, lat_index, prev_lon, next_lat)
+
    call get_values_from_qty(ens_handle, ens_size, qty, lon_index, lat_index, lev_index, vals_bot, my_status)
+   call get_values_from_qty(ens_handle, ens_size, qty, lon_index, next_lat,  lev_index, vals_top, my_status)
 
-   next_lat = lat_index+1
-   if (next_lat > grid_data%lat%nsize) next_lat = grid_data%lat%nsize
-   call get_values_from_qty(ens_handle, ens_size, qty, lon_index, next_lat, lev_index, vals_top, my_status)
-
-   vals = (vals_bot + vals_top) / 2.0_r8
+   vals = (vals_bot + vals_top) * 0.5_r8
 
   case (STAGGER_V)
+   call stagger_quad(lon_index, lat_index, prev_lon, next_lat)
+
    call get_values_from_qty(ens_handle, ens_size, qty, lon_index, lat_index, lev_index, vals_bot, my_status)
+   call get_values_from_qty(ens_handle, ens_size, qty, prev_lon,  lat_index, lev_index, vals_top, my_status)
 
-   next_lon = lon_index-1
-   if (next_lon < 1) next_lon = grid_data%lon%nsize
-   call get_values_from_qty(ens_handle, ens_size, qty, next_lon, lat_index, lev_index, vals_top, my_status)
-
-   vals = (vals_bot + vals_top) / 2.0_r8
-   !print*, 'vals, vals_bot, vals_top', vals, vals_bot, vals_top
+   vals = (vals_bot + vals_top) * 0.5_r8
 
   ! no stagger - cell centers, or W stagger
   case default
@@ -643,7 +640,7 @@ interp_handle = get_interp_handle(obs_qty)
 ! get the indices for the 4 corners of the quad in the horizontal, plus
 ! the fraction across the quad for the obs location
 call quad_lon_lat_locate(interp_handle, lon_lat_vert(1), lon_lat_vert(2) , &
-                         lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &
+                         four_lons, four_lats, lon_fract, lat_fract, &
                          status1)
 
 if (status1 /= 0) then
@@ -658,8 +655,9 @@ endif
 !  (lon_bot, lat_bot), (lon_top, lat_bot), (lon_top, lat_top), (lon_bot, lat_top)
 ! stuff this info into arrays of length 4 so we can loop over them easier.
 
-call index_setup(lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &
-                 four_lons, four_lats, two_horiz_fracts)
+! changed interface to locate - remove me once this tests ok
+!call index_setup(lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &i
+!                 four_lons, four_lats, two_horiz_fracts)
 
 ! need to consider the case for 2d vs 3d variables
 numdims = get_dims_from_qty(obs_qty, varid)
@@ -764,7 +762,7 @@ else ! 2 dimensional variable
    else ! special 2d case
       do icorner=1, 4
          call get_quad_corners(ens_size, four_lons(icorner), four_lats(icorner), &
-                               obs_qty, quad_vals(icorner,:), status1)
+                               obs_qty, obs_qty, quad_vals(icorner,:), status1)
       enddo
    endif
 
@@ -784,8 +782,10 @@ istatus(:) = 0
 end subroutine model_interpolate
 
 !-----------------------------------------------------------------------
-!>
-!>  
+!> figure out whether this is a 2d or 3d field bawsed on the quantity.
+!> if this field is in the state vector, use the state routines.
+!> if it's not, there are cases for known other quantities we can
+!> interpolate and return.
 
 function get_dims_from_qty(obs_quantity, var_id)
 integer, intent(in) :: obs_quantity
@@ -810,8 +810,9 @@ endif
 end function get_dims_from_qty
 
 !-----------------------------------------------------------------------
-!>
-!>  
+!> return 0 (ok) if we know how to interpolate this quantity.
+!> if it is a field in the state, return the variable id from
+!> the state structure.  if not in the state, varid will return -1
 
 subroutine ok_to_interpolate(obs_qty, varid, my_status)
 integer, intent(in)  :: obs_qty
@@ -845,22 +846,58 @@ end subroutine ok_to_interpolate
 !>
 !>  This is for 2d special observations quantities not in the state
 
-subroutine get_quad_corners(ens_size, lon_index, lat_index, obs_quantity, vals, my_status)
+subroutine get_quad_corners(ens_size, lon_index, lat_index, obs_quantity, stagger_qty, vals, my_status)
 integer,  intent(in) :: ens_size
 integer,  intent(in) :: lon_index
 integer,  intent(in) :: lat_index
 integer,  intent(in) :: obs_quantity
+integer,  intent(in) :: stagger_qty
 real(r8), intent(out) :: vals(ens_size) 
 integer,  intent(out) :: my_status
 
 character(len=*), parameter :: routine = 'get_quad_corners'
 
+integer :: stagger, prev_lon, next_lat
+real(r8) :: vals_bot(ens_size), vals_top(ens_size)
+
+stagger = grid_stagger%qty_stagger(stagger_qty)
+
+!>@todo FIXME we need to look at the stagger of the obs_quantity here
+!>(don't we?)
+
 select case (obs_quantity)
    case (QTY_SURFACE_ELEVATION)
-      vals(:) = phis(lon_index, lat_index) / gravity
+
+     select case (stagger)
+       case (STAGGER_U)
+          call stagger_quad(lon_index, lat_index, prev_lon, next_lat)
+          vals_bot(:) = phis(lon_index, lat_index) 
+          vals_top(:) = phis(lon_index, next_lat) 
+     
+        vals = (vals_bot + vals_top) * 0.5_r8 
+     
+       case (STAGGER_V)
+          call stagger_quad(lon_index, lat_index, prev_lon, next_lat)
+          vals_bot(:) = phis(lon_index, lat_index) 
+          vals_top(:) = phis(prev_lon,  lat_index) 
+     
+        vals = (vals_bot + vals_top) * 0.5_r8
+     
+       ! no stagger - cell centers, or W stagger
+       case default
+  
+        vals = phis(lon_index, lat_index)
+  
+     end select
+    
+     !>@todo FIXME:
+     ! should this be using gravity at the given latitude? 
+     vals = vals / gravity
+
    case default 
       write(string1, *) 'we can not interpolate qty', obs_quantity
       call error_handler(E_ERR,routine,string1,source,revision,revdate)
+
 end select
 
 my_status = 0
@@ -869,8 +906,7 @@ end subroutine get_quad_corners
 
 
 !-----------------------------------------------------------------------
-!>
-!>  interpolating first in the horizontal then the vertical
+!>  interpolate in the vertical between 2 arrays of items.
 
 subroutine vert_interp(nitems, botvals, topvals, vert_fracts, out_vals, my_status)
 integer,  intent(in)  :: nitems
@@ -891,40 +927,63 @@ my_status(:) = 0
 end subroutine vert_interp
 
 !-----------------------------------------------------------------------
-!>
-!> 
+!>@todo REMOVE ME once this tests ok
+!> populate arrays with the 4 combinations of bot/top vs lon/lat
+!> to make it easier below to loop over the corners.
+!>@todo FIXME this should be the return from the quad code
+!>to begin with.
+!
+!subroutine index_setup(lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &
+!                       four_lons, four_lats, two_horiz_fracts)
+!integer,  intent(in)  :: lon_bot, lat_bot, lon_top, lat_top
+!real(r8), intent(in)  :: lon_fract, lat_fract
+!integer,  intent(out) :: four_lons(4), four_lats(4)
+!real(r8), intent(out) :: two_horiz_fracts(2)
+!
+!! order is counterclockwise around the quad:
+!!  (lon_bot, lat_bot), (lon_top, lat_bot), (lon_top, lat_top), (lon_bot, lat_top)
+!
+!four_lons(1) = lon_bot
+!four_lons(2) = lon_top
+!four_lons(3) = lon_top
+!four_lons(4) = lon_bot
+!
+!four_lats(1) = lat_bot
+!four_lats(2) = lat_bot
+!four_lats(3) = lat_top
+!four_lats(4) = lat_top
+!
+!two_horiz_fracts(1) = lon_fract
+!two_horiz_fracts(2) = lat_fract
+!
+!end subroutine index_setup
+!
+!-----------------------------------------------------------------------
+!> given lon/lat indices, add one to lat and subtract one from lon
+!> check for wraparound in lon, and north pole at lat.
+!> intent is that you give the indices into the staggered grid
+!> and the return values are the indices in the original unstaggered
+!> grid that you need to compute the midpoints for the staggers.
+!>@todo FIXME this needs a picture or ascii art
 
-! populate arrays with the 4 combinations of bot/top vs lon/lat
-! to make it easier below to loop over the corners.
-! no rocket science here.
+subroutine stagger_quad(lon_index, lat_index, prev_lon, next_lat)
+integer, intent(in)  :: lon_index
+integer, intent(in)  :: lat_index
+integer, intent(out) :: prev_lon
+integer, intent(out) :: next_lat
 
-subroutine index_setup(lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &
-                       four_lons, four_lats, two_horiz_fracts)
-integer,  intent(in)  :: lon_bot, lat_bot, lon_top, lat_top
-real(r8), intent(in)  :: lon_fract, lat_fract
-integer,  intent(out) :: four_lons(4), four_lats(4)
-real(r8), intent(out) :: two_horiz_fracts(2)
+   next_lat = lat_index+1
+   if (next_lat > grid_data%lat%nsize) next_lat = grid_data%lat%nsize
 
-! order is counterclockwise around the quad:
-!  (lon_bot, lat_bot), (lon_top, lat_bot), (lon_top, lat_top), (lon_bot, lat_top)
+   prev_lon = lon_index-1
+   if (prev_lon < 1) prev_lon = grid_data%lon%nsize
 
-four_lons(1) = lon_bot
-four_lons(2) = lon_top
-four_lons(3) = lon_top
-four_lons(4) = lon_bot
+end subroutine stagger_quad
 
-four_lats(1) = lat_bot
-four_lats(2) = lat_bot
-four_lats(3) = lat_top
-four_lats(4) = lat_top
-
-two_horiz_fracts(1) = lon_fract
-two_horiz_fracts(2) = lat_fract
-
-end subroutine index_setup
 
 !-----------------------------------------------------------------------
-!>
+!> given a lon/lat index number, a quantity and a vertical value and type,
+!> return which two levels these are between and the fraction across.
 !> 
 
 subroutine find_vertical_levels(ens_handle, ens_size, lon_index, lat_index, vert_val, &
@@ -946,7 +1005,7 @@ character(len=*), parameter :: routine = 'find_vertical_levels:'
 integer  :: bot1, top1, imember, nlevels, level_one, status1
 real(r8) :: fract1
 real(r8) :: surf_pressure (  ens_size )
-real(r8) :: pressure_array( grid_data%lev%nsize )
+real(r8) :: pressure_array( grid_data%lev%nsize, ens_size )
 real(r8) :: height_array  ( grid_data%lev%nsize, ens_size )
 
 ! assume the worst
@@ -970,14 +1029,12 @@ select case (which_vert)
                                          lon_index, lat_index, level_one, obs_qty, &
                                          surf_pressure, status1)
 
+      call build_cam_pressure_column(ens_size, surf_pressure, nlevels, pressure_array)
+
       !>@todo FIXME: should we figure out now or later? how many unique levels we have?
       !> for now - do the unique culling later so we don't have to carry that count around.
       do imember=1, ens_size
-         call build_cam_pressure_column(surf_pressure(imember), nlevels, &
-                                        grid_data%hyam, grid_data%hybm, &
-                                        grid_data%P0, pressure_array)
-
-         call pressure_to_level(nlevels, pressure_array, vert_val, &
+         call pressure_to_level(nlevels, pressure_array(:, imember), vert_val, &
                                 bot_levs(imember), top_levs(imember), &
                                 vert_fracts(imember), my_status(imember))
 
@@ -997,8 +1054,8 @@ select case (which_vert)
       enddo
       
 
-      write(string1, *) 'we have not written the code yet for vertical type: ', which_vert
-      call error_handler(E_ERR,routine,string1,source,revision,revdate)
+      !write(string1, *) 'we have not written the code yet for vertical type: ', which_vert
+      !call error_handler(E_ERR,routine,string1,source,revision,revdate)
 
    case(VERTISLEVEL)
       ! this routine returns false if the level number is out of range.
@@ -1047,7 +1104,7 @@ real(r8),            intent(out) :: height_array(nlevels, ens_size)
 integer,             intent(out) :: my_status(ens_size)
 
 integer  :: k, level_one, imember, status1
-real(r8) :: surface_elevation
+real(r8) :: surface_elevation(1)
 real(r8) :: temperature(ens_size), specific_humidity(ens_size), surface_pressure(ens_size)
 real(r8) :: phi(ens_size, nlevels)
 real(r8) :: tv(ens_size, nlevels+1)  !>@todo FIXME  ???? ! Virtual temperature, top to bottom
@@ -1070,30 +1127,39 @@ call get_staggered_values_from_qty(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
                                    lon_index, lat_index, level_one, qty, surface_pressure, status1)
 
 
-! get the surface elevation from the phis
-surface_elevation = phis(lon_index, lat_index)
+! get the surface elevation from the phis, including stagger if needed
+call get_quad_corners(1, lon_index, lat_index, QTY_SURFACE_ELEVATION, qty, surface_elevation, status1)
+print *, 'surface elevation from quad corners: ', surface_elevation
 
 do k = 1, nlevels
    ! temperature
-   call get_values_from_qty(ens_handle, ens_size, QTY_TEMPERATURE, &
-                                     lon_index, lat_index, k, temperature, status1)
+   call get_staggered_values_from_qty(ens_handle, ens_size, QTY_TEMPERATURE, &
+                                     lon_index, lat_index, k, qty, temperature, status1)
 
    ! specific humidity
-   call get_values_from_qty(ens_handle, ens_size, QTY_SPECIFIC_HUMIDITY, &
-                                     lon_index, lat_index, k, specific_humidity, status1)
+   call get_staggered_values_from_qty(ens_handle, ens_size, QTY_SPECIFIC_HUMIDITY, &
+                                     lon_index, lat_index, k, qty, specific_humidity, status1)
    
-   !>@todo rename tv to something that mens something to users
+   !>@todo rename tv to something that means something to users
+   !>tv == virtual temperature.
    tv(:,k) = temperature(:)*(1.0_r8 + rr_factor*specific_humidity(:))
+
+   print *, 'member 1, level, t, q, tv: ', k, temperature(1), specific_humidity(1), tv(1, k)
+
 enddo
 
 ! need to convert to geopotential height
 do imember = 1, ens_size
-   !>@todo refacfor to just put out geometric height
-   call dcz2(nlevels, surface_pressure(imember), surface_elevation, tv(imember,:), &
+   !>@todo refactor to just put out geometric height
+   call dcz2(nlevels, surface_pressure(imember), surface_elevation(1), tv(imember,:), &
              grid_data%P0%vals(1), hybrid_As, hybrid_Bs, phi(imember,:))
    do k = 1,nlevels
       height_array(k, imember) = gph2gmh(phi(imember,k), grid_data%lat%vals(lat_index))
    enddo
+enddo
+
+do k = 1,nlevels
+   print *, "member 1, level, height: ", k, height_array(k, 1)
 enddo
 
 my_status(:) = 0
@@ -1103,26 +1169,155 @@ end subroutine cam_height_levels
 !-----------------------------------------------------------------------
 !> Compute the pressures at the layer midpoints
 
-subroutine build_cam_pressure_column(surface_pressure, n_levels, hyam, hybm, P0, pressure_array)
+subroutine build_cam_pressure_column(ens_size, surface_pressure, n_levels, pressure_array)
 
-real(r8),           intent(in)  :: surface_pressure   ! in pascals
+integer,            intent(in)  :: ens_size
+real(r8),           intent(in)  :: surface_pressure(:)   ! in pascals
 integer,            intent(in)  :: n_levels
-type(cam_1d_array), intent(in)  :: hyam
-type(cam_1d_array), intent(in)  :: hybm
-type(cam_1d_array), intent(in)  :: P0
-real(r8),           intent(out) :: pressure_array(:)
+real(r8),           intent(out) :: pressure_array(:,:)
 
-integer :: k
+integer :: j, k
 
 ! Set midpoint pressures.  This array mirrors the order of the
 ! cam model levels: 1 is the model top, N is the bottom.
 
-do k=1,n_levels
-   pressure_array(k) = hyam%vals(k)*P0%vals(1) + hybm%vals(k)*surface_pressure
+do j=1, ens_size
+   do k=1,n_levels
+      pressure_array(k, j) = grid_data%hyam%vals(k) * grid_data%P0%vals(1) + &
+                             grid_data%hybm%vals(k) * surface_pressure(j)
+   enddo
 enddo
 
 end subroutine build_cam_pressure_column
 
+
+!-----------------------------------------------------------------------
+!> Compute columns of pressures at the layer midpoints for the given number 
+!> of surface pressures. 
+!>
+!>@todo FIXME unlike some other things - you could pass in an upper and lower
+!>level number and compute the pressure only at the levels between those.
+!>this isn't a column that has to be built from the surface up or top down.
+!>each individual pressure can be computed independently given the surface pressure.
+
+subroutine cam_p_col_midpts(num_cols, surface_pressure, n_levels, pressure_array)
+
+integer,            intent(in)  :: num_cols
+real(r8),           intent(in)  :: surface_pressure(num_cols)   ! in pascals
+integer,            intent(in)  :: n_levels
+real(r8),           intent(out) :: pressure_array(n_levels, num_cols)
+
+integer :: j, k
+
+! Set midpoint pressures.  This array mirrors the order of the
+! cam model levels: 1 is the model top, N is the bottom.
+
+do j=1, num_cols
+   do k=1, n_levels
+      pressure_array(k, j) = grid_data%hyam%vals(k) * grid_data%P0%vals(1) + &
+                             grid_data%hybm%vals(k) * surface_pressure(j)
+   enddo
+enddo
+
+end subroutine cam_p_col_midpts
+
+!-----------------------------------------------------------------------
+!> Compute columns of pressures at the layer interfaces for the given number 
+!> of surface pressures. 
+!>
+!>@todo FIXME see comment above in cam_p_col_midpts()
+
+subroutine cam_p_col_intfcs(num_cols, surface_pressure, n_levels, pressure_array)
+
+integer,            intent(in)  :: num_cols
+real(r8),           intent(in)  :: surface_pressure(num_cols)   ! in pascals
+integer,            intent(in)  :: n_levels
+real(r8),           intent(out) :: pressure_array(n_levels, num_cols)
+
+integer :: j, k
+
+! Set interface pressures.  This array mirrors the order of the
+! cam model levels: 1 is the model top, N is the bottom.
+
+do j=1, num_cols
+   do k=1, n_levels
+      pressure_array(k, j) = grid_data%hyai%vals(k) * grid_data%P0%vals(1) + &
+                             grid_data%hybi%vals(k) * surface_pressure(j)
+   enddo
+enddo
+
+end subroutine cam_p_col_intfcs
+
+!-----------------------------------------------------------------------
+!> Compute columns of heights at the layer midpoints for the given number 
+!> of surface pressures and surface elevations.  (should this one compute
+!> those itself?  if so give it the lon/lat indx and staggers.)
+
+!> since it's no more work, should we compute the interface heights as well here?
+!> return both, or make the arrays optional and return one or both depending
+!> on what's asked for?
+
+subroutine cam_h_col_midpts(num_cols, surface_pressure, n_levels, height_array)
+
+integer,            intent(in)  :: num_cols
+real(r8),           intent(in)  :: surface_pressure(num_cols)   ! in pascals
+integer,            intent(in)  :: n_levels
+real(r8),           intent(out) :: height_array(n_levels, num_cols)  ! in meters
+
+integer :: j, k
+real(r8) :: surface_elev
+real(r8) :: p_midpts(n_levels,   num_cols)  ! in pascals, layer midpoints
+real(r8) :: p_intfcs(n_levels+1, num_cols)  ! in pascals, layer interfaces
+
+! Set midpoint heights.  This array mirrors the order of the
+! cam model levels: 1 is the model top, N is the bottom.
+
+! unlike pressure, we need to start at the surface and work our way up.
+! we can't compute a height in the middle of the column.
+
+do j=1, num_cols
+   call cam_p_col_midpts(num_cols, surface_pressure, n_levels, p_midpts)
+   call cam_p_col_intfcs(num_cols, surface_pressure, n_levels, p_intfcs)
+   ! get surface elevation at this location...
+   surface_elev = MISSING_R8
+   height_array(1, 1) = surface_elev 
+   do k=1, n_levels
+      ! add on lower half of this layer and record the height of the midpoint,
+      ! then add the upper half of this layer.  each layer has a different 
+      ! virtual temperature (at the midpt) so we can't compute midpoint to midpoint.
+      height_array(k, j) = -1
+      !height_array(k, j) = grid_data%hyam%vals(k) * grid_data%P0%vals(1) + &
+      !                     grid_data%hybm%vals(k) * surface_pressure(j)
+   enddo
+enddo
+
+end subroutine cam_h_col_midpts
+
+!-----------------------------------------------------------------------
+!> Compute columns of heights at the layer interfaces for the given number 
+!> of surface pressures. 
+
+subroutine cam_h_col_intfcs(num_cols, surface_pressure, n_levels, height_array)
+
+integer,            intent(in)  :: num_cols
+real(r8),           intent(in)  :: surface_pressure(num_cols)   ! in pascals
+integer,            intent(in)  :: n_levels
+real(r8),           intent(out) :: height_array(n_levels, num_cols)  ! in meters
+
+integer :: j, k
+
+! Set interface heights.  This array mirrors the order of the
+! cam model levels: 1 is the model top, N is the bottom.
+
+do j=1, num_cols
+   do k=1, n_levels
+      height_array(k, j) = -1
+      !height_array(k, j) = grid_data%hyai%vals(k) * grid_data%P0%vals(1) + &
+      !                     grid_data%hybi%vals(k) * surface_pressure(j)
+   enddo
+enddo
+
+end subroutine cam_h_col_intfcs
 
 !-----------------------------------------------------------------------
 !> return the level indices and fraction across the level.
@@ -1163,7 +1358,12 @@ levloop: do this_lev = 2, nlevels
 
    top_lev = this_lev - 1
    bot_lev = this_lev
-   fract = (p_val - pressures(top_lev)) / (pressures(bot_lev) - pressures(top_lev))
+   ! this is where we do the vertical fraction in either linear or log scale
+   if (use_log_vertical_scale) then
+      fract = (log(p_val) - log(pressures(top_lev))) / (log(pressures(bot_lev)) - log(pressures(top_lev)))
+   else
+      fract = (p_val - pressures(top_lev)) / (pressures(bot_lev) - pressures(top_lev))
+   endif
    my_status = 0
    return
 enddo levloop
@@ -1237,7 +1437,7 @@ end subroutine height_to_level
 !> our convention in this code is:  between levels a fraction of 0
 !> is 100% the top level, and fraction of 1 is 100% the bottom level.
 !> the top level is always closer to the model top and so has a *smaller*
-!> level number than the bottom level. stay alert for this!
+!> level number than the bottom level. 
 
 function range_set(vert_value, valid_range, bot, top, fract)
 real(r8), intent(in)  :: vert_value
@@ -1263,6 +1463,7 @@ fract_level = vert_value - integer_level
 ! the highest level and increase on the way down.
 
 !>@todo FIXME might want to add debugging print
+
 !>might want to allow extrapolation - which means
 !>allowing out of range values here and handling
 !>them correctly in the calling and vert_interp() code.
@@ -1286,22 +1487,9 @@ range_set = .true.
 end function range_set
 
 
-!#! !-----------------------------------------------------------------------
-!#! !>  Next, get the pressures on the levels for this ps
-!#! !>  Assuming we'll only need pressures on model mid-point levels, not 
-!#! !>  interface levels.  This pressure column will be for the correct grid 
-!#! !> for obs_qty, since p_surf was taken
-!#! !>      from the grid-correct ps[_stagr] grid
-!#! 
-!#! subroutine find_pressure_levels()
-!#! real(r8), allocatable :: p_col(:,:)
-!#! 
-!#! end subroutine find_pressure_levels
-
-
 !-----------------------------------------------------------------------
-!>
-!> 
+!> based on the stagger that corresponds to the given quantity,
+!> return the handle to the interpolation grid
 
 
 function get_interp_handle(obs_quantity)
@@ -1369,6 +1557,10 @@ subroutine end_model()
 ! deallocate arrays from grid and anything else
 
 call free_cam_grid(grid_data)
+
+call finalize_quad_interp(interp_nonstaggered)
+call finalize_quad_interp(interp_u_staggered)
+call finalize_quad_interp(interp_v_staggered)
 
 end subroutine end_model
 
@@ -1607,20 +1799,12 @@ ncid = nc_open_readonly(filename, routine)
 
 ! CAM initial files have two variables of length 
 ! 'time' (the unlimited dimension): date, datesec
-! This code require that the time length be size 1
-
-call nc_get_variable_size(ncid, 'time', timesize)
-
-!>@todo do we really need to ceck this if it is never going to happen.
-!#! if (timesize /= 1) then
-!#!    write(string1,*) trim(filename),' has',timesize,'times. Require exactly 1.'
-!#!    call error_handler(E_ERR, 'read_model_time', string1, source, revision, revdate)
-!#! endif
 
 call nc_get_variable(ncid, 'date',    cam_date)
 call nc_get_variable(ncid, 'datesec', cam_tod)
 
-! The 'date' is YYYYMMDD ... cam_tod is 'current seconds of current day'
+! 'date' is YYYYMMDD 
+! 'cam_tod' is seconds of current day
 iyear  = cam_date / 10000
 rem    = cam_date - iyear*10000
 imonth = rem / 100
@@ -1751,6 +1935,8 @@ end subroutine set_cam_variable_info
 !>
 !> Fill the qty_stagger array to tell what type of stagger each variable 
 !> has. This will be useful for interpolating observations.
+!> This currently doesn't support both slon/slat stagger - but cam-fv 
+!> doesn't have any fields like that.
 !>
 
 subroutine fill_cam_stagger_info(stagger)
@@ -1766,7 +1952,7 @@ do ivar = 1, get_num_variables(domain_id)
    do jdim = 1, get_num_dims(domain_id, ivar)
 
       if (get_dim_name(domain_id, ivar, jdim) == 'slat') then
-         qty_index = get_kind_index(domain_id, ivar) ! get_kind_index actualy returns the qty
+         qty_index = get_kind_index(domain_id, ivar) 
          stagger%qty_stagger(qty_index) = STAGGER_U
       endif
 
@@ -2105,29 +2291,25 @@ enddo
 end subroutine dcz2
 
 !-----------------------------------------------------------------------
+!>  Convert a geopotential altitude to mean sea level altitude.
 
 function gph2gmh(h, lat)
 
-!  Convert a list of geopotential altitudes to mean sea level altitude.
-
-real(r8), intent(in) :: h         ! geopotential altitude (in m)
-real(r8), intent(in) :: lat       ! latitude  of profile in degrees.
-real(r8)             :: gph2gmh   ! MSL altitude, in km.
+real(r8), intent(in) :: h         ! geopotential altitude in m
+real(r8), intent(in) :: lat       ! latitude in degrees.
+real(r8)             :: gph2gmh   ! MSL altitude, in m
 
 real(r8), parameter ::  be = 6356751.6_r8        ! min earth radius, m
 real(r8), parameter ::  ae = 6378136.3_r8        ! max earth radius, m
 real(r8), parameter ::  pi = 3.14159265358979_r8
-
-! FIXME; another definition of gravitational acceleration.  
-! See g0 and gravity_constant elsewhere.
 real(r8), parameter ::  G = 9.80665_r8 ! WMO reference g value, m/s**2, at 45.542N(S)
 
 real(r8) :: g0
 real(r8) :: r0
 real(r8) :: latr
 
-latr = lat * (pi/180.0_r8)           ! in radians
-call compute_gravity(latr, 0.0_r8, g0)
+latr = lat * DEG2RAD  ! convert to radians
+call compute_surface_gravity(latr, g0)
 
 ! compute local earth's radius using ellipse equation
 
@@ -2139,52 +2321,41 @@ gph2gmh = (r0 * h) / (((g0*r0)/G) - h)
 end function gph2gmh
 
 !-----------------------------------------------------------------------
-!> This subroutine computes the Earth's gravity at any altitude
-!> and latitude.  The model assumes the Earth is an oblate
-!> spheriod rotating at a the Earth's spin rate.  The model
-!> was taken from "Geophysical Geodesy, Kurt Lambeck, 1988".
+!> This subroutine computes the Earth's gravity at any latitude.
+!> The model assumes the Earth is an oblate spheriod rotating at 
+!> the Earth's spin rate.  The model was taken from 
+!> "Geophysical Geodesy, Kurt Lambeck, 1988".
 !>
 !>  input:    xlat, latitude in radians
-!>            alt,  altitude above the reference ellipsiod, km
-!>  output:   galt, gravity at the given lat and alt, m/sec**2
+!>  output:   galt, gravity at the given lat, m/sec**2
 !>
-!> Compute acceleration due to the Earth's gravity at any latitude/altitude
-!> author     Bill Schreiner   5/95
+!> taken from code from author Bill Schreiner, 5/95
 !>
-!> changed from using kilometers to meters since that is our native unit.
 !>
 
-subroutine compute_gravity(xlat,alt,galt)
+subroutine compute_surface_gravity(xlat,galt)
 
 real(r8), intent(in)  :: xlat
-real(r8), intent(in)  :: alt
 real(r8), intent(out) :: galt
 
 real(r8),parameter :: xmu = 398600.4415_r8         ! km^3/s^2
 real(r8),parameter :: ae  = 6378.1363_r8           ! km
 real(r8),parameter :: f   = 1.0_r8/298.2564_r8
-!#! real(r8),parameter :: w   = 7.292115e-05_r8        ! rad/s
 real(r8),parameter :: xm  = 0.003468_r8            !
 real(r8),parameter :: f2  = 5.3481622134089e-03_r8 ! f2 = -f + 5.0* 0.50*xm - 17.0/14.0*f*xm + 15.0/4.0*xm**2
 real(r8),parameter :: f4  = 2.3448248012911e-05_r8 ! f4 = -f**2* 0.50 + 5.0* 0.50*f*xm
 
-real(r8) :: ge
-real(r8) :: g
+! gravity at the equator, km/s2
+real(r8), parameter :: ge = xmu/ae**2/(1.0_r8 - f + 1.5_r8*xm - 15.0_r8/14.0_r8*xm*f)
 
-
-! compute gravity at the equator, km/s2
-ge = xmu/ae**2/(1.0_r8 - f + 1.5_r8*xm - 15.0_r8/14.0_r8*xm*f)
 
 ! compute gravity at any latitude, km/s2
-g = ge*(1.0_r8 + f2*(sin(xlat))**2 - 1.0_r8/4.0_r8*f4*(sin(2.0_r8*xlat))**2)
+galt = ge*(1.0_r8 + f2*(sin(xlat))**2 - 1.0_r8/4.0_r8*f4*(sin(2.0_r8*xlat))**2)
 
-! compute gravity at any latitude and at any height, km/s2
-galt = g - 2.0_r8*ge*alt/ae*(1.0_r8 + f + xm + (-3.0_r8*f + 5.0_r8* 0.50_r8*xm)*  &
-                          (sin(xlat))**2) + 3.0_r8*ge*alt**2/ae**2
 ! convert to meters/s2
 galt = galt*1000.0_r8
 
-end subroutine compute_gravity
+end subroutine compute_surface_gravity
 
 !-----------------------------------------------------------------------
 !> This subroutine computes converts vertical state
@@ -2455,11 +2626,8 @@ level_one = 1
 call get_staggered_values_from_qty(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
                          lon_index, lat_index, level_one, qty, surface_pressure, status1)
 
-do imember=1, ens_size
-   call build_cam_pressure_column(surface_pressure(imember), grid_data%lev%nsize, &
-                                  grid_data%hyam, grid_data%hybm, grid_data%P0, &
-                                  pressure_array(:,imember))
-enddo
+call build_cam_pressure_column(ens_size, surface_pressure, grid_data%lev%nsize, &
+                               pressure_array)
 my_status(:) = 0
 
 end subroutine cam_pressure_levels
