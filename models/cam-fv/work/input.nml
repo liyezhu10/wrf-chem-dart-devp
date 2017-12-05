@@ -143,9 +143,12 @@
    assimilation_period_seconds = 21600
    assimilation_period_days    = 0
    no_assim_above_this_model_level = 5
-   use_damping_ramp_at_model_top = .false.
-   suppress_grid_info_in_output  = .false.
-   debug_level                 = 13
+   use_damping_ramp_at_model_top   = .false.
+   suppress_grid_info_in_output    = .false.
+   custom_routine_to_generate_ensemble = .true.
+   fields_to_perturb               = 'QTY_TEMPERATURE'
+   perturbation_amplitude,         = 0.0001
+   debug_level                     = 13
    /
 
 !#!    vert_coord          = 'log_invP'

@@ -106,11 +106,10 @@ character(len=32)  :: vertical_localization_coord     = 'PRESSURE'
 integer            :: assimilation_period_days        = 0
 integer            :: assimilation_period_seconds     = 21600
 logical            :: use_log_vertical_scale          = .false.
-integer            :: no_assim_above_this_model_level = 5
+integer            :: no_assim_above_this_model_level = 4
 logical            :: use_damping_ramp_at_model_top   = .false.  
 integer            :: debug_level                     = 0
 logical            :: suppress_grid_info_in_output    = .false.
-integer            :: highest_obs_limit_in_state      = -1
 logical            :: custom_routine_to_generate_ensemble = .false.
 character(len=32)  :: fields_to_perturb(MAX_PERT)     = "QTY_TEMPERATURE"
 real(r8)           :: perturbation_amplitude(MAX_PERT)= 0.00001_r8
@@ -140,7 +139,6 @@ namelist /model_nml/  &
    no_assim_above_this_model_level, &
    use_damping_ramp_at_model_top,   &
    suppress_grid_info_in_output,    &
-   highest_obs_limit_in_state,      &
    custom_routine_to_generate_ensemble, &
    fields_to_perturb,               &
    perturbation_amplitude,          &
@@ -735,8 +733,8 @@ if (numdims > 2 ) then
       ! level 1 is top, so test that the level numbers are *smaller* than the limit.
       ! (meaning the obs is above the given limit in at least one ensemble member)
 
-      if (highest_obs_limit_in_state > 0) then
-         if (any(four_bot_levs(icorner,:) <= highest_obs_limit_in_state)) then
+      if (no_assim_above_this_model_level > 0) then
+         if (any(four_bot_levs(icorner,:) <= no_assim_above_this_model_level)) then
             istatus(:) = 14
             return
          endif
