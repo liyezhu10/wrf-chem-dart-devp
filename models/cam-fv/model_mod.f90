@@ -110,6 +110,7 @@ integer            :: no_assim_above_this_model_level = 5
 logical            :: use_damping_ramp_at_model_top   = .false.  
 integer            :: debug_level                     = 0
 logical            :: suppress_grid_info_in_output    = .false.
+integer            :: highest_obs_limit_in_state      = -1
 logical            :: custom_routine_to_generate_ensemble = .false.
 character(len=32)  :: fields_to_perturb(MAX_PERT)     = "QTY_TEMPERATURE"
 real(r8)           :: perturbation_amplitude(MAX_PERT)= 0.00001_r8
@@ -139,11 +140,11 @@ namelist /model_nml/  &
    no_assim_above_this_model_level, &
    use_damping_ramp_at_model_top,   &
    suppress_grid_info_in_output,    &
+   highest_obs_limit_in_state,      &
    custom_routine_to_generate_ensemble, &
    fields_to_perturb,               &
    perturbation_amplitude,          &
    debug_level
-
 
 ! global variables
 character(len=512) :: string1, string2
@@ -623,6 +624,7 @@ end subroutine get_values_from_nonstate_fields
 !> istatus = 11   cannot get vertical levels for an obs on height levels
 !> istatus = 12   cannot get values from obs quantity
 !> istatus = 13   can not interpolate values of this quantity
+!> istatus = 14   can not interpolate values above a given level
 !> istatus = X
 !> istatus = 99   unknown error - shouldn't happen
 !>
@@ -638,19 +640,17 @@ integer,            intent(out) :: istatus(ens_size)
 
 character(len=*), parameter :: routine = 'model_interpolate:'
 
-integer  :: varid
+integer  :: varid, icorner, numdims, which_vert, status1
 integer  :: lon_bot, lat_bot, lon_top, lat_top
-real(r8) :: lon_fract, lat_fract
-real(r8) :: lon_lat_vert(3), botvals(ens_size), topvals(ens_size)
-integer  :: level_one_array(ens_size)
-integer  :: which_vert, status1, status_array(ens_size)
-type(quad_interp_handle) :: interp_handle
-integer  :: icorner, numdims
 integer  :: four_lons(4), four_lats(4)
-real(r8) :: two_horiz_fracts(2)
+integer  :: level_one_array(ens_size), status_array(ens_size)
 integer  :: four_bot_levs(4, ens_size), four_top_levs(4, ens_size)
-real(r8) :: four_vert_fracts(4, ens_size)
-real(r8) :: quad_vals(4, ens_size)
+real(r8) :: lon_fract, lat_fract
+real(r8) :: lon_lat_vert(3)
+real(r8) :: botvals(ens_size), topvals(ens_size)
+real(r8) :: two_horiz_fracts(2)
+real(r8) :: four_vert_fracts(4, ens_size), quad_vals(4, ens_size)
+type(quad_interp_handle) :: interp_handle
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -754,6 +754,7 @@ if (numdims > 2 ) then
                                 four_bot_levs(icorner, :), four_top_levs(icorner, :), &
                                 four_vert_fracts(icorner, :), status_array)
       
+
       !>@todo FIXME should we let the process continue if at least one
       !>member has failed?  pro: save work  con: don't get forward operator
       !>values for members that could compute them
@@ -761,6 +762,11 @@ if (numdims > 2 ) then
       if (any(status_array /= 0)) then
          istatus(:) = 4   ! cannot locate enclosing vertical levels  !>@todo FIXME use where statements?
          return
+      endif
+      
+      if (any(highest_obs_limit_in_state < four_top_levs(icorner,:)) &&
+              highest_obs_limit_in_state > 0) then
+         istatus(:) = 14
       endif
    enddo
    
@@ -2191,6 +2197,8 @@ call nc_get_variable(ncid, varname, grid_array%vals)
 !>@todo FIXME this should be an array_dump() routine
 !> in a utilities routine somewhere. 
 if (debug_level > 10) then
+   !call array_dump2(varname, grid_array%vals(:,:), nper_linei, nsize)
+   !subroutine
    per_line = 5
    print*, 'variable name ', trim(varname)
    do i=1, grid_array%nsize, per_line

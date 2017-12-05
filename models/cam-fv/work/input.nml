@@ -115,7 +115,7 @@
    init_time_days             = -1,
    init_time_seconds          = -1,
 
-   write_output_state_to_file = .true.,
+   write_output_state_to_file = .false.,
    output_state_files         = "perfect_restart.nc",
 
    obs_seq_in_file_name       = "obs_seq.in",
