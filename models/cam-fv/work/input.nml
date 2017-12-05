@@ -147,7 +147,7 @@
    suppress_grid_info_in_output    = .false.
    custom_routine_to_generate_ensemble = .true.
    fields_to_perturb               = 'QTY_TEMPERATURE'
-   perturbation_amplitude,         = 0.0001
+   perturbation_amplitude          = 0.0001
    debug_level                     = 13
    /
 
