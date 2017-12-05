@@ -1107,7 +1107,6 @@ integer  :: k, level_one, imember, status1
 real(r8) :: surface_elevation(1)
 real(r8) :: temperature(ens_size), specific_humidity(ens_size), surface_pressure(ens_size)
 real(r8) :: tv(nlevels, ens_size)  ! Virtual temperature, top to bottom
-real(r8) :: height_interf(nlevels+1, ens_size)
 
 !>@todo this should come from a model specific constant module.
 !> the forward operators and model_mod should use it.
@@ -1126,7 +1125,6 @@ call get_staggered_values_from_qty(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
 
 ! get the surface elevation from the phis, including stagger if needed
 call get_quad_corners(1, lon_index, lat_index, QTY_SURFACE_ELEVATION, qty, surface_elevation, status1)
-print *, 'surface elevation from quad corners: ', surface_elevation
 
 do k = 1, nlevels
    ! temperature
@@ -1140,22 +1138,22 @@ do k = 1, nlevels
    !>tv == virtual temperature.
    tv(k,:) = temperature(:)*(1.0_r8 + rr_factor*specific_humidity(:))
 
-   print *, 'member 1, level, t, q, tv: ', k, temperature(1), specific_humidity(1), tv(k, 1)
-
 enddo
 
 ! compute the height columns for each ensemble member
 do imember = 1, ens_size
    call build_heights(nlevels, surface_pressure(imember), surface_elevation(1), tv(:, imember), &
-                      height_array(:, imember), height_interf(:, imember))  ! can pass in variable_r
+                      height_array(:, imember))  ! can pass in variable_r here
 enddo
 
 ! convert entire array to geometric height (from potential height)
 call gph2gmh(height_array, grid_data%lat%vals(lat_index))
 
-do k = 1,nlevels
-   print *, "member 1, level, height: ", k, height_array(k, 1)
-enddo
+if (debug_level > 100) then
+   do k = 1,nlevels
+      print *, "member 1, level, height: ", k, height_array(k, 1)
+   enddo
+endif
 
 my_status(:) = 0
 
@@ -1393,7 +1391,7 @@ bot_lev = MISSING_I
 top_lev = MISSING_I
 fract   = MISSING_R8
 
-if (h_val < heights(1) .or. h_val > heights(nlevels)) then
+if (h_val > heights(1) .or. h_val < heights(nlevels)) then
    my_status = 11
    return
 endif
@@ -1404,7 +1402,6 @@ endif
 ! already for h_val out of range.
 levloop: do this_lev = 2, nlevels
    if (h_val < heights(this_lev)) cycle levloop
-
    top_lev = this_lev - 1
    bot_lev = this_lev
    fract = (h_val - heights(top_lev)) / (heights(bot_lev) - heights(top_lev))
@@ -2207,8 +2204,8 @@ real(r8), intent(in)  :: p_surf              ! Surface pressure (pascals)
 real(r8), intent(in)  :: h_surf              ! Surface height (m)
 real(r8), intent(in)  :: tv(n_levels)        ! Virtual temperature, top to bottom
 real(r8), intent(out) :: height_midpts(n_levels)   ! Geopotential height at midpoints, top to bottom
-real(r8), intent(out) :: height_interf(n_levels+1) ! Geopotential height at interfaces, top to bottom
-real(r8), intent(in), optional :: variable_r(n_levels) ! Dry air gas constant, if varies, top to bottom
+real(r8), intent(out), optional :: height_interf(n_levels+1) ! Geopotential height at interfaces, top to bottom
+real(r8), intent(in),  optional :: variable_r(n_levels) ! Dry air gas constant, if varies, top to bottom
 
 ! Local variables
 
@@ -2220,6 +2217,7 @@ real(r8), parameter :: g0 = 9.80616_r8        ! Different than model_heights:gph
 real(r8) :: r_by_g(n_levels)
 real(r8) :: ln_p_midpts(n_levels)    ! log of pressure at layer midpoints
 real(r8) :: ln_p_interf(n_levels+1)  ! log of pressure at layer interfaces
+real(r8) :: hgt_intf(n_levels+1)     ! Geopotential height at interfaces, top to bottom
 
 integer  :: i,k,l
 
@@ -2234,18 +2232,34 @@ endif
 call cam_p_col_midpts(p_surf, n_levels,   ln_p_midpts)
 call cam_p_col_intfcs(p_surf, n_levels+1, ln_p_interf)
 
+if (debug_level > 100) then
+   do i=1, n_levels
+     print *, 'midpts, interf: ', i, ln_p_midpts(i), ln_p_interf(i)
+   enddo
+   print *, 'interf: ', n_levels+1, ln_p_interf(n_levels+1)
+endif
+
 ln_p_midpts = log(ln_p_midpts)
 ln_p_interf = log(ln_p_interf)
 
 ! start from the ground and work up
-height_interf(n_levels+1) = h_surf
+hgt_intf(n_levels+1) = h_surf
 
-! for each level, add the lower half of the layer to the midpoint array,
-! then add the upper half of the layer to the interface array.
+! for each level, add the thickness of the lower half of the layer to the previous
+! interface height to get the new midpoint height, and then add the thickness of the
+! upper half of the layer to the midpoint height to get the new interface height.
+! each layer has a different virtual temperature and optionally a different r/g.
+! (so you can't add the whole midpoint-to-midpoint thicknesses because each half layer
+! uses a different tv.)
+
 do i=n_levels, 1, -1
-   height_midpts(i) = height_interf(i-1) + (r_by_g(i) * tv(i) * (ln_p_midpts(i) - ln_p_interf(i-1)))
-   height_interf(i) = height_midpts(i)   + (r_by_g(i) * tv(i) * (ln_p_interf(i) - ln_p_midpts(i  )))
+   height_midpts(i) = hgt_intf(i+1)    + (r_by_g(i) * tv(i) * (ln_p_interf(i+1) - ln_p_midpts(i)))
+   hgt_intf(i)      = height_midpts(i) + (r_by_g(i) * tv(i) * (ln_p_midpts(i)   - ln_p_interf(i)))
 enddo
+
+! normally we only need the midpoint heights, but if its useful to have
+! the heights on the interface levels, here it is.  
+if (present(height_interf)) height_interf = hgt_intf
 
 end subroutine build_heights
 
