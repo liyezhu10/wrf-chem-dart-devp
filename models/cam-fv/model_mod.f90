@@ -318,6 +318,9 @@ if (present(var_type)) var_type = myqty
 end subroutine get_state_meta_data
 
 !-----------------------------------------------------------------------
+!> given the (i,j,k) indices into a field in the state vector,
+!> and the quantity, and the dimensionality of the field (2d, 3d),
+!> compute the location of that item.  
 
 function get_location_from_index(i, j, k, q, nd)
 integer, intent(in) :: i
@@ -331,13 +334,27 @@ real(r8) :: slon_val
 real(r8) :: use_vert_val
 integer  :: use_vert_type
 
-if (nd == 2) then
-   use_vert_type = VERTISSURFACE
-   use_vert_val  = MISSING_R8  ! could also be surface elevation
-else
+! full 3d fields are returned with lon/lat/level.
+! 2d fields are either surface fields, or if they
+! are column integrated values then they are 'undefined'
+! in the vertical.
+
+if (nd == 3) then
    use_vert_type = VERTISLEVEL
    use_vert_val  = real(k,r8)
+else
+   if (q == QTY_SURFACE_ELEVATION .or. q == QTY_SURFACE_PRESSURE) then
+      use_vert_type = VERTISSURFACE
+      use_vert_val  = MISSING_R8  ! could also be surface elevation:
+      !use_vert_val  = phis(lon_index, lat_index) / gravity
+   else
+      use_vert_type = VERTISUNDEF
+      use_vert_val  = MISSING_R8
+   endif
 endif
+
+! the horizontal location depends on whether this quantity is on the
+! mass point grid or staggered in either lat or lon.  
 
 select case (grid_stagger%qty_stagger(q))
   case (STAGGER_U)
@@ -346,9 +363,10 @@ select case (grid_stagger%qty_stagger(q))
                                           use_vert_val, use_vert_type)
 
   case (STAGGER_V)
+   ! the first staggered longitude is negative.  dart requires lons
+   ! be between 0 and 360.
    slon_val = grid_data%slon%vals(i)
-   if (slon_val <   0) slon_val = slon_val + 360.0_r8
-   if (slon_val > 360) slon_val = slon_val - 360.0_r8
+   if (slon_val < 0) slon_val = slon_val + 360.0_r8
    get_location_from_index = set_location(slon_val, &
                                           grid_data%lat%vals(j), &
                                           use_vert_val, use_vert_type)
@@ -450,7 +468,14 @@ end subroutine get_values_from_qty
 
 
 !-----------------------------------------------------------------------
+!> this routine takes care of getting the actual state values.  get_state()
+!> communicates with other MPI tasks and can be expensive.
 !>
+!> all ensemble members have the same horizontal location, but different 
+!> ensemble members could have different vertical locations and
+!> so be between different vertical layers.  this code tries to do the fewest
+!> calls to get_state by only calling it for levels that are actually needed
+!> and setting all members with those same levels in a single pass.
 !> 
 
 subroutine get_values_from_varid(ens_handle, ens_size, lon_index, lat_index, lev_index, &
@@ -465,15 +490,48 @@ real(r8), intent(out) :: vals(ens_size)
 integer,  intent(out) :: my_status(ens_size)
 
 integer(i8) :: state_indx
+integer  :: i, j
+real(r8) :: temp_vals(ens_size)
+logical  :: member_done(ens_size)
 
-!>@todo FIXME add error checking?  is state_indx < 0 how it indicates error?
+! as we get the values for each ensemble member, we set the 'done' flag
+! and a good return code. 
+my_status(:) = 16
+member_done(:) = .false.
 
-!>@todo FIXME find unique level indices here (see new wrf code)
+! start with lev_index(1).  get the vals into a temp var.  
+! run through 2-N. any other member that has the same level 
+! set the outgoing values.  keep a separate flag for which 
+! member(s) have been done.  skip to the next undone member 
+! and get the state for that level.  repeat until all
+! levels done.
 
-state_indx = get_dart_vector_index(lon_index, lat_index, lev_index(1), domain_id, varid)
-vals       = get_state(state_indx, ens_handle)
+do i=1, ens_size
 
-my_status(:) = 0
+   if (member_done(i)) cycle
+
+   state_indx = get_dart_vector_index(lon_index, lat_index, lev_index(i), domain_id, varid)
+   if (state_indx < 0) then
+      !>@todo FIXME this shouldn't happen, right?  should it call the error handler instead?
+      my_status(:) = 15
+      return
+   endif
+
+   temp_vals(:) = get_state(state_indx, ens_handle)    ! all the ensemble members for level (i)
+ 
+   ! start at i, because my ensemble member is clearly at this level.
+   ! then continue on to see if any other members are also at this level.
+   do j=i, ens_size
+      if (member_done(j)) cycle
+
+      if (lev_index(j) == lev_index(i)) then
+         vals(j) = temp_vals(j)
+         member_done(j) = .true.
+         my_status(j) = 0
+      endif
+      
+   enddo
+enddo
 
 end subroutine get_values_from_varid
 
