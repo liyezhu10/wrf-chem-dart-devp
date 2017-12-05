@@ -759,14 +759,24 @@ if (numdims > 2 ) then
       !>member has failed?  pro: save work  con: don't get forward operator
       !>values for members that could compute them
       !>(this is true for all the subsequent returns from this routine)
+
       if (any(status_array /= 0)) then
          istatus(:) = 4   ! cannot locate enclosing vertical levels  !>@todo FIXME use where statements?
          return
       endif
       
-      if (any(highest_obs_limit_in_state < four_top_levs(icorner,:)) &&
-              highest_obs_limit_in_state > 0) then
-         istatus(:) = 14
+      ! if we are avoiding assimilating obs above a given level, test here and return
+      ! if any of the bottom corners are above the limit (meaning the obs is at least
+      ! in the layer above the given cutoff.)
+      !
+      ! level 1 is top, so test that the level numbers are *smaller* than the limit.
+      ! (meaning the obs is above the given limit in at least one ensemble member)
+
+      if (highest_obs_limit_in_state > 0) then
+         if (any(four_bot_levs(icorner,:) <= highest_obs_limit_in_state)) then
+            istatus(:) = 14
+            return
+         endif
       endif
    enddo
    
