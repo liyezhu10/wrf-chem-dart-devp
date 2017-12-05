@@ -212,12 +212,11 @@ contains
 
 
 !-----------------------------------------------------------------------
-! All the REQUIRED interfaces come first - by convention.
+! All the required interfaces are first.
 !-----------------------------------------------------------------------
 
 
 !-----------------------------------------------------------------------
-!>
 !> Called to do one time initialization of the model.
 !> In this case, it reads in the grid information, the namelist
 !> containing the variables of interest, where to get them, their size,
@@ -279,9 +278,7 @@ end subroutine static_init_model
 
 
 !-----------------------------------------------------------------------
-!>
 !> Returns the size of the DART state vector (i.e. model) as an integer.
-!> Required for all applications.
 !>
 
 function get_model_size()
@@ -403,12 +400,12 @@ end select
 end function get_location_from_index
 
 !-----------------------------------------------------------------------
-!>
 !> this routine should be called to get a value from an unstaggered grid
 !> that corresponds to a staggered grid.  e.g. you need the surface pressurre
 !> under a V wind point.
 
-subroutine get_staggered_values_from_qty(ens_handle, ens_size, qty, lon_index, lat_index, lev_index, stagger_qty, vals, my_status)
+subroutine get_staggered_values_from_qty(ens_handle, ens_size, qty, lon_index, lat_index, &
+                                         lev_index, stagger_qty, vals, my_status)
 type(ensemble_type), intent(in) :: ens_handle
 integer,             intent(in) :: ens_size
 integer,             intent(in) :: qty
@@ -554,7 +551,8 @@ end subroutine get_values_from_varid
 !-----------------------------------------------------------------------
 !> this is just for 3d fields
 
-subroutine get_values_from_nonstate_fields(ens_handle, ens_size, lon_index, lat_index, lev_index, obs_quantity, vals, my_status)
+subroutine get_values_from_nonstate_fields(ens_handle, ens_size, lon_index, lat_index, &
+                                           lev_index, obs_quantity, vals, my_status)
 type(ensemble_type),  intent(in)  :: ens_handle
 integer,              intent(in)  :: ens_size
 integer,              intent(in)  :: lon_index
@@ -566,6 +564,8 @@ integer,              intent(out) :: my_status(ens_size)
 
 integer  :: imember
 real(r8) :: vals_array(grid_data%lev%nsize,ens_size)
+
+character(len=*), parameter :: routine = 'get_values_from_nonstate_fields:'
 
 vals(:) = MISSING_R8
 
@@ -592,8 +592,8 @@ select case (obs_quantity)
       my_status(:) = 0
 
    case default
-      !>@todo FIXME
-      print*, 'should not go here'
+      write(string1,*)'contact dart support. unexpected error for quantity ', obs_quantity
+      call error_handler(E_MSG,routine,string1,source,revision,revdate)
 
 end select
 
@@ -625,6 +625,7 @@ end subroutine get_values_from_nonstate_fields
 !> istatus = 12   cannot get values from obs quantity
 !> istatus = 13   can not interpolate values of this quantity
 !> istatus = 14   can not interpolate values above a given level
+!> istatus = 15   can not get indices from given state vector index
 !> istatus = X
 !> istatus = 99   unknown error - shouldn't happen
 !>
@@ -648,52 +649,26 @@ integer  :: four_bot_levs(4, ens_size), four_top_levs(4, ens_size)
 real(r8) :: lon_fract, lat_fract
 real(r8) :: lon_lat_vert(3)
 real(r8) :: botvals(ens_size), topvals(ens_size)
-real(r8) :: two_horiz_fracts(2)
 real(r8) :: four_vert_fracts(4, ens_size), quad_vals(4, ens_size)
 type(quad_interp_handle) :: interp_handle
 
 if ( .not. module_initialized ) call static_init_model
-
-! the overall strategy:
-! 1. figure out if the quantity to interpolate is
-! in the state.  if so, compute and return the value.
-! if not, is it something that is a simple function of
-! items in the state that we should compute here instead
-! of computing it in a separate forward operator?  ok, we'll
-! do it.. else error.
-! (if there *are* functions of state vars or others that we
-! need to compute here, put the rest of the interp code into
-! a separate subroutine for reuse.)
-! 2. compute the 4 horizontal i,j indices for the quad corners
-! that enclose the obs location.
-! 3. for each of the 4 quad corners compute the 2 vertical levels 
-! that enclose the obs in the vertical. also return the fraction
-! in the vertical - this needs a linear/log option.  (how set?)
-! 4. now we have 8 i,j,k index numbers and 3 fractions.
-! 5. compute the data values at each of the 4 horizontal i,j quad
-! corners, interpolating in the vertical using the k fraction
-! 6. compute the final horizontal obs value based on the i,j fractions
 
 
 ! Successful istatus is 0
 interp_vals(:) = MISSING_R8
 istatus(:)     = 99
 
+! do we know how to interpolate this quantity?
 call ok_to_interpolate(obs_qty, varid, status1)
 
-! If not, for now return an error.  if there are other quantities
-! that we can return that aren't part of the state then add code here.
-! (make the rest of this routine into a separate subroutine that can
-! be reused?)
 if (status1 /= 0) then  
-   !>@todo FIXME there may be things we need to compute that
-   !> has multiple variables involved
-   ! e.g. phis (elevation?)
-
-   ! generally the interpolation code should not print or error out if
-   ! it is asked to interpolate a quantity it cannot do.  this is then just
+   ! the interpolation code should not print or error out if
+   ! it is asked to interpolate a quantity it cannot do.  it is just
    ! a failed forward operator.  (some forward operators try one quantity
    ! and if that fails, then they compute what they need using different quantities.)
+   ! if you set the debug level up high enough, we can print out info about
+   ! failed forward operators.
    if(debug_level > 12) then
       write(string1,*)'did not find observation quantity ', obs_qty, ' in the state vector'
       call error_handler(E_MSG,routine,string1,source,revision,revdate)
@@ -702,10 +677,9 @@ if (status1 /= 0) then
    return
 endif
 
-! unpack the location type into lon, lat, vert
-! also may need the vert type?
+! unpack the location type into lon, lat, vert, vert_type
 lon_lat_vert = get_location(location)
-which_vert   = nint(query_location(location))  ! default is to return the vertical type
+which_vert   = nint(query_location(location)) 
 
 ! get the grid handle for the right staggered grid
 interp_handle = get_interp_handle(obs_qty)
@@ -713,24 +687,12 @@ interp_handle = get_interp_handle(obs_qty)
 ! get the indices for the 4 corners of the quad in the horizontal, plus
 ! the fraction across the quad for the obs location
 call quad_lon_lat_locate(interp_handle, lon_lat_vert(1), lon_lat_vert(2) , &
-                         four_lons, four_lats, lon_fract, lat_fract, &
-                         status1)
+                         four_lons, four_lats, lon_fract, lat_fract, status1)
 
 if (status1 /= 0) then
    istatus(:) = 3  ! cannot locate enclosing horizontal quad
    return
 endif
-
-!>@todo FIXME move this into quad_lon_lat_locate() interface so these are the
-!>items directly returned.
-! the order of the returned vertical info is counterclockwise around 
-! the quad starting at lon/lat bot:
-!  (lon_bot, lat_bot), (lon_top, lat_bot), (lon_top, lat_top), (lon_bot, lat_top)
-! stuff this info into arrays of length 4 so we can loop over them easier.
-
-! changed interface to locate - remove me once this tests ok
-!call index_setup(lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &i
-!                 four_lons, four_lats, two_horiz_fracts)
 
 ! need to consider the case for 2d vs 3d variables
 numdims = get_dims_from_qty(obs_qty, varid)
@@ -742,12 +704,13 @@ numdims = get_dims_from_qty(obs_qty, varid)
 ! if variable is not in the state
 !    do 2d and 3d
 
+! now here potentially we have different results for different
+! ensemble members.  the things that can vary are dimensioned by ens_size.
+
 if (numdims > 2 ) then
-   ! and now here potentially we have different results for different
-   ! ensemble members.  the things that can vary are dimensioned by ens_size.
+
+   ! build 4 columns to find vertical level numbers
    do icorner=1, 4
-      ! build a column to find vertical level numbers
-      !>@doto FIXME this needs an option for linear or log scale.  affects fraction only.
       call find_vertical_levels(state_handle, ens_size, &
                                 four_lons(icorner), four_lats(icorner), lon_lat_vert(3), &
                                 which_vert, obs_qty, &
@@ -780,67 +743,32 @@ if (numdims > 2 ) then
       endif
    enddo
    
+   ! we have all the indices and fractions we could ever want.
+   ! now get the data values at the bottom levels, the top levels, 
+   ! and do vertical interpolation to get the 4 values in the columns.
+   ! the final horizontal interpolation will happen later.
+      
    if (varid > 0) then
-      ! we have all the indices and fractions we could ever want.
-      ! now get the data values at the bottom levels, the top levels, 
-      ! and do vertical interpolation to get the final result.
-      
-      do icorner=1, 4
-         call get_values_from_varid(state_handle,  ens_size, &
-                                    four_lons(icorner), four_lats(icorner), &
-                                    four_bot_levs(icorner, :), varid, botvals, &
-                                    status_array)
 
-         if (any(status_array /= 0)) then
-            istatus(:) = 5   ! cannot retrieve bottom values
-            return
-         endif
+      call get_four_state_values(state_handle, ens_size, four_lons, four_lats, &
+                                four_bot_levs, four_top_levs, four_vert_fracts, &
+                                varid, quad_vals, status_array)
 
-         call get_values_from_varid(state_handle,  ens_size, &
-                                    four_lons(icorner), four_lats(icorner), &
-                                    four_top_levs(icorner, :), varid, topvals, status_array)
-         if (any(status_array /= 0)) then
-            istatus(:) = 6   ! cannot retrieve top values
-            return
-         endif
-
-         call vert_interp(ens_size, botvals, topvals, four_vert_fracts(icorner, :), &
-                          quad_vals(icorner, :), status_array)
-
-         if (any(status_array /= 0)) then
-            istatus(:) = 7   ! cannot do vertical interpolation
-            return
-         endif
-      enddo
    else ! get 3d special variables in another ways ( like QTY_PRESSURE )
-      ! fill topvals and botvals somehow
-      do icorner=1, 4
-         call get_values_from_nonstate_fields(state_handle,  ens_size, &
-                                    four_lons(icorner), four_lats(icorner), &
-                                    four_bot_levs(icorner, :), varid, botvals, status_array)
-         if (any(status_array /= 0)) then
-            istatus(:) = 5   ! cannot retrieve bottom values
-            return
-         endif
 
-         call get_values_from_nonstate_fields(state_handle,  ens_size, &
-                                    four_lons(icorner), four_lats(icorner), &
-                                    four_top_levs(icorner, :), varid, topvals, status_array)
-         if (any(status_array /= 0)) then
-            istatus(:) = 6   ! cannot retrieve top values
-            return
-         endif
+      call get_four_nonstate_values(state_handle, ens_size, four_lons, four_lats, &
+                                   four_bot_levs, four_top_levs, four_vert_fracts, &
+                                   obs_qty, quad_vals, status_array)
 
-         call vert_interp(ens_size, botvals, topvals, four_vert_fracts(icorner, :), &
-                          quad_vals(icorner, :), status_array)
-      
-         if (any(status_array /= 0)) then
-            istatus(:) = 7   ! cannot do vertical interpolation
-            return
-         endif
-      enddo
    endif
-else ! 2 dimensional variable
+
+   if (any(status_array /= 0)) then
+      istatus(:) = status_array(:)
+      return
+   endif
+
+else ! 2 dimensional variables
+
    if (varid > 0) then
       level_one_array(:) = 1
       do icorner=1, 4
@@ -871,10 +799,110 @@ istatus(:) = 0
 end subroutine model_interpolate
 
 !-----------------------------------------------------------------------
-!> figure out whether this is a 2d or 3d field bawsed on the quantity.
+!>
+
+subroutine get_four_state_values(state_handle, ens_size, four_lons, four_lats, &
+                                 four_bot_levs, four_top_levs, four_vert_fracts, &
+                                 varid, quad_vals, my_status)
+
+type(ensemble_type), intent(in) :: state_handle
+integer,             intent(in) :: ens_size
+integer,             intent(in) :: four_lons(4), four_lats(4)
+integer,             intent(in) :: four_bot_levs(4, ens_size), four_top_levs(4, ens_size)
+real(r8),            intent(in) :: four_vert_fracts(4, ens_size)
+integer,             intent(in) :: varid
+real(r8),           intent(out) :: quad_vals(4, ens_size) !< array of interpolated values
+integer,            intent(out) :: my_status(ens_size)
+
+integer  :: icorner
+real(r8) :: botvals(ens_size), topvals(ens_size)
+
+character(len=*), parameter :: routine = 'get_four_state_values:'
+
+do icorner=1, 4
+   call get_values_from_varid(state_handle,  ens_size, &
+                              four_lons(icorner), four_lats(icorner), &
+                              four_bot_levs(icorner, :), varid, botvals, &
+                              my_status)
+
+   if (any(my_status /= 0)) then
+      my_status(:) = 5   ! cannot retrieve bottom values
+      return
+   endif
+
+   call get_values_from_varid(state_handle,  ens_size, &
+                              four_lons(icorner), four_lats(icorner), &
+                              four_top_levs(icorner, :), varid, topvals, my_status)
+   if (any(my_status /= 0)) then
+      my_status(:) = 6   ! cannot retrieve top values
+      return
+   endif
+
+   call vert_interp(ens_size, botvals, topvals, four_vert_fracts(icorner, :), &
+                    quad_vals(icorner, :), my_status)
+
+   if (any(my_status /= 0)) then
+      my_status(:) = 7   ! cannot do vertical interpolation
+      return
+   endif
+enddo
+
+end subroutine get_four_state_values
+
+!-----------------------------------------------------------------------
+!>
+
+subroutine get_four_nonstate_values(state_handle, ens_size, four_lons, four_lats, &
+                                 four_bot_levs, four_top_levs, four_vert_fracts, &
+                                 obs_qty, quad_vals, my_status)
+
+type(ensemble_type), intent(in) :: state_handle
+integer,             intent(in) :: ens_size
+integer,             intent(in) :: four_lons(4), four_lats(4)
+integer,             intent(in) :: four_bot_levs(4, ens_size), four_top_levs(4, ens_size)
+real(r8),            intent(in) :: four_vert_fracts(4, ens_size)
+integer,             intent(in) :: obs_qty
+real(r8),           intent(out) :: quad_vals(4, ens_size) !< array of interpolated values
+integer,            intent(out) :: my_status(ens_size)
+
+integer  :: icorner
+real(r8) :: botvals(ens_size), topvals(ens_size)
+
+character(len=*), parameter :: routine = 'get_four_nonstate_values:'
+
+do icorner=1, 4
+   call get_values_from_nonstate_fields(state_handle,  ens_size, &
+                              four_lons(icorner), four_lats(icorner), &
+                              four_bot_levs(icorner, :), obs_qty, botvals, my_status)
+   if (any(my_status /= 0)) then
+      my_status(:) = 5   ! cannot retrieve bottom values
+      return
+   endif
+
+   call get_values_from_nonstate_fields(state_handle,  ens_size, &
+                              four_lons(icorner), four_lats(icorner), &
+                              four_top_levs(icorner, :), obs_qty, topvals, my_status)
+   if (any(my_status /= 0)) then
+      my_status(:) = 6   ! cannot retrieve top values
+      return
+   endif
+
+   call vert_interp(ens_size, botvals, topvals, four_vert_fracts(icorner, :), &
+                    quad_vals(icorner, :), my_status)
+
+   if (any(my_status /= 0)) then
+      my_status(:) = 7   ! cannot do vertical interpolation
+      return
+   endif
+enddo
+
+end subroutine get_four_nonstate_values
+
+!-----------------------------------------------------------------------
+!> figure out whether this is a 2d or 3d field based on the quantity.
 !> if this field is in the state vector, use the state routines.
 !> if it's not, there are cases for known other quantities we can
-!> interpolate and return.
+!> interpolate and return.  add any new non-state fields here.
 
 function get_dims_from_qty(obs_quantity, var_id)
 integer, intent(in) :: obs_quantity
@@ -1016,38 +1044,6 @@ my_status(:) = 0
 end subroutine vert_interp
 
 !-----------------------------------------------------------------------
-!>@todo REMOVE ME once this tests ok
-!> populate arrays with the 4 combinations of bot/top vs lon/lat
-!> to make it easier below to loop over the corners.
-!>@todo FIXME this should be the return from the quad code
-!>to begin with.
-!
-!subroutine index_setup(lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract, &
-!                       four_lons, four_lats, two_horiz_fracts)
-!integer,  intent(in)  :: lon_bot, lat_bot, lon_top, lat_top
-!real(r8), intent(in)  :: lon_fract, lat_fract
-!integer,  intent(out) :: four_lons(4), four_lats(4)
-!real(r8), intent(out) :: two_horiz_fracts(2)
-!
-!! order is counterclockwise around the quad:
-!!  (lon_bot, lat_bot), (lon_top, lat_bot), (lon_top, lat_top), (lon_bot, lat_top)
-!
-!four_lons(1) = lon_bot
-!four_lons(2) = lon_top
-!four_lons(3) = lon_top
-!four_lons(4) = lon_bot
-!
-!four_lats(1) = lat_bot
-!four_lats(2) = lat_bot
-!four_lats(3) = lat_top
-!four_lats(4) = lat_top
-!
-!two_horiz_fracts(1) = lon_fract
-!two_horiz_fracts(2) = lat_fract
-!
-!end subroutine index_setup
-!
-!-----------------------------------------------------------------------
 !> given lon/lat indices, add one to lat and subtract one from lon
 !> check for wraparound in lon, and north pole at lat.
 !> intent is that you give the indices into the staggered grid
@@ -1120,8 +1116,6 @@ select case (which_vert)
 
       call build_cam_pressure_column(ens_size, surf_pressure, nlevels, pressure_array)
 
-      !>@todo FIXME: should we figure out now or later? how many unique levels we have?
-      !> for now - do the unique culling later so we don't have to carry that count around.
       do imember=1, ens_size
          call pressure_to_level(nlevels, pressure_array(:, imember), vert_val, &
                                 bot_levs(imember), top_levs(imember), &
@@ -1761,7 +1755,7 @@ call nc_add_attribute_to_variable(ncid, 'hyai', 'long_name', 'hybrid A coefficie
 call nc_define_real_variable(     ncid, 'hybi', (/ 'ilev' /),                                            routine)
 call nc_add_attribute_to_variable(ncid, 'hybi', 'long_name', 'hybrid B coefficient at layer interfaces', routine)
 
-! Gaussian Wave
+! Gaussian Weights
 call nc_define_real_variable(     ncid, 'gw', (/ 'lat' /),                  routine)
 call nc_add_attribute_to_variable(ncid, 'gw', 'long_name', 'gauss weights', routine)
 
@@ -1790,9 +1784,6 @@ call nc_put_variable(ncid, 'hyai', grid_data%hyai%vals, routine)
 call nc_put_variable(ncid, 'hybi', grid_data%hybi%vals, routine)
 call nc_put_variable(ncid, 'P0',   grid_data%P0%vals,   routine)
 
-!-------------------------------------------------------------------------------
-! Flush the buffer and leave netCDF file open
-!-------------------------------------------------------------------------------
 call nc_sync(ncid)
 
 end subroutine nc_write_model_atts
@@ -2131,42 +2122,48 @@ end subroutine fill_cam_stagger_info
 
 
 !-----------------------------------------------------------------------
-!>
-!> Given a generic CAM restart file, that contains grid information and populate
-!> the grid information
-
+!> Read in the grid information from the given CAM restart file.
+!> Note that none of the data will be used from this file; just the
+!> grid size and locations.  Also read in the elevation information
+!> from the "PHIS' file.
 
 subroutine read_grid_info(grid_file, grid)
 character(len=*), intent(in)  :: grid_file
 type(cam_grid),   intent(out) :: grid
 
-character(len=*), parameter :: routine = 'read_grid_info'
-
-integer :: ncid
-
-! put this in a subroutine that deals with the grid
-ncid = nc_open_readonly(grid_file, routine)
-
 ! Get the grid info plus additional non-state arrays
-call get_cam_grid(ncid, grid)
+call get_cam_grid(grid_file, grid)
+
+! This non-state variable is used to compute surface elevation.
 call read_cam_phis_array(cam_phis_filename)
 
-! Set up the interpolation structure for later 
+! Set up the interpolation structures for later 
 call setup_interpolation(grid)
-
-call nc_close(ncid, routine)
 
 end subroutine read_grid_info
 
 
 !-----------------------------------------------------------------------
+!> Read the data from the various cam grid arrays 
 !>
-!> fill in the various cam grid arrays 
+!>@todo FIXME not all of these are used.  can we either
+!> not read them in, or make them optional?  this does affect
+!> what we can write out in the diagnostic file.  if we have
+!> to have them in the diag files then we have to read them all
+!> even if we never use them.  both ilev and gw currently fall
+!> into this category.
 !> 
 
-subroutine get_cam_grid(ncid, grid)
-integer,        intent(in)  :: ncid
+subroutine get_cam_grid(grid_file, grid)
+character(len=*), intent(in)  :: grid_file
 type(cam_grid), intent(out) :: grid
+
+character(len=*), parameter :: routine = 'get_cam_grid:'
+
+integer :: ncid
+
+! put this in a subroutine that deals with the grid
+ncid = nc_open_readonly(grid_file, routine)
 
 call fill_cam_1d_array(ncid, 'lon',  grid%lon)
 call fill_cam_1d_array(ncid, 'lat',  grid%lat)
@@ -2182,6 +2179,8 @@ call fill_cam_1d_array(ncid, 'hybm', grid%hybm)
 
 ! P0 is a scalar with no dimensionality
 call fill_cam_0d_array(ncid, 'P0',   grid%P0) 
+
+call nc_close(ncid, routine)
 
 end subroutine get_cam_grid
 
