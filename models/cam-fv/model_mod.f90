@@ -1106,17 +1106,14 @@ integer,             intent(out) :: my_status(ens_size)
 integer  :: k, level_one, imember, status1
 real(r8) :: surface_elevation(1)
 real(r8) :: temperature(ens_size), specific_humidity(ens_size), surface_pressure(ens_size)
-real(r8) :: phi(ens_size, nlevels)
-real(r8) :: tv(ens_size, nlevels+1)  !>@todo FIXME  ???? ! Virtual temperature, top to bottom
+real(r8) :: tv(nlevels, ens_size)  ! Virtual temperature, top to bottom
+real(r8) :: height_interf(nlevels+1, ens_size)
 
 !>@todo this should come from a model specific constant module.
 !> the forward operators and model_mod should use it.
 real(r8), parameter :: rd = 287.05_r8 ! dry air gas constant
 real(r8), parameter :: rv = 461.51_r8 ! wet air gas constant
 real(r8), parameter :: rr_factor = (rv/rd) - 1.0_r8
-
-!>@todo FIXME: these need to be replaced by hyam, hymb, hyai, hybi -- VERY VERY CAREFULLY
-real(r8) ::hybrid_As(nlevels+1,2), hybrid_Bs(nlevels+1,2)
 
 ! this is for surface obs
 level_one = 1
@@ -1140,23 +1137,21 @@ do k = 1, nlevels
    call get_staggered_values_from_qty(ens_handle, ens_size, QTY_SPECIFIC_HUMIDITY, &
                                      lon_index, lat_index, k, qty, specific_humidity, status1)
    
-   !>@todo rename tv to something that means something to users
    !>tv == virtual temperature.
-   tv(:,k) = temperature(:)*(1.0_r8 + rr_factor*specific_humidity(:))
+   tv(k,:) = temperature(:)*(1.0_r8 + rr_factor*specific_humidity(:))
 
-   print *, 'member 1, level, t, q, tv: ', k, temperature(1), specific_humidity(1), tv(1, k)
+   print *, 'member 1, level, t, q, tv: ', k, temperature(1), specific_humidity(1), tv(k, 1)
 
 enddo
 
-! need to convert to geopotential height
+! compute the height columns for each ensemble member
 do imember = 1, ens_size
-   !>@todo refactor to just put out geometric height
-   call dcz2(nlevels, surface_pressure(imember), surface_elevation(1), tv(imember,:), &
-             grid_data%P0%vals(1), hybrid_As, hybrid_Bs, phi(imember,:))
-   do k = 1,nlevels
-      height_array(k, imember) = gph2gmh(phi(imember,k), grid_data%lat%vals(lat_index))
-   enddo
+   call build_heights(nlevels, surface_pressure(imember), surface_elevation(1), tv(:, imember), &
+                      height_array(:, imember), height_interf(:, imember))  ! can pass in variable_r
 enddo
+
+! convert entire array to geometric height (from potential height)
+call gph2gmh(height_array, grid_data%lat%vals(lat_index))
 
 do k = 1,nlevels
    print *, "member 1, level, height: ", k, height_array(k, 1)
@@ -1192,31 +1187,28 @@ end subroutine build_cam_pressure_column
 
 
 !-----------------------------------------------------------------------
-!> Compute columns of pressures at the layer midpoints for the given number 
-!> of surface pressures. 
+!> Compute column of pressures at the layer midpoints for the given 
+!> surface pressure. 
 !>
 !>@todo FIXME unlike some other things - you could pass in an upper and lower
 !>level number and compute the pressure only at the levels between those.
 !>this isn't a column that has to be built from the surface up or top down.
 !>each individual pressure can be computed independently given the surface pressure.
 
-subroutine cam_p_col_midpts(num_cols, surface_pressure, n_levels, pressure_array)
+subroutine cam_p_col_midpts(surface_pressure, n_levels, pressure_array)
 
-integer,            intent(in)  :: num_cols
-real(r8),           intent(in)  :: surface_pressure(num_cols)   ! in pascals
+real(r8),           intent(in)  :: surface_pressure   ! in pascals
 integer,            intent(in)  :: n_levels
-real(r8),           intent(out) :: pressure_array(n_levels, num_cols)
+real(r8),           intent(out) :: pressure_array(n_levels)
 
-integer :: j, k
+integer :: k
 
 ! Set midpoint pressures.  This array mirrors the order of the
 ! cam model levels: 1 is the model top, N is the bottom.
 
-do j=1, num_cols
-   do k=1, n_levels
-      pressure_array(k, j) = grid_data%hyam%vals(k) * grid_data%P0%vals(1) + &
-                             grid_data%hybm%vals(k) * surface_pressure(j)
-   enddo
+do k=1, n_levels
+   pressure_array(k) = grid_data%hyam%vals(k) * grid_data%P0%vals(1) + &
+                       grid_data%hybm%vals(k) * surface_pressure
 enddo
 
 end subroutine cam_p_col_midpts
@@ -1227,23 +1219,20 @@ end subroutine cam_p_col_midpts
 !>
 !>@todo FIXME see comment above in cam_p_col_midpts()
 
-subroutine cam_p_col_intfcs(num_cols, surface_pressure, n_levels, pressure_array)
+subroutine cam_p_col_intfcs( surface_pressure, n_levels, pressure_array)
 
-integer,            intent(in)  :: num_cols
-real(r8),           intent(in)  :: surface_pressure(num_cols)   ! in pascals
+real(r8),           intent(in)  :: surface_pressure   ! in pascals
 integer,            intent(in)  :: n_levels
-real(r8),           intent(out) :: pressure_array(n_levels, num_cols)
+real(r8),           intent(out) :: pressure_array(n_levels)
 
-integer :: j, k
+integer :: k
 
 ! Set interface pressures.  This array mirrors the order of the
 ! cam model levels: 1 is the model top, N is the bottom.
 
-do j=1, num_cols
-   do k=1, n_levels
-      pressure_array(k, j) = grid_data%hyai%vals(k) * grid_data%P0%vals(1) + &
-                             grid_data%hybi%vals(k) * surface_pressure(j)
-   enddo
+do k=1, n_levels
+   pressure_array(k) = grid_data%hyai%vals(k) * grid_data%P0%vals(1) + &
+                       grid_data%hybi%vals(k) * surface_pressure
 enddo
 
 end subroutine cam_p_col_intfcs
@@ -1276,8 +1265,8 @@ real(r8) :: p_intfcs(n_levels+1, num_cols)  ! in pascals, layer interfaces
 ! we can't compute a height in the middle of the column.
 
 do j=1, num_cols
-   call cam_p_col_midpts(num_cols, surface_pressure, n_levels, p_midpts)
-   call cam_p_col_intfcs(num_cols, surface_pressure, n_levels, p_intfcs)
+   call cam_p_col_midpts(surface_pressure(j), n_levels, p_midpts(:,j))
+   call cam_p_col_intfcs(surface_pressure(j), n_levels, p_intfcs(:,j))
    ! get surface elevation at this location...
    surface_elev = MISSING_R8
    height_array(1, 1) = surface_elev 
@@ -2211,93 +2200,62 @@ end subroutine read_cam_phis_array
 
 !-----------------------------------------------------------------------
 
-subroutine dcz2(kmax,p_surf,h_surf,tv,hprb,hybrid_As,hybrid_Bs,z2)
+subroutine build_heights(n_levels,p_surf,h_surf,tv,height_midpts,height_interf,variable_r)
 
-! Compute geopotential height for a CESM hybrid coordinate column.
-! All arrays except hybrid_As, hybrid_Bs are oriented top to bottom.
-! hybrid_[AB]s first subscript:
-!  = 1 for layer interfaces
-!  = 2 for layer midpoints
-! hybrid_As coord coeffs for P0 reference pressure term in plevs_cam
-! hybrid_Bs coord coeffs for surf pressure term in plevs_cam (in same format as hybrid_As)
-
-integer,  intent(in)  :: kmax                ! Number of vertical levels
-real(r8), intent(in)  :: p_surf              ! Surface pressure           (pascals)
-real(r8), intent(in)  :: h_surf               ! Surface height (m)
-real(r8), intent(in)  :: tv(kmax)            ! Virtual temperature, top to bottom
-real(r8), intent(in)  :: hprb                ! Hybrid base pressure       (pascals)
-real(r8), intent(in)  :: hybrid_As(kmax+1,2)
-real(r8), intent(in)  :: hybrid_Bs(kmax+1,2)
-real(r8), intent(out) :: z2(kmax)            ! Geopotential height, top to bottom
+integer,  intent(in)  :: n_levels            ! Number of vertical levels
+real(r8), intent(in)  :: p_surf              ! Surface pressure (pascals)
+real(r8), intent(in)  :: h_surf              ! Surface height (m)
+real(r8), intent(in)  :: tv(n_levels)        ! Virtual temperature, top to bottom
+real(r8), intent(out) :: height_midpts(n_levels)   ! Geopotential height at midpoints, top to bottom
+real(r8), intent(out) :: height_interf(n_levels+1) ! Geopotential height at interfaces, top to bottom
+real(r8), intent(in), optional :: variable_r(n_levels) ! Dry air gas constant, if varies, top to bottom
 
 ! Local variables
 
 !>@todo have a model constants module?
-real(r8), parameter :: r = 287.04_r8    ! Different than model_heights ! dry air gas constant.
-real(r8), parameter :: g0 = 9.80616_r8  ! Different than model_heights:gph2gmh:G !
-real(r8), parameter :: rbyg=r/g0
-real(r8) :: pterm(kmax)         ! pressure profile
-real(r8) :: pmln(kmax+1)        ! logs of midpoint pressures
+real(r8), parameter :: const_r = 287.04_r8    ! Different than model_heights ! dry air gas constant.
+real(r8), parameter :: g0 = 9.80616_r8        ! Different than model_heights:gph2gmh:G !
+! an array now: real(r8), parameter :: rbyg=r/g0
+
+real(r8) :: r_by_g(n_levels)
+real(r8) :: ln_p_midpts(n_levels)    ! log of pressure at layer midpoints
+real(r8) :: ln_p_interf(n_levels+1)  ! log of pressure at layer interfaces
 
 integer  :: i,k,l
-real(r8) :: ARG
 
-! Compute intermediate quantities using scratch space
+if (present(variable_r)) then
+   do i=1, n_levels
+      r_by_g(i) = variable_r(i) / g0
+   enddo
+else
+   r_by_g(:) = const_r / g0
+endif
+      
+call cam_p_col_midpts(p_surf, n_levels,   ln_p_midpts)
+call cam_p_col_intfcs(p_surf, n_levels+1, ln_p_interf)
 
-! DEBUG: z2 was unassigned in previous code.
-z2(:) = MISSING_R8
+ln_p_midpts = log(ln_p_midpts)
+ln_p_interf = log(ln_p_interf)
 
-! Invert vertical loop
-! Compute top only if top interface pressure is nonzero.
-!
-! newFIXME; p_col could be used here, instead of (re)calculating it in ARG
-do K = kmax+1, 1, -1
-   i = kmax-K+2
-   ARG = hprb*hybrid_As(i,2) + p_surf *hybrid_Bs(i,2)
-   if (ARG > 0.0_r8) THEN
-       pmln(K) = LOG(ARG)
-   else
-       pmln(K) = 0.0_r8
-   endif
+! start from the ground and work up
+height_interf(n_levels+1) = h_surf
+
+! for each level, add the lower half of the layer to the midpoint array,
+! then add the upper half of the layer to the interface array.
+do i=n_levels, 1, -1
+   height_midpts(i) = height_interf(i-1) + (r_by_g(i) * tv(i) * (ln_p_midpts(i) - ln_p_interf(i-1)))
+   height_interf(i) = height_midpts(i)   + (r_by_g(i) * tv(i) * (ln_p_interf(i) - ln_p_midpts(i  )))
 enddo
 
-do K = 2,kmax - 1
-   pterm(k) = rbyg*tv(k)*0.5_r8* (pmln(k+1)-pmln(k-1))
-enddo
-
-! Initialize z2 to sum of ground height and thickness of top half layer
-! this is NOT adding the thickness of the 'top' half layer.
-!    it's adding the thickness of the half layer at level K,
-do K = 1,kmax - 1
-   z2(k) = h_surf + rbyg*tv(k)*0.5_r8* (pmln(K+1)-pmln(K))
-enddo
-z2(kmax) = h_surf + rbyg*tv(kmax)* (log(p_surf*hybrid_Bs(1,1))-pmln(kmax))
-
-! THIS is adding the half layer at the BOTTOM.
-do k = 1,kmax - 1
-    z2(k) = z2(k) + rbyg*tv(kmax)* (log(p_surf*hybrid_Bs(1,1))-0.5_r8* &
-                                       (pmln(kmax-1)+pmln(kmax)))
-enddo
-
-! Add thickness of the remaining full layers
-! (i.e., integrate from ground to highest layer interface)
-
-do K = 1,kmax - 2
-    do L = K+1, kmax-1
-       z2(K) = z2(K) + pterm(L)
-    enddo
-enddo
-
-end subroutine dcz2
+end subroutine build_heights
 
 !-----------------------------------------------------------------------
-!>  Convert a geopotential altitude to mean sea level altitude.
+!>  Convert a 2d array of geopotential altitudes to mean sea level altitudes.
 
-function gph2gmh(h, lat)
+subroutine gph2gmh(h, lat)
 
-real(r8), intent(in) :: h         ! geopotential altitude in m
-real(r8), intent(in) :: lat       ! latitude in degrees.
-real(r8)             :: gph2gmh   ! MSL altitude, in m
+real(r8), intent(inout) :: h(:,:)    ! geopotential altitude in m
+real(r8), intent(in)    :: lat       ! latitude in degrees.
 
 real(r8), parameter ::  be = 6356751.6_r8        ! min earth radius, m
 real(r8), parameter ::  ae = 6378136.3_r8        ! max earth radius, m
@@ -2308,6 +2266,8 @@ real(r8) :: g0
 real(r8) :: r0
 real(r8) :: latr
 
+integer :: i, j
+
 latr = lat * DEG2RAD  ! convert to radians
 call compute_surface_gravity(latr, g0)
 
@@ -2316,9 +2276,13 @@ call compute_surface_gravity(latr, g0)
 r0 = sqrt( ae**2 * cos(latr)**2 + be**2 * sin(latr)**2)
 
 ! Compute altitude above sea level
-gph2gmh = (r0 * h) / (((g0*r0)/G) - h)
+do j=1, size(h, 2)
+   do i=1, size(h, 1)
+      h(i,j) = (r0 * h(i,j)) / (((g0*r0)/G) - h(i,j))
+   enddo
+enddo
 
-end function gph2gmh
+end subroutine gph2gmh
 
 !-----------------------------------------------------------------------
 !> This subroutine computes the Earth's gravity at any latitude.
