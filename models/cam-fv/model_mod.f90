@@ -51,6 +51,7 @@ use  netcdf_utilities_mod,  only : nc_get_variable, nc_get_variable_size, &
                                    nc_define_dimension, nc_put_variable, &
                                    nc_sync, nc_enddef, nc_redef, nc_open_readonly, &
                                    nc_close, nc_variable_exists
+use        chem_tables_mod, only : init_chem_tables, finalize_chem_tables, chem_convert_factor
 !#!use       location_io_mod
 use        quad_utils_mod,  only : quad_interp_handle, init_quad_interp, &
                                    set_quad_coords, finalize_quad_interp, &
@@ -112,6 +113,7 @@ logical            :: suppress_grid_info_in_output    = .false.
 logical            :: custom_routine_to_generate_ensemble = .false.
 character(len=32)  :: fields_to_perturb(MAX_PERT)     = "QTY_TEMPERATURE"
 real(r8)           :: perturbation_amplitude(MAX_PERT)= 0.00001_r8
+logical            :: using_chemistry                 = .false.
 
 ! state_variables defines the contents of the state vector.
 ! each line of this input should have the form:
@@ -267,6 +269,10 @@ call set_cam_variable_info(state_variables, nfields)
 
 ! convert from string to integer
 call set_vert_localization(vertical_localization_coord, vert_local_coord)
+
+! if you are going to have chemistry variables in the model state, set
+! this namelist variable so we can initialize the proper tables
+if (using_chemistry) call init_chem_tables()
 
 end subroutine static_init_model
 
@@ -1614,6 +1620,8 @@ call free_cam_grid(grid_data)
 call finalize_quad_interp(interp_nonstaggered)
 call finalize_quad_interp(interp_u_staggered)
 call finalize_quad_interp(interp_v_staggered)
+
+if (using_chemistry) call finalize_chem_tables()
 
 end subroutine end_model
 

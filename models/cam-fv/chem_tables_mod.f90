@@ -13,10 +13,6 @@
 module chem_tables_mod
 
 
-public :: init_chem_tables, &
-          finalize_chem_tables, &
-          chem_convert_factor
-
 use types_mod
 use utilities_mod
 use obs_kind_mod
@@ -24,7 +20,18 @@ use obs_kind_mod
 implicit none
 private
 
+public :: init_chem_tables, &
+          finalize_chem_tables, &
+          chem_convert_factor
+
 !public :: chem_convert_factors, molar_mass_dry_air
+
+! version controlled file description for error handling, do not edit
+character(len=*), parameter :: source   = &
+   "$URL$"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
+
 
 type chem_convert
  character(len=31) :: netcdf_varname
@@ -38,7 +45,11 @@ type(chem_convert), allocatable :: chem_conv_table(:)
 
 real(r8), parameter :: molar_mass_dry_air = 28.9644_r8
 
+integer :: num_qtys
 character(len=256) :: string1, string2
+logical :: module_initialized = .false.
+
+contains 
 
 !--------------------------------------------------------------------
 !> call once to allocate and initialize the table
@@ -48,12 +59,15 @@ subroutine init_chem_tables()
 ! to add more quantities, add entries here following the pattern.
 ! there can be only one entry per 'QTY_xxx'
 
+if (module_initialized) return
 
-allocate(chem_conv_table(0:max_defined_quantities))
+num_qtys = get_num_quantities()
 
-call add_entry('O3',   47.9982, 'QTY_O3')
-call add_entry('O',    15.9994, 'QTY_O')
-call add_entry('O1D',  15.9994, 'QTY_O1D')
+allocate(chem_conv_table(0:num_qtys))
+
+call add_entry('O3',   47.9982_r8, 'QTY_O3')
+call add_entry('O',    15.9994_r8, 'QTY_O')
+call add_entry('O1D',  15.9994_r8, 'QTY_O1D')
 
 !%!  'N2O                            ',       44.01288,     'QTY_N2O                         ', &
 !%!  'NO                             ',       30.00614,     'QTY_NO                          ', &
@@ -203,7 +217,6 @@ real(r8),         intent(in) :: convert_factor
 character(len=*), intent(in) :: quantity_name
 
 integer :: i, qty_index
-type(chem_convert) :: this
 
 ! get qty indx, error if not found
 qty_index = get_index_for_quantity(quantity_name)
@@ -217,8 +230,7 @@ endif
 
 ! build type, add to array at indx
 
-this = chem_convert(netcdf_varname, convert_factor, quantity_name)
-chem_conv_table(qty_index) = this
+chem_conv_table(qty_index) = chem_convert(netcdf_varname, convert_factor, quantity_name)
 
 end subroutine add_entry
 
@@ -230,14 +242,18 @@ function chem_convert_factor(qty)
 integer, intent(in) :: qty
 real(r8)            :: chem_convert_factor
 
-if (qty < 0 .or. qty > max_defined_quantities) then
+if (qty < 0 .or. qty > num_qtys) then
    write(string1,'(A,I6,A,I6)') 'quantity number ', qty, &
-                                   ' must be between 0 and ', max_defined_quantities
+                                   ' must be between 0 and ', num_qtys
    call error_handler(E_ERR, 'chem_convert_factor', string1, &
                       source, revision, revdate)
 endif
 
-chem_convert_factor = chem_conv_table(qty) * molar_mass_dry_air  !??
+chem_convert_factor = chem_conv_table(qty)%convert_factor * molar_mass_dry_air  !??
+
+end function chem_convert_factor
+
+!--------------------------------------------------------------------
 
 end module chem_tables_mod
 
