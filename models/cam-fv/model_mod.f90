@@ -34,9 +34,9 @@ use          obs_kind_mod, only : QTY_SURFACE_ELEVATION, QTY_PRESSURE, &
                                   QTY_SURFACE_PRESSURE, &
                                   QTY_TEMPERATURE, QTY_SPECIFIC_HUMIDITY, &
                                   get_index_for_quantity, get_num_quantities
-!#! use     mpi_utilities_mod
-!#! use        random_seq_mod
-use  ensemble_manager_mod,  only : ensemble_type
+use     mpi_utilities_mod,  only : my_task_id
+use        random_seq_mod,  only : random_seq_type, init_random_seq, random_gaussian
+use  ensemble_manager_mod,  only : ensemble_type, get_my_num_vars, get_my_vars
 use distributed_state_mod,  only : get_state
 use   state_structure_mod,  only : add_domain, get_dart_vector_index, get_domain_size, &
                                    get_dim_name, get_kind_index, get_num_dims, &
@@ -58,7 +58,7 @@ use        quad_utils_mod,  only : quad_interp_handle, init_quad_interp, &
                                    GRID_QUAD_IRREG_SPACED_REGULAR,  &
                                    QUAD_LOCATED_CELL_CENTERS
 use     default_model_mod,  only : adv_1step, init_time, init_conditions, &
-                                   nc_write_model_vars, pert_model_copies
+                                   nc_write_model_vars
 
 implicit none
 private
@@ -70,16 +70,16 @@ private
 public :: static_init_model,                   &
           get_model_size,                      &
           get_state_meta_data,                 &
-          model_interpolate,                   & ! big todo
+          model_interpolate,                   & 
           shortest_time_between_assimilations, &
           nc_write_model_atts,                 &
-          write_model_time,                    & ! todo
+          write_model_time,                    & 
           read_model_time,                     &
           end_model
 
 ! code for these routines are in other modules
 public :: nc_write_model_vars,           &
-          pert_model_copies,             & ! todo
+          pert_model_copies,             & 
           adv_1step,                     &
           init_time,                     &
           init_conditions,               & 
@@ -94,6 +94,10 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
+! maximum number of fields you can list to be perturbed
+! to generate an ensemble if starting from a single state.
+integer, parameter :: MAX_PERT = 100
+
 ! model_nml namelist variables and default values
 character(len=256) :: cam_template_filename           = 'caminput.nc'
 character(len=256) :: cam_phis_filename               = 'camphis.nc'
@@ -105,6 +109,9 @@ integer            :: no_assim_above_this_model_level = 5
 logical            :: use_damping_ramp_at_model_top   = .false.  
 integer            :: debug_level                     = 0
 logical            :: suppress_grid_info_in_output    = .false.
+logical            :: custom_routine_to_generate_ensemble = .false.
+character(len=32)  :: fields_to_perturb(MAX_PERT)     = "QTY_TEMPERATURE"
+real(r8)           :: perturbation_amplitude(MAX_PERT)= 0.00001_r8
 
 ! state_variables defines the contents of the state vector.
 ! each line of this input should have the form:
@@ -130,6 +137,9 @@ namelist /model_nml/  &
    no_assim_above_this_model_level, &
    use_damping_ramp_at_model_top,   &
    suppress_grid_info_in_output,    &
+   custom_routine_to_generate_ensemble, &
+   fields_to_perturb,               &
+   perturbation_amplitude,          &
    debug_level
 
 
@@ -305,9 +315,8 @@ integer  :: myvarid, myqty, nd
 
 if ( .not. module_initialized ) call static_init_model
 
-call get_model_variable_indices(index_in, iloc, jloc, vloc, var_id=myvarid)
+call get_model_variable_indices(index_in, iloc, jloc, vloc, var_id=myvarid, kind_index=myqty)
 
-myqty = get_kind_index(domain_id, myvarid)
 nd = get_num_dims(domain_id, myvarid)
 
 location = get_location_from_index(iloc, jloc, vloc, myqty, nd)
@@ -1880,6 +1889,87 @@ call nc_close(ncid, routine)
 
 end function read_model_time
 
+!--------------------------------------------------------------------
+!> if the namelist is set to not use this custom routine, the default
+!> dart routine will add 'pert_amp' of noise to every field in the state
+!> to generate an ensemble from a single member.  if it is set to true
+!> this routine will be called.  the pert_amp will be ignored, and the
+!> given list of quantities will be perturbed by the given amplitude
+!> (which can be different for each field) to generate an ensemble.
+
+subroutine pert_model_copies(state_ens_handle, ens_size, pert_amp, interf_provided)
+
+type(ensemble_type), intent(inout) :: state_ens_handle 
+integer,   intent(in) :: ens_size
+real(r8),  intent(in) :: pert_amp   ! ignored in this version
+logical,  intent(out) :: interf_provided
+
+type(random_seq_type) :: seq
+
+integer :: iloc, jloc, vloc, var_id, myqty
+integer :: max_qtys, j
+
+integer(i8) :: i, items
+integer(i8), allocatable :: my_vars(:)
+
+logical,  allocatable :: do_these_qtys(:)
+real(r8), allocatable :: perturb_by(:)
+
+character(len=*), parameter :: routine = 'pert_model_copies:'
+
+! set by namelist to select using the default routine or the code here
+if (custom_routine_to_generate_ensemble) then
+   interf_provided = .true.
+else
+   interf_provided = .false.
+   return
+endif
+
+! make sure each task is using a different random sequence
+call init_random_seq(seq, my_task_id())
+
+max_qtys = get_num_quantities()
+allocate(do_these_qtys(max_qtys), perturb_by(max_qtys))
+
+do_these_qtys(:) = .false.
+perturb_by(:)    = 0.0_r8
+
+do i=1, MAX_PERT
+   if (fields_to_perturb(i) == '') exit
+ 
+   myqty = get_index_for_quantity(fields_to_perturb(i))
+   if (myqty < 0) then
+      string1 = 'unrecognized quantity name in "fields_to_perturb" list: ' // &
+                trim(fields_to_perturb(i))
+      call error_handler(E_ERR,routine,string1,source,revision,revdate)
+   endif
+
+   do_these_qtys(i) = .true.
+   perturb_by(i)    = perturbation_amplitude(i)
+enddo
+
+! get the global index numbers of the part of the state that 
+! we have in this task.
+items = get_my_num_vars(state_ens_handle)
+allocate(my_vars(items))
+call get_my_vars(state_ens_handle, my_vars)
+
+do i=1, items
+   call get_model_variable_indices(my_vars(i), iloc, jloc, vloc, kind_index=myqty)
+
+   ! if myqty is in the namelist, perturb it.  otherwise cycle
+   if (.not. do_these_qtys(myqty)) cycle
+  
+   do j=1, ens_size
+      state_ens_handle%copies(j, i) = random_gaussian(seq, state_ens_handle%copies(j, i), perturb_by(i))
+   enddo
+
+enddo
+
+deallocate(my_vars)
+deallocate(do_these_qtys, perturb_by)
+
+end subroutine pert_model_copies
 
 
 !-----------------------------------------------------------------------
