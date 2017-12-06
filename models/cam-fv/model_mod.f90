@@ -915,6 +915,8 @@ else
    select case (obs_quantity)
       case (QTY_SURFACE_ELEVATION)
          get_dims_from_qty = 2
+      case (QTY_PRESSURE)
+         get_dims_from_qty = 3
       case default 
          write(string1, *) 'we can not interpolate qty', obs_quantity, &
                            ' if the dimension is not known'
