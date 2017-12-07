@@ -73,13 +73,16 @@ set DO_THESE_MODELS = ( \
   clm \
   cm1 \
   forced_lorenz_96 \
+  ikeda \
   lorenz_04 \
   lorenz_63 \
   lorenz_84 \
   lorenz_96 \
   lorenz_96_2scale \
   mpas_atm \
+  null_model \
   simple_advection \
+  template \
   wrf \
 )
 

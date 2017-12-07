@@ -11,6 +11,9 @@ module assim_tools_mod
 !> 
 !> @{
 use      types_mod,       only : r8, i8, digits12, PI, missing_r8
+
+use    options_mod,       only : get_missing_ok_status
+
 use  utilities_mod,       only : file_exist, get_unit, check_namelist_read, do_output,    &
                                  find_namelist_in_file, register_module, error_handler,   &
                                  E_ERR, E_MSG, nmlfileunit, do_nml_file, do_nml_term,     &
@@ -74,7 +77,6 @@ private
 
 public :: filter_assim, &
           set_assim_tools_trace, &
-          get_missing_ok_status, &
           test_state_copies, &
           update_ens_from_weights  ! Jeff thinks this routine is in the wild.
 
@@ -112,12 +114,6 @@ real(r8), allocatable  :: exp_true_correl(:), alpha(:)
 ! and fill this 2d impact table. 
 real(r8), allocatable  :: obs_impact_table(:,:)
 
-! convert string to an integer in the init routine
-integer, parameter :: GAUSS_GAUSS    = 1
-integer, parameter :: GAMMA_INVGAMMA = 2
-integer, parameter :: INVGAMMA_GAMMA = 3
-integer :: GIGG_type = GAUSS_GAUSS   ! should it be something else?
-
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
    "$URL$"
@@ -137,7 +133,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 !      6 = deterministic draw from posterior with fixed kurtosis
 !      8 = Rank Histogram Filter (see Anderson 2011)
 !     (9 = Localized Particle Filter (see Poterjoy 2016), in assim_tools_mod.pf.f90)
-!     10 = GIGG, Craig Bishop. Needs additional GIGG_distribution_type flag as follows:
+!     10 = GIGG, Craig Bishop.  Can do the following subtypes:
 !          "Gauss_Gauss"     gaussian prior, gaussian observation likelihood (default?)
 !          "Gamma_InvGamma"  gamma prior, inverse-gamma observation likelihood
 !          "InvGamma_Gamma"  inverse-gamma prior, gamma observation likelihood
@@ -154,7 +150,6 @@ logical  :: sampling_error_correction       = .false.
 integer  :: adaptive_localization_threshold = -1
 real(r8) :: adaptive_cutoff_floor           = 0.0_r8
 integer  :: print_every_nth_obs             = 0
-character(len=64) :: GIGG_distribution_type = "Gauss_Gauss"   ! DOES THIS MAKE SENSE AS DEFAULT?
 
 ! since this is in the namelist, it has to have a fixed size.
 integer, parameter   :: MAX_ITEMS = 300
@@ -167,15 +162,6 @@ character(len = 129) :: localization_diagnostics_file = "localization_diagnostic
 ! Following only relevant for filter_kind = 8
 logical  :: rectangular_quadrature          = .true.
 logical  :: gaussian_likelihood_tails       = .false.
-
-! Some models are allowed to have MISSING_R8 values in the DART state vector.
-! If they are encountered, it is not necessarily a FATAL error.
-! Most of the time, if a MISSING_R8 is encountered, DART should die.
-! CLM should have allow_missing_in_clm = .true.
-! maybe POP - but in POP the missing values are land and all ensemble members
-! have the same missing values.  CLM is different in that only some ensemble members may
-! have missing values and so we have a deficient ensemble size at those state locations.
-logical  :: allow_missing_in_clm = .false.
 
 ! False by default; if true, expect to read in an ascii table
 ! to adjust the impact of obs on other state vector and obs values.
@@ -225,10 +211,9 @@ namelist / assim_tools_nml / filter_kind, cutoff, sort_obs_inc, &
    print_every_nth_obs, rectangular_quadrature, gaussian_likelihood_tails, &
    output_localization_diagnostics, localization_diagnostics_file,         &
    special_localization_obs_types, special_localization_cutoffs,           &
-   allow_missing_in_clm, distribute_mean, close_obs_caching,               &
+   distribute_mean, close_obs_caching,                                     &
    adjust_obs_impact, obs_impact_filename, allow_any_impact_values,        &
    convert_all_state_verticals_first, convert_all_obs_verticals_first,     &
-   GIGG_distribution_type,                                                 &
    lanai_bitwise ! don't document this one -- only used for regression tests
 
 !============================================================================
@@ -242,7 +227,6 @@ subroutine assim_tools_init()
 integer :: iunit, io, i, j
 integer :: num_special_cutoff, type_index
 logical :: cache_override = .false.
-character(len=64) :: GIGG_upper
 
 call register_module(source, revision, revdate)
 
@@ -331,28 +315,6 @@ endif
 is_doing_vertical_conversion = (has_vertical_choice() .and. vertical_localization_on() .and. &
                                 .not. lanai_bitwise)
 
-! set GIGG_type 1, 2 or 3 here via select
-!          "Gauss_Gauss"     gaussian prior, gaussian observation likelihood (default)
-!          "Gamma_InvGamma"  gamma prior, inverse-gamma observation likelihood
-!          "InvGamma_Gamma"  inverse-gamma prior, gamma observation likelihood
-
-GIGG_upper = GIGG_distribution_type
-call to_upper(GIGG_upper)   ! uppercases in place
-
-select case (GIGG_upper)
- case("GAUSS_GAUSS")
-   GIGG_type = GAUSS_GAUSS
- case("GAMMA_INVGAMMA")
-   GIGG_type = GAMMA_INVGAMMA 
- case("INVGAMMA_GAMMA")
-   GIGG_type = INVGAMMA_GAMMA 
- case default
-   write(msgstring, *) 'Unrecognized GIGG filter type string: "'//trim(GIGG_distribution_type)//'"'
-   call error_handler(E_ERR, 'assim_tools_init: ', &
-                      'Valid types are "Gauss_Gauss", "Gamma_InvGamma", and "InvGamma_Gamma"', &
-                      source, revision, revdate, text2=msgstring)
-end select
-
 call log_namelist_selections(num_special_cutoff, cache_override)
 
 end subroutine assim_tools_init
@@ -419,7 +381,7 @@ integer  :: num_close_obs_cached, num_close_states_cached
 integer  :: num_close_obs_calls_made, num_close_states_calls_made
 ! GSR add new count for only the 'assimilate' type close obs in the tile
 integer  :: localization_unit, secs, days, rev_num_close_obs
-character(len = 102)  :: base_loc_text   ! longest location formatting possible
+character(len = 200)  :: base_loc_text   ! longer than longest location formatting possible
 
 type(location_type)  :: my_obs_loc(obs_ens_handle%my_num_vars)
 type(location_type)  :: base_obs_loc, last_base_obs_loc, last_base_states_loc
@@ -430,7 +392,7 @@ type(obs_def_type)   :: obs_def
 type(time_type)      :: obs_time, this_obs_time
 
 logical :: do_adapt_inf_update
-logical :: missing_in_state
+logical :: allow_missing_in_state
 ! for performance, local copies 
 logical :: local_single_ss_inflate
 logical :: local_varying_ss_inflate
@@ -548,14 +510,16 @@ if (convert_all_obs_verticals_first .and. is_doing_vertical_conversion) then
    ! convert the vertical of all my observations to the localization coordinate
    ! this may not be bitwise with Lanai because of a different number of set_location calls
    if (timing) call start_mpi_timer(base)
-   call convert_vertical_obs(ens_handle, obs_ens_handle%my_num_vars, my_obs_loc, &
-                             my_obs_kind, my_obs_type, get_vertical_localization_coord(), vstatus)
-   do i = 1, obs_ens_handle%my_num_vars
-      if (good_dart_qc(nint(obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, i)))) then
-         !> @todo Can I just use the OBS_GLOBAL_QC_COPY? Is it ok to skip the loop?
-         if (vstatus(i) /= 0) obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, i) = DARTQC_FAILED_VERT_CONVERT
-      endif
-   enddo
+   if (obs_ens_handle%my_num_vars > 0) then
+      call convert_vertical_obs(ens_handle, obs_ens_handle%my_num_vars, my_obs_loc, &
+                                my_obs_kind, my_obs_type, get_vertical_localization_coord(), vstatus)
+      do i = 1, obs_ens_handle%my_num_vars
+         if (good_dart_qc(nint(obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, i)))) then
+            !> @todo Can I just use the OBS_GLOBAL_QC_COPY? Is it ok to skip the loop?
+            if (vstatus(i) /= 0) obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, i) = DARTQC_FAILED_VERT_CONVERT
+         endif
+      enddo
+   endif 
    if (timing) then
       elapsed = read_mpi_timer(base)
       print*, 'convert_vertical_obs time :', elapsed, 'rank ', my_task_id()
@@ -581,8 +545,10 @@ endif
 !> optionally convert all state location verticals
 if (convert_all_state_verticals_first .and. is_doing_vertical_conversion) then
    if (timing) call start_mpi_timer(base)
-   call convert_vertical_state(ens_handle, ens_handle%my_num_vars, my_state_loc, my_state_kind,  &
-                                            my_state_indx, get_vertical_localization_coord(), istatus)
+   if (ens_handle%my_num_vars > 0) then
+      call convert_vertical_state(ens_handle, ens_handle%my_num_vars, my_state_loc, my_state_kind,  &
+                                  my_state_indx, get_vertical_localization_coord(), istatus)
+   endif
    if (timing) then
       elapsed = read_mpi_timer(base)
       print*, 'convert_vertical_state time :', elapsed, 'rank ', my_task_id()
@@ -637,6 +603,8 @@ if (close_obs_caching) then
    num_close_obs_calls_made    = 0
    num_close_states_calls_made = 0
 endif
+
+allow_missing_in_state = get_missing_ok_status()
 
 ! timing
 if (my_task_id() == 0 .and. timing) allocate(elapse_array(obs_ens_handle%num_vars))
@@ -710,7 +678,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
             grp_top = grp_end(group)
             call obs_increment(obs_prior(grp_bot:grp_top), grp_size, obs(1), &
                obs_err_var, obs_inc(grp_bot:grp_top), inflate, my_inflate,   &
-               my_inflate_sd, net_a(group))
+               my_inflate_sd, net_a(group), base_obs_kind)
          end do
 
          ! Compute updated values for single state space inflation
@@ -907,9 +875,16 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
    ! For adaptive localization, need number of other obs close to the chosen observation
    if(adaptive_localization_threshold > 0) then
 
+      if (timing) call start_mpi_timer(base)
+
       ! this does a cross-task sum, so all tasks must make this call.
       total_num_close_obs = count_close(num_close_obs, close_obs_ind, my_obs_type, &
                                         close_obs_dist, cutoff_rev*2.0_r8)
+      if (timing) then
+         elapsed = read_mpi_timer(base)
+         print*, 'count_close time :', elapsed, 'rank ', my_task_id()
+      endif
+
 
       ! Want expected number of close observations to be reduced to some threshold;
       ! accomplish this by cutting the size of the cutoff distance.
@@ -946,7 +921,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
                call get_time(this_obs_time,secs,days)
                call write_location(-1, base_obs_loc, charstring=base_loc_text)
 
-               write(localization_unit,'(i8,1x,i5,1x,i8,1x,A,2(f14.5,1x,i10))') i, secs, days, &
+               write(localization_unit,'(i12,1x,i5,1x,i8,1x,A,2(f14.5,1x,i12))') i, secs, days, &
                      trim(base_loc_text), cutoff_orig, total_num_close_obs, cutoff_rev, rev_num_close_obs
             endif
          endif
@@ -968,7 +943,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
          call get_time(this_obs_time,secs,days)
          call write_location(-1, base_obs_loc, charstring=base_loc_text)
 
-         write(localization_unit,'(i8,1x,i5,1x,i8,1x,A,f14.5,1x,i10)') i, secs, days, &
+         write(localization_unit,'(i12,1x,i5,1x,i8,1x,A,f14.5,1x,i12)') i, secs, days, &
                trim(base_loc_text), cutoff_rev, total_num_close_obs
       endif
    endif
@@ -1017,11 +992,12 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
    STATE_UPDATE: do j = 1, num_close_states
       state_index = close_state_ind(j)
 
-      if ( allow_missing_in_clm ) then
+      ! the "any" is an expensive test when you do it for every ob.  don't test
+      ! if we know there aren't going to be missing values in the state.
+      if ( allow_missing_in_state ) then
          ! Some models can take evasive action if one or more of the ensembles have
          ! a missing value. Generally means 'do nothing' (as opposed to DIE)
-         missing_in_state = any(ens_handle%copies(1:ens_size, state_index) == MISSING_R8)
-         if ( missing_in_state ) cycle STATE_UPDATE
+         if (any(ens_handle%copies(1:ens_size, state_index) == MISSING_R8)) cycle STATE_UPDATE
       endif
 
       ! Get the initial values of inflation for this variable if state varying inflation
@@ -1295,7 +1271,7 @@ end subroutine filter_assim
 !-------------------------------------------------------------
 
 subroutine obs_increment(ens_in, ens_size, obs, obs_var, obs_inc, &
-   inflate, my_cov_inflate, my_cov_inflate_sd, net_a)
+   inflate, my_cov_inflate, my_cov_inflate_sd, net_a, quantity)
 
 ! Given the ensemble prior for an observation, the observation, and
 ! the observation error variance, computes increments and adjusts
@@ -1307,6 +1283,7 @@ real(r8),                    intent(out)   :: obs_inc(ens_size)
 type(adaptive_inflate_type), intent(inout) :: inflate
 real(r8),                    intent(inout) :: my_cov_inflate, my_cov_inflate_sd
 real(r8),                    intent(out)   :: net_a
+integer,                     intent(in)    :: quantity
 
 real(r8) :: ens(ens_size), inflate_inc(ens_size)
 real(r8) :: prior_mean, prior_var, new_val(ens_size)
@@ -1392,8 +1369,7 @@ else
     case (8) 
       call obs_increment_rank_histogram(ens, ens_size, prior_var, obs, obs_var, obs_inc)
     case (10)
-      call obs_increment_GIGG(ens, ens_size, prior_mean, prior_var, obs, obs_var, obs_inc, &
-                              GIGG_type, T1Rr=(sqrt(obs_var)/obs)**2)  ! FIXME!!
+      call obs_increment_GIGG(ens, ens_size, prior_mean, prior_var, obs, obs_var, quantity, obs_inc)
     case default
       call error_handler(E_ERR,'obs_increment', &
                  'Unexpected error: Illegal value of filter_kind in assim_tools namelist [1-8,10 OK]', &
@@ -1829,24 +1805,6 @@ real(r8) :: obs_state_cov, intermed
 real(r8) :: restoration_inc(ens_size), state_mean, state_var, correl
 real(r8) :: factor, exp_true_correl, mean_factor
 
-logical :: missing_in_state = .false.
-logical :: missing_in_obs   = .false.
-logical :: missing_in_incs  = .false.
-
-! FIXME if there are some missing values in the state or obs
-! we cannot just include them in the math ... not sure if this
-! routine can be called in these situations ... but ...
-
-if (2 == 1) then ! DEBUG VERBOSE 
-   missing_in_state = any(state   == MISSING_R8)
-   missing_in_obs   = any(obs     == MISSING_R8)
-   missing_in_incs  = any(obs_inc == MISSING_R8)
-
-   if ( missing_in_state .or. missing_in_obs .or. missing_in_incs ) then
-      write(msgstring,*) 'Should not have missing values at this point'
-      call error_handler(E_ERR,'update_from_obs_inc',msgstring,source,revision,revdate)
-   endif
-endif
 
 ! For efficiency, just compute regression coefficient here unless correl is needed
 
@@ -1906,8 +1864,18 @@ endif
 ! Then compute the increment as product of reg_coef and observation space increment
 state_inc = reg_coef * obs_inc
 
+!
+! FIXME: craig schwartz has a degenerate case involving externally computed
+! forward operators in which the obs prior variance is in fact exactly 0.
+! adding this test allowed him to continue to  use spread restoration
+! without numerical problems.  we don't know if this is sufficient;
+! for now we'll leave the original code but it needs to be revisited.
+!
+! Spread restoration algorithm option.
+!if(spread_restoration .and. obs_prior_var > 0.0_r8) then
+!
 
-! Spread restoration algorithm option
+! Spread restoration algorithm option.
 if(spread_restoration) then
    ! Don't use this to reduce spread at present (should revisit this line)
    if(net_a > 1.0_r8) net_a = 1.0_r8
@@ -2448,15 +2416,15 @@ end do
 end subroutine obs_increment_rank_histogram
 
 
-subroutine obs_increment_GIGG(ens, ens_size, prior_mean, prior_var, obs, obs_var, obs_inc, GIGG_type, T1Rr)
+subroutine obs_increment_GIGG(ens, ens_size, prior_mean, prior_var, obs, obs_var, quantity, obs_inc)
 !------------------------------------------------------------------------
 !
 ! Craig Bishop's GIGG filter variant.
-!  Define filter subtype to indicate whether prior and observation 
+!  Filter subtype determined here based on whether prior and observation 
 !  likelihood pdfs are best approximated by the following assumptions:
-!   If (GIGG_type.eq.1) then Gaussian prior and Gaussian observation likelihood is assumed
-!   If (GIGG_type.eq.2) then gamma prior and inverse gamma likelihood is assumed
-!   If (GIGG_type.eq.3) then inverse-gamma prior and gamma likelihood is assumed
+!   GIGG_type 1: Gaussian prior and Gaussian observation likelihood assumed
+!   GIGG_type 2: gamma prior and inverse gamma likelihood assumed
+!   GIGG_type 3: inverse-gamma prior and gamma likelihood assumed
 
 
 ! Type 1 relative ob error variance T1Rr = obs_var/(obs_truth**2) where 
@@ -2470,15 +2438,14 @@ subroutine obs_increment_GIGG(ens, ens_size, prior_mean, prior_var, obs, obs_var
 integer,   intent(in)  :: ens_size
 real(r8),  intent(in)  :: ens(ens_size), obs, obs_var
 real(r8),  intent(in)  :: prior_mean, prior_var
+integer,   intent(in)  :: quantity
 real(r8),  intent(out) :: obs_inc(ens_size)
-integer,   intent (in) :: GIGG_type
-real(r8),  intent(in)  :: T1Rr     !?? help here?
 
 
-integer  :: i
+integer  :: i, GIGG_type
 real(r8) :: new_mean, var_ratio, a
 real(r8) :: temp_mean, temp_var, new_ens(ens_size), new_var
-real(r8) :: T2Rr
+real(r8) :: T1Rr, T2Rr
 real(r8) :: wk1,wk2,T2Pr,inv_prior_mean
 real(r8) :: GIG_gain,T1Rr_GIG_PO,y_GIG_mean_PO,y_GIG_sample_mean_PO,nobs_GIG
 real(r8) :: IGG_gain,T1Rr_IGG_PO,y_IGG_mean_PO,y_IGG_sample_mean_PO,nobs_IGG,nanal_var_IGG,anal_var_IGG
@@ -2498,6 +2465,13 @@ if(first_ran_gigg) then
    first_ran_gigg = .false.
 endif
 
+! FIXME: compute something based on the obs value (obs), the obs variance (obs_var),
+! the prior ensemble distribution (ens(ens_size), the prior mean and variance (prior_mean,
+! prior_var), and the quantity of interest (quantity, e.g. QTY_TEMPERATURE, QTY_U_WIND_COMPONENT, etc)
+! and set GIGG_type here.  also set T1Rr
+
+GIGG_type = 1 ! or 2 or 3
+T1Rr = 1.0_r8
 
 select case (GIGG_type)
  case (1)  ! gaussian ens prior, gaussian obs likelihood
@@ -2580,11 +2554,11 @@ endif
 
    !Now compute the perturbed observations and the normalized perturbations
    do i=1,ens_size
-if (beta < 0) then
-   print *, 'correcting negative beta: ', beta
-   beta = -beta
-endif
-       y_IGG_PO(i)=random_inverse_gamma(gigg_ran_seq,alpha,beta)
+      if (beta < 0) then
+         print *, 'correcting negative beta: ', beta
+         beta = -beta
+      endif
+      y_IGG_PO(i)=random_inverse_gamma(gigg_ran_seq,alpha,beta)
    enddo
 
    wk1=0;
@@ -2891,21 +2865,6 @@ print_trace_details = execution_level
 print_timestamps    = timestamp_level
 
 end subroutine set_assim_tools_trace
-
-!------------------------------------------------------------------------
-
-function get_missing_ok_status()
- logical :: get_missing_ok_status
-
-! see if the namelist variable allows missing values in the
-! model state or not.
-
-! Initialize assim_tools_module if needed
-if (.not. module_initialized) call assim_tools_init()
-
-get_missing_ok_status = allow_missing_in_clm
-
-end function get_missing_ok_status
 
 !--------------------------------------------------------------------
 
