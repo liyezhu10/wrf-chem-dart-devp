@@ -318,6 +318,8 @@ if (tests_to_run(4)) then
       call print_info_message('TEST 4',string1)
    endif
 
+   call free_state_window(ens_handle)
+
    call print_test_message('TEST 4', ending=.true.)
 endif
 
@@ -376,7 +378,7 @@ endif
 write(string1,*) '- model_mod_check Finished successfully'
 call print_info_message(string1)
 
-call finalize_mpi_utilities()
+call finalize_modules_used()
 
 !======================================================================
 contains
@@ -395,6 +397,17 @@ call static_init_obs_sequence()
 call state_vector_io_init()
 
 end subroutine initialize_modules_used
+
+!----------------------------------------------------------------------
+!> clean up before exiting
+
+subroutine finalize_modules_used()
+
+! this must be last, and you can't print/write anything
+! after this is called.
+call finalize_mpi_utilities()
+
+end subroutine finalize_modules_used
 
 !----------------------------------------------------------------------
 !> print the results of get_state_meta_data() at a single location

@@ -271,7 +271,7 @@ enddo
 call nc_check(nf90_close(ncid), &
              'test_interpolate_range','close '//trim(ncfilename))
 
-deallocate(lon, lat, vert, field)
+deallocate(lon, lat, vert, field, all_ios_out)
 
 test_interpolate_range = nfailed
 

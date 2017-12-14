@@ -115,7 +115,7 @@ write(iunit,'(''nx = '',i8,'';'')')nx
 write(iunit,'(''nens = '',i8,'';'')')ens_size
 write(iunit,'(''interptest = [ ... '')')
 
-allocate(X(nx), field(nx,ens_size))
+allocate(X(nx), field(nx,ens_size), all_ios_out(nx,ens_size))
 nfailed = 0
 
 do i = 1, nx
@@ -154,6 +154,7 @@ endif
 
 call count_error_codes(all_ios_out, nfailed)
 
+deallocate(all_ios_out)
 
 ! Write out the netCDF file for easy exploration.
 
