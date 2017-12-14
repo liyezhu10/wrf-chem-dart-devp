@@ -251,16 +251,20 @@ if (tests_to_run(2)) then
 
    call write_state(ens_handle, file_info_output)
 
-   ! print date does not work when a model does not have a calendar
-   if (get_calendar_type() /= NO_CALENDAR) then
-      write(*,'(A)') '-- printing model date --------------------------------------'
-      call print_date( model_time,' model_mod_check:model date')
+   ! this can be an MPI program.  do this only from a single task or you
+   ! get hash from multiple tasks writing over each other.
+   if (do_output()) then
+      ! print date does not work when a model does not have a calendar
+      if (get_calendar_type() /= NO_CALENDAR) then
+         write(*,'(A)') '-- printing model date --------------------------------------'
+         call print_date( model_time,' model_mod_check:model date')
+      endif
+   
+      write(*,'(A)') '-- printing model time --------------------------------------'
+      call print_time( model_time,' model_mod_check:model time')
+      write(*,'(A)') '-------------------------------------------------------------'
+      write(*,'(A)') ''
    endif
-
-   write(*,'(A)') '-- printing model time --------------------------------------'
-   call print_time( model_time,' model_mod_check:model time')
-   write(*,'(A)') '-------------------------------------------------------------'
-   write(*,'(A)') ''
 
    call print_test_message('TEST 2', ending=.true.)
 
@@ -331,6 +335,8 @@ if (tests_to_run(5)) then
    call print_test_message('TEST 5', &
                            'Testing range of data for model_interpolate', starting=.true.)
 
+   call create_state_window(ens_handle)
+
    num_failed = test_interpolate_range( ens_handle,            &
                                         num_ens,               &
                                         interp_test_dlon,      &
@@ -347,6 +353,8 @@ if (tests_to_run(5)) then
    write(string1, *)'output values on interpolation grid are in'
    write(string2, *)'check_me_interptest.nc (netcdf) and check_me_interptest.m (matlab)'
    call print_info_message(string1, string2)
+
+   call free_state_window(ens_handle)
 
    call print_test_message('TEST 5', ending=.true.)
 endif
@@ -447,8 +455,7 @@ character(len=*), intent(in), optional :: msg3
 logical,          intent(in), optional :: starting
 logical,          intent(in), optional :: ending
 
-if (do_output()) &
-   call print_message(.true., test_label, msg1, msg2, msg3, starting, ending)
+call print_message(.true., test_label, msg1, msg2, msg3, starting, ending)
 
 end subroutine print_test_message
 
@@ -464,8 +471,7 @@ character(len=*), intent(in), optional :: msg3
 logical,          intent(in), optional :: starting
 logical,          intent(in), optional :: ending
 
-if (do_output()) &
-   call print_message(.false., info_msg, msg1, msg2, msg3, starting, ending)
+call print_message(.false., info_msg, msg1, msg2, msg3, starting, ending)
 
 end subroutine print_info_message
 
