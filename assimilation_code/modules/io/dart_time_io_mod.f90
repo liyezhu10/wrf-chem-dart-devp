@@ -179,10 +179,13 @@ else
                       source, revision, revdate, text2=string3)
 endif
 
+!>@todo FIXME: do we really want this to print from any
+!> task without being asked?  i vote no.
 call print_time(read_model_time,'read_model_time')
+
 !>@todo FIXME:
 ! make print_date() return without error if calendar is no_calendar,
-! and then add a call to print_date() here.
+! and then add a call to print_date() here.  (also vote no.)
 
 call nc_check( nf90_close(ncid) , 'read_model_time closing : ', filename)
 
