@@ -11,7 +11,7 @@
    output_interval          = 1,
    restart_in_file_name     = "perfect_ics",
    restart_out_file_name    = "perfect_restart",
-   obs_seq_in_file_name     = "obs_seq.in",
+   obs_seq_in_file_name     = "obs_seq.in.power",
    obs_seq_out_file_name    = "obs_seq.out",
    adv_ens_command          = "../shell_scripts/advance_model.csh",
    trace_execution          = .false.,
@@ -45,10 +45,12 @@
    num_groups               = 1,
    input_qc_threshold       =  3.0,
    outlier_threshold        = -1.0,
+   quad_skewness_threshold  = -1.0,
    enable_special_outlier_code = .false.,
    output_forward_op_errors = .false.,
    output_inflation         = .true.,
    output_timestamps        = .false.,
+   write_obs_every_cycle    = .false.,
    trace_execution          = .false.,
    silence                  = .false.,
 
@@ -113,6 +115,7 @@
 
 &obs_kind_nml
    assimilate_these_obs_types = 'RAW_STATE_VARIABLE',
+                                'RAW_STATE_VAR_POWER'
    /
 
 &assim_model_nml
@@ -201,7 +204,7 @@
 #   max_copy           = 300.0,
 
 &obs_diag_nml
-   obs_sequence_name     = 'obs_seq.final',
+   obs_sequence_name     = 'obs_pseudo.final',
    bin_width_days        = -1,
    bin_width_seconds     = -1,
    init_skip_days        = 0, 

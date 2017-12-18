@@ -21,7 +21,7 @@ use utilities_mod, only : get_unit, close_file, register_module, error_handler, 
                           dump_unit_attributes, find_namelist_in_file,             &
                           check_namelist_read, nc_check, do_nml_file, do_nml_term, &
                           find_textfile_dims, file_to_text, set_output,            &
-                          ascii_file_format, set_output
+                          ascii_file_format, set_output, file_exist, open_file, close_file
 use     model_mod, only : models_get_model_size => get_model_size,                 &
                           static_init_model,                                       &
                           models_get_state_meta_data => get_state_meta_data,       &
@@ -99,14 +99,14 @@ logical :: quad_filter = .false.
 logical :: write_all_values = .false. 
 
 ! Global storage for default restart formats
-character(len = 16) :: read_format = "unformatted", write_format = "unformatted"
+character(len=16) :: read_format = "unformatted", write_format = "unformatted"
 
 ! Global storage for error string output
-character(len = 129)  :: msgstring
+character(len=512)  :: msgstring
 
 !-------------------------------------------------------------
 ! Namelist with default values
-! write_binary_restart_files  == .true.  -> use unformatted file format. 
+! write_binary_restart_files  == .true.  -> use unformatted file format.
 !                                     Full precision, faster, smaller,
 !                                     but not as portable.
 
@@ -127,7 +127,7 @@ subroutine init_assim_model(state)
 !
 ! Allocates storage for an instance of an assim_model_type. With this
 ! implementation, need to be VERY careful about assigment and maintaining
-! permanent storage locations. Need to revisit the best way to do 
+! permanent storage locations. Need to revisit the best way to do
 ! assim_model_copy below.
 
 implicit none
@@ -150,7 +150,7 @@ end subroutine init_assim_model
 ! subroutine static_init_assim_model()
 !
 ! Initializes class data for the assim_model. Also calls the static
-! initialization for the underlying model. So far, this simply 
+! initialization for the underlying model. So far, this simply
 ! is initializing the position of the state variables as location types.
 
 implicit none
@@ -162,7 +162,7 @@ integer :: iunit, io
 ! only execute this code once, even if called multiple times.
 if (module_initialized) return
 
-! First thing to do is echo info to logfile ... 
+! First thing to do is echo info to logfile ...
 call register_module(source, revision, revdate)
 module_initialized = .true.
 
@@ -178,7 +178,7 @@ call find_namelist_in_file("input.nml", "assim_model_nml", iunit)
 read(iunit, nml = assim_model_nml, iostat = io)
 call check_namelist_read(iunit, io, "assim_model_nml")
 
-! Record the namelist values used for the run ... 
+! Record the namelist values used for the run ...
 if (do_nml_file()) write(nmlfileunit, nml=assim_model_nml)
 if (do_nml_term()) write(     *     , nml=assim_model_nml)
 
@@ -277,16 +277,16 @@ function init_diag_output(FileName, global_meta_data, &
 !    NF90_put_var       ! provide values for variable
 ! NF90_CLOSE            ! close: save updated netCDF dataset
 !
-! Time is a funny beast ... 
+! Time is a funny beast ...
 ! Many packages decode the time:units attribute to convert the offset to a calendar
 ! date/time format. Using an offset simplifies many operations, but is not the
 ! way we like to see stuff plotted. The "approved" calendars are:
-! gregorian or standard 
-!      Mixed Gregorian/Julian calendar as defined by Udunits. This is the default. 
-!  noleap   Modern calendar without leap years, i.e., all years are 365 days long. 
-!  360_day  All years are 360 days divided into 30 day months. 
-!  julian   Julian calendar. 
-!  none     No calendar. 
+! gregorian or standard
+!      Mixed Gregorian/Julian calendar as defined by Udunits. This is the default.
+!  noleap   Modern calendar without leap years, i.e., all years are 365 days long.
+!  360_day  All years are 360 days divided into 30 day months.
+!  julian   Julian calendar.
+!  none     No calendar.
 !
 ! location is another one ...
 !
@@ -301,7 +301,7 @@ character(len=*), intent(in) :: meta_data_per_copy(copies_of_field_per_time)
 integer, OPTIONAL,intent(in) :: lagID
 type(netcdf_file_type)       :: ncFileID
 
-integer :: i, metadata_length, nlines, linelen, createmode
+integer :: i, metadata_length, nlines, linelen, createmode, oldmode
 
 integer ::   MemberDimID,   MemberVarID     ! for each "copy" or ensemble member
 integer ::     TimeDimID,     TimeVarID
@@ -315,7 +315,7 @@ if ( .not. module_initialized ) call static_init_assim_model()
 
 if(.not. byteSizesOK()) then
     call error_handler(E_ERR,'init_diag_output', &
-   'Compiler does not support required kinds of variables.',source,revision,revdate) 
+   'Compiler does not support required kinds of variables.',source,revision,revdate)
 end if
 
 metadata_length = LEN(meta_data_per_copy(1))
@@ -376,7 +376,7 @@ call nc_check(nf90_def_dim(ncid=ncFileID%ncid, &
               'init_diag_output', 'def_dim NMLnlines '//trim(ncFileID%fname))
 
 !-------------------------------------------------------------------------------
-! Write Global Attributes 
+! Write Global Attributes
 !-------------------------------------------------------------------------------
 
 call nc_check(nf90_put_att(ncFileID%ncid, NF90_GLOBAL, "title", global_meta_data), &
@@ -385,8 +385,13 @@ call nc_check(nf90_put_att(ncFileID%ncid, NF90_GLOBAL, "assim_model_source", sou
               'init_diag_output', 'put_att assim_model_source '//trim(ncFileID%fname))
 call nc_check(nf90_put_att(ncFileID%ncid, NF90_GLOBAL, "assim_model_revision", revision ), &
               'init_diag_output', 'put_att assim_model_revision '//trim(ncFileID%fname))
+
 call nc_check(nf90_put_att(ncFileID%ncid, NF90_GLOBAL, "assim_model_revdate", revdate ), &
               'init_diag_output', 'put_att assim_model_revdate '//trim(ncFileID%fname))
+
+msgstring = nf90_inq_libvers()
+call nc_check(nf90_put_att(ncFileID%ncid, NF90_GLOBAL, "netcdf_version", trim(msgstring) ), &
+              'init_diag_output', 'put_att netcdf_version '//trim(ncFileID%fname))
 
 if (present(lagID)) then
    call nc_check(nf90_put_att(ncFileID%ncid, NF90_GLOBAL, "lag", lagID ), &
@@ -394,7 +399,7 @@ if (present(lagID)) then
 
    write(*,*)'init_diag_output detected Lag is present'
 
-endif 
+endif
 
 !-------------------------------------------------------------------------------
 ! Create variables and attributes.
@@ -412,7 +417,6 @@ call nc_check(nf90_put_att(ncFileID%ncid, MemberVarID, "units",     "nondimensio
 call nc_check(nf90_put_att(ncFileID%ncid, MemberVarID, "valid_range", &
               (/ 1, copies_of_field_per_time /)), 'init_diag_output', 'put_att valid_range')
 
-
 !    Metadata for each Copy
 call nc_check(nf90_def_var(ncid=ncFileID%ncid,name="CopyMetaData", xtype=nf90_char,    &
               dimids = (/ metadataDimID, MemberDimID /),  varid=metadataVarID), &
@@ -420,7 +424,7 @@ call nc_check(nf90_def_var(ncid=ncFileID%ncid,name="CopyMetaData", xtype=nf90_ch
 call nc_check(nf90_put_att(ncFileID%ncid, metadataVarID, "long_name",       &
               "Metadata for each copy/member"), 'init_diag_output', 'put_att long_name')
 
-!    input namelist 
+!    input namelist
 call nc_check(nf90_def_var(ncid=ncFileID%ncid,name="inputnml", xtype=nf90_char,    &
               dimids = (/ linelenDimID, nlinesDimID /),  varid=nmlVarID), &
               'init_diag_output', 'def_var inputnml')
@@ -444,7 +448,12 @@ allocate(ncFileID%rtimes(ncFileID%NtimesMAX), ncFileID%times(ncFileID%NtimesMAX)
 
 !-------------------------------------------------------------------------------
 ! Leave define mode so we can fill
+! Set the NOFILL ... noticeable performance gain from not prefilling.
+! Tests with WRF & POP show bit-for-bit under 'classic' storage layer.
 !-------------------------------------------------------------------------------
+
+i = nf90_set_fill(ncFileID%ncid, NF90_NOFILL, oldmode)
+call nc_check(i, 'init_diag_output', 'set_fill NOFILL on '//trim(ncFileID%fname))
 call nc_check(nf90_enddef(ncFileID%ncid), 'init_diag_output', 'enddef '//trim(ncFileID%fname))
 
 !-------------------------------------------------------------------------------
@@ -457,7 +466,7 @@ call nc_check(nf90_put_var(ncFileID%ncid, MemberVarID, (/ (i,i=1,copies_of_field
               'init_diag_output', 'put_var MemberVarID')
 call nc_check(nf90_put_var(ncFileID%ncid, metadataVarID, meta_data_per_copy ), &
               'init_diag_output', 'put_var metadataVarID')
- 
+
 call file_to_text("input.nml", textblock)
 
 call nc_check(nf90_put_var(ncFileID%ncid, nmlVarID, textblock ), &
@@ -469,7 +478,7 @@ deallocate(textblock)
 ! sync to disk, but leave open
 !-------------------------------------------------------------------------------
 
-call nc_check(nf90_sync(ncFileID%ncid), 'init_diag_output', 'sync '//trim(ncFileID%fname))               
+call nc_check(nf90_sync(ncFileID%ncid), 'init_diag_output', 'sync '//trim(ncFileID%fname))
 !-------------------------------------------------------------------------------
 ! Define the model-specific components
 !-------------------------------------------------------------------------------
@@ -484,7 +493,7 @@ endif
 ! sync again, but still leave open
 !-------------------------------------------------------------------------------
 
-call nc_check(nf90_sync(ncFileID%ncid), 'init_diag_output', 'sync '//trim(ncFileID%fname))               
+call nc_check(nf90_sync(ncFileID%ncid), 'init_diag_output', 'sync '//trim(ncFileID%fname))
 !-------------------------------------------------------------------------------
 
 end function init_diag_output
@@ -568,7 +577,7 @@ subroutine get_diag_input_copy_meta_data(file_id, model_size_out, num_copies, &
 !-------------------------------------------------------------------------
 !
 ! Returns the meta data associated with each copy of data in
-! a diagnostic input file. Should be called immediately after 
+! a diagnostic input file. Should be called immediately after
 ! function init_diag_input.
 
 implicit none
@@ -677,8 +686,8 @@ subroutine get_initial_condition(x)
 ! function get_initial_condition()
 !
 ! Initial conditions. This returns an initial assim_model_type
-! which includes both a state vector and a time. Design of exactly where this 
-! stuff should come from is still evolving (12 July, 2002) but for now can 
+! which includes both a state vector and a time. Design of exactly where this
+! stuff should come from is still evolving (12 July, 2002) but for now can
 ! start at time offset 0 with the initial state.
 ! Need to carefully coordinate this with the times for observations.
 
@@ -697,8 +706,8 @@ subroutine aget_initial_condition(time, x)
 ! function get_initial_condition()
 !
 ! Initial conditions. This returns an initial state vector and a time
-! for use in an assim_model_type.  Design of exactly where this 
-! stuff should come from is still evolving (12 July, 2002) but for now can 
+! for use in an assim_model_type.  Design of exactly where this
+! stuff should come from is still evolving (12 July, 2002) but for now can
 ! start at time offset 0 with the initial state.
 ! Need to carefully coordinate this with the times for observations.
 
@@ -768,7 +777,7 @@ subroutine interpolate(x, location, loctype, obs_vals, istatus)
 ! location. Will need to be generalized for more complex state vector
 ! types. It might be better to be passing an assim_model_type with
 ! the associated time through here, but that requires changing the
-! entire observation side of the class tree. Reconsider this at a 
+! entire observation side of the class tree. Reconsider this at a
 ! later date (JLA, 15 July, 2002). loctype for now is an integer that
 ! specifies what sort of variable from the model should be interpolated.
 
@@ -778,7 +787,7 @@ real(r8),            intent(in) :: x(:)
 type(location_type), intent(in) :: location
 integer,             intent(in) :: loctype
 real(r8),           intent(out) :: obs_vals
-integer,            intent(out) :: istatus 
+integer,            intent(out) :: istatus
 
 istatus = 0
 
@@ -830,8 +839,8 @@ end subroutine set_model_state_vector
 subroutine write_state_restart(assim_model, funit, target_time)
 !----------------------------------------------------------------------
 !
-! Write a restart file given a model extended state and a unit number 
-! opened to the restart file. (Need to reconsider what is passed to 
+! Write a restart file given a model extended state and a unit number
+! opened to the restart file. (Need to reconsider what is passed to
 ! identify file or if file can even be opened within this routine).
 
 implicit none
@@ -854,8 +863,8 @@ end subroutine write_state_restart
 subroutine awrite_state_restart(model_time, model_state, funit, target_time)
 !----------------------------------------------------------------------
 !
-! Write a restart file given a model extended state and a unit number 
-! opened to the restart file. (Need to reconsider what is passed to 
+! Write a restart file given a model extended state and a unit number
+! opened to the restart file. (Need to reconsider what is passed to
 ! identify file or if file can even be opened within this routine).
 
 implicit none
@@ -911,7 +920,7 @@ else
    if (io /= 0) goto 10
 endif
 
-! come directly here on error. 
+! come directly here on error.
 10 continue
 
 ! if error, use inquire function to extract filename associated with
@@ -1076,88 +1085,72 @@ function open_restart_read(file_name)
 integer :: open_restart_read
 character(len = *), intent(in) :: file_name
 
-integer :: ios, ios_out
-!!logical :: old_output_state
+integer :: ios
 type(time_type) :: temp_time
-character(len=64) :: string2
+character(len=256) :: string2
 
 if ( .not. module_initialized ) call static_init_assim_model()
 
-! DEBUG -- if enabled, every task will print out as it opens the
-! restart files.  If questions about missing restart files, first start
-! by commenting in only the timestamp line.  If still concerns, then
-! go ahead and comment in all the lines.
-!!old_output_state = do_output()
-!!call set_output(.true.)
-!call timestamp("open_restart", "opening restart file "//trim(file_name), pos='')
-!!call set_output(old_output_state)
-!END DEBUG
-
-! if you want to document which file(s) are being opened before
-! trying the open (e.g. in case the fortran runtime library intercepts
-! the error and does not return to let us print out the name) then
-! comment this in and you can see what files are being opened.
-!write(msgstring, *) 'Opening restart file ',trim(adjustl(file_name))
-!call error_handler(E_MSG,'open_restart_read',msgstring,source,revision,revdate)
+if (.not. file_exist(file_name)) then
+   write(msgstring, *) 'Restart file "'//trim(file_name)//'" not found'
+   call error_handler(E_ERR, 'open_restart_read', msgstring, &
+                     source, revision, revdate)
+endif
 
 ! WARNING: Absoft Pro Fortran 9.0, on a power-pc mac, is convinced
-! that certain binary files are, in fact, ascii, because the read_time 
+! that certain binary files are, in fact, ascii, because the read_time
 ! call is returning what seems like a good time even though it should
 ! be garbage.  This code works fine on all other platforms/compilers
 ! we've tried, so we're leaving it as-is.  Best solution if you're
 ! using absoft on a mac is to set all files to be non-binary in the
-! namelist.  You may also have to set the format in both obs_model_mod.f90 
-! and interpolate_model.f90 to 'formatted' instead of the hardcoded 
+! namelist.  You may also have to set the format in both obs_model_mod.f90
+! and interpolate_model.f90 to 'formatted' instead of the hardcoded
 ! 'unformatted' for async 2/4 model advance temp_ic and temp_ud files.
 
 ! Autodetect format of restart file when opening
 ! Know that the first thing in here has to be a time, so try to read it.
 ! If it fails with one format, try the other. If it fails with both, punt.
-open_restart_read = get_unit()
+
 read_format = 'formatted'
-open(unit   = open_restart_read, &
-     file   = trim(file_name),   &
-     form   = read_format,       &
-     action = 'read',            &
-     status = 'old',             &
-     iostat = ios)
-! An opening error means something is wrong with the file, error and stop
-if(ios /= 0) goto 11
-temp_time = read_time(open_restart_read, read_format, ios_out)
-if(ios_out == 0) then 
+open_restart_read = open_file(file_name, read_format, 'read', return_rc=ios)
+if (ios /= 0) then
+   write(msgstring, *) 'Unable to open restart file "'//trim(file_name)//'"'
+   write(string2, *) 'Error code was ', ios
+   call error_handler(E_ERR, 'open_restart_read', msgstring, &
+                     source, revision, revdate, text2=string2)
+endif
+
+! check read() iostatus code and return now if it succeeds.
+temp_time = read_time(open_restart_read, read_format, ios)
+if(ios == 0) then
    ! It appears to be formatted, proceed
    rewind open_restart_read
    return
 endif
 
-! Next, try to see if an unformatted read works instead
-close(open_restart_read)
+! No, so try an unformatted read instead
+call close_file(open_restart_read)
 
-open_restart_read = get_unit()
 read_format = 'unformatted'
-open(unit   = open_restart_read, &
-     file   = trim(file_name),   &
-     form   = read_format,       &
-     action = 'read',            &
-     status = 'old',             &
-     iostat = ios)
-! An opening error means something is wrong with the file, error and stop
-if(ios /= 0) goto 11
-rewind open_restart_read
-temp_time = read_time(open_restart_read, read_format, ios_out)
-if(ios_out == 0) then 
-   ! It appears to be unformatted, proceed
-   rewind open_restart_read
-   return
+open_restart_read = open_file(file_name, read_format, 'read', return_rc=ios)
+if (ios /= 0) then
+   write(msgstring, *) 'Unable to open restart file "'//trim(file_name)//'"'
+   write(string2, *) 'Error code was ', ios
+   call error_handler(E_ERR, 'open_restart_read', msgstring, &
+                     source, revision, revdate, text2=string2)
 endif
 
-! Otherwise, neither format works. Have a fatal error.
-11 continue
+! we caught the formatted read error, but this time for an 
+! unformatted read it might not fail even with bad values, 
+! so let read_time do the error handling.  it won't return if 
+! the read() fails or if the values are out of range.
+temp_time = read_time(open_restart_read, read_format)
 
-write(msgstring, *) 'Problem opening file ',trim(file_name)
-write( string2 , *) 'OPEN status was ',ios
-call error_handler(E_ERR, 'open_restart_read', msgstring, &
-     source, revision, revdate, text2=string2)
+! if read_time returns then we seems to have an unformatted
+! file.  proceed.
+
+rewind open_restart_read
+return
 
 end function open_restart_read
 
@@ -1180,7 +1173,7 @@ end subroutine close_restart
 
 subroutine output_diagnostics(ncFileID, state, copy_index)
 !-------------------------------------------------------------------
-! Outputs the "state" to the supplied netCDF file. 
+! Outputs the "state" to the supplied netCDF file.
 !
 ! the time, and an optional index saying which
 ! copy of the metadata this state is associated with.
@@ -1189,8 +1182,8 @@ subroutine output_diagnostics(ncFileID, state, copy_index)
 ! state          the copy of the state vector
 ! copy_index     which copy of the state vector (ensemble member ID)
 !
-! TJH 28 Aug 2002 original netCDF implementation 
-! TJH  7 Feb 2003 [created time_manager_mod:nc_get_tindex] 
+! TJH 28 Aug 2002 original netCDF implementation
+! TJH  7 Feb 2003 [created time_manager_mod:nc_get_tindex]
 !     substantially modified to handle time in a much better manner
 ! TJH 24 Jun 2003 made model_mod do all the netCDF writing.
 !                 Still need an error handler for nc_write_model_vars
@@ -1217,7 +1210,7 @@ end subroutine output_diagnostics
 
 subroutine aoutput_diagnostics(ncFileID, model_time, model_state, copy_index)
 !-------------------------------------------------------------------
-! Outputs the "state" to the supplied netCDF file. 
+! Outputs the "state" to the supplied netCDF file.
 !
 ! the time, and an optional index saying which
 ! copy of the metadata this state is associated with.
@@ -1227,12 +1220,12 @@ subroutine aoutput_diagnostics(ncFileID, model_time, model_state, copy_index)
 ! model_state    the copy of the state vector
 ! copy_index     which copy of the state vector (ensemble member ID)
 !
-! TJH 28 Aug 2002 original netCDF implementation 
-! TJH  7 Feb 2003 [created time_manager_mod:nc_get_tindex] 
+! TJH 28 Aug 2002 original netCDF implementation
+! TJH  7 Feb 2003 [created time_manager_mod:nc_get_tindex]
 !     substantially modified to handle time in a much better manner
 ! TJH 24 Jun 2003 made model_mod do all the netCDF writing.
 !                 Still need an error handler for nc_write_model_vars
-!      
+!
 ! Note -- ncFileId may be modified -- the time mirror needs to
 ! track the state of the netCDF file. This must be "inout".
 
@@ -1377,7 +1370,7 @@ function nc_append_time(ncFileID, time) result(lngth)
 !------------------------------------------------------------------------
 ! The current time is appended to the "time" coordinate variable.
 ! The new length of the "time" variable is returned.
-! 
+!
 ! This REQUIRES that "time" is a coordinate variable AND it is the
 ! unlimited dimension. If not ... bad things happen.
 !
@@ -1424,16 +1417,20 @@ if ( dimids(1) /= unlimitedDimID ) call error_handler(E_ERR,'nc_append_time', &
 call nc_check(NF90_Inquire_Dimension(ncid, unlimitedDimID, varname, lngth ), &
            'nc_append_time', 'inquire_dimension unlimited')
 
-if (lngth /= ncFileId%Ntimes) call error_handler(E_ERR,'nc_append_time', &
-           'time mirror and netcdf file time dimension out-of-sync',source,revision,revdate)
+if (lngth /= ncFileId%Ntimes) then
+   write(msgstring,*)'netCDF file has length ',lngth,' /= mirror has length of ',ncFileId%Ntimes
+   call error_handler(E_ERR,'nc_append_time', &
+           'time mirror and netcdf file time dimension out-of-sync', &
+           source,revision,revdate,text2=msgstring)
+endif
 
 ! make sure the time mirror can handle another entry.
-if ( lngth == ncFileID%NtimesMAX ) then   
+if ( lngth == ncFileID%NtimesMAX ) then
 
    write(msgstring,*)'doubling mirror length of ',lngth,' of ',ncFileID%fname
    call error_handler(E_DBG,'nc_append_time',msgstring,source,revision,revdate)
 
-   allocate(temptime(ncFileID%NtimesMAX), tempRtime(ncFileID%NtimesMAX)) 
+   allocate(temptime(ncFileID%NtimesMAX), tempRtime(ncFileID%NtimesMAX))
    temptime   = ncFileID%times            ! preserve
    tempRtime = ncFileID%rtimes            ! preserve
 
@@ -1452,7 +1449,7 @@ endif
 
 call get_time(time, secs, days)         ! get time components to append
 realtime = days + secs/86400.0_digits12 ! time base is "days since ..."
-lngth           = lngth + 1             ! index of new time 
+lngth           = lngth + 1             ! index of new time
 ncFileID%Ntimes = lngth                 ! new working length of time mirror
 
 call nc_check(nf90_put_var(ncid, TimeVarID, realtime, start=(/ lngth /) ), &
@@ -1471,15 +1468,15 @@ end function nc_append_time
 
 function nc_get_tindex(ncFileID, statetime) result(timeindex)
 !------------------------------------------------------------------------
-! 
-! We need to compare the time of the current assim_model to the 
+!
+! We need to compare the time of the current assim_model to the
 ! netcdf time coordinate variable (the unlimited dimension).
 ! If they are the same, no problem ...
 ! If it is earlier, we need to find the right index and insert ...
 ! If it is the "future", we need to add another one ...
 ! If it is in the past but does not match any we have, we're in trouble.
 ! The new length of the "time" variable is returned.
-! 
+!
 ! This REQUIRES that "time" is a coordinate variable AND it is the
 ! unlimited dimension. If not ... bad things happen.
 !
@@ -1489,13 +1486,13 @@ function nc_get_tindex(ncFileID, statetime) result(timeindex)
 ! A new array "times" has been added to mirror the times that are stored
 ! in the netcdf time coordinate variable. While somewhat unpleasant, it
 ! is SUBSTANTIALLY faster than reading the netcdf time variable at every
-! turn -- which caused a geometric or exponential increase in overall 
+! turn -- which caused a geometric or exponential increase in overall
 ! netcdf I/O. (i.e. this was really bad)
 !
 ! The time mirror is maintained as a time_type, so the comparison with
 ! the state time uses the operators for the time_type. The netCDF file,
 ! however, has time units of a different convention. The times are
-! converted only when appending to the time coordinate variable.    
+! converted only when appending to the time coordinate variable.
 !
 ! Revision by TJH 4 June 2004:
 ! Implementing a "file type" for output that contains a unique time
@@ -1522,14 +1519,14 @@ timeindex = -1  ! assume bad things are going to happen
 ncid = ncFileID%ncid
 
 ! Make sure we're looking at the most current version of the netCDF file.
-! Get the length of the (unlimited) Time Dimension 
+! Get the length of the (unlimited) Time Dimension
 ! If there is no length -- simply append a time to the dimension and return ...
-! Else   get the existing times ["days since ..."] and convert to time_type 
+! Else   get the existing times ["days since ..."] and convert to time_type
 !        if the statetime < earliest netcdf time ... we're in trouble
 !        if the statetime does not match any netcdf time ... we're in trouble
-!        if the statetime > last netcdf time ... append a time ... 
+!        if the statetime > last netcdf time ... append a time ...
 
-call nc_check(NF90_Sync(ncid), 'nc_get_tindex', 'sync '//trim(ncFileID%fname))    
+call nc_check(NF90_Sync(ncid), 'nc_get_tindex', 'sync '//trim(ncFileID%fname))
 call nc_check(NF90_Inquire(ncid, nDimensions, nVariables, nAttributes, unlimitedDimID), &
               'nc_get_tindex', 'inquire '//trim(ncFileID%fname))
 call nc_check(NF90_Inq_Varid(ncid, "time", TimeVarID), &
@@ -1542,7 +1539,7 @@ call nc_check(NF90_Inquire_Dimension(ncid, unlimitedDimID, varname, nTlen), &
 ! Sanity check all cases first.
 
 if ( ndims /= 1 ) then
-   write(msgstring,*)'"time" expected to be rank-1' 
+   write(msgstring,*)'"time" expected to be rank-1'
    call error_handler(E_WARN,'nc_get_tindex',msgstring,source,revision,revdate)
    timeindex = timeindex -   1
 endif
@@ -1588,8 +1585,8 @@ enddo TimeLoop
 
 
 if ( timeindex <= 0 ) then   ! There was no match. Either the model
-                             ! time precedes the earliest file time - or - 
-                             ! model time is somewhere in the middle  - or - 
+                             ! time precedes the earliest file time - or -
+                             ! model time is somewhere in the middle  - or -
                              ! model time needs to be appended.
 
    if (statetime < ncFileID%times(1) ) then
@@ -1608,7 +1605,7 @@ if ( timeindex <= 0 ) then   ! There was no match. Either the model
               'Model time precedes earliest netCDF time.', source,revision,revdate)
       timeindex = -2
 
-   else if ( statetime < ncFileID%times(ncFileID%Ntimes) ) then  
+   else if ( statetime < ncFileID%times(ncFileID%Ntimes) ) then
 
       ! It is somewhere in the middle without actually matching an existing time.
       ! This is very bad.
@@ -1634,7 +1631,7 @@ if ( timeindex <= 0 ) then   ! There was no match. Either the model
 
       enddo BadLoop
 
-   else ! we must need to append ... 
+   else ! we must need to append ...
 
       timeindex = nc_append_time(ncFileID, statetime)
 
@@ -1643,7 +1640,7 @@ if ( timeindex <= 0 ) then   ! There was no match. Either the model
       call error_handler(E_DBG,'nc_get_tindex',msgstring,source,revision,revdate)
 
    endif
-   
+
 endif
 
 end function nc_get_tindex
@@ -1672,7 +1669,7 @@ ierr = 0
 
 ncid = ncFileID%ncid
 
-!call check(NF90_Sync(ncid))    
+!call check(NF90_Sync(ncid))
 !call check(NF90_Inquire_Dimension(ncid, unlimitedDimID, varname, length))
 !
 !if ( TimeVarID /= unlimitedDimID ) then

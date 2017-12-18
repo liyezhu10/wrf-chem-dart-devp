@@ -1095,6 +1095,14 @@ else if (obs_kind == KIND_GEOPOTENTIAL_HEIGHT) then
    endif
    interp_val = query_location(location_tmp, 'VLOC')
 
+else if (obs_kind == KIND_VAPOR_MIXING_RATIO) then
+   tvars(1) = get_progvar_index_from_kind(KIND_VAPOR_MIXING_RATIO)
+   call compute_scalar_with_barycentric(x, location, 1, tvars, values, istatus)
+   if (istatus /= 0) goto 100
+
+   ! Don't accept negative moisture
+   interp_val = max(values(1),0.0_r8)
+
 else if (obs_kind == KIND_SPECIFIC_HUMIDITY) then
    ! compute vapor pressure, then: sh = vp / (1.0 + vp)
    tvars(1) = get_progvar_index_from_kind(KIND_VAPOR_MIXING_RATIO)
@@ -3173,6 +3181,8 @@ call nc_check(nf90_get_var( ncid, VarID, xland), &
 
 latCell = latCell * rad2deg
 lonCell = lonCell * rad2deg
+where (latCell >  90.0_r8) latCell = 90.0_r8
+where (latCell < -90.0_r8) latCell = -90.0_r8
 
 ! Read the variables
 
@@ -5677,7 +5687,8 @@ end function find_closest_cell_center
 
 subroutine finalize_closest_center()
 
-! get rid of storage associated with GC for cell centers.
+! get rid of storage associated with GC for cell centers if
+! they were used.
 ! assuming we actually did initialize it in the first place.
 
 if (search_initialized) call xyz_get_close_obs_destroy(cc_gc)

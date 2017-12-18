@@ -151,36 +151,40 @@ echo "Running DART test on $host"
 
 @ modelnum = 10
 
+# nsc - 18 dec 2017
+# removed models which don't include
+# the quad filter forward operator.
 if ( 1 == 1 ) then
 foreach MODEL ( \
-  9var \
-  am2 \
+  #9var \
+  #am2 \
   bgrid_solo \
-  cam \
+  #cam \
   #cosmo \
-  forced_lorenz_96 \
+  #forced_lorenz_96 \
   #gitm \
-  ikeda \
-  lorenz_04 \
+  #ikeda \
+  #lorenz_04 \
   lorenz_63 \
-  lorenz_84 \
+  #lorenz_84 \
   lorenz_96 \
-  lorenz_96_2scale \
-  MITgcm_annulus \
-  MITgcm_ocean \
-  mpas_atm \
-  mpas_ocn \
-  NAAPS \
-  NCOMMAS \
-  null_model \
+  #lorenz_96_2scale \
+  #MITgcm_annulus \
+  #MITgcm_ocean \
+  #mpas_atm \
+  #mpas_ocn \
+  #NAAPS \
+  #NCOMMAS \
+  #null_model \
   #PBL_1d \
-  pe2lyr \
+  #pe2lyr \
   POP \
   #rose \
-  simple_advection \
-  template \
-  tiegcm \
-  wrf )
+  #simple_advection \
+  #template \
+  #tiegcm \
+  #wrf \
+  )
   # intentionally omitted:
   #  forced_barot MITgcm_annulus PBL_1d rose
     
