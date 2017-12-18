@@ -1,4 +1,4 @@
-! DART software - Copyright UCAR. This open source software is provided
+!-1nlevels - 1 DART software - Copyright UCAR. This open source software is provided
 ! by ucar, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/dares/dart/dart_download
 !
@@ -273,6 +273,10 @@ call set_vert_localization(vertical_localization_coord, vert_local_coord)
 ! this namelist variable so we can initialize the proper tables
 if (using_chemistry) call init_chem_tables()
 
+if (use_damping_ramp_at_model_top) then
+   print*, '"use_damping_ramp_at_model_top" not implemented yet'
+endif
+
 end subroutine static_init_model
 
 
@@ -537,20 +541,22 @@ do i=1, ens_size
 
    ! start at i, because my ensemble member is clearly at this level.
    ! then continue on to see if any other members are also at this level.
-   do j=i, ens_size
-      if (member_done(j)) cycle
-         print*, 'lev_index(1) ', i, lev_index(i)
-         print*, 'lev_index(2) ', j, lev_index(j)
-         print*, 'tem_values(:)', temp_vals(j)
-      
-      if (lev_index(j) == lev_index(i)) then
-         vals(j) = temp_vals(j)
-         member_done(j) = .true.
-         my_status(j) = 0
-         print*, 'tem_values(:)', temp_vals(j)
-      endif
-      
-   enddo
+   if (debug_level > 100) then
+      do j=i, ens_size
+         if (member_done(j)) cycle
+            print*, 'lev_index(1) ', i, lev_index(i)
+            print*, 'lev_index(2) ', j, lev_index(j)
+            print*, 'tem_values(:)', temp_vals(j)
+         
+         if (lev_index(j) == lev_index(i)) then
+            vals(j) = temp_vals(j)
+            member_done(j) = .true.
+            my_status(j) = 0
+            print*, 'tem_values(:)', temp_vals(j)
+         endif
+         
+      enddo
+   endif
 enddo
 
 end subroutine get_values_from_varid
@@ -1179,9 +1185,12 @@ select case (which_vert)
          !>@todo FIXME somewhere cull out unique levels and only get_state() for those. (see wrf)
          call height_to_level(nlevels, height_array(:, imember), vert_val, &
                               bot_levs(imember), top_levs(imember), vert_fracts(imember), my_status(imember))
-         do k = 1,ens_size
-            print*, 'bot_levs(i), top_levs(i), vert_fracts()', bot_levs(imember), top_levs(imember), vert_fracts(imember)
-         enddo
+         if (debug_level > 100) then
+            do k = 1,ens_size
+               print*, 'bot_levs(k), top_levs(k), vert_fracts(k)', &
+                        bot_levs(k), top_levs(k), vert_fracts(k)
+            enddo
+         endif
       enddo
       
 
@@ -1257,7 +1266,7 @@ call get_staggered_values_from_qty(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
 ! get the surface elevation from the phis, including stagger if needed
 call get_quad_corners(1, lon_index, lat_index, QTY_SURFACE_ELEVATION, qty, surface_elevation, status1)
 
-print*, 'surface_elevation ', surface_elevation
+print*, 'lon lat surf elev ', lon_index, lat_index, surface_elevation
 
 do k = 1, nlevels
    ! temperature
@@ -2422,34 +2431,35 @@ end subroutine read_cam_phis_array
 
 !-----------------------------------------------------------------------
 
-subroutine build_heights(n_levels,p_surf,h_surf,vertual_temp,height_midpts,height_interf,variable_r)
+subroutine build_heights(nlevels,p_surf,h_surf,vertual_temp,height_midpts,height_interf,variable_r)
 
-integer,  intent(in)  :: n_levels                            ! Number of vertical levels
+integer,  intent(in)  :: nlevels                            ! Number of vertical levels
 real(r8), intent(in)  :: p_surf                              ! Surface pressure (pascals)
 real(r8), intent(in)  :: h_surf                              ! Surface height (m)
-real(r8), intent(in)  :: vertual_temp( n_levels)             ! Vertual Temperature
-real(r8), intent(out) :: height_midpts(n_levels)             ! Geopotential height at midpoints, top to bottom
-real(r8), intent(out), optional :: height_interf(n_levels+1) ! Geopotential height at interfaces, top to bottom
-real(r8), intent(in),  optional :: variable_r(   n_levels)   ! Dry air gas constant, if varies, top to bottom
+real(r8), intent(in)  :: vertual_temp( nlevels)             ! Vertual Temperature
+real(r8), intent(out) :: height_midpts(nlevels)             ! Geopotential height at midpoints, top to bottom
+real(r8), intent(out), optional :: height_interf(nlevels+1) ! Geopotential height at interfaces, top to bottom
+real(r8), intent(in),  optional :: variable_r(   nlevels)   ! Dry air gas constant, if varies, top to bottom
 
 ! Local variables
 !>@todo have a model constants module?
 real(r8), parameter :: const_r = 287.04_r8    ! Different than model_heights ! dry air gas constant.
 real(r8), parameter :: g0 = 9.80616_r8        ! Different than model_heights:gph2gmh:G !
-real(r8) :: dist_from_interf(n_levels)         ! pressure profile
-real(r8) :: pterm(n_levels)
-real(r8) :: log_points_mid(n_levels+1)
+real(r8) :: dist_from_interf(nlevels)         ! pressure profile
+real(r8) :: pterm(nlevels)
+real(r8) :: log_points_mid(nlevels+1)
 
 integer  :: i,k,l
-real(r8) :: temp, hybrid_base_pressure
+real(r8) :: temp, hybrid_base_pressure, log_p_int 
 
 ! an array now: real(r8), parameter :: rbyg=r/g0
-real(r8) :: const_r_g0(n_levels)      ! rbyg=r/g0
-real(r8) :: midpts(n_levels)          ! midpoints  in column
-real(r8) :: interf(n_levels)          ! interfaces in column
-real(r8) :: log_p_midpoints(n_levels) ! log of pressure at layer midpoints
-real(r8) :: log_p_interf(n_levels+1)  ! log of pressure at layer interfaces
-real(r8) :: geo_hgt_intf(n_levels+1)  ! Geopotential height at interfaces, top to bottom
+real(r8) :: const_r_g0(nlevels)      ! rbyg=r/g0
+real(r8) :: midpts(nlevels)          ! midpoints  in column
+real(r8) :: interf(nlevels+1)        ! interfaces in column
+real(r8) :: log_p_midpoints(nlevels) ! log of pressure at layer midpoints
+real(r8) :: log_p_interf(nlevels+1)  ! log of pressure at layer interfaces
+real(r8) :: geo_hgt_intf(nlevels+1)  ! Geopotential height at interfaces, top to bottom
+real(r8) :: pmln(nlevels+1)          ! logs of midpoint pressures
 
 !state of dry air dry air Air pressure
 !    p=rho*R*T 
@@ -2476,55 +2486,60 @@ real(r8) :: geo_hgt_intf(n_levels+1)  ! Geopotential height at interfaces, top t
 ! SHEA MODIFICATION
 
 if (present(variable_r)) then
-   do i=1, n_levels
+   do i=1, nlevels
       const_r_g0(i) = variable_r(i) / g0
    enddo
 else
       const_r_g0(:) = const_r / g0
 endif
 
-call cam_p_col_midpts(p_surf, n_levels,   midpts)
-call cam_p_col_intfcs(p_surf, n_levels+1, interf)
+call cam_p_col_midpts(p_surf, nlevels,   midpts)
+call cam_p_col_intfcs(p_surf, nlevels+1, interf)
 
 if (debug_level > 200) then
-   do i=1, n_levels
+   do i=1, nlevels
      print *, 'midpts, interf: ', i, log_p_midpoints(i), log_p_interf(i)
    enddo
-   print *, 'interf: ', n_levels+1, log_p_interf(n_levels+1)
+   print *, 'interf: ', nlevels+1, log_p_interf(nlevels+1)
 endif
 
 log_p_midpoints = log(midpts)
 log_p_interf    = log(interf)
+
 hybrid_base_pressure = grid_data%P0%vals(1)
 
-do k = n_levels+1, 1, -1
-   i = n_levels-k+2
+! compute intermediate pressure quantities at the midpoint layers of k 
+do k = nlevels, 1, -1
+   i = nlevels-k+1
    ! hybrid_As coord coeffs for P0 reference pressure term in plevs_cam
    ! hybrid_Bs coord coeffs for surf pressure term in plevs_cam (in same format as hybrid_As)
    temp = hybrid_base_pressure*grid_data%hyam%vals(k) + p_surf*grid_data%hybm%vals(k)
    if (temp > 0.0_r8) THEN 
-      log_points_mid(k) = log(temp)
+      pmln(k) = log(temp)
    else 
-      log_points_mid(k) = 0.0_r8
+      pmln(k) = 0.0_r8
    endif
+print*, 'pmln(K)', k, pmln(K)
 enddo
 
 ! Initialize height_midpts to sum of ground height and thickness of
 ! top half-layer  (i.e. (phi)sfc in equation 1.14)
 !
-!        (height_midpts(1)=top  ->  height_midpts(n_levels)=bottom
+!        height_midpts(1)=top  ->  height_midpts(nlevels)=bottom
 ! 
 !        Eq 3.a.109.2  where l=K,k<K  h(k,l) = 1/2 * ln [  p(k+1) / p(k) ]
 
-do k = 2,n_levels - 1
-   pterm(k) = const_r_g0(k)*vertual_temp(k)*0.5_r8*(log_points_mid(k+1)-log_points_mid(k-1))
+do k = 2,nlevels - 1
+   pterm(k) = const_r_g0(k)*vertual_temp(k)*0.5_r8*(pmln(k+1)-pmln(k-1))
+print*, '2pmln(K)', k, pmln(K)
 enddo
 
 ! Initialize height_midpts to sum of ground height and thickness of top half layer
 ! this is NOT adding the thickness of the 'top' half layer.
 !    it's adding the thickness of the half layer at level K,
-do k = 1,n_levels - 1
-   height_midpts(k) = h_surf + const_r_g0(k)*vertual_temp(k)*0.5_r8*(log_points_mid(k+1)-log_points_mid(k))
+do k = 1,nlevels - 1
+   height_midpts(k) = h_surf + const_r_g0(k)*vertual_temp(k)*0.5_r8* &
+                      (pmln(k+1)-pmln(k))
 
 enddo
 
@@ -2534,8 +2549,10 @@ enddo
 ! Eqs 1.14 & 3.a.109.3 where l>K, k<K
 !                          h(k,l) = 1/2 * ln [ p(l+1)/p(l-1) ]
 
-height_midpts(n_levels) = h_surf + const_r_g0(n_levels)*vertual_temp(n_levels)* &
-                          (log_p_interf(n_levels)-log_points_mid(n_levels))
+log_p_int = log(p_surf*grid_data%hybi%vals(nlevels+1))
+
+height_midpts(nlevels) = h_surf + const_r_g0(nlevels)*vertual_temp(nlevels)* &
+                          (log_p_int-pmln(nlevels))
 
 ! THIS is adding the half layer at the BOTTOM.
 !
@@ -2544,9 +2561,9 @@ height_midpts(n_levels) = h_surf + const_r_g0(n_levels)*vertual_temp(n_levels)* 
 ! 
 ! Eqs 1.14 & 3.a.109.3 where l>K, k<K
 !                          h(k,l) = 1/2 * ln [ p(l+1)/p(l-1) ]
-do k = 1,n_levels - 1
-    height_midpts(k) = height_midpts(k) + const_r_g0(k)*vertual_temp(k)*log_p_interf(k)-0.5_r8* &
-                       (log_points_mid(n_levels-1)+log_points_mid(n_levels))
+do k = 1,nlevels - 1
+    height_midpts(k) = height_midpts(k) + const_r_g0(k)*vertual_temp(nlevels)*&
+                       (log_p_int-0.5_r8*  (pmln(nlevels-1)+pmln(nlevels)))
 enddo
 
 
@@ -2558,12 +2575,15 @@ enddo
 !
 ! 3.a.109.3
 
-do k = 1,n_levels - 2
-   do l = k+1, n_levels-1
+do k = 1,nlevels - 2
+   do l = k+1, nlevels-1
       height_midpts(k) = height_midpts(k) + pterm(l)
    enddo
 enddo
-
+print*, 'psurf', p_surf, h_surf
+do k = 1,nlevels
+print*, 'z2(k)', k, height_midpts(k), pterm(k)
+enddo
 end subroutine build_heights
 
 !-----------------------------------------------------------------------
@@ -2804,7 +2824,6 @@ integer(i8),         intent(in)    :: location_indx
 integer,             intent(in)    :: qty
 
 integer  :: iloc, jloc, vloc
-integer  :: my_status(ens_size)
 
 !>@todo FIXME qty is currently unused.  if we need it, its here.
 !>if we really don't need it, we can remove it.  all the other
@@ -2860,7 +2879,7 @@ integer(i8),         intent(in)    :: location_indx
 integer,             intent(in)    :: qty
 
 
-integer  :: iloc, jloc, vloc, my_status(ens_size), i, j
+integer  :: iloc, jloc, vloc, my_status(ens_size), j
 real(r8) :: height_array(  grid_data%lev%nsize, ens_size)
 real(r8) :: pressure_array(grid_data%lev%nsize, ens_size)
 
@@ -2903,7 +2922,7 @@ integer,             intent(in)  :: qty
 real(r8),            intent(out) :: pressure_array(nlevels, ens_size)
 integer,             intent(out) :: my_status(ens_size)
 
-integer     :: level_one, status1, imember
+integer     :: level_one, status1
 real(r8)    :: surface_pressure(ens_size)
 
 ! this is for surface obs
