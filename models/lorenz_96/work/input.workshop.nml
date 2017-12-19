@@ -11,7 +11,7 @@
    output_interval          = 1,
    restart_in_file_name     = "perfect_ics",
    restart_out_file_name    = "perfect_restart",
-   obs_seq_in_file_name     = "obs_seq.in",
+   obs_seq_in_file_name     = "obs_seq.in.power",
    obs_seq_out_file_name    = "obs_seq.out",
    adv_ens_command          = "../shell_scripts/advance_model.csh",
    trace_execution          = .false.,
@@ -27,8 +27,8 @@
    ens_size                 = 20,
    start_from_restart       = .true.,
    output_restart           = .true.,
-   obs_sequence_in_name     = "obs_seq.out",
-   obs_sequence_out_name    = "obs_seq.final",
+   obs_sequence_in_name     = "obs_pseudo.out",
+   obs_sequence_out_name    = "obs_pseudo.final",
    restart_in_file_name     = "filter_ics",
    restart_out_file_name    = "filter_restart",
    init_time_days           = 0,
@@ -37,20 +37,24 @@
    first_obs_seconds        = -1,
    last_obs_days            = -1,
    last_obs_seconds         = -1,
+   quad_filter              = .true.,
+   quad_filter_eval_only    = .false.,
    num_output_state_members = 20,
    num_output_obs_members   = 20,
    output_interval          = 1,
    num_groups               = 1,
    input_qc_threshold       =  3.0,
    outlier_threshold        = -1.0,
+   quad_skewness_threshold  = -1.0,
    enable_special_outlier_code = .false.,
    output_forward_op_errors = .false.,
    output_inflation         = .true.,
    output_timestamps        = .false.,
+   write_obs_every_cycle    = .false.,
    trace_execution          = .false.,
    silence                  = .false.,
 
-   inf_flavor                  = 0,                       0,
+   inf_flavor                  = 2,                       0,
    inf_initial_from_restart    = .false.,                 .false.,
    inf_sd_initial_from_restart = .false.,                 .false.,
    inf_output_restart          = .true.,                  .true.,
@@ -80,12 +84,9 @@
    perturbation_amplitude  = 0.2,
    /
 
-# the localization cutoff in this file is distributed is too
-# large for the model to converge.  to test that the model is 
-# doing a successful assimilation, change cutoff to 0.02 and rerun.
 &assim_tools_nml
    filter_kind                     = 1,
-   cutoff                          = 1000000.0,
+   cutoff                          = 0.2,
    sort_obs_inc                    = .false.,
    spread_restoration              = .false.,
    sampling_error_correction       = .false.,
@@ -114,6 +115,7 @@
 
 &obs_kind_nml
    assimilate_these_obs_types = 'RAW_STATE_VARIABLE',
+                                'RAW_STATE_VAR_POWER'
    /
 
 &assim_model_nml
@@ -148,6 +150,7 @@
    input_obs_kind_mod_file = '../../../obs_kind/DEFAULT_obs_kind_mod.F90',
   output_obs_kind_mod_file = '../../../obs_kind/obs_kind_mod.f90',
                input_files = '../../../obs_def/obs_def_1d_state_mod.f90',
+                             '../../../obs_def/obs_def_quad_filter_mod.f90'
    /
 
 &restart_file_tool_nml
@@ -169,15 +172,12 @@
    /
 
 &obs_sequence_tool_nml
-   filename_seq      = 'obs1.out', 'obs2.out',
-   filename_seq_list = '',
-   filename_out      = 'obs_seq.combined',
-   first_obs_days    = -1,
-   first_obs_seconds = -1,
-   last_obs_days     = -1,
-   last_obs_seconds  = -1,
+   filename_seq      = 'obs_pseudo.final'
+   filename_out      = 'obs_seq.final',
    print_only        = .false.,
    gregorian_cal     = .false.,
+   keep_types        = .false.,
+   obs_types         = 'QUAD_FILTER_SQUARED_ERROR',
    /
 
 # other possible obs tool namelist items:
@@ -204,7 +204,7 @@
 #   max_copy           = 300.0,
 
 &obs_diag_nml
-   obs_sequence_name     = 'obs_seq.final',
+   obs_sequence_name     = 'obs_pseudo.final',
    bin_width_days        = -1,
    bin_width_seconds     = -1,
    init_skip_days        = 0, 
@@ -239,4 +239,10 @@
    lonlim2    =    1.0,
    verbose    = .true.
    /
+
+&obs_add_pseudo_obs_nml
+   filename_in = 'obs_seq.out', 
+   filename_out = 'obs_pseudo.out', 
+   /
+
 
