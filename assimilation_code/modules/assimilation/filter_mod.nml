@@ -43,6 +43,7 @@
    inf_deterministic           = .true.,                  .true.,
    inf_initial                 = 1.0,                     1.0,
    inf_sd_initial              = 0.0,                     0.0,
+   inf_sd_size_change          = 1.05,                    1.05,
    inf_damping                 = 1.0,                     1.0,
    inf_lower_bound             = 1.0,                     1.0,
    inf_upper_bound             = 1000000.0,               1000000.0,

@@ -123,6 +123,7 @@ prematurely terminating the namelist.
    inf_deterministic            = .true.,                  .true.,
    inf_initial                  = 1.0,                     1.0,
    inf_sd_initial               = 0.0,                     0.0,
+   inf_sd_size_change           = 1.05,                    1.05,
    inf_damping                  = 1.0,                     1.0,
    inf_lower_bound              = 1.0,                     1.0,
    inf_upper_bound              = 1000000.0,               1000000.0,
@@ -397,6 +398,7 @@ and the second controls the posterior inflation.
          <LI>2 = spatially-varying state space</LI>
          <LI>3 = spatially-fixed state space </LI>
          <LI>4 = Relaxation To Prior Spread (Posterior inflation only) </LI>
+         <LI>5 = enhanced state space </LI>
         </UL>
         (See inf_sd_initial below for how to set the time evolution options.)
  </TD></TR>
@@ -432,6 +434,12 @@ and the second controls the posterior inflation.
         from restart file.  If &le; 0, do not update the inflation
         values, so they are time-constant.  If positive, the inflation
         values will adapt through time, so they are time-varying.
+ </TD></TR>
+
+<TR><TD>inf_sd_size_change</TD>
+    <TD>real(r8) dimension(2)</TD>
+    <TD>For inflation type 5 (enhanced inflation), controls the size
+        change of the standard deviation.  Should be between 1.0 and 2.0.
  </TD></TR>
 
 <TR><TD>inf_damping</TD>
