@@ -146,8 +146,8 @@ private
 
 ! module local data
 
-integer, parameter :: E_DBG = -2,   E_MSG = -1,  E_ALLMSG = 0, E_WARN = 1, E_ERR = 2
-!integer, parameter :: DEBUG = -1, MESSAGE = 0, WARNING = 1, FATAL = 2
+integer, parameter :: E_DBG = -2, E_MSG = -1, E_ALLMSG = 0, E_WARN = 1, E_ERR = 2
+integer, parameter :: DEBUG = -1, MESSAGE = 0, WARNING = 1, FATAL = 2
 integer, parameter :: NML_NONE = 0, NML_FILE = 1, NML_TERMINAL = 2, NML_BOTH = 3
 
 real(r8), parameter :: TWOPI = PI * 2.0_r8
@@ -169,6 +169,7 @@ public :: file_exist, &
           error_handler, &
           to_upper, &
           squeeze_out_blanks, &
+          nc_check, &
           next_file, &
           logfileunit, &
           nmlfileunit, &
@@ -190,6 +191,10 @@ public :: file_exist, &
           E_ALLMSG, &
           E_WARN, &
           E_ERR, &
+          !DEBUG, &
+          !MESSAGE, &
+          !WARNING, &
+          !FATAL, &
           is_longitude_between, &
           get_next_filename, &
           ascii_file_format, &
@@ -265,192 +270,125 @@ contains
    integer :: iunit, io
 
    character(len=256) :: lname
-   character(len=512) :: string1,string2,string3
 
-      if ( module_initialized ) then ! nothing to do
+   if ( module_initialized ) return
 
-         ! write(*,*)'Module initialized ... carry on.'
+   module_initialized = .true.
 
-         return
+   if (present(output_flag)) do_output_flag = output_flag
 
-      else ! initialize the module
-         
-         module_initialized = .true.
+   ! Since the logfile is not open yet the error terminations
+   ! must be handled differently than all other cases.
+   ! The routines that normally write to the logfile cannot
+   ! be used just yet. If we cannot open a logfile, we
+   ! abort execution here.
 
-         if (present(output_flag)) do_output_flag = output_flag
+   if ( present(progname) ) then
+      if (do_output_flag) write(*,*)'Starting program ',trim(adjustl(progname))
+   endif
 
-         ! Since the logfile is not open yet, the error terminations
-         ! must be handled differently than all other cases.
-         ! The routines that normally write to the logfile cannot
-         ! be used just yet. If we cannot open a logfile, we
-         ! always abort execution at this step.
+   if (do_output_flag) write(*,*)'Initializing the utilities module.'
 
-         if ( present(progname) ) then
-            if (do_output_flag) write(*,*)'Starting program ',trim(adjustl(progname))
-         endif
+   ! Read the namelist entry first before opening logfile, because
+   ! you can rename the logfile via a utilities namelist item.
 
-         if (do_output_flag) write(*,*)'Initializing the utilities module.'
+   call find_namelist_in_file("input.nml", "utilities_nml", iunit)
+   read(iunit, nml = utilities_nml, iostat = io)
+   call check_namelist_read(iunit, io, "utilities_nml")
 
-         ! Read the namelist entry
-         call find_namelist_in_file("input.nml", "utilities_nml", iunit, .false.)
-         read(iunit, nml = utilities_nml, iostat = io)
-         call check_namelist_read(iunit, io, "utilities_nml", .false.)
+   ! Open the log file with the name from the namelist 
+   ! does not return here on failure.
+   logfileunit = get_unit()
 
-         ! Open the log file with the name from the namelist 
-         logfileunit = nextunit()
-         if ( logfileunit < 0 ) then
-            write(*,*)'   unable to get a unit to use for the logfile.'
-            write(*,*)'   stopping.'
-            call exit_all(77)
-         endif
+   if (present(alternatename)) then
+      lname = alternatename
+   else
+      lname = logfilename
+   endif
 
-         if (present(alternatename)) then
-            lname = alternatename
-         else
-            lname = logfilename
-         endif
+   if (do_output_flag) write(*,*)'Trying to log to unit ', logfileunit
+   if (do_output_flag) write(*,*)'Trying to open file ', trim(adjustl(lname))
 
-         if (do_output_flag) write(*,*)'Trying to log to unit ', logfileunit
-         if (do_output_flag) write(*,*)'Trying to open file ', trim(adjustl(lname))
+   open(logfileunit, file=trim(adjustl(lname)), form='formatted', &
+                     action='write', position='append', iostat = io )
+   if ( io /= 0 ) call fatal_opening_log('initialize_utilities', lname)
 
-         open(logfileunit, file=trim(adjustl(lname)), form='formatted', &
-                           action='write', position='append', iostat = io )
+   ! Log the run-time 
+
+   if (do_output_flag) then
+      if ( present(progname) ) then
+         call write_time (logfileunit, label='Starting ', &
+                          string1='Program '//trim(progname))
+         call write_time (             label='Starting ', &
+                          string1='Program '//trim(progname))
+      else
+         call write_time (logfileunit, label='Starting ')
+         call write_time (             label='Starting ')
+      endif 
+   endif
+
+   ! Check to make sure termlevel is set to a reasonable value
+   call checkTermLevel(TERMLEVEL)
+
+   ! Echo the module information using normal mechanism
+   call register_module(source, revision, revdate)
+
+   ! Set the defaults for logging the namelist values
+   call set_nml_output(write_nml)
+
+   ! If nmlfilename != logfilename, open it.  otherwise set nmlfileunit
+   ! to be same as logunit.
+   if (do_nml_file()) then
+      if (trim(adjustl(nmlfilename)) /= trim(adjustl(lname))) then
+         if (do_output_flag) &
+          write(*,*)'Trying to open namelist log ', trim(adjustl(nmlfilename))
+ 
+         nmlfileunit = get_unit()
+
+         open(nmlfileunit, file=trim(adjustl(nmlfilename)), form='formatted', &
+              position='append', iostat = io )
          if ( io /= 0 ) then
-            write(*,*)'FATAL ERROR in initialize_utilities'
-            write(*,*)'  ',trim(source)
-            write(*,*)'  ',trim(revision)
-            write(*,*)'  ',trim(revdate)
-            write(*,*)'   unable to open the logfile for writing.'
-            write(*,*)'   the logfile name is "',trim(lname),'"'
-            write(*,*)'   stopping.'
-            call exit_all(77)
+            call error_handler(E_ERR,'initialize_utilities', &
+                'Cannot open nm log file', source, revision, revdate)
          endif
-
-         ! Log the run-time 
-
-         if (do_output_flag) then
-            if ( present(progname) ) then
-               call write_time (logfileunit, label='Starting ', &
-                                string1='Program '//trim(progname))
-               call write_time (             label='Starting ', &
-                                string1='Program '//trim(progname))
-            else
-               call write_time (logfileunit, label='Starting ')
-               call write_time (             label='Starting ')
-            endif 
-         endif
-
-         ! Check to make sure termlevel is set to a reasonable value
-         call checkTermLevel
-
-         ! Echo the module information using normal mechanism
-         call register_module(source, revision, revdate)
-
-         ! Set the defaults for logging the namelist values
-         call set_nml_output(write_nml)
-
-         ! If nmlfilename != logfilename, open it.  otherwise set nmlfileunit
-         ! to be same as logunit.
-         if (do_nml_file()) then
-            if (trim(adjustl(nmlfilename)) /= trim(adjustl(lname))) then
-               if (do_output_flag) &
-                write(*,*)'Trying to open namelist log ', trim(adjustl(nmlfilename))
-       
-               nmlfileunit = nextunit()
-               if (nmlfileunit < 0) &
-                  call error_handler(E_ERR,'initialize_utilities', &
-                    'Cannot get unit for nm log file', source, revision, revdate)
-   
-               open(nmlfileunit, file=trim(adjustl(nmlfilename)), form='formatted', &
-                    position='append', iostat = io )
-               if ( io /= 0 ) then
-                  call error_handler(E_ERR,'initialize_utilities', &
-                      'Cannot open nm log file', source, revision, revdate)
-               endif
-       
-            else
-              nmlfileunit = logfileunit
-            endif
-         endif
-
-         ! Echo the namelist values for this module using normal mechanism
-         ! including a separator line for this run.
-         if (do_output_flag) then
-            if (do_nml_file() .and. (nmlfileunit /= logfileunit)) then
-               if ( present(progname) ) then
-                  write(nmlfileunit, *) '!Starting Program '//trim(progname)
-               else
-                  write(nmlfileunit, *) '!Starting Program '
-               endif 
-            endif
-            if (do_nml_file()) write(nmlfileunit, nml=utilities_nml)
-            if (do_nml_term()) write(     *     , nml=utilities_nml)
-         endif
-
-         ! Record the values used for variable types:
-         if (do_output_flag .and. print_debug) then
-        
-            write(     *     ,*)  ! a little whitespace is nice
-            write(logfileunit,*)  ! a little whitespace is nice
-
-            write(string1,*)'..  digits12 is ',digits12
-            write(string2,*)'r8       is ',r8
-            write(string3,*)'r4       is ',r4
-            call error_handler(E_DBG, 'initialize_utilities', string1, &
-                               source, revision, revdate, text2=string2, text3=string3)
-
-            write(string1,*)'..  integer  is ',kind(iunit) ! any integer variable will do
-            write(string2,*)'i8       is ',i8
-            write(string3,*)'i4       is ',i4
-            call error_handler(E_DBG, 'initialize_utilities', string1, &
-                               source, revision, revdate, text2=string2, text3=string3)
-         endif
-
+ 
+      else
+        nmlfileunit = logfileunit
       endif
+   endif
 
-   contains
+   ! Echo the namelist values for this module using normal mechanism
+   ! including a separator line for this run.
+   if (do_output_flag) then
+      if (do_nml_file() .and. (nmlfileunit /= logfileunit)) then
+         if ( present(progname) ) then
+            write(nmlfileunit, *) '!Starting Program '//trim(progname)
+         else
+            write(nmlfileunit, *) '!Starting Program '
+         endif 
+      endif
+      if (do_nml_file()) write(nmlfileunit, nml=utilities_nml)
+      if (do_nml_term()) write(     *     , nml=utilities_nml)
+   endif
 
-      function nextunit() result(iunit)
-         integer :: iunit
+   ! Record the values used for variable types:
+   if (do_output_flag .and. print_debug) then
+  
+      write(     *     ,*)  ! a little whitespace is nice
+      write(logfileunit,*)  ! a little whitespace is nice
 
-         logical :: open
-         integer :: i
+      write(msgstring1,*)'..  digits12 is ',digits12
+      write(msgstring2,*)'r8       is ',r8
+      write(msgstring3,*)'r4       is ',r4
+      call error_handler(E_DBG, 'initialize_utilities', msgstring1, &
+                         source, revision, revdate, text2=msgstring2, text3=msgstring3)
 
-         iunit = -1
-         UnitLoop : do i = 10, 80
-            inquire (i, opened=open)
-            if (.not. open) then
-               iunit = i
-               exit UnitLoop
-            endif
-         enddo UnitLoop
-         if ( iunit < 0 ) then 
-            write(*,*)'FATAL ERROR in initialize_utilities'
-            write(*,*)'  ',trim(source)
-            write(*,*)'  ',trim(revision)
-            write(*,*)'  ',trim(revdate)
-         endif
-      end function nextunit
-
-      subroutine checktermlevel
-         select case (TERMLEVEL)
-             case (E_MSG)
-                ! do nothing
-             case (E_ALLMSG)
-                ! do nothing
-             case (E_WARN)
-                ! do nothing
-             case (E_ERR)
-                ! do nothing
-             case default
-                print *, ' MESSAGE from initialize_utilities'
-                print *, ' namelist input of TERMLEVEL is ',TERMLEVEL
-                print *, ' possible values are ',E_MSG, E_ALLMSG, E_WARN, E_ERR
-                if (TERMLEVEL < E_WARN ) TERMLEVEL = E_WARN
-                if (TERMLEVEL > E_ERR  ) TERMLEVEL = E_ERR
-                print *, ' using ',TERMLEVEL
-         end select
-      end subroutine checktermlevel
+      write(msgstring1,*)'..  integer  is ',kind(iunit) ! any integer variable will do
+      write(msgstring2,*)'i8       is ',i8
+      write(msgstring3,*)'i4       is ',i4
+      call error_handler(E_DBG, 'initialize_utilities', msgstring1, &
+                         source, revision, revdate, text2=msgstring2, text3=msgstring3)
+   endif
 
    end subroutine initialize_utilities
 
@@ -494,38 +432,122 @@ contains
 
    end subroutine finalize_utilities
 
+!-----------------------------------------------------------------------
+!> log the subversion information about the different source modules
+!> being used in this run.
 
-!#######################################################################
+subroutine register_module(src, rev, rdate)
+character(len=*), intent(in) :: src, rev, rdate
 
+if ( .not. do_output_flag) return
+if ( .not. module_details) return
 
-   subroutine register_module(src, rev, rdate)
-   character(len=*), intent(in) :: src, rev, rdate
+! you cannot have this routine call init because it calls
+! back into register module.  this is an error if this
+! routine is called before initialize_utilities().
+! AND you cannot use the error handler because it hasn't
+! been initialized yet.
 
-      if ( .not. module_initialized ) call initialize_utilities
-      if ( .not. do_output_flag) return
-      if ( .not. module_details) return
+if ( .not. module_initialized ) call fatal_not_initialized('register_module')
 
+write(logfileunit,*)
+write(logfileunit,*)'Registering module :'
+write(logfileunit,*)trim(src)
+write(logfileunit,*)trim(rev)
+write(logfileunit,*)trim(rdate)
+write(logfileunit,*)'Registration complete.'
+write(logfileunit,*)
 
-      write(logfileunit,*)
-      write(logfileunit,*)'Registering module :'
-      write(logfileunit,*)trim(src)
-      write(logfileunit,*)trim(rev)
-      write(logfileunit,*)trim(rdate)
-      write(logfileunit,*)'Registration complete.'
-      write(logfileunit,*)
+write(     *     ,*)
+write(     *     ,*)'Registering module :'
+write(     *     ,*)trim(src)
+write(     *     ,*)trim(rev)
+write(     *     ,*)trim(rdate)
+write(     *     ,*)'Registration complete.'
+write(     *     ,*)
 
-      write(     *     ,*)
-      write(     *     ,*)'Registering module :'
-      write(     *     ,*)trim(src)
-      write(     *     ,*)trim(rev)
-      write(     *     ,*)trim(rdate)
-      write(     *     ,*)'Registration complete.'
-      write(     *     ,*)
+end subroutine register_module
 
-   end subroutine register_module
+!-----------------------------------------------------------------------
+!> call this routine if you cannot open the log file.
 
+subroutine fatal_opening_log(from_routine, lname)
 
-!#######################################################################
+character(len=*), intent(in) :: from_routine
+character(len=*), intent(in) :: lname
+
+write(*,*)'FATAL ERROR in '//trim(from_routine)
+write(*,*)'   unable to open the logfile for writing.'
+write(*,*)'   the logfile name is "',trim(lname),'"'
+write(*,*)'  ',trim(source)
+write(*,*)'  ',trim(revision)
+write(*,*)'  ',trim(revdate)
+write(*,*)'   stopping.'
+call exit_all(66)
+
+end subroutine fatal_opening_log
+
+!-----------------------------------------------------------------------
+!> call this routine if you end up in a function or subroutine here
+!> that CANNOT be called before the initialize_utilities() or
+!> initialize_mpi_utilities() routine is called.
+
+subroutine fatal_not_initialized(from_routine)
+
+character(len=*), intent(in) :: from_routine
+
+write(*,*)'FATAL ERROR in '//trim(from_routine)
+write(*,*)'   initialize_utilities() or initialize_mpi_utilities()'
+write(*,*)'   must be called before calling '//trim(from_routine)//'().'
+write(*,*)'  ',trim(source)
+write(*,*)'  ',trim(revision)
+write(*,*)'  ',trim(revdate)
+write(*,*)'   stopping.'
+call exit_all(77)
+
+end subroutine fatal_not_initialized
+
+!-----------------------------------------------------------------------
+!> call this routine if you find an error before the logfile
+!> has been opened.
+
+subroutine fatal_error_w_no_log(from_routine, msgstring1, msgstring2)
+
+character(len=*), intent(in) :: from_routine
+character(len=*), intent(in), optional :: msgstring1
+character(len=*), intent(in), optional :: msgstring2
+
+write(*,*)'FATAL ERROR in '//trim(from_routine)
+if (present(msgstring1)) write(*,*) trim(msgstring1)
+if (present(msgstring2)) write(*,*) trim(msgstring2)
+write(*,*)'  ',trim(source)
+write(*,*)'  ',trim(revision)
+write(*,*)'  ',trim(revdate)
+write(*,*)'   stopping.'
+call exit_all(88)
+
+end subroutine fatal_error_w_no_log
+
+!-----------------------------------------------------------------------
+
+subroutine checkTermLevel(level)
+
+integer, intent(in) :: level
+
+select case (level)
+  case (E_MSG, E_ALLMSG, E_WARN, E_ERR, E_DBG)
+    ! ok, do nothing
+  case default
+    write(msgstring1, *) 'bad integer value for "termlevel", must be one of'
+    write(msgstring2, *) '-1 (E_MSG), 0 (E_ALLMSG), 1 (E_WARN), 2 (E_ERR), -2 (E_DBG)'
+    call error_handler(E_ERR,'checkTermLevel', msgstring1, &
+                       source, revision, revdate, text2=msgstring2)
+
+  end select
+
+end subroutine checkTermLevel
+
+!-----------------------------------------------------------------------
 
 
    subroutine timestamp(string1,string2,string3,pos)
@@ -558,47 +580,47 @@ contains
 
 !#######################################################################
 
+function file_exist (file_name)
 
-   function file_exist (file_name)
+character(len=*), intent(in) :: file_name
+logical :: file_exist
 
-      character(len=*), intent(in) :: file_name
-      logical :: file_exist
-      integer :: trimlen
+if ( .not. module_initialized ) call initialize_utilities
 
-      if ( .not. module_initialized ) call initialize_utilities
+inquire (file=file_name, exist=file_exist)
 
-      trimlen = len_trim(file_name)
-
-      inquire (file=file_name(1:trimlen), exist=file_exist)
-
-   end function file_exist
+end function file_exist
 
 
 !#######################################################################
 
+! get available file unit number
 
-   function get_unit () result (iunit)
+function get_unit () result (iunit)
 
-      integer :: i, iunit
-      logical :: available
+integer :: i, iunit
+logical :: already_open
 
-      if ( .not. module_initialized ) call initialize_utilities
+if ( .not. module_initialized ) call fatal_not_initialized('get_unit')
 
-! ---- get available unit ----
+iunit = -1
+do i = 10, 80
+   inquire (i, opened=already_open)
+   if (.not. already_open) then
+      iunit = i
+      return
+   endif
+enddo
 
-      iunit = -1
-      do i = 10, 80
-         inquire (i, opened=available)
-         if (.not. available) then
-            iunit = i
-            exit
-         endif
-      enddo
+! if you get here it is an error
+write(msgstring1, *) 'Unable to find an available unit number between 10 and 80'
+if (logfileunit >= 0) then
+   call error_handler(E_ERR,'get_unit', msgstring1, source, revision, revdate)
+else
+   call fatal_error_w_no_log('get_unit', msgstring1)
+endif
 
-      if (iunit == -1) call error_handler(E_ERR,'get_unit', &
-             'No available units.', source, revision, revdate)
-
-   end function get_unit
+end function get_unit
 
 
 !#######################################################################
@@ -737,12 +759,7 @@ contains
 !#######################################################################
 
 
-  subroutine error_handler(level, routine, text, src, rev, rdate, aut, text2, text3 )
-!----------------------------------------------------------------------
-! subroutine error_handler(level, routine, text, src, rev, rdate, aut , text2, text3)
-!
-! logs warning/error 
-implicit none
+subroutine error_handler(level, routine, text, src, rev, rdate, aut, text2, text3 )
 
 integer, intent(in) :: level
 character(len=*), intent(in) :: routine, text
@@ -937,9 +954,9 @@ end subroutine error_handler
    integer,          intent(out), optional :: return_rc
    integer  :: iunit
 
-   integer           :: nc, rc, rlen
+   integer           :: rc, rlen
    logical           :: open, use_recl
-   character(len=32) :: format, pos, act, stat, acc, conversion, recl, del
+   character(len=32) :: format, pos, act, stat, acc, conversion, del
 
    if ( .not. module_initialized ) call initialize_utilities
 
@@ -1216,7 +1233,10 @@ end subroutine error_handler
 
    character(len=*), intent(in) :: nmlstring
 
-   if ( .not. module_initialized ) call initialize_utilities
+   ! initialize_utilities calls this routine, so you cannot call
+   ! the init routine from here.
+
+   if ( .not. module_initialized ) call fatal_not_initialized('set_nml_output')
 
    select case (nmlstring)
       case ('NONE', 'none')
@@ -1312,14 +1332,11 @@ end subroutine error_handler
 
 !#######################################################################
 
+!> Closes the given unit_number if that unit is open.
+!> Not an error to call on an already closed unit.
+!> Will print a message if the status of the unit cannot be determined.
 
 subroutine close_file(iunit)
-!-----------------------------------------------------------------------
-!
-! Closes the given unit_number if that unit is open.
-! Not an error to call on an already closed unit.
-! Will print a message if the status of the unit cannot be determined.
-!
 
 integer, intent(in) :: iunit
 
@@ -1341,158 +1358,116 @@ end subroutine close_file
 
 !#######################################################################
 
+!> Opens namelist_file_name if it exists on unit iunit, error if it
+!> doesn't exist.
+!> Searches file for a line containing ONLY the string
+!> &nml_name, for instance &filter_nml. If found, backs up one record and
+!> returns true. Otherwise, error message and terminates
 
-subroutine find_namelist_in_file(namelist_file_name, nml_name, iunit, &
-   write_to_logfile_in)
-!-----------------------------------------------------------------------
-! 
-! Opens namelist_file_name if it exists on unit iunit, error if it
-! doesn't exist.
-! Searches file for a line containing ONLY the string
-! &nml_name, for instance &filter_nml. If found, backs up one record and
-! returns true. Otherwise, error message and terminates
-!
+subroutine find_namelist_in_file(namelist_file_name, nml_name, iunit)
 
 character(len=*),  intent(in)  :: namelist_file_name
 character(len=*),  intent(in)  :: nml_name
 integer,           intent(out) :: iunit
-logical, optional, intent(in)  :: write_to_logfile_in
 
-character(len=256) :: nml_string, test_string, string1
+character(len=256) :: next_nml_string, test_string, string1
 integer            :: io
-logical            :: write_to_logfile
 
+if (.not. module_initialized) call fatal_not_initialized('find_namelist_in_file')
 
-! Decide if there is a logfile or not
-write_to_logfile = .true.
-if(present(write_to_logfile_in)) write_to_logfile = write_to_logfile_in
+! Decide if there is a logfile or not by looking at the logfileunit.
+! if >= 0, ok to write there.
 
-! Check for file existence; no file is an error
-if(file_exist(trim(namelist_file_name))) then
+! Check for namelist file existence; no file is an error
+if(.not. file_exist(trim(namelist_file_name))) then
 
-   iunit = open_file(trim(namelist_file_name), action = 'read')
-
-   ! Read each line until end of file is found
-   ! Look for the start of a namelist with &nml_name
-   ! Convert test string to all uppercase ... since that is
-   ! what happens if Fortran writes a namelist.
-
-   string1 = adjustl(nml_name)
-   call to_upper(string1)             ! works in-place
-   test_string = '&' // trim(string1)
-
-   do
-      read(iunit, '(A)', iostat = io) nml_string
-      if(io /= 0) then
-         ! No values for this namelist; error
-         write(msgstring1, *) 'Namelist entry &', nml_name, ' must exist in ', namelist_file_name
-         ! Can't write to logfile if it hasn't yet been opened
-         if(write_to_logfile) then
-            call error_handler(E_ERR, 'find_namelist_in_file', msgstring1, &
-               source, revision, revdate)
-         else
-            write(*, *) 'FATAL ERROR before logfile initialization in utilities_mod'
-            write(*, *) 'Error is in subroutine find_namelist_in_file'
-            write(*, *) msgstring1
-            write(*,*)'  ',trim(source)
-            write(*,*)'  ',trim(revision)
-            write(*,*)'  ',trim(revdate)
-            call exit_all(88) 
-         endif
-      else
-
-         string1 = adjustl(nml_string)
-         call to_upper(string1)
-
-         if(trim(string1) == trim(test_string)) then
-            backspace(iunit)
-            return
-         endif
-
-      endif
-   end do
-else
-   ! No namelist_file_name file is an error
    write(msgstring1, *) 'Namelist input file: ', namelist_file_name, ' must exist.'
-   if(write_to_logfile) then
+   if(logfileunit >= 0) then
       call error_handler(E_ERR, 'find_namelist_in_file', msgstring1, &
          source, revision, revdate)
    else
-      write(*, *) 'FATAL ERROR before logfile initialization in utilities_mod'
-      write(*, *) 'Error is in subroutine find_namelist_in_file'
-      write(*, *) msgstring1
-      write(*,*)'  ',trim(source)
-      write(*,*)'  ',trim(revision)
-      write(*,*)'  ',trim(revdate)
-      call exit_all(88) 
+      call fatal_error_w_no_log('find_namelist_in_file', msgstring1)
    endif
+
 endif
+
+
+iunit = open_file(trim(namelist_file_name), action = 'read')
+
+! Read each line until end of file is found
+! Look for the start of a namelist with &nml_name
+! Convert test string to all uppercase ... since that is
+! what happens if Fortran writes a namelist.
+
+string1 = adjustl(nml_name)
+call to_upper(string1)             ! works in-place
+test_string = '&' // trim(string1)
+
+do
+   read(iunit, '(A)', iostat = io) next_nml_string
+   if(io /= 0) then
+      ! Reached end of file and didn't find this namelist
+      write(msgstring1, *) 'Namelist entry &', trim(nml_name), &
+                           ' must exist in file ', trim(namelist_file_name)
+      if(logfileunit >= 0) then
+         call error_handler(E_ERR, 'find_namelist_in_file', msgstring1, &
+            source, revision, revdate)
+      else
+         call fatal_error_w_no_log('find_namelist_in_file', msgstring1)
+      endif
+   else
+      ! see if this line starts the namelist we are asking for
+      string1 = adjustl(next_nml_string)
+      call to_upper(string1)
+
+      if(string1 == test_string) then
+         backspace(iunit)
+         return
+      endif
+
+   endif
+end do
 
 end subroutine find_namelist_in_file
 
 
 !#######################################################################
 
+!> Confirms that a namelist read was successful. If it failed
+!> produce an error message and stop execution.
 
-subroutine check_namelist_read(iunit, iostat_in, nml_name, &
-   write_to_logfile_in)
-!-----------------------------------------------------------------------
-! 
-! Confirms that a namelist read was successful. If it failed
-! produces an error message and stops execution.
-!
+subroutine check_namelist_read(iunit, iostat_in, nml_name)
 
-integer,            intent(in) :: iunit, iostat_in
+integer,          intent(in) :: iunit, iostat_in
 character(len=*), intent(in) :: nml_name
-logical, intent(in), optional :: write_to_logfile_in
 
 character(len=256) :: nml_string
 integer            :: io
-logical            :: write_to_logfile
 
-! Decide if there is a logfile or not
-write_to_logfile = .true.
-if(present(write_to_logfile_in)) write_to_logfile = write_to_logfile_in
-
+! If the namelist read was successful, close the namelist file and we're done.
 if(iostat_in == 0) then
-   ! If the namelist read was successful, just close the file
    call close_file(iunit)
+   return
+endif
+
+! If it wasn't successful, print the line on which it failed  
+backspace(iunit)
+read(iunit, '(A)', iostat = io) nml_string
+
+! A failure in this read means that the namelist started but never terminated
+! Result was falling off the end, so backspace followed by read fails
+if(io /= 0) then
+   write(msgstring1, *) 'Namelist ', trim(nml_name), ' started but never terminated'
 else
-   ! If it wasn't successful, print the line on which it failed  
-   backspace(iunit)
-   read(iunit, '(A)', iostat = io) nml_string
-   ! A failure in this read means that the namelist started but never terminated
-   ! Result was falling off the end, so backspace followed by read fails
-   if(io /= 0) then
-      write(msgstring1, *) 'Namelist ', trim(nml_name), ' started but never terminated'
-      if(write_to_logfile) then
-         call error_handler(E_ERR, 'check_namelist_read', msgstring1, &
-            source, revision, revdate)
-      else
-         write(*, *) 'FATAL ERROR before logfile initialization in utilities_mod'
-         write(*, *) 'Error is in subroutine check_namelist_read'
-         write(*, *) msgstring1
-         write(*,*)'  ',trim(source)
-         write(*,*)'  ',trim(revision)
-         write(*,*)'  ',trim(revdate)
-         call exit_all(66) 
-      endif
-   else
-      ! Didn't fall off end so bad entry in the middle of namelist
-      write(msgstring1, *) 'INVALID NAMELIST ENTRY: ', trim(nml_string), ' in namelist ', trim(nml_name)
-      if(write_to_logfile) then
-         call error_handler(E_ERR, 'check_namelist_read', msgstring1, &
-            source, revision, revdate)
-      else
-         write(*, *) 'FATAL ERROR before logfile initialization in utilities_mod'
-         write(*, *) 'Error is in subroutine check_namelist_read'
-         write(*, *) msgstring1
-         write(*,*)'  ',trim(source)
-         write(*,*)'  ',trim(revision)
-         write(*,*)'  ',trim(revdate)
-         call exit_all(66) 
-      endif
-   endif
+   ! Didn't fall off end so bad entry in the middle of namelist
+   write(msgstring1, *) 'INVALID NAMELIST ENTRY: ', trim(nml_string), ' in namelist ', trim(nml_name)
+endif
+
+if(logfileunit >= 0) then
+   call error_handler(E_ERR, 'check_namelist_read', msgstring1, &
+      source, revision, revdate)
+else
+   call fatal_error_w_no_log('check_namelist_read', msgstring1)
 endif
 
 end subroutine check_namelist_read
@@ -1500,8 +1475,8 @@ end subroutine check_namelist_read
 
 !#######################################################################
 
+!>@todo FIXME: move this to the netcdf utilities module
 
-   !@>todo move to netcdf_utilities_mod
    subroutine nc_check(istatus, subr_name, context)
       integer, intent (in)                   :: istatus
       character(len=*), intent(in)           :: subr_name
@@ -1516,7 +1491,7 @@ end subroutine check_namelist_read
       ! something wrong.  construct an error string and call the handler.
 
       ! context is optional, but is very useful if specified.
-      ! if context + error code > 129, the assignment will truncate.
+      ! if context + error code > 512, the assignment will truncate.
       if (present(context) ) then
           error_msg = trim(context) // ': ' // trim(nf90_strerror(istatus))
       else
@@ -1524,7 +1499,8 @@ end subroutine check_namelist_read
       endif
 
       ! this does not return 
-      call error_handler(E_ERR, subr_name, error_msg, source, revision, revdate)
+      call error_handler(E_ERR, 'nc_check', error_msg, source, revision, revdate, &
+                         text2=subr_name)
   
 
    end subroutine nc_check
@@ -1532,10 +1508,12 @@ end subroutine check_namelist_read
 
 !#######################################################################
 
+!> convert a string to upper case *in place*
 
 subroutine to_upper( string )
-! Converts 'string' to uppercase
-character(len=*), intent(INOUT) :: string
+
+character(len=*), intent(inout) :: string
+
 integer :: ismalla, ibiga, i
 
 ismalla = ichar('a')
@@ -1575,13 +1553,14 @@ end subroutine squeeze_out_blanks
 
 !#######################################################################
 
+!> Determines the number of lines and maximum line length
+!> of the file.
 
 subroutine find_textfile_dims( fname, nlines, linelen )
-! Determines the number of lines and maximum line length
-! of the file. Sometimes you need to know this stuff.
-character(len=*),  intent(IN)  :: fname
-integer,           intent(OUT) :: nlines
-integer, optional, intent(OUT) :: linelen
+
+character(len=*),  intent(in)  :: fname
+integer,           intent(out) :: nlines
+integer, optional, intent(out) :: linelen
 
 integer :: i, maxlen, mylen, ios, funit
 
@@ -1636,8 +1615,8 @@ subroutine file_to_text( fname, textblock )
 ! create the minimal character length ... so any line longer than
 ! the declared length of the textblock variable is truncated.
 
-character(len=*),               intent(IN)  :: fname
-character(len=*), dimension(:), intent(OUT) :: textblock
+character(len=*),               intent(in)  :: fname
+character(len=*), dimension(:), intent(out) :: textblock
 
 integer :: i, ios, funit
 integer :: mynlines, mylinelen, strlen
@@ -2195,14 +2174,11 @@ endif
 
 end function next_file
 
+!----------------------------------------------------------------------
 
-!#######################################################################
-
+!> Common routine for setting read/write file format.
 
 function ascii_file_format(fform)
-
-!----------------------------------------------------------------------
-! Common routine for setting read/write file format.
 
 character(len=*), intent(in), optional :: fform
 logical                                :: ascii_file_format
@@ -2227,8 +2203,8 @@ END SELECT
 
 end function ascii_file_format
 
-
-!#######################################################################
+!-----------------------------------------------------------------------
+!>
 
 pure function to_scalar_real(x)
  real(r8), intent(in) :: x(1)
@@ -2238,7 +2214,8 @@ to_scalar_real = x(1)
 
 end function to_scalar_real
 
-!#######################################################################
+!-----------------------------------------------------------------------
+!>
 
 pure function to_scalar_int(x)
  integer, intent(in) :: x(1)
@@ -2248,7 +2225,8 @@ to_scalar_int = x(1)
 
 end function to_scalar_int
 
-!#######################################################################
+!-----------------------------------------------------------------------
+!>
 
 pure function to_scalar_int8(x)
  integer(i8), intent(in) :: x(1)
