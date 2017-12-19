@@ -1112,6 +1112,11 @@ if (inflation_handle%inflation_flavor > 0) then
       endif
       call error_handler(E_MSG, trim(label) // ' inflation:', msgstring, source, revision, revdate)
    endif
+   if (inflation_handle%inflation_flavor == 5) then
+      write(msgstring, '(A, F8.3)') &
+            'inf stddev size change: ', inflation_handle%inf_sd_size_change
+      call error_handler(E_MSG, trim(label) // ' inflation:', msgstring, source, revision, revdate)
+   endif
 endif
 
 end subroutine log_inflation_info
