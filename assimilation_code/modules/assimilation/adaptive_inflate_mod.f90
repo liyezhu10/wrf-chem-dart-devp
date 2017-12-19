@@ -26,7 +26,7 @@ use mpi_utilities_mod,    only : my_task_id, send_to, receive_from, send_minmax_
 implicit none
 private
 
-public :: update_inflation,           do_enhanced_inflate,           do_obs_inflate,     &
+public :: update_inflation,           do_enhanced_ss_inflate,        do_obs_inflate,     &
           do_varying_ss_inflate,      do_single_ss_inflate,          inflate_ens,        &
           adaptive_inflate_init,      adaptive_inflate_type,                             &
                                       deterministic_inflate,         solve_quadratic,    &
@@ -56,7 +56,7 @@ type adaptive_inflate_type
    private
    ! Flavor can be 0:none, 1:obs_inflate, 2:varying_ss_inflate, 3:single_ss_inflate
    ! Deprecating 1:obs_inflate, there is concerns how the observation space inflation
-   ! is happening. JPH.
+   ! is happening. JPH., 4 = RTPS, 5 = enhanced ss
    integer               :: inflation_flavor
    logical               :: output_restart = .false.
    logical               :: deterministic
@@ -174,8 +174,9 @@ function do_ss_inflate(inflation)
 type(adaptive_inflate_type), intent(in) :: inflation
 logical :: do_ss_inflate
 
-if (do_single_ss_inflate(inflation)  .or. &
+if (do_single_ss_inflate(inflation) .or. &
     do_varying_ss_inflate(inflation) .or. &
+    do_enhanced_ss_inflate(inflation) .or. &
     do_rtps_inflate(inflation)) then
    do_ss_inflate = .true.
 else
@@ -321,15 +322,16 @@ end function do_rtps_inflate
 
 !------------------------------------------------------------------
 !> Returns true if this inflation type indicates enhanced state space inflation
+!> Moha Gharamti, 2017
 
-function do_enhanced_inflate(inflate_handle)
+function do_enhanced_ss_inflate(inflate_handle)
 
-logical                                 :: do_enhanced_inflate
+logical                                 :: do_enhanced_ss_inflate
 type(adaptive_inflate_type), intent(in) :: inflate_handle
 
-do_enhanced_inflate = (inflate_handle%inflation_flavor == 5)
+do_enhanced_ss_inflate = (inflate_handle%inflation_flavor == 5)
 
-end function do_enhanced_inflate
+end function do_enhanced_ss_inflate
 
 !------------------------------------------------------------------
 !> Returns true if deterministic inflation is indicated
@@ -382,9 +384,9 @@ do i = 1, 2
 end do
 
 ! Check to see if state space inflation is turned on
-if (inf_flavor(1) > 1 )                           do_prior_inflate     = .true.
-if (inf_flavor(2) > 1 )                           do_posterior_inflate = .true.
-if (do_prior_inflate .or. do_posterior_inflate)   output_inflation     = .true.
+if (inf_flavor(1) > 1) do_prior_inflate     = .true.
+if (inf_flavor(2) > 1) do_posterior_inflate = .true.
+if (do_prior_inflate .or. do_posterior_inflate) output_inflation = .true.
 
 ! Observation space inflation not currently supported
 if(inf_flavor(1) == 1 .or. inf_flavor(2) == 1) call error_handler(E_ERR, 'validate_inflate_options', &

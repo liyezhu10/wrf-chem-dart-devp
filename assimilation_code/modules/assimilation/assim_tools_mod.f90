@@ -56,8 +56,8 @@ use mpi_utilities_mod,    only : my_task_id, broadcast_send, broadcast_recv,    
                                  sum_across_tasks, task_count, start_mpi_timer,           &
                                  read_mpi_timer
 
-use adaptive_inflate_mod, only : do_obs_inflate,  do_single_ss_inflate,                   &
-                                 do_varying_ss_inflate,                                   &
+use adaptive_inflate_mod, only : do_obs_inflate,  do_single_ss_inflate, do_ss_inflate,    &
+                                 do_varying_ss_inflate, do_enhanced_ss_inflate,           &
                                  update_inflation,                                        &
                                  inflate_ens, adaptive_inflate_type,                      &
                                  deterministic_inflate, solve_quadratic
@@ -386,6 +386,8 @@ logical :: allow_missing_in_state
 ! for performance, local copies 
 logical :: local_single_ss_inflate
 logical :: local_varying_ss_inflate
+logical :: local_enhanced_ss_inflate
+logical :: local_ss_inflate
 logical :: local_obs_inflate
 
 ! HK observation location conversion
@@ -443,6 +445,8 @@ endif
 ! are really in the inflate derived type.
 local_single_ss_inflate  = do_single_ss_inflate(inflate)
 local_varying_ss_inflate = do_varying_ss_inflate(inflate)
+local_varying_ss_inflate = do_enhanced_ss_inflate(inflate)
+local_ss_inflate         = do_ss_inflate(inflate)
 local_obs_inflate        = do_obs_inflate(inflate)
 
 ! Default to printing nothing
@@ -551,7 +555,7 @@ endif
 
 ! Get mean and variance of each group's observation priors for adaptive inflation
 ! Important that these be from before any observations have been used
-if(local_varying_ss_inflate .or. local_single_ss_inflate) then
+if(local_ss_inflate) then
    do group = 1, num_groups
       obs_mean_index = OBS_PRIOR_MEAN_START + group - 1
       obs_var_index  = OBS_PRIOR_VAR_START  + group - 1
@@ -722,7 +726,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
       !>the three below and three more which omit the 2 localization values?
       !>how much does this cost in time? time this and see.
       whichvert_real = real(whichvert_obs_in_localization_coord, r8)
-      if(local_varying_ss_inflate) then
+      if(local_varying_ss_inflate .or. local_enhanced_ss_inflate) then
          call broadcast_send(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
             orig_obs_prior_mean, orig_obs_prior_var, net_a, scalar1=obs_qc, &
             scalar2=vertvalue_obs_in_localization_coord, scalar3=whichvert_real)
@@ -737,15 +741,6 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
            scalar2=vertvalue_obs_in_localization_coord, scalar3=whichvert_real)
       endif
 
-      !>@todo FIXME it should be ok to remove this, right? 
-      !>  i'm the owner - i should not have to set anything here because
-      !>  this obs was already converted
-      !if (is_doing_vertical_conversion) then
-      !   ! use converted vertical coordinate from owner
-     !    call set_vertical(base_obs_loc, query_location(my_obs_loc(owners_index), 'VLOC'), &
-     !                                    int(query_location(my_obs_loc(owners_index), 'WHICH_VERT')))
-      !endif
-
    ! Next block is done by processes that do NOT own this observation
    !-----------------------------------------------------------------------
    else
@@ -754,7 +749,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
       ! also a converted vertical coordinate if needed
       !>@todo FIXME see the comment in the broadcast_send() section about
       !>the cost of sending unneeded values 
-      if(local_varying_ss_inflate) then
+      if(local_varying_ss_inflate .or. local_enhanced_ss_inflate) then
          call broadcast_recv(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
             orig_obs_prior_mean, orig_obs_prior_var, net_a, scalar1=obs_qc, &
             scalar2=vertvalue_obs_in_localization_coord, scalar3=whichvert_real)

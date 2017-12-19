@@ -57,12 +57,12 @@ use ensemble_manager_mod,  only : init_ensemble_manager, end_ensemble_manager,  
                                   get_single_copy, put_single_copy, deallocate_single_copy,   &
                                   print_ens_handle
 
-use adaptive_inflate_mod,  only : do_varying_ss_inflate, mean_from_restart, sd_from_restart,  &
-                                  do_single_ss_inflate, inflate_ens, adaptive_inflate_init,   &
+use adaptive_inflate_mod,  only : do_ss_inflate, mean_from_restart, sd_from_restart,  &
+                                  inflate_ens, adaptive_inflate_init,   &
                                   adaptive_inflate_type, set_inflation_mean_copy,             &
                                   log_inflation_info, set_inflation_sd_copy,                  &
                                   get_minmax_task_zero, do_rtps_inflate,                      &
-                                  validate_inflate_options, do_enhanced_inflate
+                                  validate_inflate_options
 
 use mpi_utilities_mod,     only : my_task_id, task_sync, broadcast_send, broadcast_recv,      &
                                   task_count
@@ -768,7 +768,7 @@ AdvanceTime : do
       endif
    endif
 
-   if(do_single_ss_inflate(prior_inflate) .or. do_varying_ss_inflate(prior_inflate)) then
+   if(do_ss_inflate(prior_inflate)) then
       call trace_message('Before prior inflation damping and prep')
 
       if (inf_damping(1) /= 1.0_r8) then
@@ -887,7 +887,7 @@ AdvanceTime : do
 
    ! This block applies posterior inflation
 
-   if(do_single_ss_inflate(post_inflate) .or. do_varying_ss_inflate(post_inflate)) then
+   if(do_ss_inflate(post_inflate)) then
 
       call trace_message('Before posterior inflation damping')
 
@@ -931,8 +931,7 @@ AdvanceTime : do
 
    ! This block applies posterior inflation
 
-   if(do_single_ss_inflate(post_inflate) .or. do_varying_ss_inflate(post_inflate) .or. &
-      do_rtps_inflate(post_inflate)) then
+   if(do_ss_inflate(post_inflate) .or.  do_rtps_inflate(post_inflate)) then
 
       call trace_message('Before posterior inflation applied to state')
 
@@ -993,7 +992,7 @@ AdvanceTime : do
    ! (it was applied earlier, this is computing the updated values for
    ! the next cycle.)
 
-   if(do_single_ss_inflate(post_inflate) .or. do_varying_ss_inflate(post_inflate)) then
+   if(do_ss_inflate(post_inflate)) then
 
       ! If not reading the sd values from a restart file and the namelist initial
       !  sd < 0, then bypass this entire code block altogether for speed.
