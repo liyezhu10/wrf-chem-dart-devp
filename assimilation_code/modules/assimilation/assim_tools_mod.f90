@@ -707,7 +707,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
 
                   ! Update the inflation value
                   call update_inflation(inflate, my_inflate, my_inflate_sd, &
-                     r_mean, r_var, obs(1), obs_err_var, gamma)
+                     r_mean, r_var, grp_size, obs(1), obs_err_var, gamma)
                endif
             end do
          endif SINGLE_SS_INFLATE
@@ -1090,7 +1090,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
                ! IS A TABLE LOOKUP POSSIBLE TO ACCELERATE THIS?
                ! Update the inflation values
                call update_inflation(inflate, varying_ss_inflate, varying_ss_inflate_sd, &
-                  r_mean, r_var, obs(1), obs_err_var, gamma)
+                  r_mean, r_var, grp_size, obs(1), obs_err_var, gamma)
             else
                ! if we don't go into the previous if block, make sure these
                ! have good values going out for the block below
@@ -1298,7 +1298,7 @@ if(do_obs_inflate(inflate)) then
    if(my_cov_inflate_sd > 0.0_r8) & 
       ! Gamma set to 1.0 because no distance for observation space
       call update_inflation(inflate, my_cov_inflate, my_cov_inflate_sd, prior_mean, &
-         prior_var, obs, obs_var, gamma = 1.0_r8)
+         prior_var, ens_size, obs, obs_var, gamma_corr = 1.0_r8)
 
    ! Now inflate the ensemble and compute a preliminary inflation increment
    call inflate_ens(inflate, ens, prior_mean, my_cov_inflate, prior_var)
