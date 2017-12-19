@@ -538,11 +538,13 @@ if(inflate_sd <= 0.0_r8) return
 ! on the inflation itself are provided in the inflate_handle. 
 
 ! select which method to update with
-if (inflate_handle%inflation_flavor == 5) then
+if (do_enhanced_ss_inflate(inflate_handle)) then
    inf_type = GHA2017
 else
+   ! the only other option is the original AND2007 and no one should
+   ! be trying to use that without talking to the dart team first.
+   ! (talk to jeff anderson about the details if you're interested.)
    inf_type = AND2009
-   ! change here if you want to compare to anderson 2007
 endif
 
 ! Use bayes theorem to update
@@ -598,12 +600,8 @@ if (inf_type == AND2007) then
 
    ! Use ONLY the linear approximation, cubic solution below can be numerically
    ! unstable for extreme cases. Should look at this later.
+   !if(gamma_corr > 1.01_r8) then  ! use this test to disable the entire first section
    if(gamma_corr > 0.99_r8) then
-   !if(gamma_corr > 1.01_r8) then
-   
-   ! FIXME: rectify the comment in the following line (about gamma
-   ! and 1.0) and the test above, which clearly used to be true for
-   ! 1.0 but is not anymore.
    
    ! The solution of the cubic below only works if gamma is 1.0
    ! Can analytically find the maximum of the product: d/dlambda is a
