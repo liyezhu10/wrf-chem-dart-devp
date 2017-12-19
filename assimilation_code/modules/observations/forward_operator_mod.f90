@@ -67,7 +67,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 
 ! Module storage for writing error messages
-character(len = 255) :: msgstring
+character(len = 256) :: msgstring
 
 contains
 
@@ -143,7 +143,7 @@ call create_state_window(ens_handle)
 
 ens_size = ens_handle%num_copies - ens_handle%num_extras
 
-if(get_allow_transpose(ens_handle)) then ! giant if for transpose or distribtued forward op
+if(get_allow_transpose(ens_handle)) then ! giant if for transpose or distributed forward op
 
    my_copy_indices(:) = ens_handle%my_copies(1:num_copies_to_calc) ! var-complete forward operators
 
@@ -406,6 +406,8 @@ real(r8),                intent(inout) :: expected_obs(num_ens)  !< the array of
 
 type(obs_type)     :: obs
 type(obs_def_type) :: obs_def
+character(len=256) :: msgstring2
+character(len=32)  :: state_size_string, obs_key_string, identity_obs_string
 
 integer :: obs_kind_ind
 integer :: num_obs, i
@@ -428,10 +430,15 @@ do i = 1, num_obs !> @todo do you ever use this with more than one obs?
    
    ! Check in kind for negative for identity obs
    if(obs_kind_ind < 0) then
-      if ( -obs_kind_ind > state_ens_handle%num_vars ) call error_handler(E_ERR, &
-         'get_expected_obs', &
-         'identity obs is outside of state vector ', &
-         source, revision, revdate)
+      if ( -obs_kind_ind > state_ens_handle%num_vars ) then
+         write(state_size_string, *) state_ens_handle%num_vars
+         write(obs_key_string, *) keys(i)
+         write(identity_obs_string, *) -obs_kind_ind
+         write(msgstring,  *) 'unable to compute forward operator for obs number '//trim(adjustl(obs_key_string))
+         write(msgstring2, *) 'identity index '//trim(adjustl(identity_obs_string))//&
+                              ' must be between 1 and the state size of '//trim(adjustl(state_size_string))
+         call error_handler(E_ERR, 'get_expected_obs', msgstring, source, revision, revdate, text2=msgstring2)
+      endif
 
       expected_obs =  get_state(-1*int(obs_kind_ind,i8), state_ens_handle)
 
@@ -441,8 +448,8 @@ do i = 1, num_obs !> @todo do you ever use this with more than one obs?
    
    else ! do forward operator for this kind
 
-      call get_expected_obs_from_def_distrib_state(state_ens_handle, num_ens, copy_indices, keys(i), obs_def, obs_kind_ind, &
-         state_time, isprior, &
+      call get_expected_obs_from_def_distrib_state(state_ens_handle, num_ens, copy_indices, keys(i), &
+         obs_def, obs_kind_ind, state_time, isprior, &
          assimilate_this_ob, evaluate_this_ob, expected_obs, istatus)
 
    endif
