@@ -180,8 +180,10 @@ endif
 ! to extract the filename from it.
 if (.not. present(filename) .and. present(ncid)) then
    call find_name_from_fh(ncid, saved_filename)
-else
+else if (present(filename)) then
    saved_filename = filename
+else
+   saved_filename = ''
 endif
 
 ! this does not return 
@@ -1202,7 +1204,6 @@ character(len=*), parameter :: routine = 'nc_open_file_readonly'
 integer :: ret, ncid
 
 ret = nf90_open(filename, NF90_NOWRITE, ncid)
-
 call nc_check(ret, routine, 'open '//trim(filename)//' read only', context)
 
 call add_fh_to_list(ncid, filename)
@@ -1221,14 +1222,12 @@ character(len=*), intent(in)  :: filename
 character(len=*), intent(in), optional :: context
 integer                       :: nc_open_file_readwrite
 
-character(len=*), parameter :: routine = 'nc_open_file_readwrite'
 integer :: ret, ncid, oldmode
 
 ret = nf90_open(filename, NF90_WRITE, ncid)
-
 call nc_check(ret, routine, 'open '//trim(filename)//' read/write', context)
 
-call add_fh_from_list(ncid, filename)
+call add_fh_to_list(ncid, filename)
 nc_open_file_readwrite = ncid
 
 ! faster if we don't fill the vars first with 'fill' value.
@@ -1254,10 +1253,9 @@ character(len=*), parameter :: routine = 'nc_create_file'
 integer :: ret, ncid, oldmode
 
 ret = nf90_create(filename, NF90_CLOBBER, ncid)
-
 call nc_check(ret, routine, 'create '//trim(filename)//' read/write', context)
 
-call add_fh_from_list(ncid, filename)
+call add_fh_to_list(ncid, filename)
 nc_create_file = ncid
 
 ! faster if we don't fill the vars first with 'fill' value.
@@ -1282,7 +1280,7 @@ integer :: ret
 ret = nf90_close(ncid)
 call nc_check(ret, routine, 'close file', context, filename, ncid)
 
-call del_fh_to_list(ncid, filename)
+call del_fh_from_list(ncid)
 
 end subroutine nc_close_file
 
@@ -1330,7 +1328,7 @@ character(len=*), parameter :: routine = 'nc_synchronize_file'
 integer :: ret
 
 ret = nf90_sync(ncid)
-call nc_check(ret, routine, 'file sync', context, filename, ncid)
+call nc_check(ret, routine, 'synchronize file contents', context, filename, ncid)
 
 end subroutine nc_synchronize_file
 
