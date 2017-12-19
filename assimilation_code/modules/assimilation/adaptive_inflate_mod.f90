@@ -61,7 +61,7 @@ type adaptive_inflate_type
    logical               :: output_restart = .false.
    logical               :: deterministic
    real(r8)              :: inflate, sd, sd_lower_bound, inf_lower_bound, inf_upper_bound
-   real(r8)              :: inf_sd_size_change
+   real(r8)              :: sd_size_change
    ! Include a random sequence type in case non-deterministic inflation is used
    type(random_seq_type) :: ran_seq
    logical               :: allow_missing_in_clm
@@ -190,7 +190,7 @@ end function do_ss_inflate
 subroutine adaptive_inflate_init(inflate_handle, inf_flavor, mean_from_restart, &
    sd_from_restart, output_inflation, deterministic, & 
    inf_initial, sd_initial, inf_lower_bound, inf_upper_bound, &
-   sd_lower_bound, inf_sd_size_change, ens_handle, missing_ok, label)
+   sd_lower_bound, sd_size_change, ens_handle, missing_ok, label)
 
 type(adaptive_inflate_type), intent(inout) :: inflate_handle
 integer,                     intent(in)    :: inf_flavor
@@ -201,7 +201,7 @@ logical,                     intent(in)    :: deterministic
 real(r8),                    intent(in)    :: inf_initial, sd_initial
 real(r8),                    intent(in)    :: inf_lower_bound, inf_upper_bound
 real(r8),                    intent(in)    :: sd_lower_bound
-real(r8),                    intent(in)    :: inf_sd_size_change
+real(r8),                    intent(in)    :: sd_size_change
 type(ensemble_type),         intent(inout) :: ens_handle
 logical,                     intent(in)    :: missing_ok
 character(len = *),          intent(in)    :: label
@@ -228,7 +228,7 @@ inflate_handle%sd                 = sd_initial
 inflate_handle%inf_lower_bound    = inf_lower_bound
 inflate_handle%inf_upper_bound    = inf_upper_bound
 inflate_handle%sd_lower_bound     = sd_lower_bound
-inflate_handle%inf_sd_size_change = inf_sd_size_change
+inflate_handle%sd_size_change     = sd_size_change
 inflate_handle%allow_missing_in_clm = missing_ok
 inflate_handle%mean_from_restart  = mean_from_restart
 inflate_handle%sd_from_restart    = sd_from_restart
@@ -545,7 +545,8 @@ endif
 
 ! Use bayes theorem to update
 call bayes_cov_inflate(ens_size, inf_type, prior_mean, prior_var, obs, obs_var, inflate, &
-   inflate_sd, gamma_corr, inflate_handle%sd_lower_bound, new_inflate, new_inflate_sd)
+   inflate_sd, gamma_corr, inflate_handle%sd_lower_bound, inflate_handle%sd_size_change, &
+   new_inflate, new_inflate_sd)
 
 ! Make sure inflate satisfies constraints
 inflate = new_inflate
@@ -563,11 +564,11 @@ end subroutine update_inflation
 !> Anderson 2007, Anderson 2009, or Gharamti 2017
 
 subroutine bayes_cov_inflate(ens_size, inf_type, x_p, sigma_p_2, y_o, sigma_o_2, lambda_mean, lambda_sd, &
-   gamma_corr, sd_lower_bound_in, new_cov_inflate, new_cov_inflate_sd)
+   gamma_corr, sd_lower_bound_in, sd_size_change_in, new_cov_inflate, new_cov_inflate_sd)
 
 integer , intent(in)  :: ens_size, inf_type
 real(r8), intent(in)  :: x_p, sigma_p_2, y_o, sigma_o_2, lambda_mean, lambda_sd
-real(r8), intent(in)  :: gamma_corr, sd_lower_bound_in
+real(r8), intent(in)  :: gamma_corr, sd_lower_bound_in, sd_size_change_in
 real(r8), intent(out) :: new_cov_inflate, new_cov_inflate_sd
 
 integer :: i, mlambda_index(1)
@@ -747,7 +748,7 @@ else if (inf_type == GHA2017) then
       ! If the updated variance is more than xx% the prior variance, keep the prior unchanged 
       ! for stability reasons. Also, if the updated variance is NaN (not sure why this
       ! can happen; never did when develping this code), keep the prior variance unchanged. 
-      if ( new_cov_inflate_sd > 1.05_r8*lambda_sd .OR. &
+      if ( new_cov_inflate_sd > sd_size_change_in*lambda_sd .OR. &
           new_cov_inflate_sd /= new_cov_inflate_sd) new_cov_inflate_sd = lambda_sd
    endif
    
@@ -1045,8 +1046,6 @@ endif
 if (inflation_handle%inf_lower_bound < 1.0_r8) then
    det = trim(det) // ' deflation permitted,'
 endif
-!>@todo FIXME add something about the inf_sd_size_change parameter if
-!> inf type is 5.
 if (inflation_handle%minmax_sd(2) > 0.0_r8) then
   tadapt = ' time-adaptive,'
 else
@@ -1114,7 +1113,7 @@ if (inflation_handle%inflation_flavor > 0) then
    endif
    if (inflation_handle%inflation_flavor == 5) then
       write(msgstring, '(A, F8.3)') &
-            'inf stddev size change: ', inflation_handle%inf_sd_size_change
+            'inf stddev size change: ', inflation_handle%sd_size_change
       call error_handler(E_MSG, trim(label) // ' inflation:', msgstring, source, revision, revdate)
    endif
 endif
