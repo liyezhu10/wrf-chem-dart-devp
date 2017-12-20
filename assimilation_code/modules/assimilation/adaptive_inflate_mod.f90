@@ -26,7 +26,7 @@ use mpi_utilities_mod,    only : my_task_id, send_to, receive_from, send_minmax_
 implicit none
 private
 
-public :: update_inflation,           do_enhanced_ss_inflate,        do_obs_inflate,     &
+public :: update_inflation,           do_obs_inflate,                                    &
           do_varying_ss_inflate,      do_single_ss_inflate,          inflate_ens,        &
           adaptive_inflate_init,      adaptive_inflate_type,                             &
                                       deterministic_inflate,         solve_quadratic,    &
@@ -56,8 +56,9 @@ type adaptive_inflate_type
    private
    ! Flavor can be 0:none, 1:obs_inflate, 2:varying_ss_inflate, 3:single_ss_inflate
    ! Deprecating 1:obs_inflate, there is concerns how the observation space inflation
-   ! is happening. JPH., 4 = RTPS, 5 = enhanced ss
+   ! is happening. JPH., 4 = RTPS, 5 = enhanced ss, modification of 2
    integer               :: inflation_flavor
+   integer               :: inflation_sub_flavor
    logical               :: output_restart = .false.
    logical               :: deterministic
    real(r8)              :: inflate, sd, sd_lower_bound, inf_lower_bound, inf_upper_bound
@@ -176,7 +177,6 @@ logical :: do_ss_inflate
 
 if (do_single_ss_inflate(inflation) .or. &
     do_varying_ss_inflate(inflation) .or. &
-    do_enhanced_ss_inflate(inflation) .or. &
     do_rtps_inflate(inflation)) then
    do_ss_inflate = .true.
 else
@@ -222,6 +222,7 @@ endif
 
 ! Load up the structure first to keep track of all details of this inflation type
 inflate_handle%inflation_flavor   = inf_flavor
+inflate_handle%inflation_sub_flavor = inf_flavor    ! see code below
 inflate_handle%output_restart     = output_inflation
 inflate_handle%deterministic      = deterministic
 inflate_handle%inflate            = inf_initial
@@ -236,6 +237,11 @@ inflate_handle%sd_from_restart    = sd_from_restart
 ! Prior and posterior are intialized to false
 if (trim(label)=='Prior') inflate_handle%prior = .true.
 if (trim(label)=='Posterior') inflate_handle%posterior = .true.
+
+! inf type 5 is a subset of type 2. modify the type here.
+if (inf_flavor == 5) then
+   inflate_handle%inflation_flavor   = 2
+endif
 
 ! Cannot support non-determistic inflation and an inf_lower_bound < 1
 if(.not. deterministic .and. inf_lower_bound < 1.0_r8) then
@@ -321,7 +327,9 @@ do_rtps_inflate = (inflate_handle%inflation_flavor == 4)
 end function do_rtps_inflate
 
 !------------------------------------------------------------------
-!> Returns true if this inflation type indicates enhanced state space inflation
+!> *private* accessor routine for the subtype
+!>
+!> Returns true if this inflation sub type indicates enhanced state space inflation
 !> Moha Gharamti, 2017
 
 function do_enhanced_ss_inflate(inflate_handle)
@@ -329,7 +337,8 @@ function do_enhanced_ss_inflate(inflate_handle)
 logical                                 :: do_enhanced_ss_inflate
 type(adaptive_inflate_type), intent(in) :: inflate_handle
 
-do_enhanced_ss_inflate = (inflate_handle%inflation_flavor == 5)
+do_enhanced_ss_inflate = ((inflate_handle%inflation_flavor == 2) .and. &
+                          (inflate_handle%inflation_sub_flavor == 5))
 
 end function do_enhanced_ss_inflate
 
@@ -448,9 +457,8 @@ real(r8), optional,          intent(in)    :: fsprd, asprd
 integer  :: i, ens_size
 real(r8) :: rand_sd, var, sd_inflate
 
-! it's possible to have MISSING_R8s in the state
-! vector now.  so we need to be able to avoid changing
-! MISSING_R8 values by inflation here.
+! it's possible to have MISSING_R8s in the state vector now.  
+! so we need to be able to avoid changing MISSING_R8 values by inflation here.
 if (inflate_handle%allow_missing_in_clm) then
    if (any(ens == MISSING_R8)) return
 endif
@@ -582,7 +590,6 @@ real(r8) :: new_1_sd, new_max
 real(r8) :: b, c, d, Q, R, disc, alpha, beta, cube_root_alpha, cube_root_beta, x
 real(r8) :: rrr, cube_root_rrr, angle, mx(3), sep(3), mlambda(3)
 
-
 ! If gamma is 0, nothing happens
 if(gamma_corr <= 0.0_r8) then
    new_cov_inflate    = lambda_mean
@@ -650,6 +657,7 @@ if (inf_type == AND2007) then
    
       ! Put in code to approximate the mode (new_cov_inflate)
       !write(*, *) 'old, orig mode is ', lambda_mean, new_cov_inflate
+   endif
 
 else if (inf_type == AND2009) then
 
@@ -662,11 +670,11 @@ else if (inf_type == AND2009) then
       new_cov_inflate_sd = lambda_sd
    else
       ! Compute by forcing a Gaussian fit at one positive SD
-   ! First compute the new_max value for normalization purposes
+      ! First compute the new_max value for normalization purposes
       new_max = compute_new_density(dist_2, sigma_p_2, sigma_o_2, lambda_mean, lambda_sd, &
                                     gamma_corr, new_cov_inflate)
    
-   ! Find value at a point one OLD sd above new mean value
+      ! Find value at a point one OLD sd above new mean value
       new_1_sd = compute_new_density(dist_2, sigma_p_2, sigma_o_2, lambda_mean, lambda_sd, gamma_corr, &
                                      new_cov_inflate + lambda_sd)
    
@@ -719,8 +727,10 @@ else if (inf_type == GHA2017) then
       endif
    
       ! Evaluate the exact IG posterior at p1: \lambda_u+\sigma_{\lambda_b} & p2: \lambda_u
-      density_1 = enh_compute_new_density(dist_2, ens_size, sigma_p_2, sigma_o_2, shape_old, rate, gamma_corr, new_cov_inflate+lambda_sd)
-      density_2 = enh_compute_new_density(dist_2, ens_size, sigma_p_2, sigma_o_2, shape_old, rate, gamma_corr, new_cov_inflate)
+      density_1 = enh_compute_new_density(dist_2, ens_size, sigma_p_2, sigma_o_2, shape_old, &
+                                          rate, gamma_corr, new_cov_inflate+lambda_sd)
+      density_2 = enh_compute_new_density(dist_2, ens_size, sigma_p_2, sigma_o_2, shape_old, &
+                                          rate, gamma_corr, new_cov_inflate)
    
       ! Computational errors check (small numbers + NaNs)
       if (abs(density_1) <= TINY(0.0_r8) .OR. &
@@ -755,8 +765,6 @@ else if (inf_type == GHA2017) then
 else
    write(msgstring, *) 'Internal error, should not happen.  Illegal value for bayes type.'
    call error_handler(E_ERR, 'bayes_cov_inflate', msgstring, source, revision, revdate)
-endif
-
 endif
 
 end subroutine bayes_cov_inflate

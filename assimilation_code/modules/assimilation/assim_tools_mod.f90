@@ -57,7 +57,7 @@ use mpi_utilities_mod,    only : my_task_id, broadcast_send, broadcast_recv,    
                                  read_mpi_timer
 
 use adaptive_inflate_mod, only : do_obs_inflate,  do_single_ss_inflate, do_ss_inflate,    &
-                                 do_varying_ss_inflate, do_enhanced_ss_inflate,           &
+                                 do_varying_ss_inflate,                                   &
                                  update_inflation,                                        &
                                  inflate_ens, adaptive_inflate_type,                      &
                                  deterministic_inflate, solve_quadratic
@@ -386,7 +386,6 @@ logical :: allow_missing_in_state
 ! for performance, local copies 
 logical :: local_single_ss_inflate
 logical :: local_varying_ss_inflate
-logical :: local_enhanced_ss_inflate
 logical :: local_ss_inflate
 logical :: local_obs_inflate
 
@@ -445,7 +444,6 @@ endif
 ! are really in the inflate derived type.
 local_single_ss_inflate  = do_single_ss_inflate(inflate)
 local_varying_ss_inflate = do_varying_ss_inflate(inflate)
-local_varying_ss_inflate = do_enhanced_ss_inflate(inflate)
 local_ss_inflate         = do_ss_inflate(inflate)
 local_obs_inflate        = do_obs_inflate(inflate)
 
@@ -726,7 +724,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
       !>the three below and three more which omit the 2 localization values?
       !>how much does this cost in time? time this and see.
       whichvert_real = real(whichvert_obs_in_localization_coord, r8)
-      if(local_varying_ss_inflate .or. local_enhanced_ss_inflate) then
+      if(local_varying_ss_inflate) then
          call broadcast_send(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
             orig_obs_prior_mean, orig_obs_prior_var, net_a, scalar1=obs_qc, &
             scalar2=vertvalue_obs_in_localization_coord, scalar3=whichvert_real)
@@ -749,7 +747,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
       ! also a converted vertical coordinate if needed
       !>@todo FIXME see the comment in the broadcast_send() section about
       !>the cost of sending unneeded values 
-      if(local_varying_ss_inflate .or. local_enhanced_ss_inflate) then
+      if(local_varying_ss_inflate) then
          call broadcast_recv(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
             orig_obs_prior_mean, orig_obs_prior_var, net_a, scalar1=obs_qc, &
             scalar2=vertvalue_obs_in_localization_coord, scalar3=whichvert_real)
