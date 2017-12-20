@@ -55,14 +55,14 @@ character(len=128), parameter :: revdate  = "$Date$"
 type adaptive_inflate_type
    private
    ! Flavor can be 0:none, 1:obs_inflate, 2:varying_ss_inflate, 3:single_ss_inflate
-   ! Deprecating 1:obs_inflate, there is concerns how the observation space inflation
-   ! is happening. JPH., 4 = RTPS, 5 = enhanced ss, modification of 2
+   !  4 = RTPS, 5 = enhanced ss, modification of 2
+   ! 1:obs_inflate is currently deprecated.
    integer               :: inflation_flavor
    integer               :: inflation_sub_flavor
    logical               :: output_restart = .false.
    logical               :: deterministic
    real(r8)              :: inflate, sd, sd_lower_bound, inf_lower_bound, inf_upper_bound
-   real(r8)              :: sd_size_change
+   real(r8)              :: sd_max_change
    ! Include a random sequence type in case non-deterministic inflation is used
    type(random_seq_type) :: ran_seq
    logical               :: allow_missing_in_clm
@@ -78,7 +78,6 @@ end type adaptive_inflate_type
 ! types for updating the inflation
 integer, parameter :: GHA2017 = 1
 integer, parameter :: AND2009 = 2
-integer, parameter :: AND2007 = 3
 
 ! Module storage for writing error messages
 character(len=512) :: msgstring, msgstring2
@@ -191,7 +190,7 @@ end function do_ss_inflate
 subroutine adaptive_inflate_init(inflate_handle, inf_flavor, mean_from_restart, &
    sd_from_restart, output_inflation, deterministic, & 
    inf_initial, sd_initial, inf_lower_bound, inf_upper_bound, &
-   sd_lower_bound, sd_size_change, ens_handle, missing_ok, label)
+   sd_lower_bound, sd_max_change, ens_handle, missing_ok, label)
 
 type(adaptive_inflate_type), intent(inout) :: inflate_handle
 integer,                     intent(in)    :: inf_flavor
@@ -202,7 +201,7 @@ logical,                     intent(in)    :: deterministic
 real(r8),                    intent(in)    :: inf_initial, sd_initial
 real(r8),                    intent(in)    :: inf_lower_bound, inf_upper_bound
 real(r8),                    intent(in)    :: sd_lower_bound
-real(r8),                    intent(in)    :: sd_size_change
+real(r8),                    intent(in)    :: sd_max_change
 type(ensemble_type),         intent(inout) :: ens_handle
 logical,                     intent(in)    :: missing_ok
 character(len = *),          intent(in)    :: label
@@ -230,7 +229,7 @@ inflate_handle%sd                 = sd_initial
 inflate_handle%inf_lower_bound    = inf_lower_bound
 inflate_handle%inf_upper_bound    = inf_upper_bound
 inflate_handle%sd_lower_bound     = sd_lower_bound
-inflate_handle%sd_size_change     = sd_size_change
+inflate_handle%sd_max_change      = sd_max_change
 inflate_handle%allow_missing_in_clm = missing_ok
 inflate_handle%mean_from_restart  = mean_from_restart
 inflate_handle%sd_from_restart    = sd_from_restart
@@ -238,9 +237,9 @@ inflate_handle%sd_from_restart    = sd_from_restart
 if (trim(label)=='Prior') inflate_handle%prior = .true.
 if (trim(label)=='Posterior') inflate_handle%posterior = .true.
 
-! inf type 5 is a subset of type 2. modify the type here.
+! inf type 5 is a subset of type 2. modify the main type here.
 if (inf_flavor == 5) then
-   inflate_handle%inflation_flavor   = 2
+   inflate_handle%inflation_flavor = 2
 endif
 
 ! Cannot support non-determistic inflation and an inf_lower_bound < 1
@@ -358,7 +357,7 @@ end function deterministic_inflate
 !> Make sure the combination of inflation options are legal
 
 subroutine validate_inflate_options(inf_flavor, inf_damping, inf_initial_from_restart, &
-                                    inf_sd_initial_from_restart, inf_deterministic, inf_sd_size_change,  &
+                                    inf_sd_initial_from_restart, inf_deterministic, inf_sd_max_change,  &
                                     do_prior_inflate, do_posterior_inflate, output_inflation)
 
 integer,  intent(in)    :: inf_flavor(2)
@@ -366,7 +365,7 @@ real(r8), intent(inout) :: inf_damping(2)
 logical,  intent(inout) :: inf_initial_from_restart(2)
 logical,  intent(inout) :: inf_sd_initial_from_restart(2)
 logical,  intent(inout) :: inf_deterministic(2)
-real(r8), intent(in)    :: inf_sd_size_change(2)
+real(r8), intent(in)    :: inf_sd_max_change(2)
 logical,  intent(out)   :: do_prior_inflate
 logical,  intent(out)   :: do_posterior_inflate
 logical,  intent(out)   :: output_inflation 
@@ -428,14 +427,14 @@ if (inf_flavor(2) == 4) then
    inf_damping(2) = 1.0_r8  ! no damping
 endif
 
-! enhanced inflation checks
+! enhanced inflation checks - this is before we set the subflavor in the structure.
 if (inf_flavor(1) == 5 .or. inf_flavor(2) == 5) then
-   ! check inf_sd_size_change() for valid range
+   ! check inf_sd_max_change() for valid range
    do i=1, 2
-      if (inf_sd_size_change(i) < 1.0_r8 .or. inf_sd_size_change(i) > 2.0_r8) then
-         write(msgstring, *) 'inf_sd_size_change=', inf_sd_size_change(i), ' Must be 1.0 <= X <= 2.0'
+      if (inf_sd_max_change(i) < 1.0_r8 .or. inf_sd_max_change(i) > 2.0_r8) then
+         write(msgstring, *) 'inf_sd_max_change=', inf_sd_max_change(i), ' Must be 1.0 <= X <= 2.0'
          call error_handler(E_ERR,'validate_inflate_options', msgstring, source, revision, revdate, &
-                                   text2='Inflation stddev size change for '//string(i))
+                                   text2='Inflation stddev max change for '//string(i))
       endif
    enddo
 endif
@@ -519,18 +518,21 @@ endif
 end subroutine inflate_ens
 
 !------------------------------------------------------------------
-!> Given information from an inflate type, scalar values for inflate and inflate_sd,
-!> the ensemble prior_mean and prior_var for an observation, and the obsered value
-!> and observational error variance, computes updated values for the inflate and
-!> inflate_sd values using the algorithms documented on the DART website.
-!> The gamma paramter gives the localized prior correlation times the localization
+!> This routine is given information from an inflate type, scalar values for inflate 
+!> and inflate_sd, the ensemble prior_mean and prior_var for an observation, the
+!> ensemble (or group) size, the observed value, observational error variance, 
+!> and gamma_corr (see below for description).  It computes updated values for the 
+!> inflate and inflate_sd items using algorithms described in filter.html (including
+!> references to papers).
+!>
+!> The gamma_corr parameter gives the localized prior correlation times the localization
 !> which is computed in the assim_tools routine filter_assim. For single state
 !> space inflation it is 1.0.
 
 subroutine update_inflation(inflate_handle, inflate, inflate_sd, prior_mean, prior_var, &
    ens_size, obs, obs_var, gamma_corr)
 
-type(adaptive_inflate_type), intent(in)    :: inflate_handle
+type(adaptive_inflate_type), intent(in)    :: inflate_handle   
 real(r8),                    intent(inout) :: inflate, inflate_sd
 real(r8),                    intent(in)    :: prior_mean, prior_var
 integer,                     intent(in)    :: ens_size
@@ -549,15 +551,12 @@ if(inflate_sd <= 0.0_r8) return
 if (do_enhanced_ss_inflate(inflate_handle)) then
    inf_type = GHA2017
 else
-   ! the only other option is the original AND2007 and no one should
-   ! be trying to use that without talking to the dart team first.
-   ! (talk to jeff anderson about the details if you're interested.)
    inf_type = AND2009
 endif
 
 ! Use bayes theorem to update
 call bayes_cov_inflate(ens_size, inf_type, prior_mean, prior_var, obs, obs_var, inflate, &
-   inflate_sd, gamma_corr, inflate_handle%sd_lower_bound, inflate_handle%sd_size_change, &
+   inflate_sd, gamma_corr, inflate_handle%sd_lower_bound, inflate_handle%sd_max_change, &
    new_inflate, new_inflate_sd)
 
 ! Make sure inflate satisfies constraints
@@ -576,11 +575,11 @@ end subroutine update_inflation
 !> Anderson 2007, Anderson 2009, or Gharamti 2017
 
 subroutine bayes_cov_inflate(ens_size, inf_type, x_p, sigma_p_2, y_o, sigma_o_2, lambda_mean, lambda_sd, &
-   gamma_corr, sd_lower_bound_in, sd_size_change_in, new_cov_inflate, new_cov_inflate_sd)
+   gamma_corr, sd_lower_bound_in, sd_max_change_in, new_cov_inflate, new_cov_inflate_sd)
 
 integer , intent(in)  :: ens_size, inf_type
 real(r8), intent(in)  :: x_p, sigma_p_2, y_o, sigma_o_2, lambda_mean, lambda_sd
-real(r8), intent(in)  :: gamma_corr, sd_lower_bound_in, sd_size_change_in
+real(r8), intent(in)  :: gamma_corr, sd_lower_bound_in, sd_max_change_in
 real(r8), intent(out) :: new_cov_inflate, new_cov_inflate_sd
 
 integer :: i, mlambda_index(1)
@@ -603,63 +602,62 @@ lambda_sd_2 = lambda_sd**2
 ! Squared Innovation
 dist_2 = (y_o - x_p)**2
 
-if (inf_type == AND2007) then
+! this block of code no longer being used.  it's here for historical purposes.
 
-   ! Use ONLY the linear approximation, cubic solution below can be numerically
-   ! unstable for extreme cases. Should look at this later.
-   !if(gamma_corr > 1.01_r8) then  ! use this test to disable the entire first section
-   if(gamma_corr > 0.99_r8) then
-   
-   ! The solution of the cubic below only works if gamma is 1.0
-   ! Can analytically find the maximum of the product: d/dlambda is a
-   ! cubic polynomial in lambda**2; solve using cubic formula for real root
-   ! Can write so that coefficient of x**3 is 1, other coefficients are:
-      b = -1.0_r8 * (sigma_o_2 + sigma_p_2 * lambda_mean)
-      c = lambda_sd_2 * sigma_p_2**2 / 2.0_r8
-      d = -1.0_r8 * (lambda_sd_2 * sigma_p_2**2 * dist_2) / 2.0_r8
-   
-      Q = c - b**2 / 3
-      R = d + (2 * b**3) / 27 - (b * c) / 3
-   
-      ! Compute discriminant, if this is negative have 3 real roots, else 1 real root
-      disc = R**2 / 4 + Q**3 / 27
-   
-      if(disc < 0.0_r8) then
-         rrr = sqrt(-1.0 * Q**3 / 27)
-         ! Note that rrr is positive so no problem for cube root
-         cube_root_rrr = rrr ** (1.0 / 3.0)
-         angle = acos(-0.5 * R / rrr)
-         do i = 0, 2
-            mx(i+1) = 2.0_r8 * cube_root_rrr * cos((angle + i * 2.0_r8 * PI) / 3.0_r8) - b / 3.0_r8
-            mlambda(i + 1) = (mx(i + 1) - sigma_o_2) / sigma_p_2
-            sep(i+1) = abs(mlambda(i + 1) - lambda_mean)
-         end do
-         ! Root closest to initial peak is appropriate
-         mlambda_index = minloc(sep)
-         new_cov_inflate = mlambda(mlambda_index(1))
-   
-      else
-         ! Only one real root here, find it.
-   
-         ! Compute the two primary terms
-         alpha = -R/2 + sqrt(disc)
-         beta = R/2 + sqrt(disc)
-   
-         cube_root_alpha = abs(alpha) ** (1.0 / 3.0) * abs(alpha) / alpha
-         cube_root_beta = abs(beta) ** (1.0 / 3.0) * abs(beta) / beta
-   
-         x = cube_root_alpha - cube_root_beta - b / 3.0
-   
-         ! This root is the value of x = theta**2
-         new_cov_inflate = (x - sigma_o_2) / sigma_p_2
-   
-      endif
-   
-      ! Put in code to approximate the mode (new_cov_inflate)
-      !write(*, *) 'old, orig mode is ', lambda_mean, new_cov_inflate
-   endif
+!   ! Use ONLY the linear approximation, cubic solution below can be numerically
+!   ! unstable for extreme cases. Should look at this later.
+!   if(gamma_corr > 0.99_r8) then
+!   
+!   ! The solution of the cubic below only works if gamma is 1.0
+!   ! Can analytically find the maximum of the product: d/dlambda is a
+!   ! cubic polynomial in lambda**2; solve using cubic formula for real root
+!   ! Can write so that coefficient of x**3 is 1, other coefficients are:
+!      b = -1.0_r8 * (sigma_o_2 + sigma_p_2 * lambda_mean)
+!      c = lambda_sd_2 * sigma_p_2**2 / 2.0_r8
+!      d = -1.0_r8 * (lambda_sd_2 * sigma_p_2**2 * dist_2) / 2.0_r8
+!   
+!      Q = c - b**2 / 3
+!      R = d + (2 * b**3) / 27 - (b * c) / 3
+!   
+!      ! Compute discriminant, if this is negative have 3 real roots, else 1 real root
+!      disc = R**2 / 4 + Q**3 / 27
+!   
+!      if(disc < 0.0_r8) then
+!         rrr = sqrt(-1.0 * Q**3 / 27)
+!         ! Note that rrr is positive so no problem for cube root
+!         cube_root_rrr = rrr ** (1.0 / 3.0)
+!         angle = acos(-0.5 * R / rrr)
+!         do i = 0, 2
+!            mx(i+1) = 2.0_r8 * cube_root_rrr * cos((angle + i * 2.0_r8 * PI) / 3.0_r8) - b / 3.0_r8
+!            mlambda(i + 1) = (mx(i + 1) - sigma_o_2) / sigma_p_2
+!            sep(i+1) = abs(mlambda(i + 1) - lambda_mean)
+!         end do
+!         ! Root closest to initial peak is appropriate
+!         mlambda_index = minloc(sep)
+!         new_cov_inflate = mlambda(mlambda_index(1))
+!   
+!      else
+!         ! Only one real root here, find it.
+!   
+!         ! Compute the two primary terms
+!         alpha = -R/2 + sqrt(disc)
+!         beta = R/2 + sqrt(disc)
+!   
+!         cube_root_alpha = abs(alpha) ** (1.0 / 3.0) * abs(alpha) / alpha
+!         cube_root_beta = abs(beta) ** (1.0 / 3.0) * abs(beta) / beta
+!   
+!         x = cube_root_alpha - cube_root_beta - b / 3.0
+!   
+!         ! This root is the value of x = theta**2
+!         new_cov_inflate = (x - sigma_o_2) / sigma_p_2
+!   
+!      endif
+!   
+!      ! Put in code to approximate the mode (new_cov_inflate)
+!      !write(*, *) 'old, orig mode is ', lambda_mean, new_cov_inflate
+!   endif
 
-else if (inf_type == AND2009) then
+if (inf_type == AND2009) then
 
    ! Approximate with Taylor series for likelihood term
    call linear_bayes(dist_2, sigma_p_2, sigma_o_2, lambda_mean, lambda_sd_2, gamma_corr, &
@@ -758,7 +756,7 @@ else if (inf_type == GHA2017) then
       ! If the updated variance is more than xx% the prior variance, keep the prior unchanged 
       ! for stability reasons. Also, if the updated variance is NaN (not sure why this
       ! can happen; never did when develping this code), keep the prior variance unchanged. 
-      if ( new_cov_inflate_sd > sd_size_change_in*lambda_sd .OR. &
+      if ( new_cov_inflate_sd > sd_max_change_in*lambda_sd .OR. &
           new_cov_inflate_sd /= new_cov_inflate_sd) new_cov_inflate_sd = lambda_sd
    endif
    
@@ -1004,32 +1002,33 @@ subroutine change_GA_IG(mode, var, beta)
 real(r8), intent(in)  :: mode, var
 real(r8), intent(out) :: beta
 
-real(r8) :: var2, var3, mode2, mode3, mode4, &
-            AA, BB, CC, DD, EE, mode5, mode7, mode9
+integer :: i
+real(r8) :: var_p(3), mode_p(9)   ! var and mode to the Nth power
+real(r8) :: AA, BB, CC, DD, EE
 
-! Computation saver
-var2 = var**2
-var3 = var**3
+! Computation savers - powers are computationally expensive
+var_p(1) = var
+do i=2, 3
+   var_p(i) = var_p(i-1)*var
+enddo
 
-mode2 = mode**2
-mode3 = mode**3
-mode4 = mode**4
-mode5 = mode**5
-mode7 = mode**7
-mode9 = mode**9
+mode_p(1) = mode
+do i = 2, 9
+  mode_p(i) = mode_p(i-1)*mode
+enddo
 
 ! Calculate the rate parameter for IG distribution.
 ! It's a function of both the prior mean and variannce, 
 ! obtained as a "real" solution to a cubic polynomial.
-AA   = mode4 * sqrt((var2 + 47.0_r8*var*mode2 + 3.0_r8*mode4) / var3)
-BB   = 75.0_r8*var2*mode5
-CC   = 21.0_r8*var*mode7
-DD   = var3*mode3
-EE   = (CC + BB + DD + mode9 + 6.0_r8*sqrt(3.0_r8)*AA*var3) / var3
+AA = mode_p(4) * sqrt((var_p(2) + 47.0_r8*var*mode_p(2) + 3.0_r8*mode_p(4)) / var_p(3))
+BB = 75.0_r8*var_p(2)*mode_p(5)
+CC = 21.0_r8*var*mode_p(7)
+DD = var_p(3)*mode_p(3)
+EE = (CC + BB + DD + mode_p(9) + 6.0_r8*sqrt(3.0_r8)*AA*var_p(3)) / var_p(3)
 
-beta = (7.0_r8*var*mode + mode3)/(3.0_r8*var)                       + &
-       EE**(1.0_r8/3.0_r8)/3.0_r8 + mode2*(var2 + 14.0_r8*var*mode2 + &
-       mode4) / (3.0_r8*var2*EE**(1.0_r8/3.0_r8))
+beta = (7.0_r8*var*mode + mode_p(3))/(3.0_r8*var)                           + &
+       EE**(1.0_r8/3.0_r8)/3.0_r8 + mode_p(2)*(var_p(2) + 14.0_r8*var*mode_p(2) + &
+       mode_p(4)) / (3.0_r8*var_p(2)*EE**(1.0_r8/3.0_r8))
 
 end subroutine change_GA_IG
 
@@ -1119,9 +1118,9 @@ if (inflation_handle%inflation_flavor > 0) then
       endif
       call error_handler(E_MSG, trim(label) // ' inflation:', msgstring, source, revision, revdate)
    endif
-   if (inflation_handle%inflation_flavor == 5) then
+   if (inflation_handle%inflation_sub_flavor == 5) then
       write(msgstring, '(A, F8.3)') &
-            'inf stddev size change: ', inflation_handle%sd_size_change
+            'inf stddev max change: ', inflation_handle%sd_max_change
       call error_handler(E_MSG, trim(label) // ' inflation:', msgstring, source, revision, revdate)
    endif
 endif

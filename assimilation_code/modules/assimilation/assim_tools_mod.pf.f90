@@ -57,7 +57,7 @@ use mpi_utilities_mod,    only : my_task_id, broadcast_send, broadcast_recv,    
                                  read_mpi_timer
 
 use adaptive_inflate_mod, only : do_obs_inflate,  do_single_ss_inflate, do_ss_inflate,    &
-                                 do_varying_ss_inflate, do_enhanced_ss_inflate,           &
+                                 do_varying_ss_inflate,                                   &
                                  update_inflation,                                        &
                                  inflate_ens, adaptive_inflate_type,                      &
                                  deterministic_inflate, solve_quadratic
@@ -404,7 +404,6 @@ logical :: allow_missing_in_state
 ! for performance, local copies 
 logical :: local_single_ss_inflate
 logical :: local_varying_ss_inflate
-logical :: local_enhanced_ss_inflate
 logical :: local_ss_inflate
 logical :: local_obs_inflate
 
@@ -463,7 +462,6 @@ endif
 ! are really in the inflate derived type.
 local_single_ss_inflate  = do_single_ss_inflate(inflate)
 local_varying_ss_inflate = do_varying_ss_inflate(inflate)
-local_varying_ss_inflate = do_enhanced_ss_inflate(inflate)
 local_ss_inflate         = do_ss_inflate(inflate)
 local_obs_inflate        = do_obs_inflate(inflate)
 
@@ -849,20 +847,20 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
 
          else
 
-         ! Compute the prior mean and variance for this observation
-         orig_obs_prior_mean = obs_ens_handle%copies(OBS_PRIOR_MEAN_START: &
-            OBS_PRIOR_MEAN_END, owners_index)
-         orig_obs_prior_var  = obs_ens_handle%copies(OBS_PRIOR_VAR_START:  &
-            OBS_PRIOR_VAR_END, owners_index)
-
-         ! Compute observation space increments for each group
-         do group = 1, num_groups
-            grp_bot = grp_beg(group)
-            grp_top = grp_end(group)
-            call obs_increment(obs_prior(grp_bot:grp_top), grp_size, obs(1), &
-               obs_err_var, obs_inc(grp_bot:grp_top), inflate, my_inflate,   &
-               my_inflate_sd, net_a(group))
-         end do
+            ! Compute the prior mean and variance for this observation
+            orig_obs_prior_mean = obs_ens_handle%copies(OBS_PRIOR_MEAN_START: &
+               OBS_PRIOR_MEAN_END, owners_index)
+            orig_obs_prior_var  = obs_ens_handle%copies(OBS_PRIOR_VAR_START:  &
+               OBS_PRIOR_VAR_END, owners_index)
+   
+            ! Compute observation space increments for each group
+            do group = 1, num_groups
+               grp_bot = grp_beg(group)
+               grp_top = grp_end(group)
+               call obs_increment(obs_prior(grp_bot:grp_top), grp_size, obs(1), &
+                  obs_err_var, obs_inc(grp_bot:grp_top), inflate, my_inflate,   &
+                  my_inflate_sd, net_a(group))
+            end do
 
          endif
 
@@ -932,20 +930,20 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
                    scalar2=obs_err_infl, scalar3=vertvalue_obs_in_localization_coord, scalar4=whichvert_real)
          endif
       else
-      if(local_varying_ss_inflate .or. local_enhanced_ss_inflate) then
-         call broadcast_send(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
-            orig_obs_prior_mean, orig_obs_prior_var, net_a, scalar1=obs_qc, &
-            scalar2=vertvalue_obs_in_localization_coord, scalar3=whichvert_real)
-
-      else if(local_single_ss_inflate .or. local_obs_inflate) then
-         call broadcast_send(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
-           net_a, scalar1=my_inflate, scalar2=my_inflate_sd, scalar3=obs_qc, &
-           scalar4=vertvalue_obs_in_localization_coord, scalar5=whichvert_real)
-      else
-         call broadcast_send(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
-           net_a, scalar1=obs_qc, &
-           scalar2=vertvalue_obs_in_localization_coord, scalar3=whichvert_real)
-      endif
+         if(local_varying_ss_inflate) then
+            call broadcast_send(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
+               orig_obs_prior_mean, orig_obs_prior_var, net_a, scalar1=obs_qc, &
+               scalar2=vertvalue_obs_in_localization_coord, scalar3=whichvert_real)
+   
+         else if(local_single_ss_inflate .or. local_obs_inflate) then
+            call broadcast_send(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
+              net_a, scalar1=my_inflate, scalar2=my_inflate_sd, scalar3=obs_qc, &
+              scalar4=vertvalue_obs_in_localization_coord, scalar5=whichvert_real)
+         else
+            call broadcast_send(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
+              net_a, scalar1=obs_qc, &
+              scalar2=vertvalue_obs_in_localization_coord, scalar3=whichvert_real)
+         endif
       endif
 
    ! Next block is done by processes that do NOT own this observation
@@ -972,19 +970,19 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
                scalar2=obs_err_infl, scalar3=vertvalue_obs_in_localization_coord, scalar4=whichvert_real)
          endif
       else
-      if(local_varying_ss_inflate .or. local_enhanced_ss_inflate) then
-         call broadcast_recv(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
-            orig_obs_prior_mean, orig_obs_prior_var, net_a, scalar1=obs_qc, &
-            scalar2=vertvalue_obs_in_localization_coord, scalar3=whichvert_real)
-      else if(local_single_ss_inflate .or. local_obs_inflate) then
-         call broadcast_recv(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
-            net_a, scalar1=my_inflate, scalar2=my_inflate_sd, scalar3=obs_qc, &
-            scalar4=vertvalue_obs_in_localization_coord, scalar5=whichvert_real)
-      else
-         call broadcast_recv(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
-           net_a, scalar1=obs_qc, &
-           scalar2=vertvalue_obs_in_localization_coord, scalar3=whichvert_real)
-      endif
+         if(local_varying_ss_inflate) then
+            call broadcast_recv(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
+               orig_obs_prior_mean, orig_obs_prior_var, net_a, scalar1=obs_qc, &
+               scalar2=vertvalue_obs_in_localization_coord, scalar3=whichvert_real)
+         else if(local_single_ss_inflate .or. local_obs_inflate) then
+            call broadcast_recv(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
+               net_a, scalar1=my_inflate, scalar2=my_inflate_sd, scalar3=obs_qc, &
+               scalar4=vertvalue_obs_in_localization_coord, scalar5=whichvert_real)
+         else
+            call broadcast_recv(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, &
+              net_a, scalar1=obs_qc, &
+              scalar2=vertvalue_obs_in_localization_coord, scalar3=whichvert_real)
+         endif
       endif
       whichvert_obs_in_localization_coord = nint(whichvert_real)
 
@@ -1374,8 +1372,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
                ! Update the inflation values
                if ( obs_err_infl < max_infl ) then
                call update_inflation(inflate, varying_ss_inflate, varying_ss_inflate_sd, &
-                     r_mean, r_var, obs(1), obs_err_var, gamma)
-               endif
+                  r_mean, r_var, grp_size, obs(1), obs_err_var, gamma)
             else
                ! if we don't go into the previous if block, make sure these
                ! have good values going out for the block below
