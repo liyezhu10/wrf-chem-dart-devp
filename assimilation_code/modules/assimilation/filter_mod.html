@@ -122,12 +122,12 @@ prematurely terminating the namelist.
    inf_sd_initial_from_restart  = .false.,                 .false.,
    inf_deterministic            = .true.,                  .true.,
    inf_initial                  = 1.0,                     1.0,
-   inf_sd_initial               = 0.0,                     0.0,
-   inf_sd_size_change           = 1.05,                    1.05,
-   inf_damping                  = 1.0,                     1.0,
    inf_lower_bound              = 1.0,                     1.0,
    inf_upper_bound              = 1000000.0,               1000000.0,
+   inf_damping                  = 1.0,                     1.0,
+   inf_sd_initial               = 0.0,                     0.0,
    inf_sd_lower_bound           = 0.0,                     0.0,
+   inf_sd_max_change            = 1.05,                    1.05,
 
    trace_execution              = .false.,
    output_timestamps            = .false.,
@@ -436,10 +436,18 @@ and the second controls the posterior inflation.
         values will adapt through time, so they are time-varying.
  </TD></TR>
 
-<TR><TD>inf_sd_size_change</TD>
+<TR><TD>inf_sd_max_change</TD>
     <TD>real(r8) dimension(2)</TD>
-    <TD>For inflation type 5 (enhanced inflation), controls the size
-        change of the standard deviation.  Should be between 1.0 and 2.0.
+    <TD>For inflation type 5 (enhanced inflation), controls the maximum
+        change of the inflation standard deviation when adapting for the
+        next assimilation cycle.  The value should be between 1.0 and 2.0.
+        1.0 prevents any changes, while 2.0 allows 100% change.
+        For the enhanced inflation option, if the standard deviation 
+        initial value is equal to the standard deviation
+        lower bound the standard deviation will not adapt in time.
+        See <A href="../../programs/filter/filter.html#Inflation">this section</A>
+        for a discussion of how the standard deviation
+        adapts based on different types of inflation.
  </TD></TR>
 
 <TR><TD>inf_damping</TD>
