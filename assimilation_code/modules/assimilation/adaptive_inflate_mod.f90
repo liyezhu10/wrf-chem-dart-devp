@@ -1059,6 +1059,9 @@ if (inflation_handle%minmax_sd(2) > 0.0_r8) then
 else
   tadapt = ' time-constant,'
 endif
+if (inflation_handle%inflation_sub_flavor == 5) then
+  tadapt = ' enhanced' //trim(tadapt)
+endif
 
 select case(inflation_handle%inflation_flavor)
    case (0)
@@ -1077,9 +1080,6 @@ select case(inflation_handle%inflation_flavor)
       akind = ' state-space'
    case (4)
       sadapt = ' spatially-varying relaxation-to-prior-spread,'
-      akind = ' state-space'
-   case (5)
-      sadapt = ' enhanced, '
       akind = ' state-space'
    case default
       write(msgstring, *) 'Illegal inflation value for ', label
