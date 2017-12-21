@@ -383,11 +383,11 @@ and the second controls the posterior inflation.
     <TD>Assimilation window seconds; defaults to model timestep size.
  </TD></TR>
 
-<TR><TD colspan=3>All variables named inf_* are arrays of length 2.<br />
+<TR><TD colspan=3>All variables named inf_* are arrays of length 2.
                   The first element controls the prior inflation, the second element 
                   controls the posterior inflation.
                   See <A href="../../programs/filter/filter.html#Inflation">filter.html</A>
-                  for a discussion of inflation and effective strategies for using it.
+                  for a discussion of inflation and effective strategies.
  </TD></TR>
 
 <TR><TD>inf_flavor</TD>
@@ -395,10 +395,10 @@ and the second controls the posterior inflation.
     <TD>Inflation flavor for [prior, posterior]
         <UL>
          <LI>0 = none</LI>
-         <LI>2 = spatially-varying state space</LI>
-         <LI>3 = spatially-fixed state space </LI>
+         <LI>2 = spatially-varying state-space (gaussian)</LI>
+         <LI>3 = spatially-fixed state-space  (gaussian)</LI>
          <LI>4 = Relaxation To Prior Spread (Posterior inflation only) </LI>
-         <LI>5 = enhanced state space </LI>
+         <LI>5 = enhanced spatially-varying state-space (inverse gamma)</LI>
         </UL>
         (See inf_sd_initial below for how to set the time evolution options.)
  </TD></TR>
@@ -428,6 +428,28 @@ and the second controls the posterior inflation.
     <TD>Initial value of inflation if not read from restart file. 
  </TD></TR>
 
+
+<TR><TD>inf_lower_bound</TD>
+    <TD>real(r8) dimension(2)</TD>
+    <TD>Lower bound for inflation value.
+ </TD></TR>
+
+<TR><TD>inf_upper_bound</TD>
+    <TD>real(r8) dimension(2)</TD>
+    <TD>Upper bound for inflation value.
+ </TD></TR>
+
+<TR><TD>inf_damping</TD>
+    <TD>real(r8) dimension(2)</TD>
+    <TD>Damping factor for inflation mean values.  
+The difference between the current inflation value and 1.0 is multiplied by
+this factor before the next assimilation cycle.  The value should be between
+0.0 and 1.0.  Setting a value of 0.0 is full damping, which in fact
+turns all inflation off by fixing the inflation value at 1.0.   A value
+of 1.0 turns inflation damping off leaving the original inflation value
+unchanged.
+ </TD></TR>
+
 <TR><TD>inf_sd_initial</TD>
     <TD>real(r8) dimension(2)</TD>
     <TD>Initial value of inflation standard deviation if not read 
@@ -436,6 +458,13 @@ and the second controls the posterior inflation.
         values will adapt through time, so they are time-varying.
  </TD></TR>
 
+<TR><TD>inf_sd_lower_bound</TD>
+    <TD>real(r8) dimension(2)</TD>
+    <TD>Lower bound for inflation standard deviation. 
+        If using a negative value for <em class=code>sd_initial</em> 
+        this should also be negative to preserve the setting.
+ </TD></TR>
+ 
 <TR><TD>inf_sd_max_change</TD>
     <TD>real(r8) dimension(2)</TD>
     <TD>For inflation type 5 (enhanced inflation), controls the maximum
@@ -450,36 +479,6 @@ and the second controls the posterior inflation.
         adapts based on different types of inflation.
  </TD></TR>
 
-<TR><TD>inf_damping</TD>
-    <TD>real(r8) dimension(2)</TD>
-    <TD>Damping factor for inflation mean values.  
-The difference between the current inflation value and 1.0 is multiplied by
-this factor before the next assimilation cycle.  The value should be between
-0.0 and 1.0.  Setting a value of 0.0 is full damping, which in fact
-turns all inflation off by fixing the inflation value at 1.0.   A value
-of 1.0 turns inflation damping off leaving the original inflation value
-unchanged.
- </TD></TR>
-
-<TR><TD>inf_lower_bound</TD>
-    <TD>real(r8) dimension(2)</TD>
-    <TD>Lower bound for inflation value.
- </TD></TR>
-
-<TR><TD>inf_upper_bound</TD>
-    <TD>real(r8) dimension(2)</TD>
-    <TD>Upper bound for inflation value.
- </TD></TR>
-
-<TR><TD>inf_sd_lower_bound</TD>
-    <TD>real(r8) dimension(2)</TD>
-    <TD>Lower bound for inflation standard deviation. 
-        If using a negative value for <em class=code>sd_initial</em> 
-        this should also be negative to preserve the setting.
-        The inflation standard deviation is a non-increasing quantity,
-        so the sd value will eventually reach and keep this lower bound.
- </TD></TR>
- 
 <TR><TD>trace_execution</TD>
     <TD>logical</TD>
     <TD>True means output very detailed messages about what routines
