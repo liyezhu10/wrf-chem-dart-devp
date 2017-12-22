@@ -18,7 +18,7 @@ use time_manager_mod,     only : time_type, set_time, get_time, print_time, &
                                  operator(+)
 
 use utilities_mod,        only : E_MSG, E_ERR, error_handler, to_upper
-use netcdf_utilities_mod, only : nc_check
+use netcdf_utilities_mod, only : nc_check, nc_open_file_readonly, nc_close_file
 use typeSizes
 use netcdf
 
@@ -53,6 +53,7 @@ integer :: ntimes, seconds, days
 integer :: year, month, day, hour, minute, second
 type(time_type) :: base_time, delta_time
 
+character(len=*), parameter :: routine = 'read_model_time'
 real(digits12) :: model_time, time_array(1)
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
@@ -64,8 +65,7 @@ character(len=256) :: unitstring
 write(string3,*)'You may need to supply a model-specific "read_model_time()" to read the time.'
 
 
-call nc_check( nf90_open(filename, NF90_NOWRITE, ncid), &
-               'read_model_time',  'opening : "'//trim(filename)//'"')
+ncid = nc_open_file_readonly(filename, routine)
 
 ios = nf90_inq_varid(ncid, "time", VarID)
 if (ios /= NF90_NOERR) then
@@ -187,7 +187,7 @@ call print_time(read_model_time,'read_model_time')
 ! make print_date() return without error if calendar is no_calendar,
 ! and then add a call to print_date() here.  (also vote no.)
 
-call nc_check( nf90_close(ncid) , 'read_model_time closing : ', filename)
+call nc_close_file(ncid, routine)
 
 end function read_model_time
 
