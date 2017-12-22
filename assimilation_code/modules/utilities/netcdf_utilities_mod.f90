@@ -1222,6 +1222,7 @@ character(len=*), intent(in)  :: filename
 character(len=*), intent(in), optional :: context
 integer                       :: nc_open_file_readwrite
 
+character(len=*), parameter :: routine = 'nc_open_file_readwrite'
 integer :: ret, ncid, oldmode
 
 ret = nf90_open(filename, NF90_WRITE, ncid)
