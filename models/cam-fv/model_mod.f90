@@ -47,8 +47,9 @@ use  netcdf_utilities_mod,  only : nc_get_variable, nc_get_variable_size, &
                                    nc_add_global_creation_time, &
                                    nc_add_global_attribute, &
                                    nc_define_dimension, nc_put_variable, &
-                                   nc_sync, nc_enddef, nc_redef, nc_open_readonly, &
-                                   nc_close, nc_variable_exists
+                                   nc_synchronize_file, nc_end_define_mode,&
+                                   nc_begin_define_mode, nc_open_file_readonly, &
+                                   nc_close_file, nc_variable_exists
 use        chem_tables_mod, only : init_chem_tables, finalize_chem_tables, chem_convert_factor
 use        quad_utils_mod,  only : quad_interp_handle, init_quad_interp, &
                                    set_quad_coords, finalize_quad_interp, &
@@ -1728,7 +1729,7 @@ if ( .not. module_initialized ) call static_init_model
 !-------------------------------------------------------------------------------
 ! Write Global Attributes 
 !-------------------------------------------------------------------------------
-call nc_redef(ncid)
+call nc_begin_define_mode(ncid)
 
 call nc_add_global_creation_time(ncid)
 
@@ -1744,7 +1745,7 @@ call nc_add_global_attribute(ncid, "model", "CAM")
 ! the rest of this routine writes out enough grid info
 ! to make the output file look like the input.
 if (suppress_grid_info_in_output) then
-   call nc_enddef(ncid)
+   call nc_end_define_mode(ncid)
    return
 endif
 
@@ -1832,7 +1833,7 @@ call nc_add_attribute_to_variable(ncid, 'P0', 'units',     'Pa',                
 
 ! Finished with dimension/variable definitions, must end 'define' mode to fill.
 
-call nc_enddef(ncid)
+call nc_end_define_mode(ncid)
 
 !----------------------------------------------------------------------------
 ! Fill the coordinate variables
@@ -1851,7 +1852,7 @@ call nc_put_variable(ncid, 'hyai', grid_data%hyai%vals, routine)
 call nc_put_variable(ncid, 'hybi', grid_data%hybi%vals, routine)
 call nc_put_variable(ncid, 'P0',   grid_data%P0%vals,   routine)
 
-call nc_sync(ncid)
+call nc_synchronize_file(ncid)
 
 end subroutine nc_write_model_atts
 
@@ -1884,9 +1885,9 @@ if (.not. nc_variable_exists(ncid, "date")) then
    call error_handler(E_MSG, routine,'"date" variable not found in file ', &
                       source, revision, revdate, text2='creating one')
 
-   call nc_redef(ncid)
+   call nc_begin_define_mode(ncid)
    call nc_define_integer_variable(ncid, 'date', (/ 'time' /), routine)
-   call nc_enddef(ncid)
+   call nc_end_define_mode(ncid)
    call nc_put_variable(ncid, 'date', cam_date, routine)
 endif
 
@@ -1896,9 +1897,9 @@ if (.not. nc_variable_exists(ncid, "datesec")) then
    call error_handler(E_MSG, routine,'"datesec" variable not found in file ', &
                       source, revision, revdate, text2='creating one')
 
-   call nc_redef(ncid)
+   call nc_begin_define_mode(ncid)
    call nc_define_integer_variable(ncid, 'datesec', (/ 'time' /), routine)
-   call nc_enddef(ncid)
+   call nc_end_define_mode(ncid)
    call nc_put_variable(ncid, 'datesec', cam_tod,  routine)
 endif
 
@@ -1930,7 +1931,7 @@ if ( .not. file_exist(filename) ) then
    call error_handler(E_ERR,routine,string1,source,revision,revdate)
 endif
 
-ncid = nc_open_readonly(filename, routine)
+ncid = nc_open_file_readonly(filename, routine)
 
 ! CAM initial files have two variables of length 
 ! 'time' (the unlimited dimension): date, datesec
@@ -1967,7 +1968,7 @@ endif
 
 read_model_time = set_date(iyear,imonth,iday,ihour,imin,isec)
 
-call nc_close(ncid, routine)
+call nc_close_file(ncid, routine)
 
 end function read_model_time
 
@@ -2230,7 +2231,7 @@ character(len=*), parameter :: routine = 'get_cam_grid:'
 integer :: ncid
 
 ! put this in a subroutine that deals with the grid
-ncid = nc_open_readonly(grid_file, routine)
+ncid = nc_open_file_readonly(grid_file, routine)
 
 call fill_cam_1d_array(ncid, 'lon',  grid%lon)
 call fill_cam_1d_array(ncid, 'lat',  grid%lat)
@@ -2247,7 +2248,7 @@ call fill_cam_1d_array(ncid, 'hybm', grid%hybm)
 ! P0 is a scalar with no dimensionality
 call fill_cam_0d_array(ncid, 'P0',   grid%P0) 
 
-call nc_close(ncid, routine)
+call nc_close_file(ncid, routine)
 
 end subroutine get_cam_grid
 
@@ -2424,14 +2425,14 @@ character(len=*), parameter :: routine = 'read_cam_phis_array'
 
 integer :: ncid, nsize(2)
 
-ncid = nc_open_readonly(phis_filename, routine)
+ncid = nc_open_file_readonly(phis_filename, routine)
 
 call nc_get_variable_size(ncid, 'PHIS', nsize(:))
 allocate( phis(nsize(1), nsize(2)) )
 
 call nc_get_variable(ncid, 'PHIS', phis)
 
-call nc_close(ncid, routine)
+call nc_close_file(ncid, routine)
 
 end subroutine read_cam_phis_array
 
