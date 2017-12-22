@@ -571,8 +571,8 @@ if(inflate_sd < inflate_handle%sd_lower_bound) inflate_sd = inflate_handle%sd_lo
 end subroutine update_inflation
 
 !------------------------------------------------------------------
-!> Uses one of 3 algorithms in references on DART web site to update the distribution of inflation.
-!> Anderson 2007, Anderson 2009, or Gharamti 2017
+!> Uses one of 2 algorithms in references on DART web site to update the 
+!> distribution of inflation:  Anderson 2007, 2009 or Gharamti 2017
 
 subroutine bayes_cov_inflate(ens_size, inf_type, x_p, sigma_p_2, y_o, sigma_o_2, lambda_mean, lambda_sd, &
    gamma_corr, sd_lower_bound_in, sd_max_change_in, new_cov_inflate, new_cov_inflate_sd)
@@ -589,7 +589,7 @@ real(r8) :: new_1_sd, new_max
 real(r8) :: b, c, d, Q, R, disc, alpha, beta, cube_root_alpha, cube_root_beta, x
 real(r8) :: rrr, cube_root_rrr, angle, mx(3), sep(3), mlambda(3)
 
-! If gamma is 0, nothing happens
+! If gamma is 0, nothing changes
 if(gamma_corr <= 0.0_r8) then
    new_cov_inflate    = lambda_mean
    new_cov_inflate_sd = lambda_sd
@@ -693,7 +693,7 @@ if (inf_type == AND2009) then
       endif
    
       ! Can now compute the standard deviation consistent with this as
-         ! sigma = sqrt(-x^2 / (2 ln(r))  where r is ratio and x is lambda_sd (distance from mean)
+      !    sigma = sqrt(-x^2 / (2 ln(r))  where r is ratio and x is lambda_sd (distance from mean)
       new_cov_inflate_sd = sqrt( -1.0_r8 * lambda_sd_2 / (2.0_r8 * log(ratio)))
    
       ! Prevent an increase in the sd of lambda???
@@ -1026,7 +1026,7 @@ CC = 21.0_r8*var*mode_p(7)
 DD = var_p(3)*mode_p(3)
 EE = (CC + BB + DD + mode_p(9) + 6.0_r8*sqrt(3.0_r8)*AA*var_p(3)) / var_p(3)
 
-beta = (7.0_r8*var*mode + mode_p(3))/(3.0_r8*var)                           + &
+beta = (7.0_r8*var*mode + mode_p(3))/(3.0_r8*var)                               + &
        EE**(1.0_r8/3.0_r8)/3.0_r8 + mode_p(2)*(var_p(2) + 14.0_r8*var*mode_p(2) + &
        mode_p(4)) / (3.0_r8*var_p(2)*EE**(1.0_r8/3.0_r8))
 
@@ -1047,14 +1047,15 @@ if(inflation_handle%deterministic) then
 else
   det = 'random-noise,'
 endif
-if (inflation_handle%sd_lower_bound > inflation_handle%inf_lower_bound) then
-   det = trim(det) // ' covariance adaptive,'
-endif
 if (inflation_handle%inf_lower_bound < 1.0_r8) then
    det = trim(det) // ' deflation permitted,'
 endif
 if (inflation_handle%minmax_sd(2) > 0.0_r8) then
   tadapt = ' time-adaptive,'
+   if (inflation_handle%sd_lower_bound < inflation_handle%minmax_sd(2) .or. &
+       inflation_handle%inflation_sub_flavor == 5) then
+      tadapt = trim(tadapt) // ' time-rate adaptive,'
+   endif
 else
   tadapt = ' time-constant,'
 endif
@@ -1159,6 +1160,8 @@ if (inflation_handle%mean_from_restart) then
    call send_minmax_to(minmax_mean, map_pe_to_task(ens_handle, 0), global_val)
    if (ens_handle%my_pe == 0) inflation_handle%minmax_mean = global_val
 
+else
+   if (ens_handle%my_pe == 0) inflation_handle%minmax_mean = inflation_handle%inflate
 endif
 
 if (inflation_handle%sd_from_restart) then
@@ -1170,7 +1173,8 @@ if (inflation_handle%sd_from_restart) then
    ! collect on pe 0
    call send_minmax_to(minmax_sd, map_pe_to_task(ens_handle, 0), global_val)
    if (ens_handle%my_pe == 0) inflation_handle%minmax_sd = global_val
-
+else
+   if (ens_handle%my_pe == 0) inflation_handle%minmax_sd = inflation_handle%sd 
 endif
 
 end subroutine get_minmax_task_zero
