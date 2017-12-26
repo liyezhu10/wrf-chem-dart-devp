@@ -81,6 +81,11 @@
 !>@ todo after hop test    'pot',   'QTY_ELECTRIC_POTENTIAL', 'UPDATE', 'MAGNETIC_GRID',
 
 
+&test_interp_nml
+   test_case = 1
+  /
+
+
 &quality_control_nml
    outlier_threshold  = 3.0
    input_qc_threshold = 1.0
