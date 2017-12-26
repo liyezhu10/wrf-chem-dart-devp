@@ -54,6 +54,8 @@ use   state_structure_mod, only : add_domain, get_model_variable_indices,       
                                   get_dim_name, get_variable_name,               &
                                   state_structure_info
 
+use obs_def_utilities_mod, only : track_status
+
 use     default_model_mod, only : get_close_obs, get_close_state, nc_write_model_vars
 
 use              cotr_mod, only : transform, cotr_set, cotr, xyzdeg, degxyz
@@ -90,10 +92,10 @@ public :: get_close_obs,                 &
           convert_vertical_state
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
+character(len=*), parameter :: source   = &
    "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 ! Transform type openggcm, this come directly from the 
 ! openggcm source code that had been modified and put
@@ -1539,46 +1541,6 @@ write(string1,*)' Can not find grid type for : ', get_name_for_quantity(dart_kin
 call error_handler(E_ERR,'get_grid_type',string1,source,revision,revdate)
 
 end function get_grid_type
-
-!----------------------------------------------------------------------
-
-!> track_status can be used to keep track of the status of
-!> each ensemble member during multiple calls to model_interpolate
-!> for a given obs_def.
-!> It assumes that you are starting with istatus(:) = 0
-!> If debugging, return_now is only set to true if all istatuses are non-zero
-!> If not debugging, return_now is set to true if any istatues are non-zero
-!>  and any remaining zero istatues are set to 1.
-
-!>@todo FIXME: this should be in the utilities mod!!!
-
-subroutine track_status(ens_size, val_istatus, val_data, istatus, return_now)
-
-integer,  intent(in)    :: ens_size
-integer,  intent(in)    :: val_istatus(ens_size)
-real(r8), intent(inout) :: val_data(ens_size) !> expected_obs for obs_def
-integer,  intent(inout) :: istatus(ens_size) !> istatus for obs_def
-logical,  intent(out)   :: return_now
-
-
-where (istatus == 0) istatus = val_istatus
-where (istatus /= 0) val_data = MISSING_R8
-
-return_now = .false.
-if (debug > 0) then
-   if( all(istatus /= 0))then
-      return_now = .true.
-      val_data(:) = missing_r8
-   endif
-else
-   if( any(istatus /= 0)) then
-      return_now = .true.
-      val_data(:) = missing_r8
-      where (istatus == 0) istatus = 1
-   endif
-endif
-
-end subroutine track_status
 
 !----------------------------------------------------------------------
 

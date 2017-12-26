@@ -99,12 +99,12 @@ interface nc_get_variable
 end interface
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
+character(len=*), parameter :: source   = &
    "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
-character(len=512) :: msgstring1, msgstring2, msgstring3
+character(len=512) :: msgstring1
 
 ! do we need one of these?
 !namelist /netcdf_utilities_nml/ 

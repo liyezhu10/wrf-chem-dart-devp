@@ -69,10 +69,10 @@ public :: obs_type, init_obs, destroy_obs, get_obs_def, set_obs_def, &
 public :: obs_cov_type
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
+character(len=*), parameter :: source   = &
    "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 type obs_sequence_type
    private
@@ -1267,7 +1267,6 @@ logical,           intent(out) :: pre_I_format
 logical, optional, intent(in)  :: close_the_file
 
 character(len=16) :: label(2)
-character(len=12) :: header
 integer :: ios
 
 ! always false now, should be deprecated

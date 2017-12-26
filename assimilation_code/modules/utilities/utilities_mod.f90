@@ -228,10 +228,10 @@ interface scalar
 end interface
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
+character(len=*), parameter :: source   = &
    "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 character(len=512) :: msgstring1, msgstring2, msgstring3
 
@@ -980,9 +980,9 @@ end subroutine error_handler
    integer,          intent(out), optional :: return_rc
    integer  :: iunit
 
-   integer           :: nc, rc, rlen
+   integer           :: rc, rlen
    logical           :: open, use_recl
-   character(len=32) :: format, pos, act, stat, acc, conversion, recl, del
+   character(len=32) :: format, pos, act, stat, acc, conversion, del
 
    if ( .not. module_initialized ) call initialize_utilities
 

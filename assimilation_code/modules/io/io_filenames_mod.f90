@@ -103,10 +103,10 @@ public :: READ_COPY, &
           COPY_NOT_PRESENT
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
+character(len=*), parameter :: source   = &
    "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 ! IO Parameters
 integer, parameter :: NO_IO            = -1
@@ -180,7 +180,7 @@ type file_info_type
 
 end type
 
-character(len=512) :: msgstring, msgstring2, msgstring3 ! message handler
+character(len=512) :: msgstring ! message handler
 
 contains
 
@@ -268,7 +268,7 @@ character(len=*), optional, intent(in) :: restart_files(:,:) !< list of restarts
 character(len=*), optional, intent(in) :: root_name          !< base if restart_files not given
 logical,          optional, intent(in) :: check_output_compatibility !< ensure netCDF variables exist in output BEFORE spending a ton of core hours
 
-integer :: ndomains, idom, esize
+integer :: ndomains, esize
 
 file_info%single_file = single_file
 file_info%cycling     = cycling
@@ -321,7 +321,6 @@ type(file_info_type),  intent(inout) :: file_info
 type(ensemble_type),   intent(in)    :: ens_handle
 
 integer :: num_domains, idom, icopy, my_copy
-character(len=256) :: filename
 
 num_domains = get_num_domains()
 
@@ -350,7 +349,7 @@ integer,              intent(in)    :: my_copy_start
 
 character(len=256) :: fname, desc
 character(len=128) :: stage_name, basename
-integer :: nlines, icopy, iunit, ios, idom
+integer :: icopy, idom
 integer :: offset
 
 offset = my_copy_start - 1

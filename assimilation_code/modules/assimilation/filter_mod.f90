@@ -103,10 +103,10 @@ public :: filter_sync_keys_time, &
           filter_main
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
+character(len=*), parameter :: source   = &
    "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 ! Some convenient global storage items
 character(len=512)      :: msgstring
@@ -2442,8 +2442,7 @@ type(file_info_type), intent(out) :: file_info_postassim
 type(file_info_type), intent(out) :: file_info_analysis
 type(file_info_type), intent(out) :: file_info_output
 
-integer :: noutput_members, next_file, ninput_files, noutput_files, ndomains, idom
-character(len=64)  :: fsource
+integer :: noutput_members, ninput_files, noutput_files, ndomains
 character(len=256), allocatable :: file_array_input(:,:), file_array_output(:,:)
 
 ! local variable to shorten the name for function input
