@@ -528,8 +528,8 @@ do ivar = 1, num_vars
    ret = nf90_inq_varid(ncfile, domain%variable(ivar)%varname,    &
                                 domain%variable(ivar)%io_info%netcdf_id)
 
-   call nc_check(ret, 'load_variable_ids, nf90_inq_var_id', &
-                 trim(domain%variable(ivar)%varname))
+   write(string1,*)'domain variable number ',ivar,' "'//trim(domain%variable(ivar)%varname)//'" from file "'//trim(domain%info_file)//'"'
+   call nc_check(ret, 'load_variable_ids, nf90_inq_var_id', string1) 
 
 enddo
 
@@ -1163,7 +1163,7 @@ subroutine add_time_unlimited(unlimited_dimId)
 
 integer, intent(in)  :: unlimited_dimId
 
-call error_handler(E_ERR, 'add_time_unlimited', 'does not exist')
+call error_handler(E_ERR, 'add_time_unlimited', 'routine does not exist')
 
 end subroutine add_time_unlimited
 
@@ -1591,7 +1591,7 @@ do ivar = 1, num_vars
    array_lengths(1:num_dims) = get_dim_lengths(dom_id,ivar)
    do jdim = 1, num_dims
        dim_name = get_dim_name(dom_id, ivar, jdim)
-       write(*,'("       state   dim_id[",I2,"] ",A15,", length = ",I6)') jdim, &
+       write(*,'("       state   dim_id[",I2,"] ",A15,", length = ",I8)') jdim, &
                                                                           trim(dim_name), &
                                                                           array_lengths(jdim)
    enddo
@@ -1603,7 +1603,7 @@ do ivar = 1, num_vars
    array_lengths(1:num_dims) = get_io_dim_lengths(dom_id,ivar)
    do jdim = 1, num_dims
        dim_name = get_dim_name(dom_id, ivar, jdim)
-       write(*,'("       netCDF  dim_id[",I2,"] ",A15,", length = ",I6)') array_ids(jdim), &
+       write(*,'("       netCDF  dim_id[",I2,"] ",A15,", length = ",I8)') array_ids(jdim), &
                                                                           trim(dim_name), &
                                                                           array_lengths(jdim)
    enddo
@@ -1612,7 +1612,7 @@ do ivar = 1, num_vars
    write(*,'('' io_unique_numdims     : '',I2)') num_dims
    do jdim = 1, num_dims
       write(*,'('' io_unique_dimname     : '',5A)' ) trim(get_io_unique_dim_name(dom_id,jdim))
-      write(*,'('' io_unique_dim_length  : '',I5)' ) get_io_unique_dim_length(dom_id,jdim)
+      write(*,'('' io_unique_dim_length  : '',I8)' ) get_io_unique_dim_length(dom_id,jdim)
    enddo
 
    if ( state%domain(dom_id)%info_file /= 'NULL' ) then
