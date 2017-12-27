@@ -31,6 +31,7 @@ setenv RUNDIR         `./xmlquery RUNDIR      --value`
 setenv archive        `./xmlquery DOUT_S_ROOT --value`
 setenv TOTALPES       `./xmlquery TOTALPES    --value`
 setenv DATA_ASSIMILATION_CYCLES `./xmlquery DATA_ASSIMILATION_CYCLES --value`
+setenv TASKS_PER_NODE `./xmlquery MAX_TASKS_PER_NODE --value`
 cd ${RUNDIR}
 
 # string to be replaced by the setup script or by hand once
@@ -44,7 +45,6 @@ switch ("`hostname`")
       set   COPY = 'cp -fv --preserve=timestamps'
       set   LINK = 'ln -fvs'
       set REMOVE = 'rm -fr'
-      set TASKS_PER_NODE = `echo $LSB_SUB_RES_REQ | sed -ne '/ptile/s#.*\[ptile=\([0-9][0-9]*\)]#\1#p'`
       setenv MP_DEBUG_NOTIMEOUT yes
 
       set  LAUNCHCMD = mpirun.lsf
@@ -66,7 +66,6 @@ switch ("`hostname`")
       set   COPY = 'cp -fv --preserve=timestamps'
       set   LINK = 'ln -fvs'
       set REMOVE = 'rm -fr'
-      set TASKS_PER_NODE = $MAX_TASKS_PER_NODE
 
       set  LAUNCHCMD = "mpiexec -n $NTASKS"
    breaksw
@@ -77,9 +76,6 @@ switch ("`hostname`")
       set   COPY = 'cp -fv --preserve=timestamps'
       set   LINK = 'ln -fvs'
       set REMOVE = 'rm -fr'
-      # echo "Trying to set TASKS_PER_NODE using PBS_NUM_PPN $PBS_NUM_PPN"
-      # Unavailable for some reason:  set TASKS_PER_NODE = $PBS_NUM_PPN
-      set TASKS_PER_NODE = 36
       setenv MP_DEBUG_NOTIMEOUT yes
       set  LAUNCHCMD = mpiexec_mpt
    breaksw
