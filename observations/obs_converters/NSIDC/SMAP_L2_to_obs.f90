@@ -4,10 +4,10 @@
 !
 ! $Id$
 
-program ease_grid_to_obs
+program SMAP_L2_to_obs
 
 !=======================================================================
-!   program to convert a series of HDF5 files
+!  program to convert a series of HDF5 files
 !
 !   created 13 Nov 2017   Tim Hoar NCAR/IMAGe
 !
@@ -80,7 +80,7 @@ character(len=256) :: input_file_list = 'file_list.txt'
 character(len=256) :: obs_out_file = 'obs_seq.out'
 logical            :: verbose = .false.
 
-namelist /ease_grid_to_obs_nml/ &
+namelist /SMAP_L2_to_obs_nml/ &
          input_file_list, obs_out_file, verbose
 
 !-----------------------------------------------------------------------
@@ -133,19 +133,19 @@ real, allocatable :: data_hdf5(:)
 !-----------------------------------------------------------------------
 ! start of executable code
 
-call initialize_utilities('ease_grid_to_obs')
+call initialize_utilities('SMAP_L2_to_obs')
 
 ! time setup
 call set_calendar_type(GREGORIAN)
 
 ! Read the namelist entry
-call find_namelist_in_file("input.nml", "ease_grid_to_obs_nml", iunit)
-read(iunit, nml = ease_grid_to_obs_nml, iostat = iocode)
-call check_namelist_read(iunit, iocode, "ease_grid_to_obs_nml")
+call find_namelist_in_file("input.nml", "SMAP_L2_to_obs_nml", iunit)
+read(iunit, nml = SMAP_L2_to_obs_nml, iostat = iocode)
+call check_namelist_read(iunit, iocode, "SMAP_L2_to_obs_nml")
 
 ! Record the namelist values used for the run ...
-if (do_nml_file()) write(nmlfileunit, nml=ease_grid_to_obs_nml)
-if (do_nml_term()) write(     *     , nml=ease_grid_to_obs_nml)
+if (do_nml_file()) write(nmlfileunit, nml=SMAP_L2_to_obs_nml)
+if (do_nml_term()) write(     *     , nml=SMAP_L2_to_obs_nml)
 
 num_input_files = Check_Input_Files(input_file_list, filename_seq_list) 
 
@@ -424,7 +424,7 @@ endif
 
 end subroutine read_observation_times
 
-end program ease_grid_to_obs
+end program SMAP_L2_to_obs
 
 ! <next few lines under version control, do not edit>
 ! $URL$

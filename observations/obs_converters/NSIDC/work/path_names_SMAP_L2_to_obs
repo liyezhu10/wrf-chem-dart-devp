@@ -8,6 +8,7 @@ assimilation_code/modules/io/state_structure_mod.f90
 assimilation_code/modules/io/state_vector_io_mod.f90
 assimilation_code/modules/observations/obs_kind_mod.f90
 assimilation_code/modules/observations/obs_sequence_mod.f90
+assimilation_code/modules/utilities/HDF5_utilities_mod.f90
 assimilation_code/modules/utilities/distributed_state_mod.f90
 assimilation_code/modules/utilities/ensemble_manager_mod.f90
 assimilation_code/modules/utilities/netcdf_utilities_mod.f90
@@ -23,7 +24,6 @@ models/template/model_mod.f90
 models/utilities/default_model_mod.f90
 observations/forward_operators/obs_def_mod.f90
 observations/forward_operators/obs_def_utilities_mod.f90
-observations/obs_converters/EASE-Grid/EASE_utilities_mod.f90
-observations/obs_converters/EASE-Grid/HDF5_utilities_mod.f90
-observations/obs_converters/EASE-Grid/ease_grid_to_obs.f90
+observations/obs_converters/NSIDC/EASE_utilities_mod.f90
+observations/obs_converters/NSIDC/SMAP_L2_to_obs.f90
 observations/obs_converters/utilities/obs_utilities_mod.f90

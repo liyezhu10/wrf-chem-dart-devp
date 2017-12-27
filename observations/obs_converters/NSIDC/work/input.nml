@@ -1,4 +1,4 @@
-# DART $Id: $
+# DART $Id$
 
 &preprocess_nml
            overwrite_output = .true.
@@ -14,19 +14,11 @@
    evaluate_these_obs_types   = 'null'
    /
 
-&location_nml
-   /
-
-&utilities_nml
-   module_details = .FALSE.
-   termlevel      = 2
-   /
-
 &obs_sequence_nml
    write_binary_obs_sequence = .FALSE.
    /
 
-&ease_grid_to_obs_nml
+&SMAP_L2_to_obs_nml
    input_file_list = 'file_list.txt'
    obs_out_file    = 'obs_seq.out'
    verbose         = .TRUE.
@@ -37,6 +29,14 @@
    obs_out_file    = 'obs_seq.out'
    maxgoodqc       = 2
    verbose         = .TRUE.
+   /
+
+&location_nml
+   /
+
+&utilities_nml
+   module_details = .FALSE.
+   termlevel      = 2
    /
 
 # This is appropriate for a days worth of flux tower observations
