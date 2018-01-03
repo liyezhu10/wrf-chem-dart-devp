@@ -25,8 +25,12 @@ use    utilities_mod, only : register_module, error_handler,                   &
                              do_output, to_upper,                              &
                              find_namelist_in_file, check_namelist_read,       &
                              file_exist, find_textfile_dims, file_to_text
-use netcdf_utilities_mod, only : nc_add_global_attribute, nc_check, nc_sync, &
-                                 nc_add_global_creation_time, nc_redef, nc_enddef
+use netcdf_utilities_mod, only : nc_add_global_attribute, nc_check, nc_sync,        &
+                                 nc_add_global_creation_time, nc_redef, nc_enddef,  &
+                                 nc_add_attribute_to_variable, nc_define_dimension, & 
+                                 nc_define_real_variable, nc_define_integer_variable,   &
+                                 nc_put_variable
+
 use     obs_kind_mod, only : QTY_TEMPERATURE, QTY_SALINITY, QTY_DRY_LAND,      &
                              QTY_U_CURRENT_COMPONENT,QTY_V_CURRENT_COMPONENT,  &
                              QTY_SEA_SURFACE_HEIGHT, QTY_SEA_SURFACE_PRESSURE, &
@@ -1887,19 +1891,10 @@ integer :: KMTVarID, KMUVarID
 ! local variables 
 !----------------------------------------------------------------------
 
+character(len=*), parameter :: routine = 'nc_write_model_atts'
 integer     :: i
-character(len=256) :: filename
 
 if ( .not. module_initialized ) call static_init_model
-
-!--------------------------------------------------------------------
-! we only have a netcdf handle here so we do not know the filename
-! or the fortran unit number.  but construct a string with at least
-! the netcdf handle, so in case of error we can trace back to see
-! which netcdf file is involved.
-!--------------------------------------------------------------------
-
-write(filename,*) 'ncid', ncid
 
 !-------------------------------------------------------------------------------
 ! Write Global Attributes 
@@ -1921,12 +1916,9 @@ call nc_add_global_attribute(ncid, "model", "POP")
 ! Define the new dimensions IDs
 !----------------------------------------------------------------------------
 
-call nc_check(nf90_def_dim(ncid, name='i', &
-       len = Nx, dimid = NlonDimID),'nc_write_model_atts', 'i def_dim '//trim(filename))
-call nc_check(nf90_def_dim(ncid, name='j', &
-       len = Ny, dimid = NlatDimID),'nc_write_model_atts', 'j def_dim '//trim(filename))
-call nc_check(nf90_def_dim(ncid, name='k', &
-       len = Nz, dimid =   NzDimID),'nc_write_model_atts', 'k def_dim '//trim(filename))
+call nc_define_dimension(ncid, 'i', Nx, routine)   ! Nlon
+call nc_define_dimension(ncid, 'j', Ny, routine)   ! Nlat
+call nc_define_dimension(ncid, 'k', Nz, routine)   ! Ndepth
 
 !----------------------------------------------------------------------------
 ! Create the Coordinate Variables and the Attributes
@@ -1934,114 +1926,74 @@ call nc_check(nf90_def_dim(ncid, name='k', &
 !----------------------------------------------------------------------------
 
 ! U,V Grid Longitudes
-call nc_check(nf90_def_var(ncid,name='ULON', xtype=nf90_real, &
-              dimids=(/ NlonDimID, NlatDimID /), varid=ulonVarID),&
-              'nc_write_model_atts', 'ULON def_var '//trim(filename))
-call nc_check(nf90_put_att(ncid,  ulonVarID, 'long_name', 'longitudes of U,V grid'), &
-              'nc_write_model_atts', 'ULON long_name '//trim(filename))
-call nc_check(nf90_put_att(ncid,  ulonVarID, 'cartesian_axis', 'X'),  &
-              'nc_write_model_atts', 'ULON cartesian_axis '//trim(filename))
-call nc_check(nf90_put_att(ncid,  ulonVarID, 'units', 'degrees_east'), &
-              'nc_write_model_atts', 'ULON units '//trim(filename))
-call nc_check(nf90_put_att(ncid,  ulonVarID, 'valid_range', (/ 0.0_r8, 360.0_r8 /)), &
-              'nc_write_model_atts', 'ULON valid_range '//trim(filename))
+call nc_define_real_variable(ncid, 'ULON', (/ 'i', 'j' /), routine)
+
+call nc_add_attribute_to_variable(ncid, 'ULON', 'long_name', 'longitudes of U,V grid', routine)
+call nc_add_attribute_to_variable(ncid, 'ULON', 'cartesian_axis', 'X', routine)
+call nc_add_attribute_to_variable(ncid, 'ULON', 'units', 'degrees_east', routine)
+call nc_add_attribute_to_variable(ncid, 'ULON', 'valid_range', (/ 0.0_r8, 360.0_r8 /), routine)
 
 ! U,V Grid Latitudes
-call nc_check(nf90_def_var(ncid,name='ULAT', xtype=nf90_real, &
-              dimids=(/ NlonDimID, NlatDimID /), varid=ulatVarID),&
-              'nc_write_model_atts', 'ULAT def_var '//trim(filename))
-call nc_check(nf90_put_att(ncid,  ulatVarID, 'long_name', 'latitudes of U,V grid'), &
-              'nc_write_model_atts', 'ULAT long_name '//trim(filename))
-call nc_check(nf90_put_att(ncid,  ulatVarID, 'cartesian_axis', 'Y'),   &
-              'nc_write_model_atts', 'ULAT cartesian_axis '//trim(filename))
-call nc_check(nf90_put_att(ncid,  ulatVarID, 'units', 'degrees_north'),  &
-              'nc_write_model_atts', 'ULAT units '//trim(filename))
-call nc_check(nf90_put_att(ncid,  ulatVarID,'valid_range',(/ -90.0_r8, 90.0_r8 /)), &
-              'nc_write_model_atts', 'ULAT valid_range '//trim(filename))
+call nc_define_real_variable(ncid, 'ULAT', (/ 'i', 'j' /), routine)
 
+call nc_add_attribute_to_variable(ncid, 'ULAT', 'long_name', 'latitudes of U,V grid', routine)
+call nc_add_attribute_to_variable(ncid, 'ULAT', 'cartesian_axis', 'Y', routine)
+call nc_add_attribute_to_variable(ncid, 'ULAT', 'units', 'degrees_north', routine)
+call nc_add_attribute_to_variable(ncid, 'ULAT', 'valid_range', (/ -90.0_r8, 90.0_r8 /), routine)
 
 ! S,T,PSURF Grid Longitudes
-call nc_check(nf90_def_var(ncid,name='TLON', xtype=nf90_real, &
-              dimids=(/ NlonDimID, NlatDimID /), varid=tlonVarID),&
-              'nc_write_model_atts', 'TLON def_var '//trim(filename))
-call nc_check(nf90_put_att(ncid, tlonVarID, 'long_name', 'longitudes of S,T,... grid'), &
-              'nc_write_model_atts', 'TLON long_name '//trim(filename))
-call nc_check(nf90_put_att(ncid, tlonVarID, 'cartesian_axis', 'X'),   &
-              'nc_write_model_atts', 'TLON cartesian_axis '//trim(filename))
-call nc_check(nf90_put_att(ncid, tlonVarID, 'units', 'degrees_east'),  &
-              'nc_write_model_atts', 'TLON units '//trim(filename))
-call nc_check(nf90_put_att(ncid, tlonVarID, 'valid_range', (/ 0.0_r8, 360.0_r8 /)), &
-              'nc_write_model_atts', 'TLON valid_range '//trim(filename))
+call nc_define_real_variable(ncid, 'TLON', (/ 'i', 'j' /), routine)
+
+call nc_add_attribute_to_variable(ncid, 'TLON', 'long_name', 'longitudes of S,T,... grid', routine)
+call nc_add_attribute_to_variable(ncid, 'TLON', 'cartesian_axis', 'X', routine)
+call nc_add_attribute_to_variable(ncid, 'TLON', 'units', 'degrees_east', routine)
+call nc_add_attribute_to_variable(ncid, 'TLON', 'valid_range', (/ 0.0_r8, 360.0_r8 /), routine)
 
 ! S,T,PSURF Grid Latitudes
-call nc_check(nf90_def_var(ncid,name='TLAT', xtype=nf90_real, &
-              dimids= (/ NlonDimID, NlatDimID /), varid=tlatVarID), &
-              'nc_write_model_atts', 'TLAT def_var '//trim(filename))
-call nc_check(nf90_put_att(ncid, tlatVarID, 'long_name', 'latitudes of S,T, ... grid'), &
-              'nc_write_model_atts', 'TLAT long_name '//trim(filename))
-call nc_check(nf90_put_att(ncid, tlatVarID, 'cartesian_axis', 'Y'),   &
-              'nc_write_model_atts', 'TLAT cartesian_axis '//trim(filename))
-call nc_check(nf90_put_att(ncid, tlatVarID, 'units', 'degrees_north'),  &
-              'nc_write_model_atts', 'TLAT units '//trim(filename))
-call nc_check(nf90_put_att(ncid, tlatVarID, 'valid_range', (/ -90.0_r8, 90.0_r8 /)), &
-              'nc_write_model_atts', 'TLAT valid_range '//trim(filename))
+call nc_define_real_variable(ncid, 'TLAT', (/ 'i', 'j' /), routine)
+
+call nc_add_attribute_to_variable(ncid, 'TLAT', 'long_name', 'latitudes of S,T,... grid', routine)
+call nc_add_attribute_to_variable(ncid, 'TLAT', 'cartesian_axis', 'Y', routine)
+call nc_add_attribute_to_variable(ncid, 'TLAT', 'units', 'degrees_north', routine)
+call nc_add_attribute_to_variable(ncid, 'TLAT', 'valid_range', (/ -90.0_r8, 90.0_r8 /), routine)
 
 ! Depths
-call nc_check(nf90_def_var(ncid,name='ZG', xtype=nf90_real, &
-              dimids=NzDimID, varid= ZGVarID), &
-              'nc_write_model_atts', 'ZG def_var '//trim(filename))
-call nc_check(nf90_put_att(ncid, ZGVarID, 'long_name', 'depth at grid edges'), &
-              'nc_write_model_atts', 'ZG long_name '//trim(filename))
-call nc_check(nf90_put_att(ncid, ZGVarID, 'cartesian_axis', 'Z'),   &
-              'nc_write_model_atts', 'ZG cartesian_axis '//trim(filename))
-call nc_check(nf90_put_att(ncid, ZGVarID, 'units', 'meters'),  &
-              'nc_write_model_atts', 'ZG units '//trim(filename))
-call nc_check(nf90_put_att(ncid, ZGVarID, 'positive', 'down'),  &
-              'nc_write_model_atts', 'ZG units '//trim(filename))
-call nc_check(nf90_put_att(ncid, ZGVarID, 'comment', &
-               'more positive is closer to the center of the earth'),  &
-              'nc_write_model_atts', 'ZG comment '//trim(filename))
+call nc_define_real_variable(ncid, 'ZG', 'k', routine)
 
-call nc_check(nf90_def_var(ncid,name='ZC',xtype=nf90_real,dimids=NzDimID,varid=ZCVarID), &
-              'nc_write_model_atts', 'ZC def_var '//trim(filename))
-call nc_check(nf90_put_att(ncid, ZCVarID, 'long_name', 'depth at grid centroids'), &
-              'nc_write_model_atts', 'ZC long_name '//trim(filename))
-call nc_check(nf90_put_att(ncid, ZCVarID, 'cartesian_axis', 'Z'),   &
-              'nc_write_model_atts', 'ZC cartesian_axis '//trim(filename))
-call nc_check(nf90_put_att(ncid, ZCVarID, 'units', 'meters'),  &
-              'nc_write_model_atts', 'ZC units '//trim(filename))
-call nc_check(nf90_put_att(ncid, ZCVarID, 'positive', 'down'),  &
-              'nc_write_model_atts', 'ZC units '//trim(filename))
-call nc_check(nf90_put_att(ncid, ZCVarID, 'comment', &
-               'more positive is closer to the center of the earth'),  &
-              'nc_write_model_atts', 'ZC comment '//trim(filename))
+call nc_add_attribute_to_variable(ncid, 'ZG', 'long_name', 'depth at grid edges', routine)
+call nc_add_attribute_to_variable(ncid, 'ZG', 'cartesian_axis', 'Z', routine)
+call nc_add_attribute_to_variable(ncid, 'ZG', 'units', 'meters', routine)
+call nc_add_attribute_to_variable(ncid, 'ZG', 'positive', 'down', routine)
+call nc_add_attribute_to_variable(ncid, 'ZG', 'comment', &
+               'more positive is closer to the center of the earth', routine)
 
-! Depth mask
-call nc_check(nf90_def_var(ncid,name='KMT',xtype=nf90_int, &
-              dimids= (/ NlonDimID, NlatDimID /), varid=KMTVarID), &
-              'nc_write_model_atts', 'KMT def_var '//trim(filename))
-call nc_check(nf90_put_att(ncid, KMTVarID, 'long_name', 'lowest valid depth index at grid centroids'), &
-              'nc_write_model_atts', 'KMT long_name '//trim(filename))
-call nc_check(nf90_put_att(ncid, KMTVarID, 'units', 'levels'),  &
-              'nc_write_model_atts', 'KMT units '//trim(filename))
-call nc_check(nf90_put_att(ncid, KMTVarID, 'positive', 'down'),  &
-              'nc_write_model_atts', 'KMT units '//trim(filename))
-call nc_check(nf90_put_att(ncid, KMTVarID, 'comment', &
-               'more positive is closer to the center of the earth'),  &
-              'nc_write_model_atts', 'KMT comment '//trim(filename))
+call nc_define_real_variable(ncid, 'ZC', 'k', routine)
 
-call nc_check(nf90_def_var(ncid,name='KMU',xtype=nf90_int, &
-              dimids= (/ NlonDimID, NlatDimID /), varid=KMUVarID), &
-              'nc_write_model_atts', 'KMU def_var '//trim(filename))
-call nc_check(nf90_put_att(ncid, KMUVarID, 'long_name', 'lowest valid depth index at grid corners'), &
-              'nc_write_model_atts', 'KMU long_name '//trim(filename))
-call nc_check(nf90_put_att(ncid, KMUVarID, 'units', 'levels'),  &
-              'nc_write_model_atts', 'KMU units '//trim(filename))
-call nc_check(nf90_put_att(ncid, KMUVarID, 'positive', 'down'),  &
-              'nc_write_model_atts', 'KMU units '//trim(filename))
-call nc_check(nf90_put_att(ncid, KMUVarID, 'comment', &
-               'more positive is closer to the center of the earth'),  &
-              'nc_write_model_atts', 'KMU comment '//trim(filename))
+call nc_add_attribute_to_variable(ncid, 'ZC', 'long_name', 'depth at grid centroids', routine)
+call nc_add_attribute_to_variable(ncid, 'ZC', 'cartesian_axis', 'Z', routine)
+call nc_add_attribute_to_variable(ncid, 'ZC', 'units', 'meters', routine)
+call nc_add_attribute_to_variable(ncid, 'ZC', 'positive', 'down', routine)
+call nc_add_attribute_to_variable(ncid, 'ZC', 'comment', &
+               'more positive is closer to the center of the earth', routine)
+
+! Depth masks
+call nc_define_integer_variable(ncid, 'KMT', (/ 'i', 'j' /), routine)
+              
+call nc_add_attribute_to_variable(ncid, 'KMT', 'long_name', 'lowest valid depth index at grid centroids', routine)
+call nc_add_attribute_to_variable(ncid, 'KMT', 'cartesian_axis', 'Z', routine)
+call nc_add_attribute_to_variable(ncid, 'KMT', 'units', 'levels', routine)
+call nc_add_attribute_to_variable(ncid, 'KMT', 'positive', 'down', routine)
+call nc_add_attribute_to_variable(ncid, 'KMT', 'comment', &
+               'more positive is closer to the center of the earth', routine)
+
+call nc_define_integer_variable(ncid, 'KMU', (/ 'i', 'j' /), routine)
+              
+call nc_add_attribute_to_variable(ncid, 'KMU', 'long_name', 'lowest valid depth index at grid corners', routine)
+call nc_add_attribute_to_variable(ncid, 'KMU', 'cartesian_axis', 'Z', routine)
+call nc_add_attribute_to_variable(ncid, 'KMU', 'units', 'levels', routine)
+call nc_add_attribute_to_variable(ncid, 'KMU', 'positive', 'down', routine)
+call nc_add_attribute_to_variable(ncid, 'KMU', 'comment', &
+               'more positive is closer to the center of the earth', routine)
 
 ! Finished with dimension/variable definitions, must end 'define' mode to fill.
 
@@ -2051,22 +2003,14 @@ call nc_enddef(ncid)
 ! Fill the coordinate variables
 !----------------------------------------------------------------------------
 
-call nc_check(nf90_put_var(ncid, ulonVarID, ULON ), &
-             'nc_write_model_atts', 'ULON put_var '//trim(filename))
-call nc_check(nf90_put_var(ncid, ulatVarID, ULAT ), &
-             'nc_write_model_atts', 'ULAT put_var '//trim(filename))
-call nc_check(nf90_put_var(ncid, tlonVarID, TLON ), &
-             'nc_write_model_atts', 'TLON put_var '//trim(filename))
-call nc_check(nf90_put_var(ncid, tlatVarID, TLAT ), &
-             'nc_write_model_atts', 'TLAT put_var '//trim(filename))
-call nc_check(nf90_put_var(ncid, ZGVarID, ZG ), &
-             'nc_write_model_atts', 'ZG put_var '//trim(filename))
-call nc_check(nf90_put_var(ncid, ZCVarID, ZC ), &
-             'nc_write_model_atts', 'ZC put_var '//trim(filename))
-call nc_check(nf90_put_var(ncid, KMTVarID, KMT ), &
-             'nc_write_model_atts', 'KMT put_var '//trim(filename))
-call nc_check(nf90_put_var(ncid, KMUVarID, KMU ), &
-             'nc_write_model_atts', 'KMU put_var '//trim(filename))
+call nc_put_variable(ncid, 'ULON', ULON, routine)
+call nc_put_variable(ncid, 'ULAT', ULAT, routine)
+call nc_put_variable(ncid, 'TLON', TLON, routine)
+call nc_put_variable(ncid, 'TLAT', TLAT, routine)
+call nc_put_variable(ncid, 'ZG',   ZG,   routine)
+call nc_put_variable(ncid, 'ZC',   ZC,   routine)
+call nc_put_variable(ncid, 'KMT',  KMT,   routine)
+call nc_put_variable(ncid, 'KMU',  KMU,   routine)
 
 !-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
