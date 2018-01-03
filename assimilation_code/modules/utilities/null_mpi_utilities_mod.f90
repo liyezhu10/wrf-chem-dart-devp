@@ -18,20 +18,7 @@ use time_manager_mod, only : time_type, set_time
 
 
 !#ifdef __NAG__
- !use F90_unix_proc, only : sleep, system, exit
- !! block for NAG compiler
- !  PURE SUBROUTINE SLEEP(SECONDS,SECLEFT)
- !    INTEGER,INTENT(IN) :: SECONDS
- !    INTEGER,OPTIONAL,INTENT(OUT) :: SECLEFT
- !
- !  SUBROUTINE SYSTEM(STRING,STATUS,ERRNO)
- !    CHARACTER*(*),INTENT(IN) :: STRING
- !    INTEGER,OPTIONAL,INTENT(OUT) :: STATUS,ERRNO
- !
- !!also used in exit_all outside this module
- !  SUBROUTINE EXIT(STATUS)
- !    INTEGER,OPTIONAL :: STATUS
- !! end block
+! use F90_unix_proc, only : sleep, system, exit
 !#endif
 
 
@@ -46,16 +33,16 @@ private
 ! this directory.  It is a sed script that comments in and out the interface
 ! block below.  Please leave the BLOCK comment lines unchanged.
 
- !!SYSTEM_BLOCK_EDIT START COMMENTED_IN
- ! interface block for getting return code back from system() routine
- interface
-  function system(string)    
-   character(len=*) :: string
-   integer :: system         
-  end function system
- end interface
- ! end block                 
- !!SYSTEM_BLOCK_EDIT END COMMENTED_IN
+! !!SYSTEM_BLOCK_EDIT START COMMENTED_OUT
+! ! interface block for getting return code back from system() routine
+! interface
+!  function system(string)    
+!   character(len=*) :: string
+!   integer :: system         
+!  end function system
+! end interface
+! ! end block                 
+! !!SYSTEM_BLOCK_EDIT END COMMENTED_OUT
 
 
 interface sum_across_tasks
@@ -514,6 +501,7 @@ function shell_execute(execute_string, serialize)
 ! is true, do each call serially.
 
 character(len=255) :: doit
+integer :: rc
 
    !print *, "in-string is: ", trim(execute_string)
 
@@ -522,13 +510,19 @@ character(len=255) :: doit
    !print *, "about to run: ", trim(doit)
    !print *, "input string length = ", len(trim(doit))
 
+!#ifdef __NAG__
+!   call system(doit, status=rc)
+!   shell_execute = rc
+!#else
    shell_execute = system(doit)
-   print *, "execution returns, rc = ", shell_execute
+!#endif
+   !print *, "execution returns, rc = ", shell_execute
 
 end function shell_execute
 
 !-----------------------------------------------------------------------------
 subroutine sleep_seconds(naplength)
+ use F90_unix_proc, only : sleep
  real(r8), intent(in) :: naplength
 
 ! Wrapper for the sleep command.  Argument is a real
@@ -701,6 +695,7 @@ end module mpi_utilities_mod
 !-----------------------------------------------------------------------------
 
 subroutine exit_all(exit_code)
+ use F90_unix_proc, only : exit
  integer, intent(in) :: exit_code
 
 ! Call exit with the specified code.

@@ -19,20 +19,6 @@ use time_manager_mod, only : time_type, set_time
 
 !#ifdef __NAG__
  use F90_unix_proc, only : sleep, system, exit
- ! block for NAG compiler
-   !PURE SUBROUTINE SLEEP(SECONDS,SECLEFT)
-   !SUBROUTINE SLEEP(SECONDS,SECLEFT)
-   !  INTEGER,INTENT(IN) :: SECONDS
-   !  INTEGER,OPTIONAL,INTENT(OUT) :: SECLEFT
- 
-   !SUBROUTINE SYSTEM(STRING,STATUS,ERRNO)
-   !  CHARACTER*(*),INTENT(IN) :: STRING
-   !  INTEGER,OPTIONAL,INTENT(OUT) :: STATUS,ERRNO
- 
- !also used in exit_all outside this module
-   !SUBROUTINE EXIT(STATUS)
-   !  INTEGER,OPTIONAL :: STATUS
- ! end block
 !#endif
 
 
@@ -530,7 +516,7 @@ integer :: rc
 !#else
 !   shell_execute = system(doit)
 !#endif
-   print *, "execution returns, rc = ", shell_execute
+   !print *, "execution returns, rc = ", shell_execute
 
 end function shell_execute
 
