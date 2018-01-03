@@ -227,7 +227,7 @@ MODULE map_utils
 !   use utilities_mod, only : register_module
 
    ! Define some private constants
-   INTEGER, PRIVATE, PARAMETER :: HIGH = 8
+   INTEGER, PRIVATE, PARAMETER :: HIGH = r8
 
    TYPE proj_info
 

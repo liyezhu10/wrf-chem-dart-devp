@@ -86,8 +86,9 @@ use   state_structure_mod, only : add_domain, get_model_variable_indices, &
                                   get_long_name, get_xtype, get_has_missing_value, &
                                   get_dim_lengths
 
-use netcdf_utilities_mod, only : nc_add_global_attribute, nc_sync, nc_check, &
-                                 nc_add_global_creation_time, nc_redef, nc_enddef
+use netcdf_utilities_mod, only : nc_add_global_attribute, nc_synchronize_file, nc_check, &
+                                 nc_add_global_creation_time, nc_begin_define_mode, &
+                                 nc_end_define_mode
 
 use location_io_mod,      only :  nc_write_location_atts, nc_get_location_varids, &
                                   nc_write_location
@@ -147,14 +148,6 @@ integer  :: vert_localization_coord      = VERTISHEIGHT
 integer  :: debug = 0   ! turn up for more and more debug messages
 character(len=256) :: roms_filename = 'roms_input.nc'
 
-namelist /model_nml/  &
-   assimilation_period_days,    &
-   assimilation_period_seconds, &
-   roms_filename,               &
-   vert_localization_coord,     &
-   debug,                       &
-   variables
-
 ! DART contents are specified in the input.nml:&model_nml namelist.
 !>@todo  NF90_MAX_NAME is 256 ... this makes the namelist output unreadable
 integer, parameter :: MAX_STATE_VARIABLES = 8
@@ -164,6 +157,14 @@ character(len=vtablenamelength) :: var_names(MAX_STATE_VARIABLES) = ' '
 logical  ::                   update_list(MAX_STATE_VARIABLES) = .FALSE.
 integer  ::                     kind_list(MAX_STATE_VARIABLES) = MISSING_I
 real(r8) ::                    clamp_vals(MAX_STATE_VARIABLES,2) = MISSING_R8
+
+namelist /model_nml/  &
+   assimilation_period_days,    &
+   assimilation_period_seconds, &
+   roms_filename,               &
+   vert_localization_coord,     &
+   debug,                       &
+   variables
 
 integer :: nfields   ! This is the number of variables in the DART state vector.
 
@@ -488,7 +489,7 @@ write(filename,*) 'ncid', ncid
 
 ! Write Global Attributes
 
-call nc_redef(ncid)
+call nc_begin_define_mode(ncid)
 
 call nc_add_global_creation_time(ncid)
 
@@ -610,7 +611,7 @@ call nc_check(nf90_put_att(ncid,  VarID, 'units', 'm'), &
 
 ! Finished with dimension/variable definitions, must end 'define' mode to fill.
 
-call nc_enddef(ncid)
+call nc_end_define_mode(ncid)
 
 ! Fill the coordinate variable values
 
@@ -673,7 +674,7 @@ call nc_check(nf90_put_var(ncid, VarID, WDEP ), &
              'nc_write_model_atts', 'z_w put_var '//trim(filename))
 
 ! Flush the buffer and leave netCDF file open
-call nc_sync(ncid)
+call nc_synchronize_file(ncid)
 
 
 end subroutine nc_write_model_atts

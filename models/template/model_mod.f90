@@ -23,8 +23,9 @@ use    utilities_mod, only : register_module, error_handler, &
                              E_ERR, E_MSG
                              ! nmlfileunit, do_output, do_nml_file, do_nml_term,  &
                              ! find_namelist_in_file, check_namelist_read
-use netcdf_utilities_mod, only : nc_add_global_attribute, nc_sync, &
-                                 nc_add_global_creation_time, nc_redef, nc_enddef
+use netcdf_utilities_mod, only : nc_add_global_attribute, nc_synchronize_file, &
+                                 nc_add_global_creation_time, &
+                                 nc_begin_define_mode, nc_end_define_mode
 use state_structure_mod, only : add_domain
 use ensemble_manager_mod, only : ensemble_type
 use dart_time_io_mod, only  : read_model_time, write_model_time
@@ -301,7 +302,7 @@ integer, intent(in) :: domain_id
 
 ! put file into define mode.
 
-call nc_redef(ncid)
+call nc_begin_define_mode(ncid)
 
 call nc_add_global_creation_time(ncid)
 
@@ -311,8 +312,10 @@ call nc_add_global_attribute(ncid, "model_revdate", revdate )
 
 call nc_add_global_attribute(ncid, "model", "template")
 
+call nc_end_define_mode(ncid)
+
 ! Flush the buffer and leave netCDF file open
-call nc_sync(ncid)
+call nc_synchronize_file(ncid)
 
 end subroutine nc_write_model_atts
 

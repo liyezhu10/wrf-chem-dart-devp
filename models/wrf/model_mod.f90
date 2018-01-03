@@ -58,8 +58,9 @@ use     utilities_mod,  only  : file_exist, open_file, close_file, &
                                 find_textfile_dims, file_to_text, &
                                 do_nml_file, do_nml_term, scalar
 
-use netcdf_utilities_mod, only : nc_add_global_attribute, nc_check, nc_sync, &
-                                 nc_add_global_creation_time, nc_redef, nc_enddef
+use netcdf_utilities_mod, only : nc_add_global_attribute, nc_synchronize_file, &
+                                 nc_add_global_creation_time, nc_check, &
+                                 nc_begin_define_mode, nc_end_define_mode
 
 use  mpi_utilities_mod,  only : my_task_id, task_count
 
@@ -3763,7 +3764,7 @@ write(filename,*) 'ncid', ncid
 ! Put file into define mode and
 ! Write Global Attributes 
 !-------------------------------------------------------------------------------
-call nc_redef(ncid)
+call nc_begin_define_mode(ncid)
 
 call nc_add_global_creation_time(ncid)
 
@@ -4231,7 +4232,7 @@ call nc_check(nf90_put_att(ncid, hgtVarId(id), 'units_long_name', 'meters'), &
                  'nc_write_model_atts','put_att HGT'//' units_long_name')
 
 ! Leave define mode so we can actually fill the variables.
-call nc_enddef(ncid)
+call nc_end_define_mode(ncid)
 
 !-----------------------------------------------------------------
 ! Fill the variables we can
@@ -4317,7 +4318,7 @@ call nc_check(nf90_put_var(ncid,      hgtVarID(id), wrf%dom(id)%hgt), &
 ! Flush the buffer and leave netCDF file open
 !-----------------------------------------------------------------
 
-call nc_sync(ncid)
+call nc_synchronize_file(ncid)
 
 end subroutine nc_write_model_atts
 
@@ -8467,7 +8468,7 @@ character(len=19) :: timestring
 call get_date(dart_time, year, month, day, hour, minute, second)
 call set_wrf_date(timestring, year, month, day, hour, minute, second)
 
-call nc_redef(ncid)
+call nc_begin_define_mode(ncid)
 
 ! Define Times variable if it does not exist
 ret = nf90_inq_varid(ncid, "Times", var_id)
@@ -8493,7 +8494,7 @@ if (ret /= NF90_NOERR) then
       dimids=dim_ids, varid=var_id), "write_model_time def_var Times")
 endif
 
-call nc_enddef(ncid)
+call nc_end_define_mode(ncid)
 
 call nc_check( nf90_put_var(ncid, var_id, timestring), &
                'write_model_time', 'put_var Times' )

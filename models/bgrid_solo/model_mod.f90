@@ -91,8 +91,9 @@ use state_structure_mod,  only : add_domain, add_dimension_to_variable, &
 use default_model_mod,     only : get_close_obs, get_close_state, convert_vertical_obs, &
                                   convert_vertical_state, nc_write_model_vars  
 
-use netcdf_utilities_mod,  only : nc_redef, nc_add_global_creation_time, &
-                                  nc_add_global_attribute, nc_enddef, nc_sync, nc_check
+use netcdf_utilities_mod,  only : nc_begin_define_mode, nc_add_global_creation_time, &
+                                  nc_add_global_attribute, nc_end_define_mode, & 
+                                  nc_synchronize_file, nc_check
 
 use dart_time_io_mod,      only : read_model_time, write_model_time
 
@@ -1478,7 +1479,7 @@ nVelJ   = vje - vjs + 1
 ! and then put into define mode.
 !-------------------------------------------------------------------------------
 
-call nc_redef(ncFileID)
+call nc_begin_define_mode(ncFileID)
 
 !-------------------------------------------------------------------------------
 ! Write Global Attributes 
@@ -1571,7 +1572,7 @@ if ( ntracer > 0 ) then
                                     "tracers long_name")
 endif
 
-call nc_enddef(ncFileID)
+call nc_end_define_mode(ncFileID)
 
 !-------------------------------------------------------------------------------
 ! Fill the variables
@@ -1589,7 +1590,7 @@ endif
 !-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
 !-------------------------------------------------------------------------------
-call nc_sync(ncFileID)
+call nc_synchronize_file(ncFileID)
 
 end subroutine nc_write_model_atts
 

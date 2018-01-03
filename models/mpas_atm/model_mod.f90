@@ -35,8 +35,9 @@ use     location_mod, only : location_type, get_dist, query_location,          &
                              loc_get_close_state => get_close_state,           &
                              is_vertical, set_vertical_localization_coord
                              
-use netcdf_utilities_mod, only : nc_add_global_attribute, nc_sync, nc_check, &
-                                 nc_add_global_creation_time, nc_redef, nc_enddef
+use netcdf_utilities_mod, only : nc_add_global_attribute, nc_synchronize_file, &
+                                 nc_add_global_creation_time, nc_check, &
+                                 nc_begin_define_mode, nc_end_define_mode
 
 use location_io_mod,      only :  nc_write_location_atts, nc_write_location
 
@@ -1297,7 +1298,7 @@ write(filename,*) 'ncid', ncid
 ! and then put into define mode.
 !-------------------------------------------------------------------------------
 
-call nc_redef(ncid)
+call nc_begin_define_mode(ncid)
 
 !-------------------------------------------------------------------------------
 ! We need the dimension ID for the number of copies/ensemble members, and
@@ -1471,7 +1472,7 @@ endif ! add_static_data_to_diags
 ! Finished with dimension/variable definitions, must end 'define' mode to fill.
 !----------------------------------------------------------------------------
 
-call nc_enddef(ncid)
+call nc_end_define_mode(ncid)
 
 if (add_static_data_to_diags) then
    !----------------------------------------------------------------------------
@@ -1588,12 +1589,13 @@ if (add_static_data_to_diags) then
    deallocate(data1d)
 
    call nc_check(nf90_close(mpasFileID),'nc_write_model_atts','close '//trim(grid_definition_filename))
+
 endif ! add_static_data_to_diags
 
 !-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
 !-------------------------------------------------------------------------------
-call nc_sync(ncid)
+call nc_synchronize_file(ncid)
 
 end subroutine nc_write_model_atts
 

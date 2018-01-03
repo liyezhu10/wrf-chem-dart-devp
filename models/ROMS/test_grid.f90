@@ -142,7 +142,7 @@ endif
 
 call print_test_message('FINISHED TEST 1')
 
-if ( test1thru == 1 ) call exit(0)
+if ( test1thru == 1 ) call exit_all(0)
 
 
 call print_test_message('RUNNING TEST 2', &
@@ -178,7 +178,7 @@ call print_time( model_time,' test_grid:model time')
 
 call print_test_message('FINISHED TEST 2')
 
-if ( test1thru == 2 ) call exit(0)
+if ( test1thru == 2 ) call exit_all(0)
 
 !----------------------------------------------------------------------
 ! Check the meta data
@@ -195,7 +195,7 @@ endif
 
 call print_test_message('FINISHED TEST 3')
 
-if ( test1thru == 3 ) call exit(0)
+if ( test1thru == 3 ) call exit_all(0)
 
 !----------------------------------------------------------------------
 ! Check the interpolation - print initially to STDOUT
@@ -225,7 +225,7 @@ print*, ' '
 
 call print_test_message('FINISHED TEST 4')
 
-if ( test1thru == 4 ) call exit(0)
+if ( test1thru == 4 ) call exit_all(0)
 
 call print_test_message('RUNNING TEST 5', &
                         'Testing range of data for model_interpolate')

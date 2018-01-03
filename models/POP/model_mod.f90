@@ -25,8 +25,9 @@ use    utilities_mod, only : register_module, error_handler,                   &
                              do_output, to_upper,                              &
                              find_namelist_in_file, check_namelist_read,       &
                              file_exist, find_textfile_dims, file_to_text
-use netcdf_utilities_mod, only : nc_add_global_attribute, nc_check, nc_sync, &
-                                 nc_add_global_creation_time, nc_redef, nc_enddef
+use netcdf_utilities_mod, only : nc_add_global_attribute, nc_check,            &
+                                 nc_synchronize_file, nc_add_global_creation_time, &
+                                 nc_begin_define_mode, nc_end_define_mode
 use     obs_kind_mod, only : QTY_TEMPERATURE, QTY_SALINITY, QTY_DRY_LAND,      &
                              QTY_U_CURRENT_COMPONENT,QTY_V_CURRENT_COMPONENT,  &
                              QTY_SEA_SURFACE_HEIGHT, QTY_SEA_SURFACE_PRESSURE, &
@@ -1904,7 +1905,7 @@ write(filename,*) 'ncid', ncid
 !-------------------------------------------------------------------------------
 ! Write Global Attributes 
 !-------------------------------------------------------------------------------
-call nc_redef(ncid)
+call nc_begin_define_mode(ncid)
 
 call nc_add_global_creation_time(ncid)
 
@@ -2045,7 +2046,7 @@ call nc_check(nf90_put_att(ncid, KMUVarID, 'comment', &
 
 ! Finished with dimension/variable definitions, must end 'define' mode to fill.
 
-call nc_enddef(ncid)
+call nc_end_define_mode(ncid)
 
 !----------------------------------------------------------------------------
 ! Fill the coordinate variables
@@ -2071,7 +2072,7 @@ call nc_check(nf90_put_var(ncid, KMUVarID, KMU ), &
 !-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
 !-------------------------------------------------------------------------------
-call nc_sync(ncid)
+call nc_synchronize_file(ncid)
 
 end subroutine nc_write_model_atts
 

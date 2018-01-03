@@ -26,7 +26,7 @@ use  netcdf_utilities_mod, only : nc_check, nc_add_global_creation_time, &
 use          location_mod, only : location_type, set_location, write_location,  &
                                   get_dist
 
-use          obs_kind_mod, only : get_name_for_quantity
+use          obs_kind_mod, only : get_index_for_quantity
 
 use  ensemble_manager_mod, only : ensemble_type
 
@@ -97,7 +97,7 @@ character(len=16) :: output_file = 'check_me'
 
 character(len=32)  :: field_name
 type(location_type) :: loc
-integer :: iunit, ios_out(ens_size), imem, quantity_index
+integer :: iunit, ios_out(ens_size), imem
 integer, allocatable :: all_ios_out(:,:)
 
 test_interpolate_range = 0
@@ -246,7 +246,7 @@ function test_interpolate_single( ens_handle,       &
                                   xval,             &
                                   yval,             &
                                   zval,             &
-                                  mykindindex,      &
+                                  quantity_string,  &
                                   interp_vals,      &
                                   ios_out)
 
@@ -256,17 +256,19 @@ character(len=*)      , intent(in)    :: vertcoord_string
 real(r8)              , intent(in)    :: xval
 real(r8)              , intent(in)    :: yval
 real(r8)              , intent(in)    :: zval
-integer               , intent(in)    :: mykindindex
+character(len=*)      , intent(in)    :: quantity_string
 real(r8)              , intent(out)   :: interp_vals(ens_size)
 integer               , intent(out)   :: ios_out(ens_size)
 
 integer :: test_interpolate_single
 
 type(location_type) :: loc
-integer :: imem, num_passed, vertcoord
+integer :: imem, num_passed, vertcoord, mykindindex
 character(len=128) :: my_location
 
+mykindindex = get_index_for_quantity(quantity_string)
 num_passed = 0
+
 
 loc = set_location(xval, yval, zval)
 
@@ -331,8 +333,7 @@ end subroutine count_error_codes
 
 !-------------------------------------------------------------------------------
 
-subroutine find_closest_state_item(loc_of_interest, vert_string,
-quantity_string)
+subroutine find_closest_state_item(loc_of_interest, vert_string, quantity_string)
 
 real(r8),         intent(in) :: loc_of_interest(:)
 character(len=*), intent(in) :: vert_string
