@@ -18,7 +18,7 @@ use time_manager_mod, only : time_type, set_time
 
 
 !#ifdef __NAG__
- use F90_unix_proc, only : sleep, system, exit
+ use F90_unix_proc, only : sleep, system
 !#endif
 
 
@@ -522,7 +522,6 @@ end function shell_execute
 
 !-----------------------------------------------------------------------------
 subroutine sleep_seconds(naplength)
- use F90_unix_proc, only : sleep
  real(r8), intent(in) :: naplength
 
 ! Wrapper for the sleep command.  Argument is a real
@@ -695,7 +694,9 @@ end module mpi_utilities_mod
 !-----------------------------------------------------------------------------
 
 subroutine exit_all(exit_code)
+!#ifdef __NAG__
  use F90_unix_proc, only : exit
+!#endif
  integer, intent(in) :: exit_code
 
 ! Call exit with the specified code.

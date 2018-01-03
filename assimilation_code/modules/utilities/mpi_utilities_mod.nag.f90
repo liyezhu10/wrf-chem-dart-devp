@@ -43,7 +43,7 @@ use mpi
 ! edit this by hand for NAG.
 
 !#ifdef __NAG__
- use F90_unix_proc, only : sleep, system, exit
+ use F90_unix_proc, only : sleep, system
 !#endif
 
 implicit none
@@ -1820,7 +1820,6 @@ end subroutine do_system
 
 !-----------------------------------------------------------------------------
 subroutine sleep_seconds(naplength)
- use F90_unix_proc, only : sleep
  real(r8), intent(in) :: naplength
 
 ! Wrapper for the sleep command.  Argument is a real

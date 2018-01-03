@@ -18,7 +18,7 @@ use time_manager_mod, only : time_type, set_time
 
 
 !#ifdef __NAG__
-! use F90_unix_proc, only : sleep, system, exit
+! use F90_unix_proc, only : sleep, system
 !#endif
 
 
@@ -33,16 +33,16 @@ private
 ! this directory.  It is a sed script that comments in and out the interface
 ! block below.  Please leave the BLOCK comment lines unchanged.
 
-! !!SYSTEM_BLOCK_EDIT START COMMENTED_OUT
-! ! interface block for getting return code back from system() routine
-! interface
-!  function system(string)    
-!   character(len=*) :: string
-!   integer :: system         
-!  end function system
-! end interface
-! ! end block                 
-! !!SYSTEM_BLOCK_EDIT END COMMENTED_OUT
+ !!SYSTEM_BLOCK_EDIT START COMMENTED_IN
+ ! interface block for getting return code back from system() routine
+ interface
+  function system(string)    
+   character(len=*) :: string
+   integer :: system         
+  end function system
+ end interface
+ ! end block                 
+ !!SYSTEM_BLOCK_EDIT END COMMENTED_IN
 
 
 interface sum_across_tasks
@@ -522,7 +522,6 @@ end function shell_execute
 
 !-----------------------------------------------------------------------------
 subroutine sleep_seconds(naplength)
- use F90_unix_proc, only : sleep
  real(r8), intent(in) :: naplength
 
 ! Wrapper for the sleep command.  Argument is a real
@@ -695,7 +694,9 @@ end module mpi_utilities_mod
 !-----------------------------------------------------------------------------
 
 subroutine exit_all(exit_code)
- use F90_unix_proc, only : exit
+!#ifdef __NAG__
+! use F90_unix_proc, only : exit
+!#endif
  integer, intent(in) :: exit_code
 
 ! Call exit with the specified code.
