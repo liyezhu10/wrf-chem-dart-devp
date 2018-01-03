@@ -43,7 +43,7 @@ use mpi
 ! edit this by hand for NAG.
 
 !#ifdef __NAG__
-! use F90_unix_proc, only : sleep, system
+! use F90_unix_proc, only : sleep, system, exit
 !#endif
 
 implicit none

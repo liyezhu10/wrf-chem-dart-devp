@@ -18,7 +18,7 @@ use time_manager_mod, only : time_type, set_time
 
 
 !#ifdef __NAG__
-! use F90_unix_proc, only : sleep, system
+! use F90_unix_proc, only : sleep, system, exit
 !#endif
 
 
