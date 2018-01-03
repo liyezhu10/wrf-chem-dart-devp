@@ -15,7 +15,13 @@ use             types_mod, only : r8, i8, missing_r8, metadatalength
 use         utilities_mod, only : register_module, error_handler, E_MSG, E_ERR, &
                                   initialize_utilities, finalize_utilities,     &
                                   find_namelist_in_file, check_namelist_read,   &
-                                  nc_check, E_MSG, open_file, close_file, do_output
+                                  E_MSG, open_file, close_file, do_output
+
+use  netcdf_utilities_mod, only : nc_check, nc_add_global_creation_time, &
+                                  nc_create_file, nc_close_file, nc_begin_define_mode, &
+                                  nc_define_dimension, nc_put_variable, &
+                                  nc_add_attribute_to_variable, &
+                                  nc_define_double_variable, nc_end_define_mode
 
 use          location_mod, only : location_type, set_location, write_location,  &
                                   get_dist
@@ -30,13 +36,18 @@ use netcdf
 
 implicit none
 
-public :: test_interpolate_range, test_interpolate_single
+public :: test_interpolate_range, &
+          test_interpolate_single, &
+          find_closest_state_item
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
    "$URL$"
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
+
+! for message strings
+character(len=512) :: string1, string2
 
 contains
 
@@ -52,51 +63,41 @@ function test_interpolate_range( ens_handle,            &
                                  interp_test_xrange,    &
                                  interp_test_yrange,    &
                                  interp_test_zrange,    &
-                                 mykindindex,           &
+                                 quantity_string,       &
                                  verbose )
 
-type(ensemble_type)   , intent(inout) :: ens_handle
-integer               , intent(in)    :: ens_size
-real(r8)              , intent(in)    :: interp_test_dx
-real(r8)              , intent(in)    :: interp_test_dy
-real(r8)              , intent(in)    :: interp_test_dz
-character(len=*)      , intent(in)    :: interp_test_vertcoord
+type(ensemble_type),    intent(inout) :: ens_handle
+integer,                intent(in)    :: ens_size
+real(r8),               intent(in)    :: interp_test_dx
+real(r8),               intent(in)    :: interp_test_dy
+real(r8),               intent(in)    :: interp_test_dz
+character(len=*),       intent(in)    :: interp_test_vertcoord
 real(r8), dimension(2), intent(in)    :: interp_test_xrange
 real(r8), dimension(2), intent(in)    :: interp_test_yrange
 real(r8), dimension(2), intent(in)    :: interp_test_zrange
-integer,                intent(in)    :: mykindindex
-logical               , intent(in)    :: verbose
+character(len=*),       intent(in)    :: quantity_string
+logical,                intent(in)    :: verbose
 
 ! function to exercise the model_mod:model_interpolate() function
 ! This will result in a netCDF file with all salient metadata
 integer :: test_interpolate_range
 
-character(len=metadatalength) :: kind_of_interest
-
 ! Local variables
+
+character(len=*), parameter :: routine = 'test_interpolate_range'
 
 real(r8), allocatable :: X(:), Y(:), Z(:)
 real(r8), allocatable :: field(:,:,:,:)
 integer :: nx, ny, nz
-integer :: i, j, k, nfailed
+integer :: i, j, k, nfailed, quantity_index
 character(len=128) :: ncfilename, txtfilename
 
-character(len=8)      :: crdate      ! needed by F90 DATE_AND_TIME intrinsic
-character(len=10)     :: crtime      ! needed by F90 DATE_AND_TIME intrinsic
-character(len=5)      :: crzone      ! needed by F90 DATE_AND_TIME intrinsic
-integer, dimension(8) :: values      ! needed by F90 DATE_AND_TIME intrinsic
-
-integer :: ncid, nxDimID, nyDimID, nzDimID
-integer :: VarID(ens_size), XVarID, YVarID, ZVarID
-
-character(len=256) :: output_file = 'check_me'
-
-! for message strings
-character(len=512) :: string1, string2
+integer :: ncid
+character(len=16) :: output_file = 'check_me'
 
 character(len=32)  :: field_name
 type(location_type) :: loc
-integer :: iunit, ios_out(ens_size), imem
+integer :: iunit, ios_out(ens_size), imem, quantity_index
 integer, allocatable :: all_ios_out(:,:)
 
 test_interpolate_range = 0
@@ -110,6 +111,11 @@ ny  = aint(( interp_test_yrange(2) - interp_test_yrange(1))/interp_test_dx) + 1
 nx  = aint(( interp_test_xrange(2) - interp_test_xrange(1))/interp_test_dy) + 1
 nz  = aint((interp_test_zrange(2)  - interp_test_zrange(1))/interp_test_dz) + 1
 
+allocate(X(nx), Y(ny), Z(nz), field(nx,ny,nz,ens_size))
+allocate(all_ios_out(nx*ny*nz,ens_size))
+nfailed = 0
+
+! matlab format
 iunit = open_file(trim(txtfilename), action='write')
 write(iunit,'(''missingvals = '',f12.4,'';'')')MISSING_R8
 write(iunit,'(''nx = '',i8,'';'')')nx
@@ -118,20 +124,16 @@ write(iunit,'(''nz = '',i8,'';'')')nz
 write(iunit,'(''nens = '',i8,'';'')')ens_size
 write(iunit,'(''interptest = [ ... '')')
 
-allocate(X(nx), Y(ny), Z(nz), field(nx,ny,nz,ens_size))
-allocate(all_ios_out(nx*ny*nz,ens_size))
-nfailed = 0
-
 do i = 1, nx
-   X(i) = interp_test_xrange(1) + real(i-1,r8) * interp_test_dy
+   X(i) = interp_test_xrange(1) + real(i-1,r8) * interp_test_dx
    do j = 1, ny
-      Y(j) = interp_test_yrange(1) + real(j-1,r8) * interp_test_dx
+      Y(j) = interp_test_yrange(1) + real(j-1,r8) * interp_test_dy
       do k = 1, nz
          Z(k) = interp_test_zrange(1) + real(k-1,r8) * interp_test_dz
 
          loc = set_location(X(i), Y(j), Z(k))
 
-         call model_interpolate(ens_handle, ens_size, loc, mykindindex, field(i,j,k,:), ios_out)
+         call model_interpolate(ens_handle, ens_size, loc, quantity_index, field(i,j,k,:), ios_out)
 
          write(iunit,*) field(i,j,k,:)
 
@@ -156,6 +158,7 @@ write(iunit,'(''datmat = permute(datmat,[4,1,2,3]);'')')
 write(iunit,'(''datmat(datmat == missingvals) = NaN;'')')
 call close_file(iunit)
 
+
 if ( do_output() ) then
    write(*,'(A)')     '-------------------------------------------------------------'
    write(*,'(A,I10)') 'total interpolations  : ', nx
@@ -168,52 +171,28 @@ call count_error_codes(all_ios_out, nfailed)
 
 ! Write out the netCDF file for easy exploration.
 
-call DATE_AND_TIME(crdate,crtime,crzone,values)
-write(string1,'(''YYYY MM DD HH MM SS = '',i4,5(1x,i2.2))') &
-                  values(1), values(2), values(3), values(5), values(6), values(7)
-
-call nc_check( nf90_create(path=trim(ncfilename), cmode=NF90_clobber, ncid=ncid), &
-                  'test_interpolate_range', 'open '//trim(ncfilename))
-call nc_check( nf90_put_att(ncid, NF90_GLOBAL, 'creation_date' ,trim(string1) ), &
-                  'test_interpolate_range', 'creation put '//trim(ncfilename))
+ncid = nc_create_file(ncfilename, routine)
+call nc_add_global_creation_time(ncid, 'test_interpolate_range', 'creation put '//trim(ncfilename))
 
 ! Define dimensions
 
-call nc_check(nf90_def_dim(ncid=ncid, name='X', len=nx, &
-        dimid = nxDimID),'test_interpolate_range', 'nx def_dim '//trim(ncfilename))
-
-call nc_check(nf90_def_dim(ncid=ncid, name='Y', len=ny, &
-        dimid = nyDimID),'test_interpolate_range', 'ny def_dim '//trim(ncfilename))
-
-call nc_check(nf90_def_dim(ncid=ncid, name='Z', len=nz, &
-        dimid = nzDimID),'test_interpolate_range', 'nz def_dim '//trim(ncfilename))
+call nc_define_dimension(ncid, 'X',  nx, routine)
+call nc_define_dimension(ncid, 'Y',  ny, routine)
+call nc_define_dimension(ncid, 'Z',  nz, routine)
 
 ! Define variables
 
-call nc_check(nf90_def_var(ncid=ncid, name='X', xtype=nf90_double, &
-        dimids=nxDimID, varid=XVarID), 'test_interpolate_range', &
-                 'X def_var '//trim(ncfilename))
-call nc_check(nf90_put_att(ncid, XVarID, 'range', interp_test_xrange), &
-           'test_interpolate_range', 'put_att xrange '//trim(ncfilename))
-call nc_check(nf90_put_att(ncid, XVarID, 'cartesian_axis', 'X'),   &
-           'test_interpolate_range', 'X cartesian_axis '//trim(ncfilename))
+call nc_define_double_variable(   ncid, 'X', 'X', routine)
+call nc_add_attribute_to_variable(ncid, 'X', 'range', interp_test_xrange, routine)
+call nc_add_attribute_to_variable(ncid, 'X', 'cartesian_axis', 'X', routine)
 
+call nc_define_double_variable(   ncid, 'Y', 'Y', routine)
+call nc_add_attribute_to_variable(ncid, 'Y', 'range', interp_test_yrange, routine)
+call nc_add_attribute_to_variable(ncid, 'Y', 'cartesian_axis', 'Y', routine)
 
-call nc_check(nf90_def_var(ncid=ncid, name='Y', xtype=nf90_double, &
-        dimids=nyDimID, varid=YVarID), 'test_interpolate_range', &
-                 'Y def_var '//trim(ncfilename))
-call nc_check(nf90_put_att(ncid, YVarID, 'range', interp_test_yrange), &
-           'test_interpolate_range', 'put_att yrange '//trim(ncfilename))
-call nc_check(nf90_put_att(ncid, YVarID, 'cartesian_axis', 'Y'),   &
-           'test_interpolate_range', 'Y cartesian_axis '//trim(ncfilename))
-
-call nc_check(nf90_def_var(ncid=ncid, name='Z', xtype=nf90_double, &
-        dimids=nzDimID, varid=ZVarID), 'test_interpolate_range', &
-                 'Z def_var '//trim(ncfilename))
-call nc_check(nf90_put_att(ncid, ZVarID, 'range', interp_test_zrange), &
-           'test_interpolate_range', 'put_att zrange '//trim(ncfilename))
-call nc_check(nf90_put_att(ncid, ZVarID, 'cartesian_axis', 'Z'),   &
-           'test_interpolate_range', 'Z cartesian_axis '//trim(ncfilename))
+call nc_define_double_variable(   ncid, 'Z', 'Z', routine)
+call nc_add_attribute_to_variable(ncid, 'Z', 'range', interp_test_zrange, routine)
+call nc_add_attribute_to_variable(ncid, 'Z', 'cartesian_axis', 'Z', routine)
 
 ! loop over ensemble members
 do imem = 1, ens_size
@@ -222,40 +201,35 @@ do imem = 1, ens_size
    else
       field_name = "field"
    endif
-   call nc_check(nf90_def_var(ncid=ncid, name=field_name, xtype=nf90_double, &
-           dimids=(/ nxDimID, nyDimID, nzDimID /), varid=VarID(imem)), 'test_interpolate_range', &
-                    'field def_var '//trim(ncfilename))
-   kind_of_interest = get_name_for_quantity(mykindindex)
-   call nc_check(nf90_put_att(ncid, VarID(imem), 'long_name', kind_of_interest), &
-              'test_interpolate_range', 'put_att field long_name '//trim(ncfilename))
-   call nc_check(nf90_put_att(ncid, VarID(imem), '_FillValue', MISSING_R8), &
-              'test_interpolate_range', 'put_att field FillValue '//trim(ncfilename))
-   call nc_check(nf90_put_att(ncid, VarID(imem), 'missing_value', MISSING_R8), &
-              'test_interpolate_range', 'put_att field missing_value '//trim(ncfilename))
+   call nc_define_double_variable(ncid, field_name, (/ 'X', 'Y', 'Z' /), routine)
+
+   call nc_add_attribute_to_variable(ncid, field_name, 'long_name', quantity_string, routine)
+   call nc_add_attribute_to_variable(ncid, field_name, '_FillValue', MISSING_R8, routine)
+   call nc_add_attribute_to_variable(ncid, field_name, 'missing_value', MISSING_R8, routine)
 enddo
 
 ! Leave define mode so we can fill the variables.
-call nc_check(nf90_enddef(ncid), &
-              'test_interpolate_range','field enddef '//trim(ncfilename))
+call nc_end_define_mode(ncid, routine)
 
 ! Fill the variables
-call nc_check(nf90_put_var(ncid, XVarID, X), &
-              'test_interpolate_range','X put_var '//trim(ncfilename))
-call nc_check(nf90_put_var(ncid, YVarID, Y), &
-              'test_interpolate_range','Y put_var '//trim(ncfilename))
-call nc_check(nf90_put_var(ncid, ZVarID, Z), &
-              'test_interpolate_range','Z put_var '//trim(ncfilename))
+call nc_put_variable(ncid, 'X', X, routine)
+call nc_put_variable(ncid, 'Y', Y, routine)
+call nc_put_variable(ncid, 'Z', Z, routine)
 
 do imem = 1, ens_size
-   call nc_check(nf90_put_var(ncid, VarID(imem), field(:,:,:,imem)), &
-                 'test_interpolate_range','field put_var '//trim(ncfilename))
+   if ( ens_size > 1) then
+      write(field_name,'(A,I2)') "field_",imem
+   else
+      field_name = "field"
+   endif
+   call nc_put_variable(ncid, field_name, field(:,:,:,imem), routine)
 enddo
 
-! tidy up
-call nc_check(nf90_close(ncid), &
-             'test_interpolate_range','close '//trim(ncfilename))
+
+call nc_close_file(ncid, routine)
 
 deallocate(X, Y, Z, field)
+deallocate(all_ios_out)
 
 test_interpolate_range = nfailed
 
@@ -354,6 +328,23 @@ do while (count_errors < num_failed)
 enddo
 
 end subroutine count_error_codes
+
+!-------------------------------------------------------------------------------
+
+subroutine find_closest_state_item(loc_of_interest, vert_string,
+quantity_string)
+
+real(r8),         intent(in) :: loc_of_interest(:)
+character(len=*), intent(in) :: vert_string
+character(len=*), intent(in) :: quantity_string
+
+character(len=*), parameter :: routine = 'find_closest_state_item'
+
+!>@todo FIXME  write me
+
+end subroutine find_closest_state_item
+
+!-------------------------------------------------------------------------------
 
 
 !-------------------------------------------------------------------------------

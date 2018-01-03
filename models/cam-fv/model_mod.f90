@@ -48,7 +48,7 @@ use  netcdf_utilities_mod,  only : nc_get_variable, nc_get_variable_size, &
                                    nc_add_global_creation_time, &
                                    nc_add_global_attribute, &
                                    nc_define_dimension, nc_put_variable, &
-                                   nc_synchronize_file, nc_end_define_mode,&
+                                   nc_synchronize_file, nc_end_define_mode, &
                                    nc_begin_define_mode, nc_open_file_readonly, &
                                    nc_close_file, nc_variable_exists
 use        chem_tables_mod, only : init_chem_tables, finalize_chem_tables, chem_convert_factor
@@ -1840,15 +1840,15 @@ if ( .not. module_initialized ) call static_init_model
 ! Write Global Attributes 
 !-------------------------------------------------------------------------------
 
-call nc_begin_define_mode(ncid)
+call nc_begin_define_mode(ncid, routine)
 
-call nc_add_global_creation_time(ncid)
+call nc_add_global_creation_time(ncid, routine)
 
-call nc_add_global_attribute(ncid, "model_source", source )
-call nc_add_global_attribute(ncid, "model_revision", revision )
-call nc_add_global_attribute(ncid, "model_revdate", revdate )
+call nc_add_global_attribute(ncid, "model_source", source, routine)
+call nc_add_global_attribute(ncid, "model_revision", revision, routine)
+call nc_add_global_attribute(ncid, "model_revdate", revdate, routine)
 
-call nc_add_global_attribute(ncid, "model", "CAM")
+call nc_add_global_attribute(ncid, "model", "CAM", routine)
 
 ! this option is for users who want the smallest output
 ! or diagnostic files - only the state vector data will
@@ -1856,7 +1856,7 @@ call nc_add_global_attribute(ncid, "model", "CAM")
 ! the rest of this routine writes out enough grid info
 ! to make the output file look like the input.
 if (suppress_grid_info_in_output) then
-   call nc_end_define_mode(ncid)
+   call nc_end_define_mode(ncid, routine)
    return
 endif
 
@@ -1905,11 +1905,11 @@ call nc_add_attribute_to_variable(ncid, 'slat', 'units',     'degrees_north',   
 
 ! Vertical Grid Latitudes
 call nc_define_real_variable(     ncid, 'lev', (/ 'lev' /),                                                     routine)
-call nc_add_attribute_to_variable(ncid, 'lev', 'long_name', 'hybrid level at midpoints (1000*(A+B))',           routine)
+call nc_add_attribute_to_variable(ncid, 'lev', 'long_name',      'hybrid level at midpoints (1000*(A+B))',      routine)
 call nc_add_attribute_to_variable(ncid, 'lev', 'units',          'level',                                       routine)
 call nc_add_attribute_to_variable(ncid, 'lev', 'positive',       'down',                                        routine)
 call nc_add_attribute_to_variable(ncid, 'lev', 'standard_name',  'atmosphere_hybrid_sigma_pressure_coordinate', routine)
-call nc_add_attribute_to_variable(ncid, 'lev', 'formula_terms',  'a: hyam b: hybm p0: P0 ps: PS',                routine)
+call nc_add_attribute_to_variable(ncid, 'lev', 'formula_terms',  'a: hyam b: hybm p0: P0 ps: PS',               routine)
 
 
 call nc_define_real_variable(     ncid, 'ilev', (/ 'ilev' /),                                                    routine)
@@ -1944,7 +1944,7 @@ call nc_add_attribute_to_variable(ncid, 'P0', 'units',     'Pa',                
 
 ! Finished with dimension/variable definitions, must end 'define' mode to fill.
 
-call nc_end_define_mode(ncid)
+call nc_end_define_mode(ncid, routine)
 
 !----------------------------------------------------------------------------
 ! Fill the coordinate variables
@@ -1963,7 +1963,8 @@ call nc_put_variable(ncid, 'hyai', grid_data%hyai%vals, routine)
 call nc_put_variable(ncid, 'hybi', grid_data%hybi%vals, routine)
 call nc_put_variable(ncid, 'P0',   grid_data%P0%vals,   routine)
 
-call nc_synchronize_file(ncid)
+! flush any pending i/o to disk
+call nc_synchronize_file(ncid, routine)
 
 end subroutine nc_write_model_atts
 
@@ -1996,9 +1997,9 @@ if (.not. nc_variable_exists(ncid, "date")) then
    call error_handler(E_MSG, routine,'"date" variable not found in file ', &
                       source, revision, revdate, text2='creating one')
 
-   call nc_begin_define_mode(ncid)
+   call nc_begin_define_mode(ncid, routine)
    call nc_define_integer_variable(ncid, 'date', (/ 'time' /), routine)
-   call nc_end_define_mode(ncid)
+   call nc_end_define_mode(ncid, routine)
    call nc_put_variable(ncid, 'date', cam_date, routine)
 endif
 
@@ -2008,9 +2009,9 @@ if (.not. nc_variable_exists(ncid, "datesec")) then
    call error_handler(E_MSG, routine,'"datesec" variable not found in file ', &
                       source, revision, revdate, text2='creating one')
 
-   call nc_begin_define_mode(ncid)
+   call nc_begin_define_mode(ncid, routine)
    call nc_define_integer_variable(ncid, 'datesec', (/ 'time' /), routine)
-   call nc_end_define_mode(ncid)
+   call nc_end_define_mode(ncid, routine)
    call nc_put_variable(ncid, 'datesec', cam_tod,  routine)
 endif
 
@@ -2047,8 +2048,8 @@ ncid = nc_open_file_readonly(filename, routine)
 ! CAM initial files have two variables of length 
 ! 'time' (the unlimited dimension): date, datesec
 
-call nc_get_variable(ncid, 'date',    cam_date)
-call nc_get_variable(ncid, 'datesec', cam_tod)
+call nc_get_variable(ncid, 'date',    cam_date, routine)
+call nc_get_variable(ncid, 'datesec', cam_tod,  routine)
 
 ! 'date' is YYYYMMDD 
 ! 'cam_tod' is seconds of current day
@@ -2378,12 +2379,17 @@ integer,            intent(in)    :: ncid
 character(len=*),   intent(in)    :: varname
 type(cam_1d_array), intent(inout) :: grid_array
 
+character(len=*), parameter :: routine = 'fill_cam_1d_array'
+
 integer :: i, per_line
-!>@todo need to check that this exists
+
+!>@todo do we need to check that this exists?  if all cam input
+!> files will have all the arrays we are asking for, then no.
+
 call nc_get_variable_size(ncid, varname, grid_array%nsize)
 allocate(grid_array%vals(grid_array%nsize))
 
-call nc_get_variable(ncid, varname, grid_array%vals)
+call nc_get_variable(ncid, varname, grid_array%vals, routine)
 
 !>@todo FIXME this should be an array_dump() routine
 !> in a utilities routine somewhere.  e.g:
@@ -2411,10 +2417,12 @@ integer,            intent(in)    :: ncid
 character(len=*),   intent(in)    :: varname
 type(cam_1d_array), intent(inout) :: grid_array
 
+character(len=*), parameter :: routine = 'fill_cam_0d_array'
+
 grid_array%nsize = 1
 allocate(grid_array%vals(grid_array%nsize))
 
-call nc_get_variable(ncid, varname, grid_array%vals)
+call nc_get_variable(ncid, varname, grid_array%vals, routine)
 
 if (debug_level > 10) then
    print*, 'variable name ', trim(varname), grid_array%vals
@@ -2547,10 +2555,10 @@ integer :: ncid, nsize(2)
 
 ncid = nc_open_file_readonly(phis_filename, routine)
 
-call nc_get_variable_size(ncid, 'PHIS', nsize(:))
+call nc_get_variable_size(ncid, 'PHIS', nsize(:), routine)
 allocate( phis(nsize(1), nsize(2)) )
 
-call nc_get_variable(ncid, 'PHIS', phis)
+call nc_get_variable(ncid, 'PHIS', phis, routine)
 
 call nc_close_file(ncid, routine)
 

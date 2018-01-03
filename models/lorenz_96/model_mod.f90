@@ -18,8 +18,7 @@ use utilities_mod,         only : register_module, do_nml_file, do_nml_term,    
                                   nmlfileunit, find_namelist_in_file,           &
                                   check_namelist_read
 
-use location_io_mod,      only :  nc_write_location_atts, nc_get_location_varids, &
-                                  nc_write_location
+use location_io_mod,      only :  nc_write_location_atts, nc_write_location
 
 use netcdf_utilities_mod, only : nc_add_global_attribute, nc_synchronize_file, &
                                  nc_add_global_creation_time, nc_begin_define_mode, &
@@ -312,9 +311,6 @@ integer, intent(in) :: ncid
 integer, intent(in) :: domain_id
 
 integer :: msize
-type(location_type) :: lctn 
-character(len=128)  :: filename
-
 
 msize = int(model_size, i4)
 

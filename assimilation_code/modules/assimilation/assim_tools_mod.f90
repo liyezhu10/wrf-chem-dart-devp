@@ -392,8 +392,6 @@ logical :: local_obs_inflate
 real(r8) :: vertvalue_obs_in_localization_coord
 integer  :: whichvert_obs_in_localization_coord
 real(r8) :: whichvert_real
-type(location_type) :: lc(1)
-integer             :: kd(1)
 
 ! timing - set one or both of the parameters to true
 ! to get timing info printed out.
@@ -494,7 +492,7 @@ call init_obs(observation, get_num_copies(obs_seq), get_num_qc(obs_seq))
 ! HK I would like to move this to before the calculation of the forward operator so you could
 ! overwrite the vertical location with the required localization vertical coordinate when you 
 ! do the forward operator calculation
-call get_my_obs_loc(ens_handle, obs_ens_handle, obs_seq, keys, my_obs_loc, my_obs_kind, my_obs_type, obs_time)
+call get_my_obs_loc(obs_ens_handle, obs_seq, keys, my_obs_loc, my_obs_kind, my_obs_type, obs_time)
 
 if (convert_all_obs_verticals_first .and. is_doing_vertical_conversion) then
    ! convert the vertical of all my observations to the localization coordinate
@@ -1907,8 +1905,8 @@ integer,  intent(in)  :: ens_size
 
 ! Uses interpolation to get correction factor into the table
 
-integer             :: iunit, i, low_indx, high_indx
-real(r8)            :: temp, temp2, correl, fract, low_correl, low_exp_correl, low_alpha
+integer             :: low_indx, high_indx
+real(r8)            :: correl, fract, low_correl, low_exp_correl, low_alpha
 real(r8)            :: high_correl, high_exp_correl, high_alpha
 
 logical, save :: first_time = .true.
@@ -2793,9 +2791,8 @@ end function count_close
 
 !----------------------------------------------------------------------
 !> gets the location of of all my observations
-subroutine get_my_obs_loc(state_ens_handle, obs_ens_handle, obs_seq, keys, my_obs_loc, my_obs_kind, my_obs_type, my_obs_time)
+subroutine get_my_obs_loc(obs_ens_handle, obs_seq, keys, my_obs_loc, my_obs_kind, my_obs_type, my_obs_time)
 
-type(ensemble_type),      intent(in)  :: state_ens_handle
 type(ensemble_type),      intent(in)  :: obs_ens_handle
 type(obs_sequence_type),  intent(in)  :: obs_seq
 integer,                  intent(in)  :: keys(:)
