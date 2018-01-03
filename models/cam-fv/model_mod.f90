@@ -105,8 +105,8 @@ character(len=32)  :: vertical_localization_coord     = 'PRESSURE'
 integer            :: assimilation_period_days        = 0
 integer            :: assimilation_period_seconds     = 21600
 logical            :: use_log_vertical_scale          = .false.
-integer            :: no_assim_above_pressure         = -1.0      ! in pascals or mb/hPa?
-logical            :: start_damping_ramp_at_pressure  = .false.  
+real(r8)           :: no_assim_above_pressure         = -1.0      ! in pascals or mb/hPa?
+real(r8)           :: start_damping_ramp_at_pressure  = -1.0
 integer            :: debug_level                     = 0
 logical            :: suppress_grid_info_in_output    = .false.
 logical            :: custom_routine_to_generate_ensemble = .false.
@@ -268,12 +268,12 @@ call set_vert_localization(vertical_localization_coord)
 if (using_chemistry) call init_chem_tables()
 
 !>@todo we need to set the model top related stuff here
-if (start_damping_ramp_at_pressure) then
+if (start_damping_ramp_at_pressure > 0.0_r8) then
    print*, '"start_damping_ramp_at_pressure" not implemented yet'
 endif
 
 !>@todo we need to set the model top related stuff here
-if (no_assim_above_pressure) then
+if (no_assim_above_pressure > 0.0_r8) then
    print*, '"no_assim_above_pressure" not implemented yet'
 endif
 
