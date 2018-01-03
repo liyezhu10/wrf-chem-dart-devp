@@ -51,8 +51,6 @@ use  test_interpolate_mod, only : test_interpolate_single, &
                                   test_interpolate_range, &
                                   find_closest_state_item
 
-use netcdf
-
 implicit none
 
 ! version controlled file description for error handling, do not edit
