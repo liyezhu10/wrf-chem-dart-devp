@@ -39,12 +39,10 @@ use time_manager_mod, only : time_type, get_time, set_time
 use mpi
 
 ! the NAG compiler needs these special definitions enabled
-! but we don't preprocess this file (why?) so you have to
-! edit this by hand for NAG.
 
-!#ifdef __NAG__
+! !!NAG_BLOCK_EDIT START COMMENTED_OUT
 ! use F90_unix_proc, only : sleep, system, exit
-!#endif
+! !!NAG_BLOCK_EDIT END COMMENTED_OUT
 
 implicit none
 private
@@ -59,16 +57,16 @@ private
 ! this directory.  It is a sed script that comments in and out the interface
 ! block below.  Please leave the BLOCK comment lines unchanged.
 
- !!SYSTEM_BLOCK_EDIT START COMMENTED_IN
- ! interface block for getting return code back from system() routine
- interface
-  function system(string)
-   character(len=*) :: string
-   integer :: system
-  end function system
- end interface
- ! end block
- !!SYSTEM_BLOCK_EDIT END COMMENTED_IN
+! !!SYSTEM_BLOCK_EDIT START COMMENTED_OUT
+! ! interface block for getting return code back from system() routine
+! interface
+!  function system(string)
+!   character(len=*) :: string
+!   integer :: system
+!  end function system
+! end interface
+! ! end block
+! !!SYSTEM_BLOCK_EDIT END COMMENTED_OUT
 
 
 ! allow global sum to be computed for integers, r4, and r8s
@@ -1810,11 +1808,12 @@ subroutine do_system(execute, rc)
 character(len=*), intent(in)  :: execute
 integer,          intent(out) :: rc
 
-!#ifdef __NAG__
+! !!NAG_BLOCK_EDIT START COMMENTED_OUT
 !  call system(trim(shell_name)//' '//trim(execute)//' '//char(0), errno=rc)
-!#else
+! !!NAG_BLOCK_EDIT END COMMENTED_OUT
+! !!OTHER_BLOCK_EDIT START COMMENTED_IN
     rc = system(trim(shell_name)//' '//trim(execute)//' '//char(0))
-!#endif
+! !!OTHER_BLOCK_EDIT END COMMENTED_IN
 
 end subroutine do_system
 

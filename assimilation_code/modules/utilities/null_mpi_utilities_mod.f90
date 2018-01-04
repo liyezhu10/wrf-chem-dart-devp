@@ -17,9 +17,9 @@ use utilities_mod, only    : register_module, error_handler,             &
 use time_manager_mod, only : time_type, set_time
 
 
-!#ifdef __NAG__
+! !!NAG_BLOCK_EDIT START COMMENTED_OUT
 ! use F90_unix_proc, only : sleep, system, exit
-!#endif
+! !!NAG_BLOCK_EDIT END COMMENTED_OUT
 
 
 implicit none
@@ -33,16 +33,16 @@ private
 ! this directory.  It is a sed script that comments in and out the interface
 ! block below.  Please leave the BLOCK comment lines unchanged.
 
- !!SYSTEM_BLOCK_EDIT START COMMENTED_IN
- ! interface block for getting return code back from system() routine
- interface
-  function system(string)    
-   character(len=*) :: string
-   integer :: system         
-  end function system
- end interface
- ! end block                 
- !!SYSTEM_BLOCK_EDIT END COMMENTED_IN
+! !!SYSTEM_BLOCK_EDIT START COMMENTED_OUT
+! ! interface block for getting return code back from system() routine
+! interface
+!  function system(string)    
+!   character(len=*) :: string
+!   integer :: system         
+!  end function system
+! end interface
+! ! end block                 
+! !!SYSTEM_BLOCK_EDIT END COMMENTED_OUT
 
 
 interface sum_across_tasks
@@ -510,12 +510,13 @@ integer :: rc
    !print *, "about to run: ", trim(doit)
    !print *, "input string length = ", len(trim(doit))
 
-!#ifdef __NAG__
+! !!NAG_BLOCK_EDIT START COMMENTED_OUT
 !   call system(doit, status=rc)
 !   shell_execute = rc
-!#else
-   shell_execute = system(doit)
-!#endif
+! !!NAG_BLOCK_EDIT END COMMENTED_OUT
+  !!OTHER_BLOCK_EDIT START COMMENTED_IN
+    shell_execute = system(doit)
+  !!OTHER_BLOCK_EDIT END COMMENTED_IN
    !print *, "execution returns, rc = ", shell_execute
 
 end function shell_execute
@@ -694,9 +695,9 @@ end module mpi_utilities_mod
 !-----------------------------------------------------------------------------
 
 subroutine exit_all(exit_code)
-!#ifdef __NAG__
+! !!NAG_BLOCK_EDIT START COMMENTED_OUT
 ! use F90_unix_proc, only : exit
-!#endif
+! !!NAG_BLOCK_EDIT END COMMENTED_OUT
  integer, intent(in) :: exit_code
 
 ! Call exit with the specified code.
