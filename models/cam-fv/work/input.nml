@@ -111,7 +111,7 @@
      
 &perfect_model_obs_nml
    read_input_state_from_file = .true.,
-   input_state_files          = "perfect_ics.nc",
+   input_state_files          = "caminput.nc",
    init_time_days             = -1,
    init_time_seconds          = -1,
 
@@ -142,8 +142,8 @@
                                  'PS' 'QTY_SURFACE_PRESSURE',  'NA', 'NA', 'UPDATE'
    assimilation_period_seconds = 21600
    assimilation_period_days    = 0
-   no_assim_above_this_model_level = 5
-   use_damping_ramp_at_model_top   = .false.
+   no_assim_above_pressure     = 2000.0
+   start_damping_ramp_at_pressure  = -1.0
    suppress_grid_info_in_output    = .false.
    custom_routine_to_generate_ensemble = .true.
    fields_to_perturb               = 'QTY_TEMPERATURE'

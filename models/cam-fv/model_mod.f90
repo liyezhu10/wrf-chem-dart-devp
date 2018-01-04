@@ -159,7 +159,7 @@ integer :: domain_id
 type cam_1d_array
    integer  :: nsize
    real(r8), allocatable :: vals(:)
-   !>@todo FIXME do we need a string name here anymore?
+   !>@todo FIXME do we need a string name here anymore?  (no, so far)
 end type
 
 type cam_grid
@@ -194,6 +194,12 @@ type(cam_stagger) :: grid_stagger
 
 ! Surface potential; used for calculation of geometric heights.
 real(r8), allocatable :: phis(:, :)
+
+! Precompute pressure -> height map once based on 1010mb surface pressure.
+! Used only to discard obs on heights above the user-defined top threshold.
+integer, parameter :: generic_nlevels = 17
+real(r8), allocatable :: generic_height_column(:)
+real(r8), allocatable :: generic_pressure_column(:)
 
 ! Horizontal interpolation code.  Need a handle for nonstaggered, U and V.
 type(quad_interp_handle) :: interp_nonstaggered, &
@@ -274,7 +280,13 @@ endif
 
 !>@todo we need to set the model top related stuff here
 if (no_assim_above_pressure > 0.0_r8) then
-   print*, '"no_assim_above_pressure" not implemented yet'
+   write(string1, *) 'discarding observations above a pressure level of ', &
+                      no_assim_above_pressure, ' Pascals'   !>@todo FIXME  units???
+
+   ! compute both height and pressure columns once, based on a surface
+   ! pressure of 1000 mb. use for quick conversions when absolute accuracy 
+   ! isn't a primary concern.
+   call store_generic_columns()
 endif
 
 end subroutine static_init_model
@@ -717,9 +729,9 @@ endif
 ! if we are avoiding assimilating obs above a given pressure, test here and return.
 ! we have to do a vertical conversion for obs which don't have a vertical of pressure.
 !>@todo FIXME do we convert an entire ensemble of heights or just one and call that good?
+!> for now we are using a generic, 1000mb surface pressure for all obs, all ensembles.
 if (no_assim_above_pressure > 0) then
-   call obs_too_high(lon_lat_vert(3), which_vert, interp_handle, &
-                     four_lons, four_lats, lon_fract, lat_fract, status1)
+   call obs_too_high(lon_lat_vert(3), which_vert, status1)
    if (status1 /= 0) then
       istatus(:) = status1
       return
@@ -835,29 +847,57 @@ istatus(:) = 0
 end subroutine model_interpolate_no_top
 
 !-----------------------------------------------------------------------
-!>
+!> discard observations above a user-defined threshold.
+!> intended to be quick (low-cost) and not exact.
 
-subroutine obs_too_high(vert_value, which_vert, interp_handle, &
-                        four_lons, four_lats, lon_fract, lat_fract, my_status)
+subroutine obs_too_high(vert_value, which_vert, my_status)
 real(r8), intent(in) :: vert_value
 integer,  intent(in) :: which_vert
-type(quad_interp_handle), intent(in) :: interp_handle
-integer,  intent(in) :: four_lons(4), four_lats(4)
-real(r8), intent(in) :: lon_fract, lat_fract
 integer, intent(out) :: my_status
 
-! lower pressures are higher; watch the less than/greater than tests
-if (which_vert == VERTISPRESSURE .and. vert_value < no_assim_above_pressure) then
-   my_status = 14
+integer   :: nlevels
+integer   :: bot_lev, top_lev
+real(r8)  :: h_val, fract
+real(r8)  :: this_pressure
+
+
+! assume ok to begin with
+my_status = 0
+
+! obs with a vertical type of pressure:
+!  lower pressures are higher; watch the less than/greater than tests
+!  note that this returns here no matter what the vert value is; 
+!  a good error code if below the threshold; with a bad error code if above.
+if (which_vert == VERTISPRESSURE) then
+   if (vert_value < no_assim_above_pressure) my_status = 14
    return
 endif
 
+! these are always ok
+if (which_vert == VERTISSURFACE .or. which_vert == VERTISUNDEF) return
+
+! for now we haven't run into observations where the vertical coordinate
+! (of the OBS) is in scale height.  so return ok here also.  if we have
+! obs with this vert, add code here to convert from pressure to scale height.
+if (which_vert == VERTISSCALEHEIGHT) return
+
 !>@todo FIXME you were working here ----
 
-! call get_quad_vals() or ? to get equiv vertispressure
-! ?one of the vert convert routines?
+if (which_vert == VERTISHEIGHT) then
 
-my_status = 0
+   call height_to_level(generic_nlevels, generic_height_column, vert_value, &
+                        bot_lev, top_lev, fract, my_status)
+
+   this_pressure = generic_pressure_column(bot_lev) * fract + &
+                   generic_pressure_column(top_lev) * (1.0_r8-fract)
+
+   if (this_pressure < no_assim_above_pressure) my_status = 14
+   return
+endif
+
+write(string2, *) 'vertical type: ', which_vert
+call error_handler(E_ERR, 'obs_too_high', 'unrecognized vertical type', &
+                   source, revision, revdate, text2=string2)
 
 end subroutine obs_too_high
 
@@ -1498,46 +1538,22 @@ end subroutine cam_p_col_intfcs
 
 !-----------------------------------------------------------------------
 !> Compute columns of heights at the layer midpoints for the given number 
-!> of surface pressures and surface elevations.  (should this one compute
-!> those itself?  if so give it the lon/lat indx and staggers.)
+!> of surface pressures and surface elevations.
 
-!> since it's no more work, should we compute the interface heights as well here?
-!> return both, or make the arrays optional and return one or both depending
-!> on what's asked for?
+subroutine cam_h_col_midpts(n_levels, surface_pressure, surface_elev, virtual_temp, &
+                            height_array)
 
-subroutine cam_h_col_midpts(num_cols, surface_pressure, n_levels, height_array)
-
-integer,            intent(in)  :: num_cols
-real(r8),           intent(in)  :: surface_pressure(num_cols)   ! in pascals
-integer,            intent(in)  :: n_levels
-real(r8),           intent(out) :: height_array(n_levels, num_cols)  ! in meters
-
-integer :: j, k
-real(r8) :: surface_elev
-real(r8) :: p_midpts(n_levels,   num_cols)  ! in pascals, layer midpoints
-real(r8) :: p_intfcs(n_levels+1, num_cols)  ! in pascals, layer interfaces
-
-! Set midpoint heights.  This array mirrors the order of the
-! cam model levels: 1 is the model top, N is the bottom.
+integer,  intent(in)  :: n_levels
+real(r8), intent(in)  :: surface_pressure   ! in pascals
+real(r8), intent(in)  :: surface_elev       ! in m
+real(r8), intent(in)  :: virtual_temp(n_levels) ! Virtual Temperature
+real(r8), intent(out) :: height_array(n_levels)  ! in meters
 
 ! unlike pressure, we need to start at the surface and work our way up.
 ! we can't compute a height in the middle of the column.
 
-do j=1, num_cols
-   call cam_p_col_midpts(surface_pressure(j), n_levels, p_midpts(:,j))
-   call cam_p_col_intfcs(surface_pressure(j), n_levels, p_intfcs(:,j))
-   ! get surface elevation at this location...
-   surface_elev = MISSING_R8
-   height_array(1, 1) = surface_elev 
-   do k=1, n_levels
-      ! add on lower half of this layer and record the height of the midpoint,
-      ! then add the upper half of this layer.  each layer has a different 
-      ! virtual temperature (at the midpt) so we can't compute midpoint to midpoint.
-      height_array(k, j) = -1
-      !height_array(k, j) = grid_data%hyam%vals(k) * grid_data%P0%vals(1) + &
-      !                     grid_data%hybm%vals(k) * surface_pressure(j)
-   enddo
-enddo
+call build_heights(n_levels, surface_pressure, surface_elev, virtual_temp, &
+                   height_array)
 
 end subroutine cam_h_col_midpts
 
@@ -1804,6 +1820,8 @@ subroutine end_model()
 ! deallocate arrays from grid and anything else
 
 call free_cam_grid(grid_data)
+
+call free_generic_columns()
 
 call finalize_quad_interp(interp_nonstaggered)
 call finalize_quad_interp(interp_u_staggered)
@@ -2523,19 +2541,22 @@ type(cam_grid), intent(in) :: grid
 !>between each pair would be faster
 
 ! mass points at cell centers
-call init_quad_interp(GRID_QUAD_IRREG_SPACED_REGULAR, grid%lon%nsize, grid%lat%nsize, QUAD_LOCATED_CELL_CENTERS, &
+call init_quad_interp(GRID_QUAD_IRREG_SPACED_REGULAR, grid%lon%nsize, grid%lat%nsize, &
+                      QUAD_LOCATED_CELL_CENTERS, &
                       global=.true., spans_lon_zero=.true., pole_wrap=.true., &
                       interp_handle=interp_nonstaggered)
 call set_quad_coords(interp_nonstaggered, grid%lon%vals, grid%lat%vals)
 
 ! U stagger
-call init_quad_interp(GRID_QUAD_IRREG_SPACED_REGULAR, grid%lon%nsize, grid%slat%nsize, QUAD_LOCATED_CELL_CENTERS, &
+call init_quad_interp(GRID_QUAD_IRREG_SPACED_REGULAR, grid%lon%nsize, grid%slat%nsize, &
+                      QUAD_LOCATED_CELL_CENTERS, &
                       global=.true., spans_lon_zero=.true., pole_wrap=.true., &
                       interp_handle=interp_u_staggered)
 call set_quad_coords(interp_u_staggered, grid%lon%vals, grid%slat%vals)
 
 ! V stagger
-call init_quad_interp(GRID_QUAD_IRREG_SPACED_REGULAR, grid%slon%nsize, grid%lat%nsize, QUAD_LOCATED_CELL_CENTERS, &
+call init_quad_interp(GRID_QUAD_IRREG_SPACED_REGULAR, grid%slon%nsize, grid%lat%nsize, &
+                      QUAD_LOCATED_CELL_CENTERS, &
                       global=.true., spans_lon_zero=.true., pole_wrap=.true., &
                       interp_handle=interp_v_staggered)
 call set_quad_coords(interp_v_staggered, grid%slon%vals, grid%lat%vals)
@@ -2566,12 +2587,12 @@ end subroutine read_cam_phis_array
 
 !-----------------------------------------------------------------------
 
-subroutine build_heights(nlevels,p_surf,h_surf,vertual_temp,height_midpts,height_interf,variable_r)
+subroutine build_heights(nlevels,p_surf,h_surf,virtual_temp,height_midpts,height_interf,variable_r)
 
 integer,  intent(in)  :: nlevels                            ! Number of vertical levels
-real(r8), intent(in)  :: p_surf                              ! Surface pressure (pascals)
-real(r8), intent(in)  :: h_surf                              ! Surface height (m)
-real(r8), intent(in)  :: vertual_temp( nlevels)             ! Vertual Temperature
+real(r8), intent(in)  :: p_surf                             ! Surface pressure (pascals)
+real(r8), intent(in)  :: h_surf                             ! Surface height (m)
+real(r8), intent(in)  :: virtual_temp( nlevels)             ! Virtual Temperature
 real(r8), intent(out) :: height_midpts(nlevels)             ! Geopotential height at midpoints, top to bottom
 real(r8), intent(out), optional :: height_interf(nlevels+1) ! Geopotential height at interfaces, top to bottom
 real(r8), intent(in),  optional :: variable_r(   nlevels)   ! Dry air gas constant, if varies, top to bottom
@@ -2698,14 +2719,14 @@ enddo
 !        Eq 3.a.109.2  where l=K,k<K  h(k,l) = 1/2 * ln [  p(k+1) / p(k) ]
 
 do k = 2,nlevels - 1
-   pterm(k) = const_r_g0(k)*vertual_temp(k)*0.5_r8*(pmln(k+1)-pmln(k-1))
+   pterm(k) = const_r_g0(k)*virtual_temp(k)*0.5_r8*(pmln(k+1)-pmln(k-1))
 enddo
 
 ! Initialize height_midpts to sum of ground height and thickness of top half layer
 ! this is NOT adding the thickness of the 'top' half layer.
 !    it's adding the thickness of the half layer at level K,
 do k = 1,nlevels - 1
-   height_midpts(k) = h_surf + const_r_g0(k)*vertual_temp(k)*0.5_r8* &
+   height_midpts(k) = h_surf + const_r_g0(k)*virtual_temp(k)*0.5_r8* &
                       (pmln(k+1)-pmln(k))
 
 enddo
@@ -2718,7 +2739,7 @@ enddo
 
 log_p_int = log(p_surf*grid_data%hybi%vals(nlevels+1))
 
-height_midpts(nlevels) = h_surf + const_r_g0(nlevels)*vertual_temp(nlevels)*0.5_r8*&
+height_midpts(nlevels) = h_surf + const_r_g0(nlevels)*virtual_temp(nlevels)*0.5_r8*&
                          (log_p_int-pmln(nlevels)-pmln(nlevels))
 
 ! THIS is adding the half layer at the BOTTOM.
@@ -2729,7 +2750,7 @@ height_midpts(nlevels) = h_surf + const_r_g0(nlevels)*vertual_temp(nlevels)*0.5_
 ! Eqs 1.14 & 3.a.109.3 where l>K, k<K
 !                          h(k,l) = 1/2 * ln [ p(l+1)/p(l-1) ]
 do k = 1,nlevels - 1
-    height_midpts(k) = height_midpts(k) + const_r_g0(nlevels)*vertual_temp(nlevels)*&
+    height_midpts(k) = height_midpts(k) + const_r_g0(nlevels)*virtual_temp(nlevels)*&
                        (log_p_int - 0.5_r8*(pmln(nlevels-1)+pmln(nlevels)))
 enddo
 
@@ -3256,6 +3277,59 @@ scaleheight = log(pressure_array(1)/surface_pressure_array(1))
 call set_vertical(location, scaleheight, VERTISSCALEHEIGHT)
 
 end subroutine obs_vertical_to_scaleheight
+
+!-----------------------------------------------------------------------
+!> Store a generic column of pressures and heights.
+!>  not precise - use only when rough numbers are good enough.
+!>@todo FIXME: this will need to go higher for WACCM, WACCM-X
+
+subroutine store_generic_columns()
+
+! table from:
+! http://meteorologytraining.tpub.com/14269/css/14269_75.htm
+! see also
+! https://www.engineeringtoolbox.com/standard-atmosphere-d_604.html
+
+integer :: i
+real(r8) :: generic_height_to_pressure(2, generic_nlevels)
+
+! index 1 is height in meters, index 2 is corresponding pressure in pascals
+generic_height_to_pressure(:,  1) =  (/  31055.0_r8,   1000.0_r8 /) 
+generic_height_to_pressure(:,  2) =  (/  26481.0_r8,   2000.0_r8 /)
+generic_height_to_pressure(:,  3) =  (/  23849.0_r8,   3000.0_r8 /)
+generic_height_to_pressure(:,  4) =  (/  20576.0_r8,   5000.0_r8 /)
+generic_height_to_pressure(:,  5) =  (/  18442.0_r8,   7000.0_r8 /)
+generic_height_to_pressure(:,  6) =  (/  16180.0_r8,  10000.0_r8 /)
+generic_height_to_pressure(:,  7) =  (/  13608.0_r8,  15000.0_r8 /)
+generic_height_to_pressure(:,  8) =  (/  11784.0_r8,  20000.0_r8 /)
+generic_height_to_pressure(:,  9) =  (/  10363.0_r8,  25000.0_r8 /)
+generic_height_to_pressure(:, 10) =  (/   9164.0_r8,  30000.0_r8 /)
+generic_height_to_pressure(:, 11) =  (/   7185.0_r8,  40000.0_r8 /)
+generic_height_to_pressure(:, 12) =  (/   5574.0_r8,  50000.0_r8 /)
+generic_height_to_pressure(:, 13) =  (/   3012.0_r8,  70000.0_r8 /)
+generic_height_to_pressure(:, 14) =  (/   1457.0_r8,  85000.0_r8 /)
+generic_height_to_pressure(:, 15) =  (/    766.0_r8,  92500.0_r8 /)
+generic_height_to_pressure(:, 16) =  (/    111.0_r8, 100000.0_r8 /)
+generic_height_to_pressure(:, 17) =  (/      0.0_r8, 101000.0_r8 /) 
+
+allocate(generic_height_column(generic_nlevels), generic_pressure_column(generic_nlevels))
+
+do i=1, generic_nlevels
+   generic_height_column(i)   = generic_height_to_pressure(1, i)
+   generic_pressure_column(i) = generic_height_to_pressure(2, i)
+enddo
+
+end subroutine store_generic_columns
+
+!-----------------------------------------------------------------------
+!> Free arrays associated with generic columns
+
+subroutine free_generic_columns()
+
+if (allocated(generic_height_column)) deallocate(generic_height_column)
+if (allocated(generic_pressure_column)) deallocate(generic_pressure_column)
+
+end subroutine free_generic_columns
 
 !--------------------------------------------------------------------
 
