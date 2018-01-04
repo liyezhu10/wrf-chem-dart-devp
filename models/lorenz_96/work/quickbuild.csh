@@ -18,6 +18,10 @@
 #  to keep the .o and .mod files in the current directory instead of 
 #  removing them at the end.  this usually improves runtime error reports 
 #  and these files are required by most debuggers.
+# 
+#  to pass any flags to the 'make' program, set DART_MFLAGS in your environment.
+#  e.g. to build faster by running 4 (or your choice) compiles at once:
+#   "setenv DART_MFLAGS '-j 4' " (csh) or "export DART_MFLAGS='-j 4' " (bash)
 #----------------------------------------------------------------------
 
 # this model name:
@@ -48,13 +52,19 @@ endif
 set preprocess_done = 0
 set tdebug = 0
 set cdebug = 0
+set mflags = ''
 
+# environment vars this script looks for
 if ( $?CODE_DEBUG ) then
    set cdebug = $CODE_DEBUG
 endif
 if ( $?DART_TEST ) then
    set tdebug = $DART_TEST
 endif
+if ( $?DART_MFLAGS ) then
+   set mflags = "$DART_MFLAGS"
+endif
+
 
 \rm -f *.o *.mod 
 
@@ -107,8 +117,8 @@ foreach TARGET ( mkmf_preprocess mkmf_* )
    echo "---------------------------------------------------"
    echo "$BUILDING build number $n is $PROG" 
    \rm -f $PROG
-   csh $TARGET || exit $n
-   make        || exit $n
+   csh $TARGET  || exit $n
+   make $mflags || exit $n
 
    if ( $tdebug ) then
       echo 'removing all files between builds'
@@ -159,7 +169,7 @@ foreach PROG ( $MPI_TARGETS )
    echo "$BUILDING with MPI build number $n is $PROG" 
    \rm -f $PROG
    csh $TARGET -mpi || exit $n
-   make             || exit $n
+   make $mflags     || exit $n
 
    if ( $tdebug ) then
       echo 'removing all files between builds'
