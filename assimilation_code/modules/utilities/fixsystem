@@ -105,8 +105,6 @@ do
     exit 1
   fi
   
-  echo $before1 $todo1 $before2 $todo2
-
   # if we are already in the right state, loop to next file
   if ([ $before1 = $todo1 ] && [ $before2 = $todo2 ]); then continue; fi
  
