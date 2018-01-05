@@ -113,6 +113,7 @@ logical            :: custom_routine_to_generate_ensemble = .false.
 character(len=32)  :: fields_to_perturb(MAX_PERT)     = "QTY_TEMPERATURE"
 real(r8)           :: perturbation_amplitude(MAX_PERT)= 0.00001_r8
 logical            :: using_chemistry                 = .false.
+logical            :: use_old_heights                 = .false.
 
 ! state_variables defines the contents of the state vector.
 ! each line of this input should have the form:
@@ -141,6 +142,7 @@ namelist /model_nml/  &
    custom_routine_to_generate_ensemble, &
    fields_to_perturb,               &
    perturbation_amplitude,          &
+   use_old_heights,                 &
    debug_level
 
 ! global variables
@@ -2587,12 +2589,12 @@ end subroutine read_cam_phis_array
 
 !-----------------------------------------------------------------------
 
-subroutine build_heights(nlevels,p_surf,h_surf,virtual_temp,height_midpts,height_interf,variable_r)
+subroutine build_heights(nlevels,p_surfX,h_surfX,virtual_tempX,height_midpts,height_interf,variable_r)
 
 integer,  intent(in)  :: nlevels                            ! Number of vertical levels
-real(r8), intent(in)  :: p_surf                             ! Surface pressure (pascals)
-real(r8), intent(in)  :: h_surf                             ! Surface height (m)
-real(r8), intent(in)  :: virtual_temp( nlevels)             ! Virtual Temperature
+real(r8), intent(in)  :: p_surfX                            ! Surface pressure (pascals)
+real(r8), intent(in)  :: h_surfX                            ! Surface height (m)
+real(r8), intent(in)  :: virtual_tempX( nlevels)             ! Virtual Temperature
 real(r8), intent(out) :: height_midpts(nlevels)             ! Geopotential height at midpoints, top to bottom
 real(r8), intent(out), optional :: height_interf(nlevels+1) ! Geopotential height at interfaces, top to bottom
 real(r8), intent(in),  optional :: variable_r(   nlevels)   ! Dry air gas constant, if varies, top to bottom
@@ -2601,21 +2603,20 @@ real(r8), intent(in),  optional :: variable_r(   nlevels)   ! Dry air gas consta
 !>@todo have a model constants module?
 real(r8), parameter :: const_r = 287.04_r8    ! Different than model_heights ! dry air gas constant.
 real(r8), parameter :: g0 = 9.80616_r8        ! Different than model_heights:gph2gmh:G !
-real(r8) :: dist_from_interf(nlevels)         ! pressure profile
 real(r8) :: pterm(nlevels)
-real(r8) :: log_points_mid(nlevels+1)
 
 integer  :: i,k,l
-real(r8) :: temp, hprb, log_p_int 
+real(r8) :: temp, hprb, log_p_int, r
+real(r8) :: p_surf, h_surf, virtual_temp(nlevels)
 
 ! an array now: real(r8), parameter :: rbyg=r/g0
-real(r8) :: const_r_g0(nlevels)      ! rbyg=r/g0
-real(r8) :: midpts(nlevels)          ! midpoints  in column
-real(r8) :: interf(nlevels+1)        ! interfaces in column
-real(r8) :: log_p_midpoints(nlevels) ! log of pressure at layer midpoints
-real(r8) :: log_p_interf(nlevels+1)  ! log of pressure at layer interfaces
-real(r8) :: geo_hgt_intf(nlevels+1)  ! Geopotential height at interfaces, top to bottom
-real(r8) :: pmln(nlevels+1)          ! logs of midpoint pressures
+real(r8) :: r_g0_tv(nlevels)       ! rbyg=r/g0 * tv
+real(r8) :: midpts(nlevels)        ! midpoints  in column
+real(r8) :: pmln(nlevels)          ! logs of midpoint pressures  - check K indexing??
+
+!>@todo FIXME i really really want to get rid of these.  they make the code very
+!> hard to understand.  we have simpler routines to compute the pressures at the
+!> midpoints, and at the interfaces.  i think we can substitute those for these.
 real(r8) :: hybrid_As(nlevels+1,2), hybrid_Bs(nlevels+1,2)
 
 !state of dry air dry air Air pressure
@@ -2650,10 +2651,50 @@ hybrid_Bs(1,1) = grid_data%hybi%vals(k)
 hybrid_As(1,2) = 0.0_r8
 hybrid_Bs(1,2) = 1.0_r8
 
+! be very careful about indexing in this array - it seems
+! off by one compared to the hyam()/hybm() arrays.
+pmln(:) = MISSING_R8
+
+print *, 'heights surface p, surface elev hardcoded - remove me!!!'
+print *, 'heights surface p, surface elev hardcoded - remove me!!!'
+print *, 'heights surface p, surface elev hardcoded - remove me!!!'
+p_surf = 100183.18209922672
+h_surf = 329.45914459142108
+!tvX:
+virtual_temp(:) = (/   &
+    219.504545724395342177, &
+    220.755756266998901083, &
+    218.649777340474969378, &
+    218.144545911709940356, &
+    217.728221229954215232, &
+    216.143009218914528446, &
+    214.481037053947034110, &
+    211.658627994532224648, &
+    211.833385313013934592, &
+    212.213164703541366407, &
+    212.615531561483351197, &
+    209.756210669626966592, &
+    209.138904604986379354, &
+    212.498936606159986695, &
+    219.523651584890700406, &
+    229.031103260649530284, &
+    237.766208609568053589, &
+    245.843809142625332242, &
+    253.456529559321467104, &
+    258.270814547914710602, &
+    260.346496319841151035, &
+    261.759864813262595362, &
+    262.993454407623175939, &
+    266.850708906211991689, &
+    270.064944946168111528, &
+    271.721653151072075616 /)
+
+
 ! mid-points: 2nd dimension of hybrid_[AB]s = 2
 ! note that hyXm(n_levels + 1) is not defined (= MISSING_R8)
 do k = 2,nlevels+1
    i = nlevels +2 - k
+!print *, 'setting hybrid k, to hyai/m index i = ', k, i
    hybrid_As(k,1) = grid_data%hyai%vals(i)
    hybrid_Bs(k,1) = grid_data%hybi%vals(i)
    hybrid_As(k,2) = grid_data%hyam%vals(i)
@@ -2664,52 +2705,67 @@ enddo
 ! models like waccm change the gas constant with height.
 ! allow for the calling code to pass in an array of r.
 if (present(variable_r)) then
-   do i=1, nlevels
-      const_r_g0(i) = variable_r(i) / g0
-   enddo
+   r_g0_tv(:) = variable_r(:) / g0 * virtual_temp(:)
 else
-   const_r_g0(:) = const_r / g0
+   r_g0_tv(:) = const_r / g0 * virtual_temp(:)
 endif
 
-!>@todo FIXME:
-! i'd still like to compare this simpler code with
-! the more complicated and see how far apart they are.  nsc.
-! 
-! call cam_p_col_midpts(p_surf, nlevels,   midpts)
-! call cam_p_col_intfcs(p_surf, nlevels+1, interf)
+if (.false.) then
+   hprb = grid_data%P0%vals(1)
+   
+   ! do k = 1,nlevels
+   !   print*, 'hybrid_As(k,1)', k, hybrid_As(k,1)
+   !   print*, 'hybrid_Bs(k,2)', k, hybrid_As(k,2)
+   !   print*, 'hybrid_As(k,1)', k, hybrid_As(k,1)
+   !   print*, 'hybrid_Bs(k,2)', k, hybrid_As(k,2)
+   ! enddo
+   
+! this is 1.0: hybrid_Bs(1,1)
+   !>@todo FIXME is this not just the midpoint column?
+   
+   ! compute intermediate pressure quantities at the midpoint layers of k 
+   !>@todo FIXME the numbering is strange here - midpoint levels seem to be
+   ! +1 compared to the rest of the code outside this routine.
+   
+   do k = nlevels, 1, -1
+      i = nlevels-k+1
+      ! hybrid_As coord coeffs for P0 reference pressure term in plevs_cam
+      ! hybrid_Bs coord coeffs for surf pressure term in plevs_cam (in same format as hybrid_As)
+      temp = hprb*hybrid_As(i,2) + p_surf*hybrid_Bs(i,2)
+      if (temp > 0.0_r8) THEN 
+         pmln(k) = log(temp)
+      else 
+         pmln(k) = 0.0_r8
+      endif
+   enddo
+else
+   !>@todo FIXME: i think this is identical now.
+   ! but still more complex than necessary.
+    
+   call cam_p_col_midpts(p_surf, nlevels,   midpts)
+   
+   ! adjust the index values to match the original code 
+   ! (but why??  the original seems off by one?)
+   !do i=1, nlevels-1
+   !  pmln(i) = midpts(i+1)
+   !enddo
+   !pmln(nlevels) = p_surf
+   
+   do i=1, nlevels
+     pmln(i) = midpts(i)
+   enddo
+   
+   where(pmln >  0.0_r8) pmln = log(pmln) 
+   where(pmln <= 0.0_r8) pmln = 0.0_r8
+   
+endif
 
-! if (debug_level > 200) then
-!    do i=1, nlevels
-!      print *, 'midpts, interf: ', i, log_p_midpoints(i), log_p_interf(i)
-!    enddo
-!    print *, 'interf: ', nlevels+1, log_p_interf(nlevels+1)
-! endif
-! 
-! log_p_midpoints = log(midpts)
-! log_p_interf    = log(interf)
+!>@todo FIXME - 
+! my request for changes to the code below is just in editing the comments
+! to be more clear.
 
-hprb = grid_data%P0%vals(1)
-
-! do k = 1,nlevels
-!   print*, 'hybrid_As(k,1)', k, hybrid_As(k,1)
-!   print*, 'hybrid_Bs(k,2)', k, hybrid_As(k,2)
-!   print*, 'hybrid_As(k,1)', k, hybrid_As(k,1)
-!   print*, 'hybrid_Bs(k,2)', k, hybrid_As(k,2)
-! enddo
-! call exit(0)
-
-! compute intermediate pressure quantities at the midpoint layers of k 
-do k = nlevels, 1, -1
-   i = nlevels-k+1
-   ! hybrid_As coord coeffs for P0 reference pressure term in plevs_cam
-   ! hybrid_Bs coord coeffs for surf pressure term in plevs_cam (in same format as hybrid_As)
-   temp = hprb*hybrid_As(i,2) + p_surf*hybrid_Bs(i,2)
-   if (temp > 0.0_r8) THEN 
-      pmln(k) = log(temp)
-   else 
-      pmln(k) = 0.0_r8
-   endif
-enddo
+! the log of the surface pressure == pmln(nlevels)  - why is there a separate var?
+log_p_int = log(p_surf * grid_data%hybi%vals(nlevels))
 
 ! Initialize height_midpts to sum of ground height and thickness of
 ! top half-layer  (i.e. (phi)sfc in equation 1.14)
@@ -2718,17 +2774,36 @@ enddo
 ! 
 !        Eq 3.a.109.2  where l=K,k<K  h(k,l) = 1/2 * ln [  p(k+1) / p(k) ]
 
+print *, ''
 do k = 2,nlevels - 1
-   pterm(k) = const_r_g0(k)*virtual_temp(k)*0.5_r8*(pmln(k+1)-pmln(k-1))
+   pterm(k) = r_g0_tv(k) * 0.5_r8 * (pmln(k+1)-pmln(k-1))
+   print *, 'r_g0_tv, delta logp: ', r_g0_tv(k), (pmln(k+1)-pmln(k-1))
+enddo
+
+print *, ''
+print *, 'step 1:'
+do k=1, nlevels
+ write(*, '(A, I3, F12.5)') 'k, pterm: ', k, pterm(k)
 enddo
 
 ! Initialize height_midpts to sum of ground height and thickness of top half layer
 ! this is NOT adding the thickness of the 'top' half layer.
 !    it's adding the thickness of the half layer at level K,
+print *, ''
+print *, 'computing step 2:'
 do k = 1,nlevels - 1
-   height_midpts(k) = h_surf + const_r_g0(k)*virtual_temp(k)*0.5_r8* &
-                      (pmln(k+1)-pmln(k))
+   height_midpts(k) = h_surf + r_g0_tv(k) * 0.5_r8 * (pmln(k+1)-pmln(k))
+   print *, k, height_midpts(k), h_surf, r_g0_tv(k), pmln(k+1), pmln(k)
+enddo
+! i think this just becomes h_surf because log_p_int == pmln(nlevels)?
+height_midpts(nlevels) = h_surf + r_g0_tv(nlevels) * 0.5_r8 *(log_p_int-pmln(nlevels))
+k = 26
+print *, k, height_midpts(k), h_surf, const_r, g0, virtual_temp(k), log_p_int, pmln(k)
 
+print *, ''
+print *, 'step 2:'
+do k=1, nlevels
+ write(*, '(A, I3, F12.5)') 'k, z2: ', k, height_midpts(k)
 enddo
 
 ! Add thickness of the remaining full layers
@@ -2737,10 +2812,6 @@ enddo
 ! Eqs 1.14 & 3.a.109.3 where l>K, k<K
 !                          h(k,l) = 1/2 * ln [ p(l+1)/p(l-1) ]
 
-log_p_int = log(p_surf*grid_data%hybi%vals(nlevels+1))
-
-height_midpts(nlevels) = h_surf + const_r_g0(nlevels)*virtual_temp(nlevels)*0.5_r8*&
-                         (log_p_int-pmln(nlevels)-pmln(nlevels))
 
 ! THIS is adding the half layer at the BOTTOM.
 !
@@ -2750,11 +2821,18 @@ height_midpts(nlevels) = h_surf + const_r_g0(nlevels)*virtual_temp(nlevels)*0.5_
 ! Eqs 1.14 & 3.a.109.3 where l>K, k<K
 !                          h(k,l) = 1/2 * ln [ p(l+1)/p(l-1) ]
 do k = 1,nlevels - 1
-    height_midpts(k) = height_midpts(k) + const_r_g0(nlevels)*virtual_temp(nlevels)*&
-                       (log_p_int - 0.5_r8*(pmln(nlevels-1)+pmln(nlevels)))
+    height_midpts(k) = height_midpts(k) + r_g0_tv(nlevels) * &
+                     (log_p_int - 0.5_r8*(pmln(nlevels-1)+pmln(nlevels)))
+enddo
+
+print *, ''
+print *, 'step 3:' 
+do k=1, nlevels
+ write(*, '(A, I3, F12.5)') 'k, z2: ', k, height_midpts(k)
 enddo
 
 
+!>@todo fixme - repeated comment?
 ! Add thickness of the remaining full layers
 ! (i.e., integrate from ground to highest layer interface)
 !
@@ -2767,6 +2845,14 @@ do k = 1,nlevels - 2
    do l = k+1, nlevels-1
       height_midpts(k) = height_midpts(k) + pterm(l)
    enddo
+enddo
+
+write(*, *) 'psurf, hsurf: ', p_surf, h_surf
+do k = 1,nlevels
+   write(*, '(A, I3, F12.5)') 'k, height: ', k, height_midpts(k)
+enddo
+do k = 1,nlevels
+   write(*, '(A, I3, F12.5)') 'k, pmln: ', k, pmln(k)
 enddo
 
 end subroutine build_heights
