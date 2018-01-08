@@ -157,7 +157,7 @@ foreach MODEL ( $DO_THESE_MODELS )
     if ( "$MODEL" == "template" ) then
       echo skipping test of the template directory
 
-    elif ( -f workshop_setup.csh ) then
+    else if ( -f workshop_setup.csh ) then
       set SAVEDIR = saveme.test_dart
       mkdir -p ${SAVEDIR}
       ${COPY} input.nml obs_seq.* ${SAVEDIR}
