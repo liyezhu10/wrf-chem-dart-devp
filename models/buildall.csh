@@ -147,9 +147,10 @@ foreach MODEL ( $DO_THESE_MODELS )
     echo "=================================================================="
     echo
     echo
-
+ 
     cd ${modeldir}/${MODEL}/work
     set FAILURE = 0
+    echo "Current directory is " `pwd`
 
     @ ncdlfiles = `ls *.cdl | wc -l`
 
