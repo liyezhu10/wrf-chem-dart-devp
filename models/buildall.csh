@@ -154,7 +154,10 @@ foreach MODEL ( $DO_THESE_MODELS )
 
     @ ncdlfiles = `ls *.cdl | wc -l`
 
-    if ( -f workshop_setup.csh ) then
+    if ( "$MODEL" == "template" ) then
+      echo skipping test of the template directory
+
+    elif ( -f workshop_setup.csh ) then
       set SAVEDIR = saveme.test_dart
       mkdir -p ${SAVEDIR}
       ${COPY} input.nml obs_seq.* ${SAVEDIR}
@@ -167,6 +170,7 @@ foreach MODEL ( $DO_THESE_MODELS )
       echo "Restoring original input.nml and obs_seq files"
       ${COPY} ${SAVEDIR}/* .
       ${REMOVE} ${SAVEDIR}
+
     else
       echo "Trying to run pmo for model $MODEL as a test"
       echo "Will generate NetCDF files from any .cdl files first."
