@@ -933,6 +933,10 @@ real(r8) :: botvals(ens_size), topvals(ens_size)
 real(r8) :: four_vert_fracts(4, ens_size)
 type(quad_interp_handle) :: interp_handle
 
+
+quad_vals(:,:) = MISSING_R8
+my_status(:) = 99
+
 ! need to consider the case for 2d vs 3d variables
 numdims = get_dims_from_qty(obs_qty, varid)
 
@@ -1017,6 +1021,10 @@ else ! 2 dimensional variables
    endif
 
 endif
+
+! good return
+my_status(:) = 0
+
 end subroutine get_quad_vals
 
 !-----------------------------------------------------------------------
