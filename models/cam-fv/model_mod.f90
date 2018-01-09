@@ -741,6 +741,11 @@ endif
 call get_quad_vals(state_handle, ens_size, varid, obs_qty, four_lons, four_lats, &
                    lon_lat_vert, which_vert, quad_vals, status_array)
 
+if (any(status_array /= 0)) then
+   istatus(:) = 10   ! cannot get vertical values
+   return
+endif
+
 ! do the horizontal interpolation for each ensemble member
 call quad_lon_lat_evaluate(interp_handle, lon_fract, lat_fract, ens_size, &
                            quad_vals, interp_vals, status_array)
@@ -828,6 +833,11 @@ endif
 
 call get_quad_vals(state_handle, ens_size, varid, obs_qty, four_lons, four_lats, &
                    lon_lat_vert, which_vert, quad_vals, status_array)
+
+if (any(status_array /= 0)) then
+   istatus(:) = 10   ! cannot get vertical values
+   return
+endif
 
 ! do the horizontal interpolation for each ensemble member
 call quad_lon_lat_evaluate(interp_handle, lon_fract, lat_fract, ens_size, &
@@ -938,7 +948,6 @@ if (numdims > 2 ) then
                                 which_vert, obs_qty, &
                                 four_bot_levs(icorner, :), four_top_levs(icorner, :), &
                                 four_vert_fracts(icorner, :), status_array)
-      
 
       !>@todo FIXME should we let the process continue if at least one
       !>member has failed?  pro: save work  con: don't get forward operator
@@ -1362,6 +1371,7 @@ select case (which_vert)
       bot_levs(:) = bot1
       top_levs(:) = top1
       vert_fracts(:) = fract1
+      my_status(:) = 0
       if (debug_level > 100) then
          do k = 1,ens_size
             print*, 'ISLEVEL bot_levs(k), top_levs(k), vert_fracts(k), vert_val', &
@@ -1370,11 +1380,11 @@ select case (which_vert)
       endif
 
    ! 2d fields
-   case(VERTISSURFACE)
-   case(VERTISUNDEF)  
+   case(VERTISUNDEF, VERTISSURFACE)
       bot_levs(:) = nlevels
       top_levs(:) = nlevels - 1
       vert_fracts(:) = 1.0_r8
+      my_status(:) = 0
 
    case default
       write(string1, *) 'unsupported vertical type: ', which_vert
@@ -1630,6 +1640,7 @@ levloop: do this_lev = 2, nlevels
    else
       fract = (p_val - pressures(top_lev)) / (pressures(bot_lev) - pressures(top_lev))
    endif
+
    my_status = 0
    return
 enddo levloop
