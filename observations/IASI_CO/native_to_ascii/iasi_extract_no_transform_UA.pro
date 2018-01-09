@@ -330,14 +330,6 @@ for k = 0L, nx do begin
 ; DEGREES OF FREEDOM FOR SIGNAL:
    dfs = dofs[k]
 ;
-   if debug eq 1 then begin
-      print, 'DFS: ',dfs, dofs_threshold_low, dofs_threshold_hi
-      print, 'ZAD: ',sza[k], sza_day
-      print, 'LAT: ',lat[k], lat_edge_1, lat_edge_2
-      print, 'SEC: ',obs_time[k], bin_beg_sec, bin_end_sec
-      print, ' '
-   endif
-;
 ; APM: at this point we have full averaging kernal
 ; APM: this is pre-DART QA/QC and may nedd to be revised to get more
 ; obs to DART
@@ -348,7 +340,20 @@ for k = 0L, nx do begin
    min=float(fix(obs_time[k]/100)-hr*100)
    scc=float(obs_time[k]-hr*10000-min*100)
    tod_sec=hr*60*60+min*60+scc   
-;   print, 'IDL lon, lat ', lon[k],lat[k]
+;
+   if debug eq 1 then begin
+      print, 'obs_time ',obs_time[k]
+      print, 'hr-mn-sc ',hr,min,scc
+      print, 'DFS: ',dfs, dofs_threshold_low, dofs_threshold_hi
+      print, 'ZAN: ',sza[k], sza_day
+      print, 'LAT: ',lat[k], day_lat_edge_1, day_lat_edge_2
+      print, 'LAT: ',lat[k], nit_lat_edge_1, nit_lat_edge_2
+      print, 'SEC: ',obs_sec[k], bin_beg_sec, bin_end_sec
+      print, 'SEC: ',tod_sec, bin_beg_sec, bin_end_sec
+      print, 'LAT: ',lat[k], lat_min, lat_max
+      print, 'LON: ',lon[k], lon_min, lon_max
+      print, ' '
+   endif
    if( $
 ;      ( dfs ge dofs_threshold_low ) && ( dfs le dofs_threshold_hi ) && $
       ((( sza[k] lt sza_day ) && ( lat[k] gt day_lat_edge_1 ) && ( lat[k] lt day_lat_edge_2 )) || $

@@ -141,7 +141,7 @@ program create_iasi_obs_sequence
   real                            :: bin_beg, bin_end
   real                            :: sec, lat, lon, dummy, nlevels
   real                            :: pi ,rad2deg, re, wt, corr_err, fac, fac_obs_error
-  real                            :: ln_10, xg_sec_avg
+  real                            :: ln_10, xg_sec_avg, o3_log_max, o3_log_min, o3_min
   real                            :: ias_psf, irot, nlvls_fix
   real*8, dimension(1000)         :: unif
   real*8, dimension(num_qc)       :: o3_qc
@@ -587,10 +587,18 @@ program create_iasi_obs_sequence
         enddo
 !
 ! Calculate errors for NO ROT RET case
+        o3_min=.01
         do j=1,nlvls
 ! (APM: IS THIS CORRECT?)
 !           ret_err(j)=sqrt(ret_cov(j,j)))
-           ret_err(j)=log10(sqrt(raw_cov(j,j)))
+!           ret_err(j)=log10(sqrt(raw_cov(j,j)))
+           o3_log_max=log10(ret_x_r(j)+sqrt(raw_cov(j,j)))
+           if(ret_x_r(j)-sqrt(raw_cov(j,j)) .le. 0.) then
+              ret_err(j)=o3_log_max-log10(ret_x_r(j)) 
+           else
+              o3_log_min=log10(ret_x_r(j)-sqrt(raw_cov(j,j)))
+              ret_err(j)=min(log10(ret_x_r(j))-o3_log_min, o3_log_max-log10(ret_x_r(j))) 
+           endif
         enddo
 !
 ! Calculate superobs

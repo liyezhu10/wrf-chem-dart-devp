@@ -142,7 +142,7 @@ real*8                          :: co_psurf, err, co_error, co_prior
 real                            :: bin_beg, bin_end
 real                            :: sec, lat, lon, nlevels
 real                            :: pi ,rad2deg, re, wt, corr_err, fac, fac_obs_error
-real                            :: ln_10, xg_sec_avg
+real                            :: ln_10, xg_sec_avg, co_log_max, co_log_min, co_min
 real                            :: irot, nlvls_fix
 real*8, dimension(1000)         :: unif
 real*8, dimension(num_qc)       :: co_qc
@@ -543,10 +543,18 @@ fac=fac_obs_error
         enddo
 !
 ! Calculate errors for NO ROT RET case
+        co_min=.01
         do j=1,nlvls
 ! (APM: IS THIS CORRECT?)
 !           ret_err(j)=sqrt(ret_cov(j,j)))
-           ret_err(j)=log10(sqrt(raw_cov(j,j)))
+!           ret_err(j)=log10(sqrt(raw_cov(j,j)))
+           co_log_max=log10(ret_x_r(j)+sqrt(raw_cov(j,j)))
+           if(ret_x_r(j)-sqrt(raw_cov(j,j)) .le. 0.) then
+              ret_err(j)=co_log_max-log10(ret_x_r(j)) 
+           else
+              co_log_min=log10(ret_x_r(j)-sqrt(raw_cov(j,j)))
+              ret_err(j)=min(log10(ret_x_r(j))-co_log_min, co_log_max-log10(ret_x_r(j))) 
+           endif
         enddo
 !
 ! Calculate superobs
