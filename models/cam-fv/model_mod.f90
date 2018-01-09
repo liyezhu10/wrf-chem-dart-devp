@@ -113,7 +113,6 @@ logical            :: custom_routine_to_generate_ensemble = .false.
 character(len=32)  :: fields_to_perturb(MAX_PERT)     = "QTY_TEMPERATURE"
 real(r8)           :: perturbation_amplitude(MAX_PERT)= 0.00001_r8
 logical            :: using_chemistry                 = .false.
-logical            :: use_old_heights                 = .false.
 
 ! state_variables defines the contents of the state vector.
 ! each line of this input should have the form:
@@ -142,7 +141,6 @@ namelist /model_nml/  &
    custom_routine_to_generate_ensemble, &
    fields_to_perturb,               &
    perturbation_amplitude,          &
-   use_old_heights,                 &
    debug_level
 
 ! global variables
