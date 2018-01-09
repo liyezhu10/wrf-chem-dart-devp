@@ -114,6 +114,7 @@
       real,dimension(indx_max)     :: lat,lon,obs_val,obs_err
       real*8,dimension(num_qc)     :: obs_qc
       real*8,dimension(num_copies) :: obs_val_out
+      real                         :: co_log_max, co_log_min
       character(len=2)             :: chr_month, chr_day
       character(len=4)             :: chr_year
       character(len=20)            :: dmy
@@ -124,6 +125,7 @@
       character(len=129)           :: qc_meta_data='AIRNOW QC index'
       character(len=129)           :: file_name='airnow_obs_seq'
       character(len=180)           :: file_in
+      logical                      :: use_log_co, use_log_o3
 !
 !============================================================
 !obs sequence extra variables
@@ -134,7 +136,7 @@
       obs_qc(1)=0.
       namelist /create_airnow_obs_nml/year0,month0,day0,hour0,beg_year,beg_mon,beg_day, &
       beg_hour,beg_min,beg_sec,end_year,end_mon,end_day,end_hour,end_min,end_sec, &
-      file_in,lat_mn,lat_mx,lon_mn,lon_mx
+      file_in,lat_mn,lat_mx,lon_mn,lon_mx,use_log_co,use_log_o3
 !
       save_greg_sec=-9999                                                 
 ! Record the current time, date, etc. to the logfile                                       
@@ -221,6 +223,7 @@
          data_greg_sec_temp=calc_greg_sec(year_temp,month_temp,day_temp, &
          hour_temp,minute_temp,0,days_in_month)
 !
+         if (obs_val_temp .le. 0.) cycle
          if(lat_mn .le. lat_temp .and. lat_mx .ge. lat_temp .and. &
             lon_mn .le. lon_temp .and. lon_mx .ge. lon_temp .and. &
             beg_greg_sec .le. data_greg_sec_temp .and. end_greg_sec .ge. data_greg_sec_temp) then
@@ -234,6 +237,16 @@
             minute(indx)=minute_temp
             obs_val(indx)=obs_val_temp*fac
             obs_err(indx)=.2 * obs_val_temp
+            if (use_log_co .and. obs_val(indx).gt.0.) then
+               co_log_max=log10(obs_val(indx)+obs_err(indx))
+               if (obs_val(indx)-obs_err(indx).le. 0.) then
+                  obs_err(indx)=co_log_max-log10(obs_val(indx))
+               else
+                  co_log_min=log10(obs_val(indx)-obs_err(indx))
+                  obs_err(indx)=min(log10(obs_val(indx))-co_log_min, co_log_max-log10(obs_val(indx)))
+               endif
+               obs_val(indx)=log10(obs_val(indx))
+            endif
             data_greg_sec(indx)=data_greg_sec_temp
          endif
       enddo
