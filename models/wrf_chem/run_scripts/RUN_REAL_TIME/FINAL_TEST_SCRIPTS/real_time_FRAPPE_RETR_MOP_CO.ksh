@@ -8,24 +8,25 @@
 #
 #########################################################################
 #
-# CYCLE DATE-TIME:
-export CYCLE_STR_DATE=2014071400
-export CYCLE_STR_DATE=2014072006
-export CYCLE_END_DATE=${CYCLE_STR_DATE}
-export CYCLE_END_DATE=2014072018
+export INITIAL_DATE=2014072000
+export FIRST_FILTER_DATE=2014072006
+export FIRST_DART_INFLATE_DATE=2014072006
+export FIRST_EMISS_INV_DATE=2014072006
+#
+# START CYCLE DATE-TIME:
+export CYCLE_STR_DATE=2014072300
+#
+# END CYCLE DATE-TIME:
+export CYCLE_END_DATE=2014072300
+#export CYCLE_END_DATE=${CYCLE_STR_DATE}
+#
 export CYCLE_DATE=${CYCLE_STR_DATE}
-export NL_FAC_OBS_ERROR_MOPITT=4.00
-export NL_FAC_OBS_ERROR_MOPITT=10.0
-export NL_FAC_OBS_ERROR_MOPITT=2.50
-export NL_FAC_OBS_ERROR_MOPITT=3.00
-export NL_FAC_OBS_ERROR_MOPITT=2.25
-export NL_FAC_OBS_ERROR_MOPITT=2.00
 export NL_FAC_OBS_ERROR_MOPITT=1.00
 export NL_FAC_OBS_ERROR_IASI=1.00
 export RETRIEVAL_TYPE_MOPITT=RETR
-export RETRIEVAL_TYPE_IASI=RAWR
+export RETRIEVAL_TYPE_IASI=RETR
 #
-export USE_LOG=false
+export USE_LOG=true
 if [[ ${USE_LOG} == true ]]; then
    export CO_MIN=NULL
    export CO_MAX=NULL
@@ -65,11 +66,11 @@ fi
 #
 # Run WRF-Chem for failed forecasts
 export RUN_SPECIAL_FORECAST=false
-export NUM_SPECIAL_FORECAST=4
+export NUM_SPECIAL_FORECAST=1
+export SPECIAL_FORECAST_FAC=1.
 export SPECIAL_FORECAST_FAC=1./2.
 export SPECIAL_FORECAST_FAC=2./3.
-export SPECIAL_FORECAST_FAC=1.
-export SPECIAL_FORECAST_MEM[1]=2
+export SPECIAL_FORECAST_MEM[1]=9
 export SPECIAL_FORECAST_MEM[2]=5
 export SPECIAL_FORECAST_MEM[3]=9
 export SPECIAL_FORECAST_MEM[4]=10
@@ -101,12 +102,13 @@ export SPECIAL_FORECAST_MEM[29]=29
 export SPECIAL_FORECAST_MEM[30]=30
 #
 # Run temporal interpolation for missing background files
+# Currently set up for 6 hr forecasts. It can handle up to 24 hr forecasts
 export RUN_INTERPOLATE=false
 #
 # for 2014072212 and 2014072218
-#export BACK_DATE=2014072206
-#export FORW_DATE=2014072300
-#let BACK_WT=.3333
+export BACK_DATE=2014072206
+export FORW_DATE=2014072300
+let BACK_WT=.3333
 #let BACK_WT=.6667
 #
 # for 20142900
@@ -115,20 +117,12 @@ export RUN_INTERPOLATE=false
 #let BACK_WT=.5000
 #
 # for 20142912
-export BACK_DATE=2014072906
-export FORW_DATE=2014072918
-let BACK_WT=.5000
+#export BACK_DATE=2014072906
+#export FORW_DATE=2014072918
+#let BACK_WT=.5000
 #
 while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
 export DATE=${CYCLE_DATE}
-export INITIAL_DATE=2014072000
-export FIRST_DART_INFLATE_DATE=2014072006
-export FIRST_FILTER_DATE=2014072006
-export FIRST_EMISS_INV_DATE=2014072006
-export FIRST_DART_INFLATE_DATE=2014072006
-if [[ ${ADD_EMISS} == false ]]; then
-   export FIRST_EMISS_INV_DATE=${DATE}
-fi
 export CYCLE_PERIOD=6
 export HISTORY_INTERVAL_HR=1
 (( HISTORY_INTERVAL_MIN = ${HISTORY_INTERVAL_HR} * 60 ))
@@ -276,9 +270,9 @@ export ASIM_MAX_SEC_GREG=${temp[1]}
 # SELECT COMPONENT RUN OPTIONS:
 if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_GEOGRID=false
-   export RUN_UNGRIB=true
-   export RUN_METGRID=true
-   export RUN_REAL=true
+   export RUN_UNGRIB=false
+   export RUN_METGRID=false
+   export RUN_REAL=false
    export RUN_PERT_WRFCHEM_MET_IC=true
    export RUN_PERT_WRFCHEM_MET_BC=true
    export RUN_EXO_COLDENS=true
@@ -289,8 +283,8 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_PERT_WRFCHEM_CHEM_ICBC=true
    export RUN_PERT_WRFCHEM_CHEM_EMISS=true
    export RUN_MOPITT_CO_OBS=true
-   export RUN_IASI_CO_OBS=false
-   export RUN_IASI_O3_OBS=true
+   export RUN_IASI_CO_OBS=true
+   export RUN_IASI_O3_OBS=false
    export RUN_OMI_NO2_OBS=false
    export RUN_AIRNOW_O3_OBS=true
    export RUN_AIRNOW_CO_OBS=true
@@ -900,7 +894,7 @@ export NL_JCDFI_IO=false
 # &filter.nml
 export NL_OUTLIER_THRESHOLD=3.
 export NL_ENABLE_SPECIAL_OUTLIER_CODE=.false.
-export NL_SPECIAL_OUTLIER_THRESHOLD=4.
+export NL_SPECIAL_OUTLIER_THRESHOLD=3.
 export NL_ENS_SIZE=${NUM_MEMBERS}
 export NL_OUTPUT_RESTART=.true.
 export NL_START_FROM_RESTART=.true.
@@ -1190,9 +1184,7 @@ export NL_ASSIMILATE_THESE_OBS_TYPES="'RADIOSONDE_TEMPERATURE',
 #                                   'AIRNOW_CO',
 #                                   'AIRNOW_O3',
 #                                   'OMI_NO2_COLUMN'"
-export NL_EVALUATE_THESE_OBS_TYPES="'IASI_O3_RETRIEVAL',
-                                   'AIRNOW_CO',
-                                   'AIRNOW_O3'"
+export NL_EVALUATE_THESE_OBS_TYPES="' '"
 #
 # &replace_wrf_fields_nml
 export NL_FIELDNAMES="'SNOWC',
@@ -1638,7 +1630,7 @@ if [[ ${RUN_INTERPOLATE} = "true" ]]; then
       export FORW_FILE_FR=FW_met_em.d${FR_DOMAIN}.${P_FORW_FILE_DATE}.nc
       export OUTFILE_CR=met_em.d${CR_DOMAIN}.${P_FILE_DATE}.nc
       export OUTFILE_FR=met_em.d${FR_DOMAIN}.${P_FILE_DATE}.nc
-      export TIME_INTERP_DIR1=/glade/p/work/mizzi/TRUNK/DART_CHEM_MY_BRANCH/models/wrf_chem
+      export TIME_INTERP_DIR1=${DART_DIR}/models/wrf_chem
       export TIME_INTERP_DIR2=run_scripts/RUN_TIME_INTERP
       export FIX_TIME_FILE=${TIME_INTERP_DIR1}/${TIME_INTERP_DIR2}/fix_time_stamp.exe
       export NUM_FIX_DATES=1
@@ -1737,7 +1729,7 @@ EOF
       export BDYFILE_CR=wrfbdy_d${CR_DOMAIN}_${P_FILE_DATE}
       export OUTFILE_CR=wrfinput_d${CR_DOMAIN}_${P_FILE_DATE}
       export OUTFILE_FR=wrfinput_d${FR_DOMAIN}_${P_FILE_DATE}
-      export TIME_INTERP_DIR1=/glade/p/work/mizzi/TRUNK/DART_CHEM_MY_BRANCH/models/wrf_chem
+      export TIME_INTERP_DIR1=${DART_DIR}/models/wrf_chem
       export TIME_INTERP_DIR2=run_scripts/RUN_TIME_INTERP
       export FIX_TIME_FILE=${TIME_INTERP_DIR1}/${TIME_INTERP_DIR2}/fix_time_stamp.exe
       let NUM_FIX_DATES=${FCST_PERIOD}/${LBC_FREQ}
@@ -1773,28 +1765,10 @@ EOF
 &time_stamp_nml
 time_str1='${FX_FILE_DATE[0]}'
 time_str2='${FX_FILE_DATE[1]}'
-time_str3='${FX_FILE_DATE[2]}'
-time_str4='${FX_FILE_DATE[3]}'
-time_str5='${FX_FILE_DATE[4]}'
-time_str6='${FX_FILE_DATE[5]}'
-time_str7='${FX_FILE_DATE[6]}'
-time_str8='${FX_FILE_DATE[7]}'
 time_this_str1='${FX_FILE_DATE[0]}'
 time_this_str2='${FX_FILE_DATE[1]}'
-time_this_str3='${FX_FILE_DATE[2]}'
-time_this_str4='${FX_FILE_DATE[3]}'
-time_this_str5='${FX_FILE_DATE[4]}'
-time_this_str6='${FX_FILE_DATE[5]}'
-time_this_str7='${FX_FILE_DATE[6]}'
-time_this_str8='${FX_FILE_DATE[7]}'
 time_next_str1='${FX_FILE_NEXT_DATE[0]}'
 time_next_str2='${FX_FILE_NEXT_DATE[1]}'
-time_next_str3='${FX_FILE_NEXT_DATE[2]}'
-time_next_str4='${FX_FILE_NEXT_DATE[3]}'
-time_next_str5='${FX_FILE_NEXT_DATE[4]}'
-time_next_str6='${FX_FILE_NEXT_DATE[5]}'
-time_next_str7='${FX_FILE_NEXT_DATE[6]}'
-time_next_str8='${FX_FILE_NEXT_DATE[7]}'
 file_str='${BDYFILE_CR}'
 num_dates=${NUM_FIX_DATES}
 file_sw=1
@@ -1802,7 +1776,7 @@ file_sw=1
 EOF
       ncflint -w ${BACK_WT} ${BACK_BDYF_CR} ${FORW_BDYF_CR} ${BDYFILE_CR}
       ./fix_time_stamp.exe
-      export TIME_INTERP_DIR1=/glade/p/work/mizzi/TRUNK/DART_CHEM_MY_BRANCH/models/wrf_chem
+      export TIME_INTERP_DIR1=${DART_DIR}/models/wrf_chem
       export TIME_INTERP_DIR2=run_scripts/RUN_TIME_INTERP
       export FIX_TIME_FILE=${TIME_INTERP_DIR1}/${TIME_INTERP_DIR2}/fix_time_stamp.exe
       cp ${FIX_TIME_FILE} ./.
@@ -1813,28 +1787,10 @@ EOF
 &time_stamp_nml
 time_str1='${FX_FILE_DATE[0]}'
 time_str2='${FX_FILE_DATE[1]}'
-time_str3='${FX_FILE_DATE[2]}'
-time_str4='${FX_FILE_DATE[3]}'
-time_str5='${FX_FILE_DATE[4]}'
-time_str6='${FX_FILE_DATE[5]}'
-time_str7='${FX_FILE_DATE[6]}'
-time_str8='${FX_FILE_DATE[7]}'
 time_this_str1='${FX_FILE_DATE[0]}'
 time_this_str2='${FX_FILE_DATE[1]}'
-time_this_str3='${FX_FILE_DATE[2]}'
-time_this_str4='${FX_FILE_DATE[3]}'
-time_this_str5='${FX_FILE_DATE[4]}'
-time_this_str6='${FX_FILE_DATE[5]}'
-time_this_str7='${FX_FILE_DATE[6]}'
-time_this_str8='${FX_FILE_DATE[7]}'
 time_next_str1='${FX_FILE_NEXT_DATE[0]}'
 time_next_str2='${FX_FILE_NEXT_DATE[1]}'
-time_next_str3='${FX_FILE_NEXT_DATE[2]}'
-time_next_str4='${FX_FILE_NEXT_DATE[3]}'
-time_next_str5='${FX_FILE_NEXT_DATE[4]}'
-time_next_str6='${FX_FILE_NEXT_DATE[5]}'
-time_next_str7='${FX_FILE_NEXT_DATE[6]}'
-time_next_str8='${FX_FILE_NEXT_DATE[7]}'
 file_str='${OUTFILE_CR}'
 num_dates=${NUM_FIX_DATES}
 file_sw=0
@@ -1842,7 +1798,7 @@ file_sw=0
 EOF
       ncflint -w ${BACK_WT} ${BACK_FILE_CR} ${FORW_FILE_CR} ${OUTFILE_CR}
       ./fix_time_stamp.exe
-      export TIME_INTERP_DIR1=/glade/p/work/mizzi/TRUNK/DART_CHEM_MY_BRANCH/models/wrf_chem
+      export TIME_INTERP_DIR1=${DART_DIR}/models/wrf_chem
       export TIME_INTERP_DIR2=run_scripts/RUN_TIME_INTERP
       export FIX_TIME_FILE=${TIME_INTERP_DIR1}/${TIME_INTERP_DIR2}/fix_time_stamp.exe
       cp ${FIX_TIME_FILE} ./.
@@ -1853,28 +1809,10 @@ EOF
 &time_stamp_nml
 time_str1='${FX_FILE_DATE[0]}'
 time_str2='${FX_FILE_DATE[1]}'
-time_str3='${FX_FILE_DATE[2]}'
-time_str4='${FX_FILE_DATE[3]}'
-time_str5='${FX_FILE_DATE[4]}'
-time_str6='${FX_FILE_DATE[5]}'
-time_str7='${FX_FILE_DATE[6]}'
-time_str8='${FX_FILE_DATE[7]}'
 time_this_str1='${FX_FILE_DATE[0]}'
 time_this_str2='${FX_FILE_DATE[1]}'
-time_this_str3='${FX_FILE_DATE[2]}'
-time_this_str4='${FX_FILE_DATE[3]}'
-time_this_str5='${FX_FILE_DATE[4]}'
-time_this_str6='${FX_FILE_DATE[5]}'
-time_this_str7='${FX_FILE_DATE[6]}'
-time_this_str8='${FX_FILE_DATE[7]}'
 time_next_str1='${FX_FILE_NEXT_DATE[0]}'
 time_next_str2='${FX_FILE_NEXT_DATE[1]}'
-time_next_str3='${FX_FILE_NEXT_DATE[2]}'
-time_next_str4='${FX_FILE_NEXT_DATE[3]}'
-time_next_str5='${FX_FILE_NEXT_DATE[4]}'
-time_next_str6='${FX_FILE_NEXT_DATE[5]}'
-time_next_str7='${FX_FILE_NEXT_DATE[6]}'
-time_next_str8='${FX_FILE_NEXT_DATE[7]}'
 file_str='${OUTFILE_FR}'
 num_dates=${NUM_FIX_DATES}
 file_sw=0
@@ -3590,6 +3528,8 @@ if ${RUN_AIRNOW_O3_OBS}; then
    export NL_LAT_MX=${NL_MAX_LAT}
    export NL_LON_MN=${NNL_MIN_LON}
    export NL_LON_MX=${NNL_MAX_LON}
+   export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
+   export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
 #
 # GET EXECUTABLE
    cp ${DART_DIR}/observations/AIRNOW/work/airnow_o3_ascii_to_obs ./.
@@ -3657,6 +3597,8 @@ if ${RUN_AIRNOW_CO_OBS}; then
    export NL_LAT_MX=${NL_MAX_LAT}
    export NL_LON_MN=${NNL_MIN_LON}
    export NL_LON_MX=${NNL_MAX_LON}
+   export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
+   export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
 #
 # GET EXECUTABLE
    cp ${DART_DIR}/observations/AIRNOW/work/airnow_co_ascii_to_obs ./.
@@ -4238,7 +4180,7 @@ if ${RUN_DART_FILTER}; then
       export LL_DD=`echo ${LL_DATE} | cut -c7-8`
       export LL_HH=`echo ${LL_DATE} | cut -c9-10`
       export LL_FILE_DATE=${LL_YY}-${LL_MM}-${LL_DD}_${LL_HH}:00:00
-      if [[ ${LL_DATE} -le ${FIRST_EMISS_INV_DATE} ]]; then
+      if [[ ${LL_DATE} -le ${FIRST_EMISS_INV_DATE} || ${ADD_EMISS} = ".false." ]]; then
          cp ${WRFCHEM_CHEM_EMISS_DIR}/wrfchemi_d${CR_DOMAIN}_${LL_FILE_DATE}.${CMEM} wrfchemi_d${CR_DOMAIN}
          cp ${WRFCHEM_CHEM_EMISS_DIR}/wrffirechemi_d${CR_DOMAIN}_${LL_FILE_DATE}.${CMEM} wrffirechemi_d${CR_DOMAIN}
          ncatted -O -a coordinates,E_CO,c,c,"XLONG, XLAT" wrfchemi_d${CR_DOMAIN}
@@ -4438,7 +4380,7 @@ EOF
       export LL_DD=`echo ${LL_DATE} | cut -c7-8`
       export LL_HH=`echo ${LL_DATE} | cut -c9-10`
       export LL_FILE_DATE=${LL_YY}-${LL_MM}-${LL_DD}_${LL_HH}:00:00
-      if [[ ${LL_DATE} -le ${FIRST_EMISS_INV_DATE} ]]; then
+      if [[ ${LL_DATE} -le ${FIRST_EMISS_INV_DATE} || ${ADD_EMISS} = ".false." ]]; then
          cp ${WRFCHEM_CHEM_EMISS_DIR}/wrfchemi_d${CR_DOMAIN}_${LL_FILE_DATE}.${CMEM} wrfchemi_d${CR_DOMAIN}
          cp ${WRFCHEM_CHEM_EMISS_DIR}/wrffirechemi_d${CR_DOMAIN}_${LL_FILE_DATE}.${CMEM} wrffirechemi_d${CR_DOMAIN}
          ncatted -O -a coordinates,E_CO,c,c,"XLONG, XLAT" wrfchemi_d${CR_DOMAIN}
@@ -4684,7 +4626,7 @@ if ${RUN_WRFCHEM_CYCLE_CR}; then
 #      cp ${WRFCHEM_CHEM_ICBC_DIR}/wrfbdy_d${CR_DOMAIN}_${START_FILE_DATE}.${CMEM} wrfbdy_d${CR_DOMAIN}
 #
 # Update the other emission files
-      if [[ ${ADD_EMISS} ]]; then
+      if [[ ${ADD_EMISS} = ".true." ]]; then
          cp wrfchemi_d${CR_DOMAIN}_${L_FILE_DATE} wrfchemi_d${CR_DOMAIN}_prior
          cp wrfchemi_d${CR_DOMAIN}_${L_FILE_DATE} wrfchemi_d${CR_DOMAIN}
          cp wrffirechemi_d${CR_DOMAIN}_${L_FILE_DATE} wrffirechemi_d${CR_DOMAIN}_prior

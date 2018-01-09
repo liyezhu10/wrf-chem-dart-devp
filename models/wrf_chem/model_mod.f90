@@ -3438,7 +3438,7 @@ else
             else
                fld(2) = fld(1)
             endif
-            fld = max(0.0_r8, fld)
+!            fld = max(0.0_r8, fld)
          endif
       endif
 !

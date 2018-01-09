@@ -56,7 +56,7 @@ foreach TARGET ( mkmf_* )
    endsw
 end
 
-\rm -f *.o *.mod 
+#\rm -f *.o *.mod 
 \rm -f input.nml*_default
 
 if ( $#argv == 1 && "$1" == "-mpi" ) then

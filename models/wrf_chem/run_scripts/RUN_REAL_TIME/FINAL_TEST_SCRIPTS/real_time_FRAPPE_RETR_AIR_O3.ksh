@@ -10,22 +10,16 @@
 #
 # CYCLE DATE-TIME:
 export CYCLE_STR_DATE=2014071400
-export CYCLE_STR_DATE=2014072006
+export CYCLE_STR_DATE=2014072112
 export CYCLE_END_DATE=${CYCLE_STR_DATE}
-export CYCLE_END_DATE=2014072018
+export CYCLE_END_DATE=2014072206
 export CYCLE_DATE=${CYCLE_STR_DATE}
-export NL_FAC_OBS_ERROR_MOPITT=4.00
-export NL_FAC_OBS_ERROR_MOPITT=10.0
-export NL_FAC_OBS_ERROR_MOPITT=2.50
-export NL_FAC_OBS_ERROR_MOPITT=3.00
-export NL_FAC_OBS_ERROR_MOPITT=2.25
-export NL_FAC_OBS_ERROR_MOPITT=2.00
 export NL_FAC_OBS_ERROR_MOPITT=1.00
 export NL_FAC_OBS_ERROR_IASI=1.00
 export RETRIEVAL_TYPE_MOPITT=RETR
-export RETRIEVAL_TYPE_IASI=RAWR
+export RETRIEVAL_TYPE_IASI=RETR
 #
-export USE_LOG=false
+export USE_LOG=true
 if [[ ${USE_LOG} == true ]]; then
    export CO_MIN=NULL
    export CO_MAX=NULL
@@ -65,12 +59,12 @@ fi
 #
 # Run WRF-Chem for failed forecasts
 export RUN_SPECIAL_FORECAST=false
-export NUM_SPECIAL_FORECAST=4
+export NUM_SPECIAL_FORECAST=2
 export SPECIAL_FORECAST_FAC=1./2.
 export SPECIAL_FORECAST_FAC=2./3.
 export SPECIAL_FORECAST_FAC=1.
-export SPECIAL_FORECAST_MEM[1]=2
-export SPECIAL_FORECAST_MEM[2]=5
+export SPECIAL_FORECAST_MEM[1]=8
+export SPECIAL_FORECAST_MEM[2]=10
 export SPECIAL_FORECAST_MEM[3]=9
 export SPECIAL_FORECAST_MEM[4]=10
 export SPECIAL_FORECAST_MEM[5]=14
@@ -288,12 +282,12 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_WRFCHEM_CHEMI=true
    export RUN_PERT_WRFCHEM_CHEM_ICBC=true
    export RUN_PERT_WRFCHEM_CHEM_EMISS=true
-   export RUN_MOPITT_CO_OBS=true
+   export RUN_MOPITT_CO_OBS=false
    export RUN_IASI_CO_OBS=false
-   export RUN_IASI_O3_OBS=true
+   export RUN_IASI_O3_OBS=false
    export RUN_OMI_NO2_OBS=false
    export RUN_AIRNOW_O3_OBS=true
-   export RUN_AIRNOW_CO_OBS=true
+   export RUN_AIRNOW_CO_OBS=false
    export RUN_MODIS_AOD_OBS=false
    export RUN_MET_OBS=true
    export RUN_COMBINE_OBS=true
@@ -479,7 +473,7 @@ export WRFDA_TIME_LIMIT=0:10
 export WRFDA_NUM_TASKS=32
 export WRFDA_TASKS_PER_NODE=8
 export WRFDA_JOB_CLASS=geyser
-export FILTER_TIME_LIMIT=5:59
+export FILTER_TIME_LIMIT=6:59
 export FILTER_NUM_TASKS=32
 export FILTER_TASKS_PER_NODE=8
 export FILTER_JOB_CLASS=geyser
@@ -900,7 +894,7 @@ export NL_JCDFI_IO=false
 # &filter.nml
 export NL_OUTLIER_THRESHOLD=3.
 export NL_ENABLE_SPECIAL_OUTLIER_CODE=.false.
-export NL_SPECIAL_OUTLIER_THRESHOLD=4.
+export NL_SPECIAL_OUTLIER_THRESHOLD=3.
 export NL_ENS_SIZE=${NUM_MEMBERS}
 export NL_OUTPUT_RESTART=.true.
 export NL_START_FROM_RESTART=.true.
@@ -952,6 +946,7 @@ export NL_INF_UPPER_BOUND_PRIOR=100.0
 export NL_INF_UPPER_BOUND_POST=100.0
 export NL_INF_SD_LOWER_BOUND_PRIOR=0.6
 export NL_INF_SD_LOWER_BOUND_POST=0.0
+export NL_OUTPUT_FORWARD_OP_ERRORS=.true.
 #
 # &assim_tools_nml
 export NL_CUTOFF=0.1
@@ -1106,7 +1101,8 @@ export NL_ASSIMILATION_PERIOD_SECONDS=${CYCLE_PERIOD_SEC}
 export NL_VERT_LOCALIZATION_COORD=4
 export NL_CENTER_SEARCH_HALF_LENGTH=500000.
 export NL_CENTER_SPLINE_GRID_SCALE=10
-export NL_SFC_ELEV_MAX_DIFF=100.0
+#export NL_SFC_ELEV_MAX_DIFF=100.0
+export NL_SFC_ELEV_MAX_DIFF=-1.
 export NL_CIRCULATION_PRES_LEVEL=80000.0
 export NL_CIRCULATION_RADIUS=108000.0
 export NL_ALLOW_OBS_BELOW_VOL=.false.
@@ -1190,9 +1186,7 @@ export NL_ASSIMILATE_THESE_OBS_TYPES="'RADIOSONDE_TEMPERATURE',
 #                                   'MODIS_AOD_RETRIEVAL',
 #                                   'AIRNOW_CO',
 #                                   'OMI_NO2_COLUMN'"
-export NL_EVALUATE_THESE_OBS_TYPES="'MOPITT_CO_RETRIEVAL',
-                                   'IASI_O3_RETRIEVAL',
-                                   'AIRNOW_CO'"
+export NL_EVALUATE_THESE_OBS_TYPES="' '"
 #
 # &replace_wrf_fields_nml
 export NL_FIELDNAMES="'SNOWC',
@@ -3590,6 +3584,8 @@ if ${RUN_AIRNOW_O3_OBS}; then
    export NL_LAT_MX=${NL_MAX_LAT}
    export NL_LON_MN=${NNL_MIN_LON}
    export NL_LON_MX=${NNL_MAX_LON}
+   export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
+   export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
 #
 # GET EXECUTABLE
    cp ${DART_DIR}/observations/AIRNOW/work/airnow_o3_ascii_to_obs ./.
@@ -3657,6 +3653,8 @@ if ${RUN_AIRNOW_CO_OBS}; then
    export NL_LAT_MX=${NL_MAX_LAT}
    export NL_LON_MN=${NNL_MIN_LON}
    export NL_LON_MX=${NNL_MAX_LON}
+   export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
+   export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
 #
 # GET EXECUTABLE
    cp ${DART_DIR}/observations/AIRNOW/work/airnow_co_ascii_to_obs ./.

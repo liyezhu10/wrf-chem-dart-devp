@@ -6,10 +6,10 @@
 ############################################################################### 
 #
 export START_DATE=2014072006
-export END_DATE=2014072018
+export END_DATE=2014072206
 export DART_FILTER=dart_filter
 #
-export DELETE_FLG=false
+export DELETE_FLG=true
 export DOMAIN=01
 export NUM_MEMBERS=10
 export CYCLE_PERIOD=6
@@ -35,11 +35,12 @@ export JOB_CLASS=regular
 #
 # Define independent directory paths
 #export DIR_NAME=real_FRAPPE_RETR_CNTL
-#export DIR_NAME=real_FRAPPE_RETR_MOP_CO
 #export DIR_NAME=real_FRAPPE_RETR_AIR_CO
-#export DIR_NAME=real_FRAPPE_RETR_MOPnAIR_CO
+#export DIR_NAME=real_FRAPPE_RETR_AIR_O3
+#export DIR_NAME=real_FRAPPE_RETR_MOP_CO
+export DIR_NAME=real_FRAPPE_RETR_IAS_CO
 #export DIR_NAME=real_FRAPPE_RETR_IAS_O3
-export DIR_NAME=real_FRAPPE_RETR_AIR_O3
+#export DIR_NAME=real_FRAPPE_RETR_MOPnAIR_CO
 #export DIR_NAME=real_FRAPPE_RETR_IASnAIR_O3
 #
 # Independent path settings
@@ -445,14 +446,14 @@ export NL_PRINT_TABLE=.false.
                                       'AIRCRAFT_V_WIND_COMPONENT',
                                       'AIRCRAFT_TEMPERATURE',
                                       'SAT_U_WIND_COMPONENT',
-                                      'SAT_V_WIND_COMPONENT'"
-#                                      'MOPITT_CO_RETRIEVAL',
-#                                      'IASI_CO_RETRIEVAL',
-#                                      'IASI_O3_RETRIEVAL',
-#                                      'MODIS_AOD_RETRIEVAL',
-#                                      'AIRNOW_CO',
-#                                      'AIRNOW_O3',
-#                                      'OMI_NO2_COLUMN'"
+                                      'SAT_V_WIND_COMPONENT',
+                                      'MOPITT_CO_RETRIEVAL',
+                                      'IASI_CO_RETRIEVAL',
+                                      'IASI_O3_RETRIEVAL',
+                                      'MODIS_AOD_RETRIEVAL',
+                                      'AIRNOW_CO',
+                                      'AIRNOW_O3',
+                                      'OMI_NO2_COLUMN'"
 #
 # &replace_wrf_fields_nml
    export NL_FIELDNAMES="'SNOWC',

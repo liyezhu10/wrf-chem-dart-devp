@@ -1,9 +1,10 @@
-fname         = '/glade/p/acd/mizzi/DART_OBS_DIAG/MOPnXXX_Exp_2_MgDA_20M_100km_COnXX_p10p30_f1p0/obs_epoch_005.nc';
-fname         = '/glade/p/acd/mizzi/DART_OBS_DIAG/MOPnXXX_Exp_2_MgDA_20M_100km_COnXX_p10p30_f1p0_loc0p5/obs_epoch_005.nc';
-fname         = '/glade/p/acd/mizzi/DART_OBS_DIAG/MOPnXXX_Exp_2_MgDA_20M_100km_COnXX_p10p30_f1p0_ph-loc100/obs_epoch_005.nc';
-region        = [0 360 -90 90 -Inf Inf];
-ObsTypeString = 'MOPITT_CO_RETRIEVAL';
-%ObsTypeString = 'IASI_CO_RETRIEVAL';
+
+fname         = '/glade2/scratch2/mizzi/DART_OBS_DIAG/real_FRAPPE_RETR_AIR_CO/dart_filter_iasi_co_rawr/obs_epoch_001.nc'
+fname         = '/glade2/scratch2/mizzi/DART_OBS_DIAG/real_FRAPPE_RETR_AIR_CO/dart_filter_iasi_co_log/obs_epoch_001.nc'
+fname         = '/glade2/scratch2/mizzi/DART_OBS_DIAG/real_FRAPPE_RETR_AIR_CO/dart_filter/obs_epoch_001.nc'
+region        = [227 267 26 49 -Inf Inf];
+%ObsTypeString = 'MOPITT_CO_RETRIEVAL';
+ObsTypeString = 'IASI_CO_RETRIEVAL';
 %ObsTypeString = 'IASI_O3_RETRIEVAL';
 CopyString    = 'NCEP BUFR observation';
 QCString      = 'DART quality control';

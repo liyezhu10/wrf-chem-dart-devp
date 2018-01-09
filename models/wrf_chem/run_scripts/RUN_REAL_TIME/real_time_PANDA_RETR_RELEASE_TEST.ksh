@@ -1,9 +1,9 @@
 #!/bin/ksh -aeux
 #########################################################################
 #
-# Purpose: Set global environment variables for real_time_wrf_chem
+# Purpose: Run_the WRF-Chem/DART PANDA test case
 #
-# NOTE: To generate the chemistry perturbations check NL_SW_GENERATE comments
+# NOTE: To generate chemistry perturbations check NL_SW_GENERATE comments
 # To use the same purturbastions from one cycle to the next one must copy
 # the pert_file_emiss and pert_file_icbc file to the run directory
 #
@@ -19,20 +19,8 @@ export CYCLE_STR_DATE=2014072500
 export CYCLE_END_DATE=${CYCLE_STR_DATE}
 export CYCLE_END_DATE=2014072500
 export CYCLE_DATE=${CYCLE_STR_DATE}
-export NL_FAC_OBS_ERROR_MOPITT=2.00
-export NL_FAC_OBS_ERROR_IASI=2.00
-export NL_FAC_OBS_ERROR_MOPITT=4.00
-export NL_FAC_OBS_ERROR_IASI=4.00
-export NL_FAC_OBS_ERROR_MOPITT=6.00
-export NL_FAC_OBS_ERROR_IASI=6.00
-export NL_FAC_OBS_ERROR_MOPITT=8.00
-export NL_FAC_OBS_ERROR_IASI=8.00
-export NL_FAC_OBS_ERROR_MOPITT=10.00
-export NL_FAC_OBS_ERROR_IASI=10.00
 export NL_FAC_OBS_ERROR_MOPITT=1.00
 export NL_FAC_OBS_ERROR_IASI=1.00
-export NL_FAC_OBS_ERROR_MOPITT=9.00
-export NL_FAC_OBS_ERROR_IASI=9.00
 export RETRIEVAL_TYPE_MOPITT=RETR
 export RETRIEVAL_TYPE_IASI=RAWR
 #
@@ -61,6 +49,7 @@ export EMISS_DAMP_INTRA_CYCLE=0.5
 #
 let BAND_ISO_VAL_CO=.09
 #
+#########################################################################
 # Run fine scale forecast only
 export RUN_FINE_SCALE=false
 #
@@ -88,26 +77,6 @@ export SPECIAL_FORECAST_MEM[7]=7
 export SPECIAL_FORECAST_MEM[8]=8
 export SPECIAL_FORECAST_MEM[9]=9
 export SPECIAL_FORECAST_MEM[10]=10
-export SPECIAL_FORECAST_MEM[11]=11
-export SPECIAL_FORECAST_MEM[12]=12
-export SPECIAL_FORECAST_MEM[13]=13
-export SPECIAL_FORECAST_MEM[14]=14
-export SPECIAL_FORECAST_MEM[15]=15
-export SPECIAL_FORECAST_MEM[16]=16
-export SPECIAL_FORECAST_MEM[17]=17
-export SPECIAL_FORECAST_MEM[18]=18
-export SPECIAL_FORECAST_MEM[19]=19
-export SPECIAL_FORECAST_MEM[20]=20
-export SPECIAL_FORECAST_MEM[21]=21
-export SPECIAL_FORECAST_MEM[22]=22
-export SPECIAL_FORECAST_MEM[23]=23
-export SPECIAL_FORECAST_MEM[24]=24
-export SPECIAL_FORECAST_MEM[25]=25
-export SPECIAL_FORECAST_MEM[26]=26
-export SPECIAL_FORECAST_MEM[27]=27
-export SPECIAL_FORECAST_MEM[28]=28
-export SPECIAL_FORECAST_MEM[29]=29
-export SPECIAL_FORECAST_MEM[30]=30
 #
 # Run temporal interpolation for missing background files
 export RUN_INTERPOLATE=false
@@ -128,6 +97,7 @@ export BACK_DATE=2014072906
 export FORW_DATE=2014072918
 let BACK_WT=.5000
 #
+#########################################################################
 while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
 export DATE=${CYCLE_DATE}
 export INITIAL_DATE=2014072418

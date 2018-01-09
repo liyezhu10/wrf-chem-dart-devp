@@ -12,20 +12,14 @@
 export CYCLE_STR_DATE=2014071400
 export CYCLE_STR_DATE=2014072006
 export CYCLE_END_DATE=${CYCLE_STR_DATE}
-export CYCLE_END_DATE=2014072018
+export CYCLE_END_DATE=2014072006
 export CYCLE_DATE=${CYCLE_STR_DATE}
-export NL_FAC_OBS_ERROR_MOPITT=4.00
-export NL_FAC_OBS_ERROR_MOPITT=10.0
-export NL_FAC_OBS_ERROR_MOPITT=2.50
-export NL_FAC_OBS_ERROR_MOPITT=3.00
-export NL_FAC_OBS_ERROR_MOPITT=2.25
-export NL_FAC_OBS_ERROR_MOPITT=2.00
 export NL_FAC_OBS_ERROR_MOPITT=1.00
 export NL_FAC_OBS_ERROR_IASI=1.00
 export RETRIEVAL_TYPE_MOPITT=RETR
-export RETRIEVAL_TYPE_IASI=RAWR
+export RETRIEVAL_TYPE_IASI=RETR
 #
-export USE_LOG=false
+export USE_LOG=true
 if [[ ${USE_LOG} == true ]]; then
    export CO_MIN=NULL
    export CO_MAX=NULL
@@ -276,18 +270,18 @@ export ASIM_MAX_SEC_GREG=${temp[1]}
 # SELECT COMPONENT RUN OPTIONS:
 if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_GEOGRID=false
-   export RUN_UNGRIB=true
-   export RUN_METGRID=true
-   export RUN_REAL=true
-   export RUN_PERT_WRFCHEM_MET_IC=true
-   export RUN_PERT_WRFCHEM_MET_BC=true
-   export RUN_EXO_COLDENS=true
-   export RUN_SEASON_WES=true
-   export RUN_WRFCHEM_BIO=true
-   export RUN_WRFCHEM_FIRE=true
-   export RUN_WRFCHEM_CHEMI=true
-   export RUN_PERT_WRFCHEM_CHEM_ICBC=true
-   export RUN_PERT_WRFCHEM_CHEM_EMISS=true
+   export RUN_UNGRIB=false
+   export RUN_METGRID=false
+   export RUN_REAL=false
+   export RUN_PERT_WRFCHEM_MET_IC=false
+   export RUN_PERT_WRFCHEM_MET_BC=false
+   export RUN_EXO_COLDENS=false
+   export RUN_SEASON_WES=false
+   export RUN_WRFCHEM_BIO=false
+   export RUN_WRFCHEM_FIRE=false
+   export RUN_WRFCHEM_CHEMI=false
+   export RUN_PERT_WRFCHEM_CHEM_ICBC=false
+   export RUN_PERT_WRFCHEM_CHEM_EMISS=false
    export RUN_MOPITT_CO_OBS=true
    export RUN_IASI_CO_OBS=false
    export RUN_IASI_O3_OBS=true
@@ -900,7 +894,7 @@ export NL_JCDFI_IO=false
 # &filter.nml
 export NL_OUTLIER_THRESHOLD=3.
 export NL_ENABLE_SPECIAL_OUTLIER_CODE=.false.
-export NL_SPECIAL_OUTLIER_THRESHOLD=4.
+export NL_SPECIAL_OUTLIER_THRESHOLD=3.
 export NL_ENS_SIZE=${NUM_MEMBERS}
 export NL_OUTPUT_RESTART=.true.
 export NL_START_FROM_RESTART=.true.
@@ -1190,9 +1184,7 @@ export NL_ASSIMILATE_THESE_OBS_TYPES="'RADIOSONDE_TEMPERATURE',
 #                                   'AIRNOW_CO',
 #                                   'AIRNOW_O3',
 #                                   'OMI_NO2_COLUMN'"
-export NL_EVALUATE_THESE_OBS_TYPES="'MOPITT_CO_RETRIEVAL',
-                                   'AIRNOW_CO',
-                                   'AIRNOW_O3'"
+export NL_EVALUATE_THESE_OBS_TYPES="' '"
 #
 # &replace_wrf_fields_nml
 export NL_FIELDNAMES="'SNOWC',
@@ -3590,6 +3582,8 @@ if ${RUN_AIRNOW_O3_OBS}; then
    export NL_LAT_MX=${NL_MAX_LAT}
    export NL_LON_MN=${NNL_MIN_LON}
    export NL_LON_MX=${NNL_MAX_LON}
+   export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
+   export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
 #
 # GET EXECUTABLE
    cp ${DART_DIR}/observations/AIRNOW/work/airnow_o3_ascii_to_obs ./.
@@ -3657,6 +3651,8 @@ if ${RUN_AIRNOW_CO_OBS}; then
    export NL_LAT_MX=${NL_MAX_LAT}
    export NL_LON_MN=${NNL_MIN_LON}
    export NL_LON_MX=${NNL_MAX_LON}
+   export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
+   export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
 #
 # GET EXECUTABLE
    cp ${DART_DIR}/observations/AIRNOW/work/airnow_co_ascii_to_obs ./.

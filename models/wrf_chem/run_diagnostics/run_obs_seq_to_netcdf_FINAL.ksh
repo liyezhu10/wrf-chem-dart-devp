@@ -7,13 +7,16 @@
 #
 # Define experiment parameters
 export START_DATE=2014072006
-export END_DATE=20142006
+export END_DATE=2014072006
 export DOMAIN=01
 export NUM_MEMBERS=10
 export CYCLE_PERIOD=6
 export FCST_PERIOD=6
 export ASIM_PERIOD=3
 export LBC_FREQ=3
+export DART_FILTER_NAME=dart_filter_iasi_co_rawr
+export DART_FILTER_NAME=dart_filter_iasi_co_log
+export DART_FILTER_NAME=dart_filter
 (( INTERVAL_SEC=${LBC_FREQ}*60*60 ))
 (( CYCLE_PERIOD_SEC=${CYCLE_PERIOD}*60*60 ))
 #
@@ -23,7 +26,9 @@ export VARLOC=.false.
 export INDEP_CHEM_ASIM=.true.
 export EMISS_DAMP_CYCLE=0.5
 export EMISS_DAMP_INTRA_CYCLE=0.5
-export USE_HSI=false
+export NL_MOPITT_CO_RETRIEVAL_TYPE=RETR
+export NL_IASI_CO_RETRIEVAL_TYPE=RETR
+export NL_IASI_O3_RETRIEVAL_TYPE=RETR
 #
 # Define code versions
 export DART_VER=DART_CHEM_REPOSITORY
@@ -37,12 +42,12 @@ export DIR_NAME=real_FRAPPE_RETR_AIR_CO
 export TRUNK_DIR=/glade/p/work/mizzi/TRUNK
 export SCRATCH_DIR=/glade/scratch/mizzi
 export ACD_DIR=/glade/p/acd/mizzi
-export FRAPPE_DIR=/glade/FRAPPE/FINAL
+export FRAPPE_DIR=/glade/p/FRAPPE/FINAL
 #
 #
 # Dependent path settings
 export EXP_DIR=${FRAPPE_DIR}/${DIR_NAME}
-export RUN_DIR=${SCRATCH_DIR}/DART_OBS_DIAG/${DIR_NAME}
+export RUN_DIR=${SCRATCH_DIR}/DART_OBS_DIAG/${DIR_NAME}/${DART_FILTER_NAME}
 #
 export DART_DIR=${TRUNK_DIR}/${DART_VER}
 export WRF_DIR=${TRUNK_DIR}/${WRF_VER}
@@ -78,19 +83,16 @@ while [[ ${L_DATE} -le ${END_DATE} ]]; do
 #
 # Create obs_seq file list
    export FILE=obs_seq.final
-   if [[ -f ${EXP_DIR}/${L_DATE}/dart_filter/${FILE} ]]; then
-      echo ${EXP_DIR}/${L_DATE}/dart_filter/${FILE} >> file_list.txt
+   if [[ -f ${EXP_DIR}/${L_DATE}/${DART_FILTER_NAME}/${FILE} ]]; then
+      echo ${EXP_DIR}/${L_DATE}/${DART_FILTER_NAME}/${FILE} >> file_list.txt
    else
-      echo APM: traget file ${EXP_DIR}/${L_DATE}/dart_filter/${FILE} does not exist
+      echo APM: traget file ${EXP_DIR}/${L_DATE}/${DART_FILTER_NAME}/${FILE} does not exist
       exit
    fi
 #
 # Loop to next cycle time   
    export L_DATE=${NEXT_DATE}
 done
-
-
-exit
 #
 ###############################################################################
 #
@@ -128,7 +130,6 @@ export ASIM_MAX_YY_END=`echo $ASIM_MAX_DATE_END | cut -c1-4`
 export ASIM_MAX_MM_END=`echo $ASIM_MAX_DATE_END | cut -c5-6`
 export ASIM_MAX_DD_END=`echo $ASIM_MAX_DATE_END | cut -c7-8`
 export ASIM_MAX_HH_END=`echo $ASIM_MAX_DATE_END | cut -c9-10`
-
 (( STR_MM = ${STR_MM} + 0 ))
 (( STR_DD = ${STR_DD} + 0 ))
 (( STR_HH = ${STR_HH} + 0 ))     

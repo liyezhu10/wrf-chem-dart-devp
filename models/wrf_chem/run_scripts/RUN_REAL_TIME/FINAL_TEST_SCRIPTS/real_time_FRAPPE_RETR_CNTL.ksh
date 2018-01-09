@@ -8,24 +8,25 @@
 #
 #########################################################################
 #
-# CYCLE DATE-TIME:
-export CYCLE_STR_DATE=2014071400
-export CYCLE_STR_DATE=2014072018
-export CYCLE_END_DATE=${CYCLE_STR_DATE}
-export CYCLE_END_DATE=2014072018
+export INITIAL_DATE=2014072000
+export FIRST_FILTER_DATE=2014072006
+export FIRST_DART_INFLATE_DATE=2014072006
+export FIRST_EMISS_INV_DATE=2014072006
+#
+# START CYCLE DATE-TIME:
+export CYCLE_STR_DATE=2014072300
+#
+# END CYCLE DATE-TIME:
+export CYCLE_END_DATE=2014072300
+#export CYCLE_END_DATE=${CYCLE_STR_DATE}
+#
 export CYCLE_DATE=${CYCLE_STR_DATE}
-export NL_FAC_OBS_ERROR_MOPITT=4.00
-export NL_FAC_OBS_ERROR_MOPITT=10.0
-export NL_FAC_OBS_ERROR_MOPITT=2.50
-export NL_FAC_OBS_ERROR_MOPITT=3.00
-export NL_FAC_OBS_ERROR_MOPITT=2.25
-export NL_FAC_OBS_ERROR_MOPITT=2.00
 export NL_FAC_OBS_ERROR_MOPITT=1.00
 export NL_FAC_OBS_ERROR_IASI=1.00
 export RETRIEVAL_TYPE_MOPITT=RETR
-export RETRIEVAL_TYPE_IASI=RAWR
+export RETRIEVAL_TYPE_IASI=RETR
 #
-export USE_LOG=false
+export USE_LOG=true
 if [[ ${USE_LOG} == true ]]; then
    export CO_MIN=NULL
    export CO_MAX=NULL
@@ -64,7 +65,7 @@ if [[ ${RUN_FINE_SCALE_RESTART} = "true" ]]; then
 fi
 #
 # Run WRF-Chem for failed forecasts
-export RUN_SPECIAL_FORECAST=true
+export RUN_SPECIAL_FORECAST=false
 export NUM_SPECIAL_FORECAST=3
 export SPECIAL_FORECAST_FAC=1./2.
 export SPECIAL_FORECAST_FAC=2./3.
@@ -121,14 +122,6 @@ let BACK_WT=.5000
 #
 while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
 export DATE=${CYCLE_DATE}
-export INITIAL_DATE=2014072000
-export FIRST_DART_INFLATE_DATE=2014072006
-export FIRST_FILTER_DATE=2014072006
-export FIRST_EMISS_INV_DATE=2014072006
-export FIRST_DART_INFLATE_DATE=2014072006
-if [[ ${ADD_EMISS} == false ]]; then
-   export FIRST_EMISS_INV_DATE=${DATE}
-fi
 export CYCLE_PERIOD=6
 export HISTORY_INTERVAL_HR=1
 (( HISTORY_INTERVAL_MIN = ${HISTORY_INTERVAL_HR} * 60 ))
@@ -276,9 +269,9 @@ export ASIM_MAX_SEC_GREG=${temp[1]}
 # SELECT COMPONENT RUN OPTIONS:
 if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_GEOGRID=false
-   export RUN_UNGRIB=true
-   export RUN_METGRID=true
-   export RUN_REAL=true
+   export RUN_UNGRIB=false
+   export RUN_METGRID=false
+   export RUN_REAL=false
    export RUN_PERT_WRFCHEM_MET_IC=true
    export RUN_PERT_WRFCHEM_MET_BC=true
    export RUN_EXO_COLDENS=true
@@ -289,8 +282,8 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_PERT_WRFCHEM_CHEM_ICBC=true
    export RUN_PERT_WRFCHEM_CHEM_EMISS=true
    export RUN_MOPITT_CO_OBS=true
-   export RUN_IASI_CO_OBS=false
-   export RUN_IASI_O3_OBS=true
+   export RUN_IASI_CO_OBS=true
+   export RUN_IASI_O3_OBS=false
    export RUN_OMI_NO2_OBS=false
    export RUN_AIRNOW_O3_OBS=true
    export RUN_AIRNOW_CO_OBS=true
@@ -479,7 +472,7 @@ export WRFDA_TIME_LIMIT=0:10
 export WRFDA_NUM_TASKS=32
 export WRFDA_TASKS_PER_NODE=8
 export WRFDA_JOB_CLASS=geyser
-export FILTER_TIME_LIMIT=5:59
+export FILTER_TIME_LIMIT=7:59
 export FILTER_NUM_TASKS=32
 export FILTER_TASKS_PER_NODE=8
 export FILTER_JOB_CLASS=geyser
@@ -900,7 +893,7 @@ export NL_JCDFI_IO=false
 # &filter.nml
 export NL_OUTLIER_THRESHOLD=3.
 export NL_ENABLE_SPECIAL_OUTLIER_CODE=.false.
-export NL_SPECIAL_OUTLIER_THRESHOLD=4.
+export NL_SPECIAL_OUTLIER_THRESHOLD=3.
 export NL_ENS_SIZE=${NUM_MEMBERS}
 export NL_OUTPUT_RESTART=.true.
 export NL_START_FROM_RESTART=.true.
@@ -1192,7 +1185,7 @@ export NL_ASSIMILATE_THESE_OBS_TYPES="'RADIOSONDE_TEMPERATURE',
 #                                   'AIRNOW_O3',
 #                                   'OMI_NO2_COLUMN'"
 export NL_EVALUATE_THESE_OBS_TYPES="'MOPITT_CO_RETRIEVAL',
-                                   'IASI_O3_RETRIEVAL',
+                                   'IASI_CO_RETRIEVAL',
                                    'AIRNOW_CO',
                                    'AIRNOW_O3'"
 #
@@ -4240,7 +4233,7 @@ if ${RUN_DART_FILTER}; then
       export LL_DD=`echo ${LL_DATE} | cut -c7-8`
       export LL_HH=`echo ${LL_DATE} | cut -c9-10`
       export LL_FILE_DATE=${LL_YY}-${LL_MM}-${LL_DD}_${LL_HH}:00:00
-      if [[ ${LL_DATE} -le ${FIRST_EMISS_INV_DATE} ]]; then
+      if [[ ${LL_DATE} -le ${FIRST_EMISS_INV_DATE} || ${ADD_EMISS} = ".false." ]]; then
          cp ${WRFCHEM_CHEM_EMISS_DIR}/wrfchemi_d${CR_DOMAIN}_${LL_FILE_DATE}.${CMEM} wrfchemi_d${CR_DOMAIN}
          cp ${WRFCHEM_CHEM_EMISS_DIR}/wrffirechemi_d${CR_DOMAIN}_${LL_FILE_DATE}.${CMEM} wrffirechemi_d${CR_DOMAIN}
          ncatted -O -a coordinates,E_CO,c,c,"XLONG, XLAT" wrfchemi_d${CR_DOMAIN}
@@ -4440,7 +4433,7 @@ EOF
       export LL_DD=`echo ${LL_DATE} | cut -c7-8`
       export LL_HH=`echo ${LL_DATE} | cut -c9-10`
       export LL_FILE_DATE=${LL_YY}-${LL_MM}-${LL_DD}_${LL_HH}:00:00
-      if [[ ${LL_DATE} -le ${FIRST_EMISS_INV_DATE} ]]; then
+      if [[ ${LL_DATE} -le ${FIRST_EMISS_INV_DATE} || ${ADD_EMISS} = ".false." ]]; then
          cp ${WRFCHEM_CHEM_EMISS_DIR}/wrfchemi_d${CR_DOMAIN}_${LL_FILE_DATE}.${CMEM} wrfchemi_d${CR_DOMAIN}
          cp ${WRFCHEM_CHEM_EMISS_DIR}/wrffirechemi_d${CR_DOMAIN}_${LL_FILE_DATE}.${CMEM} wrffirechemi_d${CR_DOMAIN}
          ncatted -O -a coordinates,E_CO,c,c,"XLONG, XLAT" wrfchemi_d${CR_DOMAIN}
@@ -4686,7 +4679,7 @@ if ${RUN_WRFCHEM_CYCLE_CR}; then
 #      cp ${WRFCHEM_CHEM_ICBC_DIR}/wrfbdy_d${CR_DOMAIN}_${START_FILE_DATE}.${CMEM} wrfbdy_d${CR_DOMAIN}
 #
 # Update the other emission files
-      if [[ ${ADD_EMISS} ]]; then
+      if [[ ${ADD_EMISS} = ".true." ]]; then
          cp wrfchemi_d${CR_DOMAIN}_${L_FILE_DATE} wrfchemi_d${CR_DOMAIN}_prior
          cp wrfchemi_d${CR_DOMAIN}_${L_FILE_DATE} wrfchemi_d${CR_DOMAIN}
          cp wrffirechemi_d${CR_DOMAIN}_${L_FILE_DATE} wrffirechemi_d${CR_DOMAIN}_prior
