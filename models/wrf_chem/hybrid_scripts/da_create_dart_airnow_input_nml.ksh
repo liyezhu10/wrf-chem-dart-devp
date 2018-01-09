@@ -13,7 +13,7 @@ cat > create_airnow_obs_nml.nl << EOF
 &create_airnow_obs_nml
    year0=${NL_YEAR}
    month0=${NL_MONTH}
-   day0=${NL_DAY}                                                                                    
+   day0=${NL_DAY}
    hour0=${NL_HOUR}
    beg_year=${ASIM_MIN_YYYY}
    beg_mon=${ASIM_MIN_MM}
@@ -32,6 +32,8 @@ cat > create_airnow_obs_nml.nl << EOF
    lat_mx=${NL_LAT_MX}
    lon_mn=${NL_LON_MN}
    lon_mx=${NL_LON_MX}
+   use_log_co=${NL_USE_LOG_CO}
+   use_log_o3=${NL_USE_LOG_O3}
 /
 EOF
 #
