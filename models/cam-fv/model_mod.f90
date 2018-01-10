@@ -1358,7 +1358,7 @@ select case (which_vert)
 
    ! 2d fields
    case(VERTISUNDEF, VERTISSURFACE)
-      if (get_num_dims(domain_id,var_id) == 2) then
+      if (get_dims_from_qty(obs_qty, var_id) == 2) then
          bot_levs(:) = nlevels
          top_levs(:) = nlevels - 1
          vert_fracts(:) = 1.0_r8
