@@ -753,8 +753,10 @@ endif
 call get_quad_vals(state_handle, ens_size, varid, obs_qty, four_lons, four_lats, &
                    lon_lat_vert, which_vert, quad_vals, status_array)
 
+!>@todo FIXME : Here we are failing if any ensemble member fails. Instead
+!>              we should be using track status...
 if (any(status_array /= 0)) then
-   istatus(:) = status_array   ! cannot get the state values at the corners
+   istatus(:) = maxval(status_array)   ! cannot get the state values at the corners
    return
 endif
 
@@ -823,7 +825,7 @@ endif
 
 call get_quad_vals(state_handle, ens_size, varid, obs_qty, four_lons, four_lats, &
                    lon_lat_vert, which_vert, quad_vals, istatus)
-if (any(istatus /= 0))  return
+if (any(istatus /= 0)) return
 
 call quad_lon_lat_evaluate(interp_handle, lon_fract, lat_fract, ens_size, &
                            quad_vals, interp_vals, istatus)
@@ -871,6 +873,7 @@ if (which_vert == VERTISHEIGHT) then
 
    call height_to_level(generic_nlevels, generic_height_column, vert_value, &
                         bot_lev, top_lev, fract, my_status)
+   if (my_status /= 0) return
 
    this_pressure = generic_pressure_column(bot_lev) * fract + &
                    generic_pressure_column(top_lev) * (1.0_r8-fract)
