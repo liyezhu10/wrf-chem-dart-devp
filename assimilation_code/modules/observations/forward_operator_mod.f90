@@ -67,7 +67,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 
 ! Module storage for writing error messages
-character(len = 256) :: msgstring
+character(len = 256) :: msgstring, msgstring2
 
 contains
 
@@ -236,7 +236,7 @@ if(get_allow_transpose(ens_handle)) then ! giant if for transpose or distributed
       qc_ens_handle%vars(j, 1:num_copies_to_calc) = istatus(:)
 
       call check_forward_operator_istatus(num_copies_to_calc, assimilate_this_ob, &
-                                 evaluate_this_ob, istatus, expected_obs)
+                                 evaluate_this_ob, istatus, expected_obs, keys(j))
 
    end do ALL_OBSERVATIONS
 
@@ -303,7 +303,7 @@ else ! distributed state
    qc_ens_handle%copies(:, j) = istatus
 
    call check_forward_operator_istatus(num_copies_to_calc, assimilate_this_ob, evaluate_this_ob, &
-                               istatus, expected_obs)
+                               istatus, expected_obs, thiskey(1))
 
    end do MY_OBSERVATIONS
 
@@ -509,13 +509,14 @@ end subroutine assim_or_eval
 !>   * Successful istatus but missing_r8 for forward operator
 !>   * Negative istatus
 !> This routine calls the error handler (E_ERR) if either of these happen.
-subroutine check_forward_operator_istatus(num_fwd_ops, assimilate_ob, evaluate_ob, istatus, expected_obs)
+subroutine check_forward_operator_istatus(num_fwd_ops, assimilate_ob, evaluate_ob, istatus, expected_obs, thiskey)
 
 integer,  intent(in) :: num_fwd_ops
 logical,  intent(in) :: assimilate_ob
 logical,  intent(in) :: evaluate_ob
 integer,  intent(in) :: istatus(num_fwd_ops)
 real(r8), intent(in) :: expected_obs(num_fwd_ops)
+integer,  intent(in) :: thiskey
 
 
 integer :: copy
@@ -527,12 +528,14 @@ do copy = 1, num_fwd_ops
    if(istatus(copy) == 0) then
       if ((assimilate_ob .or. evaluate_ob) .and. (expected_obs(copy) == missing_r8)) then
          write(msgstring, *) 'istatus was 0 (OK) but forward operator returned missing value.'
-         call error_handler(E_ERR,'filter_main', msgstring, source, revision, revdate)
+         write(msgstring2, *) 'observation number ', thiskey
+         call error_handler(E_ERR,'filter_main', msgstring, source, revision, revdate, text2=msgstring2)
       endif
    ! Negative istatus
    else if (istatus(copy) < 0) then
       write(msgstring, *) 'istatus must not be <0 from forward operator. 0=OK, >0 for error'
-      call error_handler(E_ERR,'filter_main', msgstring, source, revision, revdate)
+      write(msgstring2, *) 'observation number ', thiskey
+      call error_handler(E_ERR,'filter_main', msgstring, source, revision, revdate, text2=msgstring2)
    endif
 
 enddo
