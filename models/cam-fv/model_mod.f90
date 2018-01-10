@@ -761,6 +761,20 @@ endif
 ! do the horizontal interpolation for each ensemble member
 call quad_lon_lat_evaluate(interp_handle, lon_fract, lat_fract, ens_size, &
                            quad_vals, interp_vals, status_array)
+
+! print*, 'lon_ind_below ', four_lons(1)
+! print*, 'lon_ind_above ', four_lons(2)
+! print*, 'lat_ind_below ', four_lats(2)
+! print*, 'lat_ind_above ', four_lats(3)
+! print*, 'lon_fract     ', lon_fract
+! print*, 'lat_fract     ', lat_fract
+! print*, 'quad_vals(:,1) ', quad_vals(:,1)
+! print*, 'quad_vals(:,2) ', quad_vals(:,2)
+! print*, 'quad_vals(:,3) ', quad_vals(:,3)
+! print*, 'inperp_vals(:,1) ', interp_vals(1)
+! print*, 'inperp_vals(:,2) ', interp_vals(2)
+! print*, 'inperp_vals(:,3) ', interp_vals(3)
+
 if (any(status_array /= 0)) then
    istatus(:) = 8   ! cannot evaluate in the quad
    return
@@ -878,8 +892,10 @@ subroutine get_quad_vals(state_handle, ens_size, varid, obs_qty, four_lons, four
                          lon_lat_vert, which_vert, quad_vals, my_status)
 type(ensemble_type), intent(in) :: state_handle
 integer,             intent(in) :: ens_size
-integer,             intent(in) :: varid, obs_qty
-integer,             intent(in) :: four_lons(4), four_lats(4)
+integer,             intent(in) :: varid
+integer,             intent(in) :: obs_qty
+integer,             intent(in) :: four_lons(4)
+integer,             intent(in) :: four_lats(4)
 real(r8),            intent(in) :: lon_lat_vert(3)
 integer,             intent(in) :: which_vert
 real(r8),           intent(out) :: quad_vals(4, ens_size) !< array of interpolated values
@@ -907,7 +923,7 @@ if (numdims == 3) then
    do icorner=1, 4
       call find_vertical_levels(state_handle, ens_size, &
                                 four_lons(icorner), four_lats(icorner), lon_lat_vert(3), &
-                                which_vert, obs_qty, &
+                                which_vert, obs_qty, varid, &
                                 four_bot_levs(icorner, :), four_top_levs(icorner, :), &
                                 four_vert_fracts(icorner, :), my_status)
       if (any(my_status /= 0)) return
@@ -1234,7 +1250,7 @@ end subroutine quad_index_neighbors
 !> 
 
 subroutine find_vertical_levels(ens_handle, ens_size, lon_index, lat_index, vert_val, &
-                                which_vert, obs_qty, bot_levs, top_levs, vert_fracts, my_status)
+                                which_vert, obs_qty, var_id, bot_levs, top_levs, vert_fracts, my_status)
 type(ensemble_type), intent(in)  :: ens_handle
 integer,             intent(in)  :: ens_size
 integer,             intent(in)  :: lon_index 
@@ -1242,6 +1258,7 @@ integer,             intent(in)  :: lat_index
 real(r8),            intent(in)  :: vert_val
 integer,             intent(in)  :: which_vert
 integer,             intent(in)  :: obs_qty
+integer,             intent(in)  :: var_id
 integer,             intent(out) :: bot_levs(ens_size)
 integer,             intent(out) :: top_levs(ens_size)
 real(r8),            intent(out) :: vert_fracts(ens_size)
@@ -1338,10 +1355,14 @@ select case (which_vert)
 
    ! 2d fields
    case(VERTISUNDEF, VERTISSURFACE)
-      bot_levs(:) = nlevels
-      top_levs(:) = nlevels - 1
-      vert_fracts(:) = 1.0_r8
-      my_status(:) = 0
+      if (get_num_dims(domain_id,var_id) == 2) then
+         bot_levs(:) = nlevels
+         top_levs(:) = nlevels - 1
+         vert_fracts(:) = 1.0_r8
+         my_status(:) = 0
+      else
+         my_status(:) = 4 ! can not get vertical levels
+      endif
 
    case default
       write(string1, *) 'unsupported vertical type: ', which_vert
@@ -1391,7 +1412,7 @@ call get_staggered_values_from_qty(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
 ! get the surface elevation from the phis, including stagger if needed
 call get_quad_values(1, lon_index, lat_index, QTY_SURFACE_ELEVATION, qty, surface_elevation)
 
-! JPH CURRENT
+! DEBUG
 !print*, 'lon lat surf elev ', lon_index, lat_index, surface_elevation
 
 ! construct a virtual temperature column, one for each ensemble member
@@ -1416,7 +1437,7 @@ enddo
 ! convert entire array to geometric height (from potential height)
 call gph2gmh(height_array, grid_data%lat%vals(lat_index))
 
-! JPH CURRENT
+! JPU DEBUG
 ! if (debug_level > 100) then
 !    do k = 1,nlevels
 !      do imember = 1, ens_size
