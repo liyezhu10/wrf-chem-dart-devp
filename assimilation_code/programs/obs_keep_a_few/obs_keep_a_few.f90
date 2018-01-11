@@ -85,7 +85,8 @@ integer, parameter :: max_obs_input_types = 500
 character(len=256)   :: filename_in = ''
 character(len=256)   :: filename_out = ''
 
-integer              :: keep_N_of_each = 10
+integer              :: keep_N_of_each  = 10
+integer              :: max_all_obs_out = -1
 
 logical              :: print_only    = .false.
 character(len=32)    :: calendar      = 'Gregorian'
@@ -93,7 +94,7 @@ character(len=32)    :: calendar      = 'Gregorian'
 
 namelist /obs_keep_a_few_nml/ &
          filename_in, filename_out, &
-         keep_N_of_each, &
+         keep_N_of_each, max_all_obs_out, &
          print_only, calendar
 
 !----------------------------------------------------------------
@@ -209,32 +210,29 @@ if ( get_first_obs(seq_in, obs_in) )  then
 
       this_type = get_obs_def_type_of_obs(this_obs_def)
 
-      if (n_this_type(this_type) >= keep_N_of_each) goto 100
+      if (n_this_type(this_type) < keep_N_of_each .or. keep_N_of_each < 0) then
  
-      ! copy to output obs_seq and increment the count for this type
-      n_this_type(this_type) = n_this_type(this_type) + 1
-
-      ! Since the stride through the observation sequence file is always
-      ! guaranteed to be in temporally-ascending order, we can use the
-      ! 'previous' observation as the starting point to search for the
-      ! correct insertion point.  This speeds up the insert code a lot.
-
-      if (num_inserted > 0) then
-         call insert_obs_in_seq(seq_out, obs_out, prev_obs_out)
-      else
-         call insert_obs_in_seq(seq_out, obs_out)
-      endif
-
-      prev_obs_out = obs_out  ! update position in seq for next insert
-      num_inserted = num_inserted + 1
-
-      if (print_every > 0) then
-         if (mod(num_inserted,print_every) == 0) then
-            print*, 'inserted number ',num_inserted,' of ',size_seq_out
+         ! copy to output obs_seq and increment the count for this type
+         n_this_type(this_type) = n_this_type(this_type) + 1
+   
+         if (num_inserted > 0) then
+            call insert_obs_in_seq(seq_out, obs_out, prev_obs_out)
+         else
+            call insert_obs_in_seq(seq_out, obs_out)
          endif
+   
+         prev_obs_out = obs_out  ! update position in seq for next insert
+         num_inserted = num_inserted + 1
+   
+         if (print_every > 0) then
+            if (mod(num_inserted,print_every) == 0) then
+               print*, 'inserted number ',num_inserted,' of ',size_seq_out
+            endif
+         endif
+
       endif
 
-100 continue
+      if (max_all_obs_out > 0 .and. num_inserted >= max_all_obs_out) exit ObsLoop
 
       call get_next_obs(seq_in, obs_in, next_obs_in, is_this_last)
 
