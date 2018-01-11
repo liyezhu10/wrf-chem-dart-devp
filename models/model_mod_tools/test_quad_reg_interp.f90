@@ -12,7 +12,7 @@ program test_quad_reg_interp
 
 ! Modules that are absolutely required for use are listed
 use        types_mod, only : r8, i8, MISSING_R8, deg2rad, rad2deg
-use    utilities_mod, only : error_handler
+use    utilities_mod, only : error_handler, initialize_utilities, finalize_utilities
 use   random_seq_mod, only : init_random_seq, random_seq_type, &
                              random_uniform, random_gaussian
 
@@ -111,6 +111,7 @@ integer  :: istatus
 real(r8) :: invals(4), outval
 integer  :: iunit_orig, iunit_interp
 
+call initialize_utilities('test_quad_reg_interp')
 call init_random_seq(ran)
 
 
@@ -177,12 +178,10 @@ call set_quad_coords(h, data_start_lon, data_del_lon, data_start_lat, data_del_l
 do i=1, nsx
    do j=1, nsy
 
-      !>@todo FIXME should this interface return an array of 4 index combinations 
-      !>so the calling code could do loops from 1 to 4 instead of making combinations
-      !>of lat/lon bot/top in the right order for eval?  locate can output already 
-      !>in the right combinations in the right order.
+      !>this interface now returns an array of 4 index combinations 
+      !>so the calling code can do loops from 1 to 4 instead of making 
+      !>combinations of lat/lon bot/top in the right order for eval. 
 
-integer  :: lon_indices(4), lat_indices(4)
       call quad_lon_lat_locate(h, sample_lons(i,j), sample_lats(i,j), lon_indices, lat_indices, &
                                lon_fract, lat_fract, istatus)
       if (istatus /= 0) then
@@ -237,8 +236,10 @@ call writeit_2d('sample_lats_2d_reg_test.txt', nsx, nsy, sample_lats)
 call writeit_2d('sample_data_2d_reg_test.txt', nsx, nsy, interp_data)
 
 call finalize_quad_interp(h)
-
 if (debug > 0) print *, 'closed files and finalized interp handle'
+
+call finalize_utilities('test_quad_reg_interp')
+
 
 contains
 

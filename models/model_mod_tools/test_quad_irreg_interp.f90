@@ -11,7 +11,7 @@ program test_quad_irreg_interp
 
 ! Modules that are absolutely required for use are listed
 use        types_mod, only : r8, i8, MISSING_R8, deg2rad, rad2deg
-use    utilities_mod, only : error_handler
+use    utilities_mod, only : error_handler, initialize_utilities, finalize_utilities
 use   random_seq_mod, only : init_random_seq, random_seq_type, &
                              random_uniform, random_gaussian
 
@@ -86,13 +86,15 @@ real(r8) :: interp_data(nrx, nry) = MISSING_R8
 
 type(random_seq_type) :: ran
 
-integer  :: i, j
+integer  :: i, j, k
 real(r8) :: lon_del, lat_del, sample_lon_del, sample_lat_del
 integer  :: lon_bot, lat_bot, lon_top, lat_top
+integer  :: four_lons(4), four_lats(4)
 integer  :: istatus
 real(r8) :: invals(4), outval
 integer  :: iunit_orig, iunit_interp
 
+call initialize_utilities('test_quad_irreg_interp')
 call init_random_seq(ran)
 
 lon_del = (end_lon - start_lon) / (nx-1)
@@ -158,21 +160,20 @@ call set_quad_coords(h, data_lons, data_lats)
 ! for each location in the sampling grid, interpolate a data value
 do i=1, nrx
    do j=1, nry
-      call quad_lon_lat_locate(h, sample_lons(i), sample_lats(j), lon_bot, lat_bot, lon_top, lat_top, istatus)
+      call quad_lon_lat_locate(h, sample_lons(i), sample_lats(j), four_lons, four_lats, istatus)
       if (istatus /= 0) then
          !print *, 'location outside of grid: ', sample_lons(i), sample_lats(j)
          interp_data(i, j) = MISSING_R8 
          cycle
       endif
-      if (debug > 0) print *, i, j, lon_bot, lat_bot, lon_top, lat_top, sample_lons(i), sample_lats(j)
+      if (debug > 0) print *, i, j, four_lons(1), four_lons(3), four_lats(1), four_lats(3), sample_lons(i), sample_lats(j)
 
       ! get values of data at lon/lat bot/top indices, counterclockwise around quad
-      invals(1) = grid_data(lon_bot, lat_bot)
-      invals(2) = grid_data(lon_top, lat_bot)
-      invals(3) = grid_data(lon_top, lat_top)
-      invals(4) = grid_data(lon_bot, lat_top)
+      do k=1, 4
+         invals(k) = grid_data(four_lons(k), four_lats(k))
+      enddo
 
-      call quad_lon_lat_evaluate(h, sample_lons(i), sample_lats(j), lon_bot, lat_bot, lon_top, lat_top, &
+      call quad_lon_lat_evaluate(h, sample_lons(i), sample_lats(j), four_lons, four_lats, &
                                  invals, outval, istatus)
 
       interp_data(i, j) = outval
@@ -193,6 +194,7 @@ call writeit_1d('sample_lats_1d_irreg_test.txt', nry, sample_lats)
 call writeit_2d('sample_data_2d_irreg_test.txt', nrx, nry, interp_data)
 
 call finalize_quad_interp(h)
+call finalize_utilities('test_quad_irreg_interp')
 
 if (debug > 0) print *, 'closed files and finalized interp handle'
 
