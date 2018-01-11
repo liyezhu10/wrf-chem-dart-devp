@@ -1184,11 +1184,11 @@ end subroutine update_reg_list
 ! The irregular grid is also assumed to be global east
 ! west for all applications.
 
-subroutine quad_lon_lat_locate_ii(interp_handle, lon, lat, lon_bot, lat_bot, &
-                                  lon_top, lat_top, istatus)
+subroutine quad_lon_lat_locate_ii(interp_handle, lon, lat, &
+                                  four_lons, four_lats, istatus)
 type(quad_interp_handle), intent(in)  :: interp_handle
 real(r8),                 intent(in)  :: lon, lat
-integer,                  intent(out) :: lon_bot, lat_bot, lon_top, lat_top
+integer,                  intent(out) :: four_lons(4), four_lats(4)
 integer,                  intent(out) :: istatus
 
 ! NOTE: Using array sections to pass in the x array may be inefficient on some
@@ -1198,6 +1198,7 @@ integer,                  intent(out) :: istatus
 ! Local storage
 integer  :: num_inds, start_ind
 integer  :: x_ind, y_ind, nx, ny
+integer  :: lon_bot, lat_bot, lon_top, lat_top
 logical  :: cyclic
 real(r8) :: x_corners(4), y_corners(4)
 
@@ -1290,6 +1291,15 @@ if(lon_top > nx) then
 endif
 
 ! the 4 return values set here are:  lon_bot, lat_bot, lon_top, lat_top
+four_lons(1) = lon_bot
+four_lons(2) = lon_bot
+four_lons(3) = lon_top
+four_lons(4) = lon_top
+
+four_lats(1) = lat_bot
+four_lats(2) = lat_top
+four_lats(3) = lat_bot
+four_lats(4) = lat_top
 
 end subroutine quad_lon_lat_locate_ii
 
@@ -2208,11 +2218,11 @@ end function all_corners_valid
 ! single item wrapper
 
 subroutine quad_lon_lat_evaluate_ii_single(interp_handle, lon, lat, &
-               lon_bot, lat_bot, lon_top, lat_top, invals, outval, istatus)
+                      four_lons, four_lats, invals, outval, istatus)
 
 type(quad_interp_handle), intent(in)  :: interp_handle
 real(r8),                 intent(in)  :: lon, lat
-integer,                  intent(in)  :: lon_bot, lat_bot, lon_top, lat_top
+integer,                  intent(in)  :: four_lons(4), four_lats(4)
 real(r8),                 intent(in)  :: invals(4)
 real(r8),                 intent(out) :: outval
 integer,                  intent(out) :: istatus
@@ -2220,8 +2230,8 @@ integer,                  intent(out) :: istatus
 real(r8) :: in_array(4, 1), out_array(1)
 
 in_array(:, 1) = invals
-call quad_lon_lat_evaluate_ii_array(interp_handle, lon, lat, lon_bot, lat_bot, &
-                            lon_top, lat_top, 1, in_array, out_array, istatus)
+call quad_lon_lat_evaluate_ii_array(interp_handle, lon, lat, four_lons, four_lats, &
+                                    1, in_array, out_array, istatus)
 outval = out_array(1)
 istatus = 0
 
@@ -2233,11 +2243,11 @@ end subroutine quad_lon_lat_evaluate_ii_single
 !> irregular case.
 
 subroutine quad_lon_lat_evaluate_ii_array(interp_handle, lon, lat, &
-               lon_bot, lat_bot, lon_top, lat_top, nitems, invals, outvals, istatus)
+             four_lons, four_lats, nitems, invals, outvals, istatus)
 
 type(quad_interp_handle), intent(in)  :: interp_handle
 real(r8),                 intent(in)  :: lon, lat
-integer,                  intent(in)  :: lon_bot, lat_bot, lon_top, lat_top
+integer,                  intent(in)  :: four_lons(4), four_lats(4)
 integer,                  intent(in)  :: nitems
 real(r8),                 intent(in)  :: invals(4, nitems)
 real(r8),                 intent(out) :: outvals(nitems)
@@ -2245,6 +2255,7 @@ integer,                  intent(out) :: istatus
 
 real(r8) :: x_corners(4), y_corners(4)
 integer  :: e
+integer  :: lon_bot, lat_bot, lon_top, lat_top
 
 character(len=*), parameter :: routine = 'quad_lon_lat_evaluate:quad_lon_lat_evaluate_ii_array'
 
@@ -2252,12 +2263,12 @@ character(len=*), parameter :: routine = 'quad_lon_lat_evaluate:quad_lon_lat_eva
 if(interp_handle%grid_type == GRID_QUAD_FULLY_IRREGULAR) then
 
    !! Get corner grid locations for accurate interpolation
-   call get_quad_corners(interp_handle%ii%lons_2D, lon_bot, lat_bot, &
+   call get_quad_corners(interp_handle%ii%lons_2D, four_lons(1), four_lats(1), &
                          interp_handle%opt%spans_lon_zero, interp_handle%nlon, &
                          interp_handle%nlat, x_corners, istatus)
    if (istatus /= 0) return
 
-   call get_quad_corners(interp_handle%ii%lats_2D, lon_bot, lat_bot, &
+   call get_quad_corners(interp_handle%ii%lats_2D, four_lons(1), four_lats(1), &
                          interp_handle%opt%spans_lon_zero, interp_handle%nlon, &
                          interp_handle%nlat, y_corners, istatus)
    if (istatus /= 0) return
