@@ -6,9 +6,10 @@
 
 program obs_keep_a_few
 
-! simple program that opens an obs_seq file and loops over the obs
-! and copies them to a new output file.   this is intended to be a
-! template for programs that want to alter existing obs in some simple way.
+!> open an obs_seq file and copy over the first N of each obs type to
+!> the output file. the value of N is namelist-settable.  intended
+!> to subset a large obs_seq file for testing or other purposes but
+!> still keep examples of each type of obs from the input.
 
 use        types_mod, only : r8, missing_r8, metadatalength
 use    utilities_mod, only : register_module, initialize_utilities,            &
