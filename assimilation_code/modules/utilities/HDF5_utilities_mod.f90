@@ -89,10 +89,10 @@ end function h5_open
 
 subroutine h5_get_dset_dspace(file_id, dsetname, dsetid, dspaceid, context)
 
-integer(HID_T),             intent(in)  :: file_id  !> hdf file ID
-character(len=*),           intent(in)  :: dsetname !> dataset name
-integer(HID_T),             intent(out) :: dsetid   !> dataset ID
-integer(HID_T),             intent(out) :: dspaceid !> dataset dataspace ID
+integer(HID_T),             intent(in)  :: file_id  !< hdf file ID
+character(len=*),           intent(in)  :: dsetname !< dataset name
+integer(HID_T),             intent(out) :: dsetid   !< dataset ID
+integer(HID_T),             intent(out) :: dspaceid !< dataset dataspace ID
 character(len=*), optional, intent(in)  :: context
 
 integer :: hdferr
@@ -112,15 +112,18 @@ end subroutine h5_get_dset_dspace
 !-----------------------------------------------------------------------
 !>
 
-function h5_get_rank(dspace_id, error) result(rank)
+function h5_get_rank(dspaceid, context) result(rank)
 
-integer(HID_T), intent(in)  :: dspace_id
-integer,        intent(out) :: error
-integer :: rank
+integer(HID_T),             intent(in)  :: dspaceid !< dataset dataspace ID
+character(len=*), optional, intent(in)  :: context
+integer                                 :: rank     !< number of dimensions
 
-call h5sget_simple_extent_ndims_f(dspace_id, rank, error)
+integer :: hdferr
+character(len=*), parameter :: routine = 'h5_get_rank'
 
-write(*,*)'TJH rank is ',rank
+call h5sget_simple_extent_ndims_f(dspaceid, rank, hdferr)
+
+call h5_check(hdferr, routine, 'h5sget_simple_extent_ndims_f', context)
 
 end function h5_get_rank
 
@@ -128,21 +131,34 @@ end function h5_get_rank
 !-----------------------------------------------------------------------
 !>
 
-subroutine h5_get_dimensions(dspace_id, dims, error)
+subroutine h5_get_dimensions(dspaceid, dims, maxdims, context)
 
-integer(HID_T),   intent(in)  :: dspace_id
-integer(HSIZE_T), intent(out) :: dims(:)
-integer,          intent(out) :: error
+integer(HID_T),             intent(in)  :: dspaceid
+integer(HSIZE_T),           intent(out) :: dims(:)    !< actual   dimension lengths
+integer(HSIZE_T), optional, intent(out) :: maxdims(:) !< declared dimension lengths 
+character(len=*), optional, intent(in)  :: context
 
-integer(HSIZE_T) :: maxdims(size(dims))
+integer :: hdferr
+character(len=*), parameter :: routine = 'h5_get_dimensions'
+
+integer(HSIZE_T) :: declared_dimensions(size(dims))
 
 ! get the dimensions of the dataspace
-call h5sget_simple_extent_dims_f(dspace_id, dims, maxdims, error)
+call h5sget_simple_extent_dims_f(dspaceid, dims, declared_dimensions, hdferr)
 
-write(*,*)'TJH    dims is ',dims
-write(*,*)'TJH maxdims is ',maxdims
+! hdferr is 'Dataspace rank on success' and -1 on failure
+! h5_check only thinks 0 is a success
+
+if (hdferr < 0) &
+   call h5_check(hdferr, routine, 'h5sget_simple_extent_dims_f', context)
+
+write(*,*)'TJH actual   dimensions ',dims
+write(*,*)'TJH declared dimensions ',declared_dimensions
+
+if (present(maxdims)) maxdims = declared_dimensions
 
 end subroutine h5_get_dimensions
+
 
 !------------------------------------------------------------------
 !> check return code from previous call. on error, print and stop.
@@ -153,7 +169,7 @@ subroutine h5_check(istatus, subr_name, h5routine, context, filename)
 integer,          intent(in)           :: istatus
 character(len=*), intent(in)           :: subr_name
 character(len=*), intent(in)           :: h5routine
-character(len=*), intent(in)           :: context
+character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
 
 character(len=512) :: string1, string2, string3
@@ -163,7 +179,12 @@ if (istatus == 0) return
 ! something wrong.  construct an error string, print and abort.
 
 write(string1,*)'HDF5 ERROR from ', trim(h5routine)
-write(string2,*)trim(context),', error code is ',istatus
+
+if (present(context)) then
+   write(string2,*)trim(context),', error code is ',istatus
+else
+   write(string2,*)'error code is ',istatus
+endif
 
 call error_handler(E_ERR, subr_name, string2, &
                    source, revision, revdate, text2=string2, text3=filename)

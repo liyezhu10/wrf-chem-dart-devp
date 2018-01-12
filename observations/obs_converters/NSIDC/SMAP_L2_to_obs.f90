@@ -179,24 +179,29 @@ if ( verbose ) then !  HDF5 exploration block - works.
    deallocate(data_hdf5, dims, maxdims)
 endif
 
-   ! h5_open combines h5open_f() and h5fopen_f()
-   file_id = h5_open(filename, H5F_ACC_RDONLY_F)
-   write(*,*)'h5_open file_id is ',file_id
 
-   ! replace    
-   call h5dopen_f(file_id, dset_name, dset_id, hdferr)
-   call h5dget_space_f(dset_id, dspace_id, hdferr)
-   write(*,*)'TJH org: ',dset_id, dspace_id
-   ! with
-   write(string1,*) trim(filename),' ',routine
-   call h5_get_dset_dspace(file_id, dset_name, dset_id, dspace_id, string1)
-   write(*,*)'TJH new: ',dset_id, dspace_id
-   ! end
 
-call h5sget_simple_extent_ndims_f(dspace_id, ndims, hdferr)
+file_id = h5_open(filename, H5F_ACC_RDONLY_F)
+
+write(string1,*) trim(filename),' ',routine
+call h5_get_dset_dspace(file_id, dset_name, dset_id, dspace_id, string1)
+
+write(string1,*) trim(dset_name),' ',trim(filename),' ',routine
+ndims = h5_get_rank(dspace_id, string1)
+
 allocate(dims(ndims), maxdims(ndims))
+
 call h5sget_simple_extent_dims_f(dspace_id, dims, maxdims, hdferr)
+write(*,*)'TJH org: dims is ',dims
+
+call h5_get_dimensions(dspace_id, dims, context=string1)
+
+
+
+
 allocate(data_hdf5(dims(1)))
+
+
 call h5ltread_dataset_float_f(file_id, dset_name, data_hdf5, dims, hdferr)
 write(*,*)data_hdf5(1:10)
 deallocate(data_hdf5, dims, maxdims)
@@ -208,21 +213,6 @@ stop
 
 
 
-! open the dataspace
-write(*,*)'h5dget_space_f error status is ',hdferr
-
-! get the rank of the dataset
-ndims = h5_get_rank(dspace_id, hdferr)
-
-write(*,*)'main: ndims is ',ndims
-
-! fill the dims array with the dimensions
-call h5_get_dimensions(dspace_id, dims, hdferr)
-
-write(*,*)'main: dims is ',dims
-
-!allocate input data to the dimensions
-allocate(data_hdf5(dims(1)))
 
 ! read the data
 ! call h5dread_f(dset_id, H5T_NATIVE_REAL, data_hdf5, dims, hdferr)
