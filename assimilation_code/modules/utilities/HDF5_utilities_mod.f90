@@ -7,7 +7,7 @@
 module HDF5_utilities_mod
 
 use        types_mod, only : i2, i4, r4, r8, MISSING_R8, MISSING_I
-use    utilities_mod, only : nc_check, E_MSG, E_ERR, error_handler
+use    utilities_mod, only : register_module, E_MSG, E_ERR, error_handler
 use time_manager_mod, only : time_type, operator(>=), set_time, get_time
 
 use HDF5
@@ -15,8 +15,7 @@ use HDF5
 implicit none
 private
 
-public :: H5_CRTDAT, H5_RDWT, h5_get_rank, h5_get_dimensions
-
+public :: h5_open, H5_CRTDAT, H5_RDWT, h5_get_rank, h5_get_dimensions
 
 ! interface hf_get_var
 !    module procedure hf_get_int_1d
@@ -31,9 +30,52 @@ character(len=*), parameter :: revdate  = "$Date$"
 
 character(len=512) :: string1, string2, string3
 
+logical :: module_initialized = .false.
+
 
 contains
 
+
+!-----------------------------------------------------------------------
+!> initialize the Fortran interface to HDF5
+
+subroutine initialize_module()
+
+integer :: hdferr
+
+if (module_initialized) return
+
+call register_module(source, revision, revdate)
+module_initialized = .true.
+
+! initialize the Fortran interface
+call h5open_f(hdferr)
+call h5_check(hdferr,'initialize_module','h5open_f','initializing Fortran interfaces') 
+
+end subroutine initialize_module 
+
+
+!-----------------------------------------------------------------------
+!>
+
+function h5_open(filename, flag, context) result(file_id)
+
+character(len=*),           intent(in) :: filename
+integer(HID_T),             intent(in) :: flag
+character(len=*), optional, intent(in) :: context
+integer(HID_T)                         :: file_id
+
+
+integer :: hdferr
+
+call h5fopen_f(filename, flag, file_id, hdferr)
+call h5_check(hdferr,'h5_open','h5fopen_f', context, filename)
+
+end function h5_open
+
+
+!-----------------------------------------------------------------------
+!>
 
 function h5_get_rank(dspace_id, error) result(rank)
 
@@ -48,6 +90,8 @@ write(*,*)'TJH rank is ',rank
 end function h5_get_rank
 
 
+!-----------------------------------------------------------------------
+!>
 
 subroutine h5_get_dimensions(dspace_id, dims, error)
 
@@ -65,6 +109,31 @@ write(*,*)'TJH maxdims is ',maxdims
 
 end subroutine h5_get_dimensions
 
+!------------------------------------------------------------------
+!> check return code from previous call. on error, print and stop.
+!> if you want to continue after an error don't use this call. 
+
+subroutine h5_check(istatus, subr_name, h5routine, context, filename)
+
+integer,          intent(in)           :: istatus
+character(len=*), intent(in)           :: subr_name
+character(len=*), intent(in)           :: h5routine
+character(len=*), intent(in)           :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=512) :: string1, string2, string3
+
+if (istatus == 0) return
+
+! something wrong.  construct an error string, print and abort.
+
+write(string1,*)'HDF5 ERROR from ', trim(h5routine)
+write(string2,*)trim(context),', error code is ',istatus
+
+call error_handler(E_ERR, subr_name, string2, &
+                   source, revision, revdate, text2=string2, text3=filename)
+
+end subroutine h5_check
 
 
 subroutine H5_CRTDAT()

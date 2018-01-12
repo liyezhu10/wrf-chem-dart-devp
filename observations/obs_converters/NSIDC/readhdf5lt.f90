@@ -1,5 +1,5 @@
 
-program readhdf5
+program readhdf5lt
 
 use HDF5
 use H5LT
@@ -72,7 +72,8 @@ allocate(longitude(dims(1)))
 call h5ltread_dataset_float_f(file_id, dset_name, longitude, dims, hdferr)
 write(*,*)'h5ltread_dataset_float_f error, dims(:) is ',hdferr, dims
 
+write(*,*)'longitude(1:10) is ',longitude(1:10)
 
 deallocate(longitude, dims)
 
-end program readhdf5
+end program readhdf5lt

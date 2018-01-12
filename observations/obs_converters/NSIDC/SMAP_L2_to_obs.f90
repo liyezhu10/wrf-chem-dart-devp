@@ -58,12 +58,13 @@ use       location_mod, only : VERTISHEIGHT, set_location
 use  obs_utilities_mod, only : add_obs_to_seq, create_3d_obs
 
 use  netcdf_utilities_mod, only : nc_get_variable, nc_check
-use    HDF5_utilities_mod, only : H5_CRTDAT, H5_RDWT, h5_get_rank, h5_get_dimensions
+use    HDF5_utilities_mod, only : h5_open, H5_CRTDAT, H5_RDWT, h5_get_rank, h5_get_dimensions
 
 use       obs_kind_mod, only : SOIL_MOISTURE
 
 use netcdf
 use HDF5
+use H5LT
 
 implicit none
 
@@ -72,6 +73,8 @@ character(len=*), parameter :: source   = &
    "$URL$"
 character(len=*), parameter :: revision = "$Revision$"
 character(len=*), parameter :: revdate  = "$Date$"
+
+character(len=*), parameter :: routine = 'SMAP_L2_to_obs'
 
 !-----------------------------------------------------------------------
 ! Namelist input with default values
@@ -128,12 +131,15 @@ integer(HID_T) :: file_id, dset_id, dspace_id
 integer        :: hdferr
 
 integer(HSIZE_T), allocatable :: dims(:)
+integer(HSIZE_T), allocatable :: maxdims(:)
 real, allocatable :: data_hdf5(:)
+
+character(len=*), parameter   :: dset_name = '/Soil_Moisture_Retrieval_Data/longitude'
 
 !-----------------------------------------------------------------------
 ! start of executable code
 
-call initialize_utilities('SMAP_L2_to_obs')
+call initialize_utilities(routine)
 
 ! time setup
 call set_calendar_type(GREGORIAN)
@@ -153,28 +159,40 @@ filename = filename_seq_list(1)
 
 ! HDF5 exploration block
 
-! initialize the Fortran interface
 call h5open_f(hdferr)
-write(*,*)'h5open_f error status is ',hdferr
-
-! open the file
 call h5fopen_f(filename, H5F_ACC_RDONLY_F, file_id, hdferr)
-write(*,*)'h5fopen_f error status is ',hdferr
+call h5dopen_f(file_id,dset_name,dset_id, hdferr)
+call h5dget_space_f(dset_id, dspace_id, hdferr)
+call h5sget_simple_extent_ndims_f(dspace_id, ndims, hdferr)
+allocate(   dims(ndims))
+allocate(maxdims(ndims))
+call h5sget_simple_extent_dims_f(dspace_id, dims, maxdims, hdferr)
+allocate(data_hdf5(dims(1)))
+call h5ltread_dataset_float_f(file_id, dset_name, data_hdf5, dims, hdferr)
+write(*,*)data_hdf5(1:10)
+deallocate(data_hdf5, dims)
+
+stop
+
+
+
+
+
+
+
+
 
 ! open the dataset
-call h5dopen_f(file_id,'/Soil_Moisture_Retrieval_Data/longitude',dset_id, hdferr)
+file_id = h5_open(filename, H5F_ACC_RDONLY_F)
 write(*,*)'h5dopen_f error status is ',hdferr
 
 ! open the dataspace
-call h5dget_space_f(dset_id, dspace_id, hdferr)
 write(*,*)'h5dget_space_f error status is ',hdferr
 
 ! get the rank of the dataset
 ndims = h5_get_rank(dspace_id, hdferr)
 
 write(*,*)'main: ndims is ',ndims
-
-allocate(dims(ndims))
 
 ! fill the dims array with the dimensions
 call h5_get_dimensions(dspace_id, dims, hdferr)
@@ -185,11 +203,9 @@ write(*,*)'main: dims is ',dims
 allocate(data_hdf5(dims(1)))
 
 ! read the data
-call h5dread_f(dset_id, H5T_NATIVE_REAL, data_hdf5, dims, hdferr)
+! call h5dread_f(dset_id, H5T_NATIVE_REAL, data_hdf5, dims, hdferr)
 
-write(*,*)data_hdf5(1:10)
 
-deallocate(data_hdf5, dims)
 
 stop
 
@@ -233,25 +249,25 @@ FileLoop: do ifile = 1,num_input_files
 
    ! A little helpful logging
    write(string1,*)'.. Converting file',ifile,' of ',num_input_files
-   call error_handler(E_MSG, 'ease_grid_to_dart', string1, text2 = trim(filename))
+   call error_handler(E_MSG, routine, string1, text2 = trim(filename))
 
    io = nf90_open(trim(filename), nf90_nowrite, ncid)
-   call nc_check(io, 'ease_grid_to_dart', context='nf90_open',filename=filename)
+   call nc_check(io, routine, context='nf90_open',filename=filename)
 
    ! Get dimension information from the longitude variable
    
    varname = 'longitude'
    varname = '/Soil_Moisture_Retrieval_Data/longitude'
    io = nf90_inq_varid(ncid,varname,VarID)
-   call nc_check(io, 'ease_grid_to_dart', context='inq_varid "'//trim(varname)//'"', filename=filename)
+   call nc_check(io, routine, context='inq_varid "'//trim(varname)//'"', filename=filename)
 
    io = nf90_inquire_variable(ncid, VarID, varname, xtype, ndims, dimids, nAtts)
-   call nc_check(io, 'ease_grid_to_dart', context='inquire_variable "'//trim(varname)//'"', filename=filename)
+   call nc_check(io, routine, context='inquire_variable "'//trim(varname)//'"', filename=filename)
 
    !>@todo FIXME check to make sure there is only 1 dimension
 
    io = nf90_inquire_dimension(ncid, dimids(1), len=dimlens(1))
-   call nc_check(io, 'ease_grid_to_dart', context='inquire_dimension longitude', filename=filename)
+   call nc_check(io, routine, context='inquire_dimension longitude', filename=filename)
 
    counts = dimlens(1) 
 
@@ -262,11 +278,11 @@ FileLoop: do ifile = 1,num_input_files
    allocate(           obs_time(counts))  
    allocate(     retrieval_flag(counts))  
 
-   call nc_get_variable(ncid, 'longitude', longitude, 'ease_grid_to_dart', filename)
-   call nc_get_variable(ncid, 'latitude', latitude, 'ease_grid_to_dart', filename)
-   call nc_get_variable(ncid, 'soil_moisture', observation, 'ease_grid_to_dart', filename)
-   call nc_get_variable(ncid, 'soil_moisture_error', soil_moisture_error_std, 'ease_grid_to_dart', filename)
-   call nc_get_variable(ncid, 'retrieval_qual_flag', retrieval_flag, 'ease_grid_to_dart', filename)
+   call nc_get_variable(ncid, 'longitude', longitude, routine, filename)
+   call nc_get_variable(ncid, 'latitude', latitude, routine, filename)
+   call nc_get_variable(ncid, 'soil_moisture', observation, routine, filename)
+   call nc_get_variable(ncid, 'soil_moisture_error', soil_moisture_error_std, routine, filename)
+   call nc_get_variable(ncid, 'retrieval_qual_flag', retrieval_flag, routine, filename)
    call read_observation_times(ncid, filename)
 
    COUNTLOOP: do icount=1,counts
