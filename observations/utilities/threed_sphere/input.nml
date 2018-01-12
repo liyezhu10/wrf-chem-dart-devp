@@ -161,8 +161,8 @@
 &obs_keep_a_few_nml
    filename_in  = 'obs_seq.out'
    filename_out = 'obs_seq.subset' 
-   keep_N_of_each = 100
-   max_all_obs_out = -1
+   max_count_per_type = 10
+   max_total_count    = -1
    print_only   = .false.
    calendar     = 'Gregorian'
    /
