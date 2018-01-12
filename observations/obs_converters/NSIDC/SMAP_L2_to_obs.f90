@@ -58,7 +58,11 @@ use       location_mod, only : VERTISHEIGHT, set_location
 use  obs_utilities_mod, only : add_obs_to_seq, create_3d_obs
 
 use  netcdf_utilities_mod, only : nc_get_variable, nc_check
-use    HDF5_utilities_mod, only : h5_open, H5_CRTDAT, H5_RDWT, h5_get_rank, h5_get_dimensions
+
+use HDF5_utilities_mod, only : h5_open, &
+                               h5_get_rank, &
+                               h5_get_dimensions, &
+                               h5_get_dset_dspace
 
 use       obs_kind_mod, only : SOIL_MOISTURE
 
@@ -157,20 +161,45 @@ num_input_files = Check_Input_Files(input_file_list, filename_seq_list)
 
 filename = filename_seq_list(1)
 
-! HDF5 exploration block
 
-call h5open_f(hdferr)
-call h5fopen_f(filename, H5F_ACC_RDONLY_F, file_id, hdferr)
-call h5dopen_f(file_id,dset_name,dset_id, hdferr)
-call h5dget_space_f(dset_id, dspace_id, hdferr)
+if ( verbose ) then !  HDF5 exploration block - works.
+   call h5open_f(hdferr)
+   call h5fopen_f(filename, H5F_ACC_RDONLY_F, file_id, hdferr)
+   write(*,*)'classic file_id, hdferr is ',file_id, hdferr
+
+   call h5dopen_f(file_id,dset_name,dset_id, hdferr)
+   call h5dget_space_f(dset_id, dspace_id, hdferr)
+
+   call h5sget_simple_extent_ndims_f(dspace_id, ndims, hdferr)
+   allocate(dims(ndims), maxdims(ndims))
+   call h5sget_simple_extent_dims_f(dspace_id, dims, maxdims, hdferr)
+   allocate(data_hdf5(dims(1)))
+   call h5ltread_dataset_float_f(file_id, dset_name, data_hdf5, dims, hdferr)
+   write(*,*)data_hdf5(1:10)
+   deallocate(data_hdf5, dims, maxdims)
+endif
+
+   ! h5_open combines h5open_f() and h5fopen_f()
+   file_id = h5_open(filename, H5F_ACC_RDONLY_F)
+   write(*,*)'h5_open file_id is ',file_id
+
+   ! replace    
+   call h5dopen_f(file_id, dset_name, dset_id, hdferr)
+   call h5dget_space_f(dset_id, dspace_id, hdferr)
+   write(*,*)'TJH org: ',dset_id, dspace_id
+   ! with
+   write(string1,*) trim(filename),' ',routine
+   call h5_get_dset_dspace(file_id, dset_name, dset_id, dspace_id, string1)
+   write(*,*)'TJH new: ',dset_id, dspace_id
+   ! end
+
 call h5sget_simple_extent_ndims_f(dspace_id, ndims, hdferr)
-allocate(   dims(ndims))
-allocate(maxdims(ndims))
+allocate(dims(ndims), maxdims(ndims))
 call h5sget_simple_extent_dims_f(dspace_id, dims, maxdims, hdferr)
 allocate(data_hdf5(dims(1)))
 call h5ltread_dataset_float_f(file_id, dset_name, data_hdf5, dims, hdferr)
 write(*,*)data_hdf5(1:10)
-deallocate(data_hdf5, dims)
+deallocate(data_hdf5, dims, maxdims)
 
 stop
 
@@ -178,13 +207,6 @@ stop
 
 
 
-
-
-
-
-! open the dataset
-file_id = h5_open(filename, H5F_ACC_RDONLY_F)
-write(*,*)'h5dopen_f error status is ',hdferr
 
 ! open the dataspace
 write(*,*)'h5dget_space_f error status is ',hdferr

@@ -15,7 +15,8 @@ use HDF5
 implicit none
 private
 
-public :: h5_open, H5_CRTDAT, H5_RDWT, h5_get_rank, h5_get_dimensions
+public :: h5_open, H5_CRTDAT, H5_RDWT, h5_get_rank, h5_get_dimensions, &
+          h5_get_dset_dspace
 
 ! interface hf_get_var
 !    module procedure hf_get_int_1d
@@ -39,7 +40,8 @@ contains
 !-----------------------------------------------------------------------
 !> initialize the Fortran interface to HDF5
 
-subroutine initialize_module()
+subroutine initialize_module(context)
+character(len=*), optional :: context
 
 integer :: hdferr
 
@@ -48,15 +50,22 @@ if (module_initialized) return
 call register_module(source, revision, revdate)
 module_initialized = .true.
 
+if (present(context)) then
+   write(string1,*)'initializing Fortran interfaces: ',trim(context)
+else
+   write(string1,*)'initializing Fortran interfaces'
+endif
+
 ! initialize the Fortran interface
 call h5open_f(hdferr)
-call h5_check(hdferr,'initialize_module','h5open_f','initializing Fortran interfaces') 
+call h5_check(hdferr,'initialize_module','h5open_f',string1) 
 
 end subroutine initialize_module 
 
 
 !-----------------------------------------------------------------------
-!>
+!> open the fortran interface to hdf5 libs 
+!> open the file
 
 function h5_open(filename, flag, context) result(file_id)
 
@@ -65,13 +74,39 @@ integer(HID_T),             intent(in) :: flag
 character(len=*), optional, intent(in) :: context
 integer(HID_T)                         :: file_id
 
-
 integer :: hdferr
+
+if ( .not. module_initialized ) call initialize_module(context)
 
 call h5fopen_f(filename, flag, file_id, hdferr)
 call h5_check(hdferr,'h5_open','h5fopen_f', context, filename)
 
 end function h5_open
+
+
+!-----------------------------------------------------------------------
+!>
+
+subroutine h5_get_dset_dspace(file_id, dsetname, dsetid, dspaceid, context)
+
+integer(HID_T),             intent(in)  :: file_id  !> hdf file ID
+character(len=*),           intent(in)  :: dsetname !> dataset name
+integer(HID_T),             intent(out) :: dsetid   !> dataset ID
+integer(HID_T),             intent(out) :: dspaceid !> dataset dataspace ID
+character(len=*), optional, intent(in)  :: context
+
+integer :: hdferr
+character(len=*), parameter :: routine = 'h5_get_dset_dspace'
+
+if ( .not. module_initialized ) call initialize_module(context)
+
+call h5dopen_f(file_id, dsetname, dsetid, hdferr)
+call h5_check(hdferr, routine, 'h5dopen_f', context, dsetname)
+
+call h5dget_space_f(dsetid, dspaceid, hdferr)
+call h5_check(hdferr, routine, 'h5dget_space_f', context, dsetname)
+
+end subroutine h5_get_dset_dspace
 
 
 !-----------------------------------------------------------------------

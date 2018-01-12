@@ -21,7 +21,7 @@
 &SMAP_L2_to_obs_nml
    input_file_list = 'file_list.txt'
    obs_out_file    = 'obs_seq.out'
-   verbose         = .TRUE.
+   verbose         = .FALSE.
    /
 
 &ascii_table_converter_nml
