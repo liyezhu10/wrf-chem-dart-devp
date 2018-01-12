@@ -1184,6 +1184,10 @@ end subroutine update_reg_list
 ! The irregular grid is also assumed to be global east
 ! west for all applications.
 
+!>@todo FIXME should these args be:  four_lon_indices(), four_lat_indices()
+!> or even four_x_indices(), four_y_indices()?  they aren't the actual lon/lat
+!> real/float values - they are the array indices.
+
 subroutine quad_lon_lat_locate_ii(interp_handle, lon, lat, &
                                   four_lons, four_lats, istatus)
 type(quad_interp_handle), intent(in)  :: interp_handle
@@ -2262,7 +2266,8 @@ character(len=*), parameter :: routine = 'quad_lon_lat_evaluate:quad_lon_lat_eva
 ! Full bilinear interpolation for quads
 if(interp_handle%grid_type == GRID_QUAD_FULLY_IRREGULAR) then
 
-   !! Get corner grid locations for accurate interpolation
+   ! lons and lats are integer indices.  x_corners and y_corners are the real*8 locations.
+   ! Get corner grid locations for accurate interpolation
    call get_quad_corners(interp_handle%ii%lons_2D, four_lons(1), four_lats(1), &
                          interp_handle%opt%spans_lon_zero, interp_handle%nlon, &
                          interp_handle%nlat, x_corners, istatus)
