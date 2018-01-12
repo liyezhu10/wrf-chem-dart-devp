@@ -2594,7 +2594,54 @@ call nc_close_file(ncid, routine)
 
 end subroutine read_cam_phis_array
 
+!#! !real(r8) :: p_surf = 100183.18209922672_r8
+!#! !real(r8) :: h_surf = 329.4591445914210794_r8
+!#! !!tvX:
+!#! !real(r8) :: virtual_temp(26) = (/   &
+!#! !    219.504545724395342177_r8, &
+!#! !    220.755756266998901083_r8, &
+!#! !    218.649777340474969378_r8, &
+!#! !    218.144545911709940356_r8, &
+!#! !    217.728221229954215232_r8, &
+!#! !    216.143009218914528446_r8, &
+!#! !    214.481037053947034110_r8, &
+!#! !    211.658627994532224648_r8, &
+!#! !    211.833385313013934592_r8, &
+!#! !    212.213164703541366407_r8, &
+!#! !    212.615531561483351197_r8, &
+!#! !    209.756210669626966592_r8, &
+!#! !    209.138904604986379354_r8, &
+!#! !    212.498936606159986695_r8, &
+!#! !    219.523651584890700406_r8, &
+!#! !    229.031103260649530284_r8, &
+!#! !    237.766208609568053589_r8, &
+!#! !    245.843809142625332242_r8, &
+!#! !    253.456529559321467104_r8, &
+!#! !    258.270814547914710602_r8, &
+!#! !    260.346496319841151035_r8, &
+!#! !    261.759864813262595362_r8, &
+!#! !    262.993454407623175939_r8, &
+!#! !    266.850708906211991689_r8, &
+!#! !    270.064944946168111528_r8, &
+!#! !    271.721653151072075616_r8 /)
+!#! !
+!#! !
+!#! !write(*, 202) 'psurf, hsurf: ', p_surf, h_surf
+!#! 
+
 !-----------------------------------------------------------------------
+! Purpose:
+!   To compute geopotential height using the CCM2 hybrid coordinate
+!   vertical slice.  Since the vertical integration matrix is a
+!   function of latitude and longitude, it is not explicitly
+!   computed as for sigma coordinates.  The integration algorithm
+!   is derived from Boville's mods in the ibm file hybrid 1mods
+!   (6/17/88).  All vertical slice arrays are oriented top to
+!   bottom as in CCM2.  This field is on full model levels (aka
+!   "midpoints") not half levels.
+!
+! Equation references are to "Hybrid Coordinates for CCM1"
+!    https://opensky.ucar.edu/islandora/object/technotes%3A149/datastream/PDF/view
 
 subroutine build_heights(nlevels,p_surf,h_surf,virtual_temp,height_midpts,height_interf,variable_r)
 
@@ -2608,72 +2655,16 @@ real(r8), intent(in),  optional :: variable_r(nlevels)      ! Dry air gas consta
 
 ! Local variables
 !>@todo have a model constants module?
-real(r8), parameter :: const_r = 287.04_r8    ! Different than model_heights ! dry air gas constant.
-real(r8), parameter :: g0 = 9.80616_r8        ! Different than model_heights:gph2gmh:G !
+real(r8), parameter :: const_r = 287.04_r8    ! Different than model_heights (dry air gas constant)
+real(r8), parameter :: g0 = 9.80616_r8        ! Different than model_heights (gph2gmh:G) !
 
 integer  :: i,k,l
 
 ! an array now: real(r8), parameter :: rbyg=r/g0
-real(r8) :: pterm(nlevels)
-real(r8) :: r_g0_tv(nlevels)       ! rbyg=r/g0 * tv
-real(r8) :: midpts(nlevels)        ! midpoints  in column
-real(r8) :: pmln(nlevels+1)        ! logs of midpoint pressures plus surface interface pressure
-
-!real(r8) :: p_surf = 100183.18209922672_r8
-!real(r8) :: h_surf = 329.4591445914210794_r8
-!!tvX:
-!real(r8) :: virtual_temp(26) = (/   &
-!    219.504545724395342177_r8, &
-!    220.755756266998901083_r8, &
-!    218.649777340474969378_r8, &
-!    218.144545911709940356_r8, &
-!    217.728221229954215232_r8, &
-!    216.143009218914528446_r8, &
-!    214.481037053947034110_r8, &
-!    211.658627994532224648_r8, &
-!    211.833385313013934592_r8, &
-!    212.213164703541366407_r8, &
-!    212.615531561483351197_r8, &
-!    209.756210669626966592_r8, &
-!    209.138904604986379354_r8, &
-!    212.498936606159986695_r8, &
-!    219.523651584890700406_r8, &
-!    229.031103260649530284_r8, &
-!    237.766208609568053589_r8, &
-!    245.843809142625332242_r8, &
-!    253.456529559321467104_r8, &
-!    258.270814547914710602_r8, &
-!    260.346496319841151035_r8, &
-!    261.759864813262595362_r8, &
-!    262.993454407623175939_r8, &
-!    266.850708906211991689_r8, &
-!    270.064944946168111528_r8, &
-!    271.721653151072075616_r8 /)
-!
-!
-!write(*, 202) 'psurf, hsurf: ', p_surf, h_surf
-
-
-200 format (I3, 6(1X, F24.16))
-201 format (A, 1X, I3, 6(1X, F24.16))
-202 format (A, 6(1X, F24.16))
-203 format (6(1X, F24.16))
-
-!state of dry air dry air Air pressure
-!    p=rho*R*T 
-! where rho   is the mass density 
-!       alpha is specific volume
-!       R      gas constant and 
-!       T     temperature
-! gravity force must exactly be exactly balanced by  by the vertical component of the pressure gradiant force
-!    dp/dz = -rho*g    
-! hydrostatic balance
-!    p(z) = /int_z^/infinity rho*g
-! finite difference forms of the Dyn operator, including semi implicit time integration are :
-
-! normally we only need the midpoint heights, but if its useful to have
-! the heights on the interface levels, here it is.  
-
+real(r8) :: pterm(nlevels)   ! vertical scratch space, to improve computational efficiency
+real(r8) :: r_g0_tv(nlevels) ! rbyg=r/g0 * tv
+real(r8) :: p_mid(nlevels)   ! midpoints in column
+real(r8) :: pm_ln(nlevels+1) ! logs of midpoint pressures plus surface interface pressure
 
 ! cam uses a uniform gas constant value, but high top
 ! models like waccm change the gas constant with height.
@@ -2681,74 +2672,81 @@ real(r8) :: pmln(nlevels+1)        ! logs of midpoint pressures plus surface int
 if (present(variable_r)) then
    r_g0_tv(:) = variable_r(:) / g0 * virtual_temp(:)
 else
-   r_g0_tv(:) = const_r / g0 * virtual_temp(:)
+   r_g0_tv(:) = const_r       / g0 * virtual_temp(:)
 endif
 
-! this does the midpoints, which is one less than pmln() needs.
-! nlevels+1 is the pressure at the surface interface.
+! calculate the pressure column midpoints, which is 
+! one less than pm_ln() needs. The pressure at the
+! surface interface is at nlevels+1
 
-call cam_p_col_midpts(p_surf, nlevels, midpts)
+call cam_p_col_midpts(p_surf, nlevels, p_mid)
    
-do i=1, nlevels
-  pmln(i) = midpts(i)
-enddo
-pmln(nlevels+1) = p_surf * grid_data%hybi%vals(nlevels+1)
+p_mid(nlevels+1) = p_surf * grid_data%hybi%vals(nlevels+1)
    
-where(pmln >  0.0_r8) pmln = log(pmln) 
-where(pmln <= 0.0_r8) pmln = 0.0_r8
-   
-!print *, 'pmln: '
+! compute top only if the top interface pressure is nonzero.
+where      (pm_mid >  0.0_r8) 
+   pm_ln = log(pm_ln) 
+else where (pm_mid <= 0.0_r8)
+   pm_ln = 0
+end where
+
+!200 format (I3, 6(1X, F24.16))
+!201 format (A, 1X, I3, 6(1X, F24.16))
+!202 format (A, 6(1X, F24.16))
+!203 format (6(1X, F24.16))
+!
+!print *, 'pm_ln: '
 !do i=1, nlevels+1
-!  write(*, 200) i, pmln(i)
+!  write(*, 200) i, pm_ln(i)
 !enddo
 
-!>@todo FIXME - 
-! my request for changes to the code below is just in editing the comments
-! to be more clear.
-
 ! Initialize height_midpts to sum of ground height and thickness of
-! top half-layer  (i.e. (phi)sfc in equation 1.14)
-!
+! top half-layer terms.
+
+pterm(1)       = 0.0_r8
+pterm(nlevels) = 0.0_r8
+
 !        height_midpts(1)=top  ->  height_midpts(nlevels)=bottom
 ! 
-!        Eq 3.a.109.2  where l=K,k<K  h(k,l) = 1/2 * ln [  p(k+1) / p(k) ]
+! level
+! 1/2    ---------------------------------------------------------------
+! 1      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - top
+! 3/2    ---------------------------------------------------------------
+!
+!                 ---------------------------------------------
+!        --------/                                             \--------
+!                - - - - - - - - - - - - - - - - - - - - - - - - 
+! NL     - - - /                                                 \ - - - bottom
+!              ---------------------------------------------------
+! NL+1/2 -----/|||||||||||||||||||||||||||||||||||||||||||||||||||\-----
 
-pterm(1) = 0.0_r8
+! Midpoint layer terms
+!        Eq 3.a.109.2  where l=K,k<K  h(k,l) = 1/2 * ln [  p(k+1) / p(k-1) ]
 do k = 2,nlevels - 1
-   pterm(k) = r_g0_tv(k) * 0.5_r8 * (pmln(k+1)-pmln(k-1))
+   pterm(k) = r_g0_tv(k) * 0.5_r8 * (pm_ln(k+1)-pm_ln(k-1))
 enddo
-pterm(nlevels) = 0.0_r8
 
 ! Initialize height_midpts to sum of ground height and thickness of top half layer
 ! this is NOT adding the thickness of the 'top' half layer.
-!    it's adding the thickness of the half layer at level K,
-do k = 1,nlevels - 1
-   height_midpts(k) = h_surf + r_g0_tv(k) * 0.5_r8 * (pmln(k+1)-pmln(k))
-enddo
-height_midpts(nlevels) = h_surf + r_g0_tv(nlevels) * (pmln(nlevels+1)-pmln(nlevels))
-! notice no 0.5 here - because pmln(nlevels+1) is only 1/2 layer away from pmln(nlevels)?
-! is this right?  the line above is adding the half layer at the BOTTOM.
-
 !
-! Add thickness of the remaining full layers
-!  (i.e., integrate from ground to highest layer interface)
-! 
-! Eqs 1.14 & 3.a.109.3 where l>K, k<K
-!                          h(k,l) = 1/2 * ln [ p(l+1)/p(l-1) ]
+!        Eq 3.a.109.2  where l=K,k<K  h(k,l) = 1/2 * ln [  p(k+1) / p(k) ]
+do k = 1,nlevels - 1
+   height_midpts(k) = h_surf + r_g0_tv(k) * 0.5_r8 * (pm_ln(k+1)-pm_ln(k))
+enddo
+! add thickness of bottom half layer
+height_midpts(nlevels) = h_surf + r_g0_tv(nlevels) * (pm_ln(nlevels+1)-pm_ln(nlevels))
+
+!        Eq 3.a.109.4  where l=K,k<K  h(k,l) = 1/2*ln[pi*pi/(p(k-1)*p(k))
 do k = 1,nlevels - 1
     height_midpts(k) = height_midpts(k) + r_g0_tv(nlevels) * &
-                     (pmln(nlevels+1) - 0.5_r8*(pmln(nlevels-1)+pmln(nlevels)))
+                       (pm_ln(nlevels+1) - 0.5_r8*(pm_ln(nlevels-1)+pm_ln(nlevels)))
 enddo
 
-
-!>@todo fixme - repeated comment?
 ! Add thickness of the remaining full layers
 ! (i.e., integrate from ground to highest layer interface)
 !
 !       Eqs 1.14 & 3.a.109.3 where l>K, k<K
 !                                h(k,l) = 1/2 * ln [ p(l+1)/p(l-1) ]
-!
-! 3.a.109.3
 
 do k = 1,nlevels - 2
    do l = k+1, nlevels-1
