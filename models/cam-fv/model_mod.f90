@@ -2918,16 +2918,27 @@ type(location_type), intent(inout) :: location
 integer(i8),         intent(in)    :: location_indx
 integer,             intent(in)    :: qty
 
-integer  :: iloc, jloc, vloc
+integer  :: iloc, jloc, vloc, myqty, level_one, status1
 integer  :: my_status(ens_size)
-real(r8) :: pressure_array(grid_data%lev%nsize)
+real(r8) :: pressure_array(grid_data%lev%nsize), surface_pressure(ens_size)
 
-call get_model_variable_indices(location_indx, iloc, jloc, vloc)
 
-call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, grid_data%lev%nsize, &
-                         qty, pressure_array, my_status)
+call get_model_variable_indices(location_indx, iloc, jloc, vloc, kind_index=myqty)
 
-call set_vertical(location, pressure_array(vloc), VERTISPRESSURE)
+if (is_surface_field(myqty)) then
+   
+   level_one = 1
+   call get_staggered_values_from_qty(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
+                                      iloc, jloc, level_one, qty, surface_pressure, status1)
+
+   if (status1 /= 0) return
+   call set_vertical(location, surface_pressure(1), VERTISPRESSURE)
+else
+   call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, grid_data%lev%nsize, &
+                            qty, pressure_array, my_status)
+
+   call set_vertical(location, pressure_array(vloc), VERTISPRESSURE)
+endif
 
 end subroutine state_vertical_to_pressure
 
@@ -3637,6 +3648,16 @@ else
 endif
 
 end function scale_height
+
+!--------------------------------------------------------------------
+
+function is_surface_field(qty)
+integer, intent(in) :: qty
+logical :: is_surface_field
+
+is_surface_field = (qty == QTY_SURFACE_PRESSURE .or. qty == QTY_SURFACE_ELEVATION)
+   
+end function is_surface_field
 
 !--------------------------------------------------------------------
 
