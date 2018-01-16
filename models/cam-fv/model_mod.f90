@@ -2677,7 +2677,6 @@ integer  :: i,k,l
 ! an array now: real(r8), parameter :: rbyg=r/g0
 real(r8) :: pterm(nlevels)   ! vertical scratch space, to improve computational efficiency
 real(r8) :: r_g0_tv(nlevels) ! rbyg=r/g0 * tv
-real(r8) :: p_mid(nlevels)   ! midpoints in column
 real(r8) :: pm_ln(nlevels+1) ! logs of midpoint pressures plus surface interface pressure
 
 ! cam uses a uniform gas constant value, but high top
@@ -2694,13 +2693,13 @@ endif
 ! the pressure at nlevels+1 is the pressure of the 
 ! actual surface interface, not a midpoint!!
 
-call cam_p_col_midpts(p_surf, nlevels, p_mid)
+call cam_p_col_midpts(p_surf, nlevels, pm_ln)
    
-p_mid(nlevels+1) = p_surf * grid_data%hybi%vals(nlevels+1)   ! surface interface
+pm_ln(nlevels+1) = p_surf * grid_data%hybi%vals(nlevels+1)   ! surface interface
    
-where      (p_mid >  0.0_r8) 
+where (pm_ln >  0.0_r8) 
    pm_ln = log(pm_ln) 
-else where (p_mid <= 0.0_r8)
+else where (pm_ln <= 0.0_r8)
    pm_ln = 0
 end where
 
