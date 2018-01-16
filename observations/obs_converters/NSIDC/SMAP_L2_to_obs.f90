@@ -66,7 +66,6 @@ use HDF5_utilities_mod, only : h5_open, h5_check, &
 
 use       obs_kind_mod, only : SOIL_MOISTURE
 
-use netcdf
 use HDF5
 use H5LT
 
@@ -107,24 +106,20 @@ integer :: num_copies, num_qc, max_obs
 logical :: first_obs
 
 ! The EASE grid 
-real(r8),        allocatable, dimension(:) :: longitude
-real(r8),        allocatable, dimension(:) :: latitude
-real(r8),        allocatable, dimension(:) :: observation
-real(r8),        allocatable, dimension(:) :: soil_moisture_error_std
+real(r4),        allocatable, dimension(:) :: longitude
+real(r4),        allocatable, dimension(:) :: latitude
+real(r4),        allocatable, dimension(:) :: observation
+real(r4),        allocatable, dimension(:) :: soil_moisture_error_std
 type(time_type), allocatable, dimension(:) :: obs_time
 integer,         allocatable, dimension(:) :: retrieval_flag
 
-integer                      :: dimids(NF90_MAX_DIMS)
-integer                      :: dimlens(NF90_MAX_DIMS)
-character(len=NF90_MAX_NAME) :: dimnames(NF90_MAX_DIMS)
-
-integer :: icount, ncid, VarID, io
+integer :: icount
 integer :: counts = 20000
 
-character(len=NF90_MAX_NAME) :: varname
-integer  :: xtype, ndims, nAtts
+character(len=256) :: varname ! HDF variable names can be long
+integer  :: ndims
 
-real(r8) :: qc
+real(r8) :: qc, obs_val, err_std
 real(r8) :: rlat, rlon, depth_cm, depth_m
 
 type(obs_sequence_type) :: obs_seq
@@ -134,7 +129,7 @@ type(time_type)         :: prev_time
 integer(HID_T) :: file_id, dset_id, dspace_id
 integer        :: hdferr
 
-integer(HSIZE_T), allocatable :: dims(:)
+integer(HSIZE_T), allocatable :: dimlens(:)
 integer(HSIZE_T), allocatable :: maxdims(:)
 real, allocatable :: data_hdf5(:)
 
@@ -159,8 +154,12 @@ if (do_nml_term()) write(     *     , nml=SMAP_L2_to_obs_nml)
 
 num_input_files = Check_Input_Files(input_file_list, filename_seq_list) 
 
-filename = filename_seq_list(1)
 
+!-----------------------------------------------------------------------
+!-----------------------------------------------------------------------
+! Test block ...  
+
+filename = filename_seq_list(1)
 
 if ( verbose ) then !  HDF5 exploration block - works.
    call h5open_f(hdferr)
@@ -171,38 +170,36 @@ if ( verbose ) then !  HDF5 exploration block - works.
    call h5dget_space_f(dset_id, dspace_id, hdferr)
 
    call h5sget_simple_extent_ndims_f(dspace_id, ndims, hdferr)
-   allocate(dims(ndims), maxdims(ndims))
-   call h5sget_simple_extent_dims_f(dspace_id, dims, maxdims, hdferr)
-   allocate(data_hdf5(dims(1)))
-   call h5ltread_dataset_float_f(file_id, dset_name, data_hdf5, dims, hdferr)
+   allocate(dimlens(ndims), maxdims(ndims))
+   call h5sget_simple_extent_dims_f(dspace_id, dimlens, maxdims, hdferr)
+   allocate(data_hdf5(dimlens(1)))
+   call h5ltread_dataset_float_f(file_id, dset_name, data_hdf5, dimlens, hdferr)
    write(*,*)data_hdf5(1:10)
-   deallocate(data_hdf5, dims, maxdims)
+   deallocate(data_hdf5, dimlens, maxdims)
 endif
 
-
-
 file_id = h5_open(filename, H5F_ACC_RDONLY_F)
-
 write(string1,*) trim(filename),' ',routine
 call h5_get_dset_dspace(file_id, dset_name, dset_id, dspace_id, string1)
 
 write(string1,*) trim(dset_name),' ',trim(filename),' ',routine
 ndims = h5_get_rank(dspace_id, string1)
 
-allocate(dims(ndims), maxdims(ndims))
+allocate(dimlens(ndims), maxdims(ndims))
 
-call h5_get_dimensions(dspace_id, dims, context=string1)
+call h5_get_dimensions(dspace_id, dimlens, context=string1)
 
-allocate(data_hdf5(dims(1)))
+allocate(data_hdf5(dimlens(1)))
 
 ! h5ltread_dataset_float_f   fails if hdferr is negative 
-call h5ltread_dataset_float_f(file_id, dset_name, data_hdf5, dims, hdferr)
+call h5ltread_dataset_float_f(file_id, dset_name, data_hdf5, dimlens, hdferr)
 call h5_check(hdferr,'main','h5ltread_dataset_float_f',dset_name,filename)
 
-deallocate(data_hdf5, dims, maxdims)
+deallocate(data_hdf5, dimlens, maxdims)
 
 
-
+!-----------------------------------------------------------------------
+!-----------------------------------------------------------------------
 
 
 ! each observation in this series will have a single observation value 
@@ -241,25 +238,25 @@ FileLoop: do ifile = 1,num_input_files
 
    ! A little helpful logging
    write(string1,*)'.. Converting file',ifile,' of ',num_input_files
-   call error_handler(E_MSG, routine, string1, text2 = trim(filename))
+   call error_handler(E_MSG, routine, string1, text2 = '"'//trim(filename)//'"')
 
-   io = nf90_open(trim(filename), nf90_nowrite, ncid)
-   call nc_check(io, routine, context='nf90_open',filename=filename)
+   file_id = h5_open(filename, H5F_ACC_RDONLY_F)
 
    ! Get dimension information from the longitude variable
-   
-   varname = 'longitude'
+
    varname = '/Soil_Moisture_Retrieval_Data/longitude'
-   io = nf90_inq_varid(ncid,varname,VarID)
-   call nc_check(io, routine, context='inq_varid "'//trim(varname)//'"', filename=filename)
 
-   io = nf90_inquire_variable(ncid, VarID, varname, xtype, ndims, dimids, nAtts)
-   call nc_check(io, routine, context='inquire_variable "'//trim(varname)//'"', filename=filename)
+   write(string1,*) routine, trim(filename), trim(varname)
 
-   !>@todo FIXME check to make sure there is only 1 dimension
+   call h5_get_dset_dspace(file_id, varname, dset_id, dspace_id, string1)
+   ndims = h5_get_rank(dspace_id, string1)
 
-   io = nf90_inquire_dimension(ncid, dimids(1), len=dimlens(1))
-   call nc_check(io, routine, context='inquire_dimension longitude', filename=filename)
+   if (ndims /= 1) then
+      call error_handler(E_ERR,routine,'wrong shape', source, revision, revdate)
+   endif  
+
+   allocate(dimlens(ndims)) 
+   call h5_get_dimensions(dspace_id, dimlens, context=string1)
 
    counts = dimlens(1) 
 
@@ -270,19 +267,34 @@ FileLoop: do ifile = 1,num_input_files
    allocate(           obs_time(counts))  
    allocate(     retrieval_flag(counts))  
 
-   call nc_get_variable(ncid, 'longitude', longitude, routine, filename)
-   call nc_get_variable(ncid, 'latitude', latitude, routine, filename)
-   call nc_get_variable(ncid, 'soil_moisture', observation, routine, filename)
-   call nc_get_variable(ncid, 'soil_moisture_error', soil_moisture_error_std, routine, filename)
-   call nc_get_variable(ncid, 'retrieval_qual_flag', retrieval_flag, routine, filename)
-   call read_observation_times(ncid, filename)
+   varname = '/Soil_Moisture_Retrieval_Data/longitude'
+   call h5ltread_dataset_float_f(file_id, varname, longitude, dimlens, hdferr)
+   call h5_check(hdferr,routine,'h5ltread_dataset_float_f',varname,filename)
+
+   varname = '/Soil_Moisture_Retrieval_Data/latitude'
+   call h5ltread_dataset_float_f(file_id, varname, latitude, dimlens, hdferr)
+   call h5_check(hdferr,routine,'h5ltread_dataset_float_f',varname,filename)
+
+   varname = '/Soil_Moisture_Retrieval_Data/soil_moisture'
+   call h5ltread_dataset_float_f(file_id, varname, observation, dimlens, hdferr)
+   call h5_check(hdferr,routine,'h5ltread_dataset_float_f',varname,filename)
+
+   varname = '/Soil_Moisture_Retrieval_Data/soil_moisture_error'
+   call h5ltread_dataset_float_f(file_id, varname, soil_moisture_error_std, dimlens, hdferr)
+   call h5_check(hdferr,routine,'h5ltread_dataset_float_f',varname,filename)
+
+   varname = '/Soil_Moisture_Retrieval_Data/retrieval_qual_flag'
+   call h5ltread_dataset_int_f(file_id, varname, retrieval_flag, dimlens, hdferr)
+   call h5_check(hdferr,routine,'h5ltread_dataset_float_f',varname,filename)
+
+   call read_observation_times(file_id, filename)
 
    COUNTLOOP: do icount=1,counts
 
-      if ( observation(icount) ==  0.0_r8 ) cycle COUNTLOOP
+      if ( observation(icount) ==  0.0_r4 ) cycle COUNTLOOP
 
-      rlat = latitude(icount)
-      rlon = longitude(icount)
+      rlat = real(latitude(icount),r8)
+      rlon = real(longitude(icount),r8)
 
       ! ensure the lat/longitude values are in range
       if ( rlat >  90.0_r8 .or. rlat <  -90.0_r8 ) cycle COUNTLOOP
@@ -294,13 +306,17 @@ FileLoop: do ifile = 1,num_input_files
       call get_time(obs_time(icount), osec, oday)
       qc = retrieval_flag(icount)
 
-      call create_3d_obs(rlat, rlon, depth_m/1000.0_r8, VERTISHEIGHT, observation(icount), &
-                        SOIL_MOISTURE, soil_moisture_error_std(icount), oday, osec, qc, obs)
+      obs_val = real(observation(icount),r8)
+      err_std = real(soil_moisture_error_std(icount),r8)
+
+      call create_3d_obs(rlat, rlon, depth_m/1000.0_r8, VERTISHEIGHT, obs_val, &
+                        SOIL_MOISTURE, err_std, oday, osec, qc, obs)
 
       call add_obs_to_seq(obs_seq, obs, obs_time(icount), prev_obs, prev_time, first_obs)
 
    enddo COUNTLOOP
 
+   deallocate(dimlens)
    deallocate(longitude)
    deallocate(latitude)
    deallocate(observation)
@@ -384,10 +400,11 @@ end function Check_Input_Files
 !> read the observation time array and convert to an array of DART
 !> time_type objects
 
-subroutine read_observation_times(ncid,filename)
+subroutine read_observation_times(file_id, filename)
 
-integer,          intent(in) :: ncid
+integer(HID_T),   intent(in) :: file_id
 character(len=*), intent(in) :: filename
+
 
 real(digits12) :: seconds_array(size(obs_time))
 real(digits12) :: remainder
@@ -399,29 +416,31 @@ character(len=512) :: long_name
 
 character(len=*), parameter :: routine = 'read_observation_times'
 
-call nc_get_variable(ncid, 'tb_time_seconds', seconds_array, routine,filename )
+varname = '/Soil_Moisture_Retrieval_Data/tb_time_seconds'
+call h5ltread_dataset_double_f(file_id, varname, seconds_array, dimlens, hdferr)
+call h5_check(hdferr,routine,'h5ltread_dataset_float_f',varname,filename)
 
-io = nf90_inq_varid(ncid, 'tb_time_seconds', VarID)
-call nc_check(io, routine, 'inq_varid tb_time_seconds', filename=filename)
+call h5ltget_attribute_string_f(file_id, varname, 'units', units, hdferr)
+call h5_check(hdferr,routine,'h5ltget_attribute_string_f',varname,filename)
 
-io = nf90_get_att(ncid, VarID, 'units', units)
-call nc_check(io, routine, 'get_att tb_time_seconds units', filename=filename)
+!>@todo  check to make sure units are 'seconds'
+! write(*,*)'TJH units is ',trim(units)
 
-write(*,*)'TJH units is ',trim(units)
+call h5ltget_attribute_string_f(file_id, varname, 'long_name', long_name, hdferr)
+call h5_check(hdferr,routine,'h5ltget_attribute_string_f',varname,filename)
 
-io = nf90_get_att(ncid, VarID, 'long_name', long_name)
-call nc_check(io, routine, 'get_att tb_time_seconds long_name', filename=filename)
+!>@todo  check to make sure 'seconds since midnight on January 1, 2000 UTC' 
+! is somewhere in the long_name
+! write(*,*)'TJH long_name is ',trim(long_name)
 
-write(*,*)'TJH long_name is ',trim(long_name)
-
-! hardcoded for now ... could check long_name
+!>@todo hardcoded for now 
 base_time = set_date(2000,1,1,0,0,0)
 
 do itime = 1,size(obs_time)
-   days = seconds_array(itime)/86400
+   days      = seconds_array(itime)/86400
    remainder = seconds_array(itime) - real(days,digits12) * 86400.0_digits12
-   seconds = floor(remainder*86400.0_digits12)
-   offset = set_time(seconds,days)
+   seconds   = floor(remainder)
+   offset    = set_time(seconds,days)
    obs_time(itime) = base_time + offset
 enddo
 
