@@ -121,6 +121,7 @@ LD = ifort
 # LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf
 # LIBS = -L$(NETCDF)/lib -lnetcdf           -lcurl -lhdf5_hl -lhdf5 -lz -lm
 # LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf -lcurl -lhdf5_hl -lhdf5 -lz -lm
+# LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf -lhdf5_hl -lhdf5 -lhdf5hl_fortran -lhdf5_fortran
 #
 # If you get an error "ld: library not found for -lnetcdff" (note 2 f's),
 # remove it from the LIBS line. The same is true for any library. If 'ld'
