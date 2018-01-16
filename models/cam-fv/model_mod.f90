@@ -3374,18 +3374,22 @@ select case (vertical_localization_type)
   case (VERTISPRESSURE)
     ! top, bottom vals already in pressure units
     model_top = global_model_top
+    string3 = 'pascals'
 
   case (VERTISSCALEHEIGHT)
     ramp_start = scale_height(global_ref_pressure, ramp_start)
     model_top  = scale_height(global_ref_pressure, global_model_top)
+    string3 = 'scale heights'
 
   case (VERTISHEIGHT)
     ramp_start = generic_pressure_to_height(ramp_start, status)
     model_top =  generic_pressure_to_height(model_top, status)
+    string3 = 'meters'
 
   case (VERTISLEVEL)
     ramp_start = generic_pressure_to_level(ramp_start, status)
     model_top =  generic_pressure_to_level(model_top, status)
+    string3 = 'levels'
 
   case default
     write(string1, *) 'unknown vertical localization type ', vertical_localization_type
@@ -3405,6 +3409,11 @@ ramp_start_loc = set_location(0.0_r8, 0.0_r8, ramp_start, vertical_localization_
 model_top_loc  = set_location(0.0_r8, 0.0_r8, model_top,  vertical_localization_type)
 
 damp_weight = 1.0_r8/get_dist(ramp_start_loc, model_top_loc)
+
+! and let the log know what we're doing
+write(string1, *) 'Decreasing increments on state starting at', ramp_start, trim(string3)
+write(string2, *) 'Increments will be 0 at model top, ', model_top, trim(string3)
+call error_handler(E_MSG, routine, string1, source, revision, revdate, text2=string2)
 
 end subroutine init_damping_ramp_info
 
