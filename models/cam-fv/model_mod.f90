@@ -693,6 +693,7 @@ end subroutine get_values_from_nonstate_fields
 !> istatus = 15   can not get indices from given state vector index
 !> istatus = 16   cannot do vertical interpolation for bottom layer
 !> istatus = 17   cannot do vertical interpolation for top layer
+!> istatus = 98   unknown error - shouldn't happen
 !> istatus = 99   unknown error - shouldn't happen
 !>
 
@@ -2630,18 +2631,31 @@ end subroutine read_cam_phis_array
 !#! 
 
 !-----------------------------------------------------------------------
-! Purpose:
-!   To compute geopotential height using the CCM2 hybrid coordinate
-!   vertical slice.  Since the vertical integration matrix is a
-!   function of latitude and longitude, it is not explicitly
-!   computed as for sigma coordinates.  The integration algorithm
-!   is derived from Boville's mods in the ibm file hybrid 1mods
-!   (6/17/88).  All vertical slice arrays are oriented top to
-!   bottom as in CCM2.  This field is on full model levels (aka
-!   "midpoints") not half levels.
-!
-! Equation references are to "Hybrid Coordinates for CCM1"
-!    https://opensky.ucar.edu/islandora/object/technotes%3A149/datastream/PDF/view
+!> This code is using a finite difference method to evaluate an 
+!> integral to solve the hydrostatic equation. 
+!>
+!> The details are in the reference given below.
+!> Don't change this code until you have read the paper and
+!> understand what they're doing.  The paper uses a matrix
+!> while this code gets away with ignoring 'l' and evaluating
+!> the 'k' vector directly. 
+!>
+!> Equation references are to "Hybrid Coordinates for CCM1"
+!>    https://opensky.ucar.edu/islandora/object/technotes%3A149/datastream/PDF/view
+!>
+!> Here is a comment from the NCL function that does the
+!> same thing for them.
+!>
+!> Purpose:
+!>   To compute geopotential height using the CCM2 hybrid coordinate
+!>   vertical slice.  Since the vertical integration matrix is a
+!>   function of latitude and longitude, it is not explicitly
+!>   computed as for sigma coordinates.  The integration algorithm
+!>   is derived from Boville's mods in the ibm file hybrid 1mods
+!>   (6/17/88).  All vertical slice arrays are oriented top to
+!>   bottom as in CCM2.  This field is on full model levels (aka
+!>   "midpoints") not half levels.
+!>
 
 subroutine build_heights(nlevels,p_surf,h_surf,virtual_temp,height_midpts,height_interf,variable_r)
 
@@ -2675,18 +2689,18 @@ else
    r_g0_tv(:) = const_r       / g0 * virtual_temp(:)
 endif
 
-! calculate the pressure column midpoints, which is 
-! one less than pm_ln() needs. The pressure at the
-! surface interface is at nlevels+1
+! calculate the log of the pressure column midpoints.
+! items 1:nlevels are the midpoints, but NOTICE THAT
+! the pressure at nlevels+1 is the pressure of the 
+! actual surface interface, not a midpoint!!
 
 call cam_p_col_midpts(p_surf, nlevels, p_mid)
    
-p_mid(nlevels+1) = p_surf * grid_data%hybi%vals(nlevels+1)
+p_mid(nlevels+1) = p_surf * grid_data%hybi%vals(nlevels+1)   ! surface interface
    
-! compute top only if the top interface pressure is nonzero.
-where      (pm_mid >  0.0_r8) 
+where      (p_mid >  0.0_r8) 
    pm_ln = log(pm_ln) 
-else where (pm_mid <= 0.0_r8)
+else where (p_mid <= 0.0_r8)
    pm_ln = 0
 end where
 
@@ -2699,12 +2713,6 @@ end where
 !do i=1, nlevels+1
 !  write(*, 200) i, pm_ln(i)
 !enddo
-
-! Initialize height_midpts to sum of ground height and thickness of
-! top half-layer terms.
-
-pterm(1)       = 0.0_r8
-pterm(nlevels) = 0.0_r8
 
 !        height_midpts(1)=top  ->  height_midpts(nlevels)=bottom
 ! 
@@ -2720,33 +2728,48 @@ pterm(nlevels) = 0.0_r8
 !              ---------------------------------------------------
 ! NL+1/2 -----/|||||||||||||||||||||||||||||||||||||||||||||||||||\-----
 
-! Midpoint layer terms
-!        Eq 3.a.109.2  where l=K,k<K  h(k,l) = 1/2 * ln [  p(k+1) / p(k-1) ]
-do k = 2,nlevels - 1
-   pterm(k) = r_g0_tv(k) * 0.5_r8 * (pm_ln(k+1)-pm_ln(k-1))
-enddo
 
-! Initialize height_midpts to sum of ground height and thickness of top half layer
-! this is NOT adding the thickness of the 'top' half layer.
+! now the finite differences.
+! Eq 3.a.109 has 5 piecewise (PW) terms.  The numbers below refer to each of these terms
+! in the order they're listed in the paper.
+
 !
-!        Eq 3.a.109.2  where l=K,k<K  h(k,l) = 1/2 * ln [  p(k+1) / p(k) ]
+! See 2nd PW term here: Eq 3.a.109  where l=K,k<K  h(k,l) = 1/2 * ln [  p(k+1) / p(k) ]
+!
+
 do k = 1,nlevels - 1
    height_midpts(k) = h_surf + r_g0_tv(k) * 0.5_r8 * (pm_ln(k+1)-pm_ln(k))
 enddo
-! add thickness of bottom half layer
 height_midpts(nlevels) = h_surf + r_g0_tv(nlevels) * (pm_ln(nlevels+1)-pm_ln(nlevels))
 
-!        Eq 3.a.109.4  where l=K,k<K  h(k,l) = 1/2*ln[pi*pi/(p(k-1)*p(k))
+!
+! See 4th PW term here: Eq 3.a.109  where l=K,k<K  h(k,l) = 1/2*ln[pi*pi/(p(k-1)*p(k))
+!
+
 do k = 1,nlevels - 1
     height_midpts(k) = height_midpts(k) + r_g0_tv(nlevels) * &
                        (pm_ln(nlevels+1) - 0.5_r8*(pm_ln(nlevels-1)+pm_ln(nlevels)))
 enddo
 
-! Add thickness of the remaining full layers
-! (i.e., integrate from ground to highest layer interface)
 !
-!       Eqs 1.14 & 3.a.109.3 where l>K, k<K
+! See 3rd PW term here:  Eqs 1.14 & 3.a.109 where l>K, k<K
 !                                h(k,l) = 1/2 * ln [ p(l+1)/p(l-1) ]
+
+! don't recompute the same values multiple times;
+! compute once and put into a temporary array.
+! (see the double nested loops below with k and l)
+
+! this is really a matrix multiply with a upper triangular
+! matrix so it simplifies to a doubly nested loop.
+
+! pterm(1) and (nlevels) are never used, but to prevent
+! confusion when debugging set them to 0 so they don't
+! look like uninitialized variables.
+pterm(1)       = 0.0_r8
+do k = 2,nlevels - 1
+   pterm(k) = r_g0_tv(k) * 0.5_r8 * (pm_ln(k+1)-pm_ln(k-1))
+enddo
+pterm(nlevels) = 0.0_r8
 
 do k = 1,nlevels - 2
    do l = k+1, nlevels-1
@@ -3574,7 +3597,7 @@ diff = p_surface - p_above  ! should be positive
 
 if (abs(diff) < tiny) then
    ! surface obs will have (almost) identical values
-   scale_height = 1.0_r8
+   scale_height = -log(1.0_r8)
 
 else if (diff <= tiny .or. p_above <= 0.0_r8) then
    ! weed out bad cases
@@ -3582,7 +3605,7 @@ else if (diff <= tiny .or. p_above <= 0.0_r8) then
 
 else
    ! normal computation - should be safe now
-   scale_height = log(p_surface / p_above)
+   scale_height = -log(p_surface / p_above)
 
 endif
 
