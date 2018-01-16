@@ -17,7 +17,7 @@ use             types_mod,  only : MISSING_R8, MISSING_I, i8, r8, vtablenameleng
 use      time_manager_mod,  only : set_time, time_type, set_date, &
                                    set_calendar_type, get_date
 use          location_mod,  only : location_type, set_vertical, set_location, &
-                                   get_location, &
+                                   get_location, write_location, &
                                    VERTISUNDEF, VERTISSURFACE, VERTISLEVEL, &
                                    VERTISPRESSURE, VERTISHEIGHT, &
                                    VERTISSCALEHEIGHT, query_location, &
@@ -3126,7 +3126,6 @@ integer :: current_vert_type, i
 
 do i=1,num
    current_vert_type = nint(query_location(locs(i)))
-
    if ( current_vert_type == which_vert ) cycle
 
    select case (which_vert)
@@ -3154,23 +3153,32 @@ type(ensemble_type), intent(in)    :: ens_handle
 type(location_type), intent(inout) :: location
 integer,             intent(out)   :: my_status
 
-integer  :: varid, ens_size, status(1)
+integer  :: varid, ens_size, status(1), qty
 real(r8) :: pressure_array(grid_data%lev%nsize)
 
 character(len=*), parameter :: routine = 'obs_vertical_to_pressure'
 
 ens_size = 1
 
-call ok_to_interpolate(QTY_PRESSURE, varid, my_status)
+if (query_location(location) == VERTISUNDEF) then
+   my_status = 0
+   return
+endif
+
+qty = QTY_PRESSURE
+if (query_location(location) == VERTISSURFACE) then
+   qty = QTY_SURFACE_PRESSURE
+endif
+
+call ok_to_interpolate(qty, varid, my_status)
 if (my_status /= 0) return
 
 call interpolate_values(ens_handle, ens_size, location, &
-                        QTY_PRESSURE, varid, pressure_array(:), status(:))
+                        qty, varid, pressure_array(:), status(:))
 if (status(1) /= 0) then
    my_status = status(1)
    return
 endif
-
 call set_vertical(location, pressure_array(1), VERTISPRESSURE)
 
 end subroutine obs_vertical_to_pressure
@@ -3339,8 +3347,6 @@ integer :: bot_lev, top_lev, status
 
 character(len=*), parameter :: routine = 'init_damping_ramp_info'
 
-print*, '"start_damping_ramp_at_pressure" not tested yet'
-
 damp_weight = 1.0_r8  !? is this the neutral/no ramp setting ?
 
 ! these start out as pressure and are converted, if needed, into
@@ -3459,6 +3465,7 @@ character(len=*), parameter :: routine = 'get_close_obs'
 integer :: i, status(1), this, vert_type
 real(r8) :: vert_value, damping_dist
 type(location_type) :: this_loc
+real(r8), parameter :: LARGE_DIST = 999999.0  ! positive and large
 
 ! if absolute distances aren't needed, or vertical localization isn't on,
 ! the default version works fine since no conversion will be needed and
@@ -3491,7 +3498,13 @@ do i=1, num_close
       call convert_vertical_obs(ens_handle, 1, locs(this:this), &
                                 loc_qtys(this:this), loc_types(this:this), &
                                 vertical_localization_type, status)
+      if (status(1) /= 0) then
+         dist(i) = LARGE_DIST
+         cycle
+      endif
+
       call set_vertical(locs(this), vert_value, vertical_localization_type)
+    
    endif
 
    dist(i) = get_dist(base_loc, locs(this))
@@ -3530,6 +3543,7 @@ character(len=*), parameter :: routine = 'get_close_state'
 integer :: i, status, this, vert_type
 real(r8) :: vert_value, damping_dist
 type(location_type) :: this_loc
+real(r8), parameter :: LARGE_DIST = 999999.0  ! positive and large
 
 ! if absolute distances aren't needed, or vertical localization isn't on,
 ! the default version works fine since no conversion will be needed and
@@ -3562,6 +3576,10 @@ do i=1, num_close
       call convert_vertical_state(ens_handle, 1, locs(this:this), &
                                  loc_qtys(this:this), loc_indx(this:this), &
                                  vertical_localization_type, status)
+      if (status /= 0) then
+         dist(i) = LARGE_DIST
+         cycle
+      endif
       call set_vertical(locs(this), vert_value, vertical_localization_type)
    endif
 
