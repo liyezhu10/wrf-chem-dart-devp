@@ -59,7 +59,7 @@ use  obs_utilities_mod, only : add_obs_to_seq, create_3d_obs
 
 use  netcdf_utilities_mod, only : nc_get_variable, nc_check
 
-use HDF5_utilities_mod, only : h5_open, &
+use HDF5_utilities_mod, only : h5_open, h5_check, &
                                h5_get_rank, &
                                h5_get_dimensions, &
                                h5_get_dset_dspace
@@ -191,35 +191,15 @@ ndims = h5_get_rank(dspace_id, string1)
 
 allocate(dims(ndims), maxdims(ndims))
 
-call h5sget_simple_extent_dims_f(dspace_id, dims, maxdims, hdferr)
-write(*,*)'TJH org: dims is ',dims
-
 call h5_get_dimensions(dspace_id, dims, context=string1)
-
-
-
 
 allocate(data_hdf5(dims(1)))
 
-
+! h5ltread_dataset_float_f   fails if hdferr is negative 
 call h5ltread_dataset_float_f(file_id, dset_name, data_hdf5, dims, hdferr)
-write(*,*)data_hdf5(1:10)
+call h5_check(hdferr,'main','h5ltread_dataset_float_f',dset_name,filename)
+
 deallocate(data_hdf5, dims, maxdims)
-
-stop
-
-
-
-
-
-
-
-! read the data
-! call h5dread_f(dset_id, H5T_NATIVE_REAL, data_hdf5, dims, hdferr)
-
-
-
-stop
 
 
 

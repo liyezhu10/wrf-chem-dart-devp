@@ -15,13 +15,16 @@ use HDF5
 implicit none
 private
 
-public :: h5_open, H5_CRTDAT, H5_RDWT, h5_get_rank, h5_get_dimensions, &
-          h5_get_dset_dspace
+public :: h5_open, H5_CRTDAT, H5_RDWT, &
+          h5_get_rank, &
+          h5_get_dimensions, &
+          h5_get_dset_dspace, &
+          h5_check
 
-! interface hf_get_var
-!    module procedure hf_get_int_1d
-!    module procedure hf_get_real_1d
-! end interface
+!interface hf_get_var
+!   module procedure hf_get_int_1d
+!   module procedure hf_get_real_1d
+!end interface
 
 ! version controlled file description for error handling, do not edit
 character(len=*), parameter :: source   = &
@@ -152,8 +155,8 @@ call h5sget_simple_extent_dims_f(dspaceid, dims, declared_dimensions, hdferr)
 if (hdferr < 0) &
    call h5_check(hdferr, routine, 'h5sget_simple_extent_dims_f', context)
 
-write(*,*)'TJH actual   dimensions ',dims
-write(*,*)'TJH declared dimensions ',declared_dimensions
+! write(*,*)'TJH actual   dimensions ',dims
+! write(*,*)'TJH declared dimensions ',declared_dimensions
 
 if (present(maxdims)) maxdims = declared_dimensions
 
@@ -163,10 +166,11 @@ end subroutine h5_get_dimensions
 !------------------------------------------------------------------
 !> check return code from previous call. on error, print and stop.
 !> if you want to continue after an error don't use this call. 
+!> a negative hdferr is considered a failure
 
-subroutine h5_check(istatus, subr_name, h5routine, context, filename)
+subroutine h5_check(hdferr, subr_name, h5routine, context, filename)
 
-integer,          intent(in)           :: istatus
+integer,          intent(in)           :: hdferr
 character(len=*), intent(in)           :: subr_name
 character(len=*), intent(in)           :: h5routine
 character(len=*), intent(in), optional :: context
@@ -174,16 +178,16 @@ character(len=*), intent(in), optional :: filename
 
 character(len=512) :: string1, string2, string3
 
-if (istatus == 0) return
+if (hdferr >= 0) return
 
 ! something wrong.  construct an error string, print and abort.
 
 write(string1,*)'HDF5 ERROR from ', trim(h5routine)
 
 if (present(context)) then
-   write(string2,*)trim(context),', error code is ',istatus
+   write(string2,*)trim(context),', error code is ',hdferr
 else
-   write(string2,*)'error code is ',istatus
+   write(string2,*)'error code is ',hdferr
 endif
 
 call error_handler(E_ERR, subr_name, string2, &
