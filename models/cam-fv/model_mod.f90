@@ -3373,6 +3373,7 @@ endif
 select case (vertical_localization_type)
   case (VERTISPRESSURE)
     ! top, bottom vals already in pressure units
+    model_top = global_model_top
 
   case (VERTISSCALEHEIGHT)
     ramp_start = scale_height(global_ref_pressure, ramp_start)
