@@ -66,9 +66,13 @@ Level-1B brightness temperatures whose boresights fall within a 36 km
 EASE-Grid 2.0 cell.</em>
 </blockquote>
 <P>
-<!-- strong>Important</strong>: <em class=program>SMAP_L2_to_obs</em> uses an
-observation error standard deviation of 0.002 m3/m3. This is a total guess
-and should be thoroughly explored. -->
+<strong>Important</strong>: <em class=program>SMAP_L2_to_obs</em> uses an
+observation error standard deviation of 0.01 m3/m3 or 20% of the soil moisture 
+value, whatever is higher. <strong>These numbers have no scientific basis and 
+should be thoroughly explored.</strong>  The data files I have explored have 
+a variable <em class=code>soil_moisture_error</em> but these appear to be 
+empty - i.e. full of <em class=code>_FillValue</em> values. A better way
+of specifying the observation error standard deviation is needed.
 <br />
 <br />
 <strong>Important</strong>: <em class=program>SMAP_L2_to_obs</em> has only

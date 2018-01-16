@@ -121,19 +121,17 @@ integer  :: ndims
 
 real(r8) :: qc, obs_val, err_std
 real(r8) :: rlat, rlon, depth_cm, depth_m
+real(r4) :: obs_FillValue(1), obs_valid_min(1), obs_valid_max(1)
+real(r4) :: sme_FillValue(1), sme_valid_min(1), sme_valid_max(1)
+real(r4) :: rqf_FillValue(1)
 
 type(obs_sequence_type) :: obs_seq
 type(obs_type)          :: obs, prev_obs
 type(time_type)         :: prev_time
 
+integer(HSIZE_T), allocatable :: dimlens(:)
 integer(HID_T) :: file_id, dset_id, dspace_id
 integer        :: hdferr
-
-integer(HSIZE_T), allocatable :: dimlens(:)
-integer(HSIZE_T), allocatable :: maxdims(:)
-real, allocatable :: data_hdf5(:)
-
-character(len=*), parameter   :: dset_name = '/Soil_Moisture_Retrieval_Data/longitude'
 
 !-----------------------------------------------------------------------
 ! start of executable code
@@ -153,54 +151,6 @@ if (do_nml_file()) write(nmlfileunit, nml=SMAP_L2_to_obs_nml)
 if (do_nml_term()) write(     *     , nml=SMAP_L2_to_obs_nml)
 
 num_input_files = Check_Input_Files(input_file_list, filename_seq_list) 
-
-
-!-----------------------------------------------------------------------
-!-----------------------------------------------------------------------
-! Test block ...  
-
-filename = filename_seq_list(1)
-
-if ( verbose ) then !  HDF5 exploration block - works.
-   call h5open_f(hdferr)
-   call h5fopen_f(filename, H5F_ACC_RDONLY_F, file_id, hdferr)
-   write(*,*)'classic file_id, hdferr is ',file_id, hdferr
-
-   call h5dopen_f(file_id,dset_name,dset_id, hdferr)
-   call h5dget_space_f(dset_id, dspace_id, hdferr)
-
-   call h5sget_simple_extent_ndims_f(dspace_id, ndims, hdferr)
-   allocate(dimlens(ndims), maxdims(ndims))
-   call h5sget_simple_extent_dims_f(dspace_id, dimlens, maxdims, hdferr)
-   allocate(data_hdf5(dimlens(1)))
-   call h5ltread_dataset_float_f(file_id, dset_name, data_hdf5, dimlens, hdferr)
-   write(*,*)data_hdf5(1:10)
-   deallocate(data_hdf5, dimlens, maxdims)
-endif
-
-file_id = h5_open(filename, H5F_ACC_RDONLY_F)
-write(string1,*) trim(filename),' ',routine
-call h5_get_dset_dspace(file_id, dset_name, dset_id, dspace_id, string1)
-
-write(string1,*) trim(dset_name),' ',trim(filename),' ',routine
-ndims = h5_get_rank(dspace_id, string1)
-
-allocate(dimlens(ndims), maxdims(ndims))
-
-call h5_get_dimensions(dspace_id, dimlens, context=string1)
-
-allocate(data_hdf5(dimlens(1)))
-
-! h5ltread_dataset_float_f   fails if hdferr is negative 
-call h5ltread_dataset_float_f(file_id, dset_name, data_hdf5, dimlens, hdferr)
-call h5_check(hdferr,'main','h5ltread_dataset_float_f',dset_name,filename)
-
-deallocate(data_hdf5, dimlens, maxdims)
-
-
-!-----------------------------------------------------------------------
-!-----------------------------------------------------------------------
-
 
 ! each observation in this series will have a single observation value 
 ! and a quality control flag.  the max possible number of obs needs to
@@ -267,33 +217,75 @@ FileLoop: do ifile = 1,num_input_files
    allocate(           obs_time(counts))  
    allocate(     retrieval_flag(counts))  
 
+   call read_observation_times(file_id,filename)
+
    varname = '/Soil_Moisture_Retrieval_Data/longitude'
-   call h5ltread_dataset_float_f(file_id, varname, longitude, dimlens, hdferr)
+   call h5ltread_dataset_float_f(file_id,varname,longitude,dimlens,hdferr)
    call h5_check(hdferr,routine,'h5ltread_dataset_float_f',varname,filename)
 
    varname = '/Soil_Moisture_Retrieval_Data/latitude'
-   call h5ltread_dataset_float_f(file_id, varname, latitude, dimlens, hdferr)
+   call h5ltread_dataset_float_f(file_id,varname,latitude,dimlens,hdferr)
    call h5_check(hdferr,routine,'h5ltread_dataset_float_f',varname,filename)
 
    varname = '/Soil_Moisture_Retrieval_Data/soil_moisture'
-   call h5ltread_dataset_float_f(file_id, varname, observation, dimlens, hdferr)
+   call h5ltread_dataset_float_f(file_id,varname,observation,dimlens,hdferr)
    call h5_check(hdferr,routine,'h5ltread_dataset_float_f',varname,filename)
 
+   call h5ltget_attribute_float_f(file_id,varname,'_FillValue',obs_FillValue,hdferr)
+   call h5_check(hdferr,routine,'h5ltget_attribute_string_f',varname,filename)
+
+   call h5ltget_attribute_float_f(file_id,varname,'valid_min',obs_valid_min,hdferr)
+   call h5_check(hdferr,routine,'h5ltget_attribute_string_f',varname,filename)
+
+   call h5ltget_attribute_float_f(file_id,varname,'valid_max',obs_valid_max,hdferr)
+   call h5_check(hdferr,routine,'h5ltget_attribute_string_f',varname,filename)
+
+   !>@todo The soil moisture error values are ALL MISSING in the data files I have.
+   !> not using this for now.
    varname = '/Soil_Moisture_Retrieval_Data/soil_moisture_error'
-   call h5ltread_dataset_float_f(file_id, varname, soil_moisture_error_std, dimlens, hdferr)
+   call h5ltread_dataset_float_f(file_id,varname,soil_moisture_error_std,dimlens,hdferr)
    call h5_check(hdferr,routine,'h5ltread_dataset_float_f',varname,filename)
+
+   call h5ltget_attribute_float_f(file_id,varname,'_FillValue',sme_FillValue,hdferr)
+   call h5_check(hdferr,routine,'h5ltget_attribute_string_f',varname,filename)
+
+   call h5ltget_attribute_float_f(file_id,varname,'valid_min',sme_valid_min,hdferr)
+   call h5_check(hdferr,routine,'h5ltget_attribute_string_f',varname,filename)
+
+   call h5ltget_attribute_float_f(file_id,varname,'valid_max',sme_valid_max,hdferr)
+   call h5_check(hdferr,routine,'h5ltget_attribute_string_f',varname,filename)
 
    varname = '/Soil_Moisture_Retrieval_Data/retrieval_qual_flag'
-   call h5ltread_dataset_int_f(file_id, varname, retrieval_flag, dimlens, hdferr)
+   call h5ltread_dataset_int_f(file_id,varname,retrieval_flag,dimlens,hdferr)
    call h5_check(hdferr,routine,'h5ltread_dataset_float_f',varname,filename)
 
-   call read_observation_times(file_id, filename)
+   call h5ltget_attribute_float_f(file_id,varname,'_FillValue',rqf_FillValue,hdferr)
+   call h5_check(hdferr,routine,'h5ltget_attribute_string_f',varname,filename)
+
+   if (verbose) then
+      write(*,*)
+      write(*,*)' obs FillValue is ',obs_FillValue
+      write(*,*)' obs valid_min is ',obs_valid_min
+      write(*,*)' obs valid_max is ',obs_valid_max
+      write(*,*)' sme FillValue is ',sme_FillValue
+      write(*,*)' sme valid_min is ',sme_valid_min
+      write(*,*)' sme valid_max is ',sme_valid_max
+      write(*,*)' rqf FillValue is ',rqf_FillValue
+      write(*,*)
+   endif
 
    COUNTLOOP: do icount=1,counts
 
-      if ( observation(icount) ==  0.0_r4 ) cycle COUNTLOOP
+      if (            observation(icount) == obs_FillValue(1)) cycle COUNTLOOP
+!     if (soil_moisture_error_std(icount) == sme_FillValue(1)) cycle COUNTLOOP
+      if (         retrieval_flag(icount) == rqf_FillValue(1)) cycle COUNTLOOP
 
-      rlat = real(latitude(icount),r8)
+      if (            observation(icount) < obs_valid_min(1)) cycle COUNTLOOP
+      if (            observation(icount) > obs_valid_max(1)) cycle COUNTLOOP
+!     if (soil_moisture_error_std(icount) < sme_valid_min(1)) cycle COUNTLOOP
+!     if (soil_moisture_error_std(icount) > sme_valid_max(1)) cycle COUNTLOOP
+
+      rlat = real(latitude( icount),r8)
       rlon = real(longitude(icount),r8)
 
       ! ensure the lat/longitude values are in range
@@ -307,8 +299,17 @@ FileLoop: do ifile = 1,num_input_files
       qc = retrieval_flag(icount)
 
       obs_val = real(observation(icount),r8)
-      err_std = real(soil_moisture_error_std(icount),r8)
 
+      ! Since the soil moisture error values are all _FillValue in the data
+      ! I have, we are simply assuming something like 20% ... 
+      ! cannot have an error standard deviation of 0.0, so there must be an alternative
+      ! minimum error specification ... just using 0.01 until proven otherwise
+      ! Both 20% and 0.01 have no scientific basis and should be explored.
+
+      ! err_std = real(soil_moisture_error_std(icount),r8)
+
+      err_std = max(obs_val/20.0_r8, 0.01_r8)
+ 
       call create_3d_obs(rlat, rlon, depth_m/1000.0_r8, VERTISHEIGHT, obs_val, &
                         SOIL_MOISTURE, err_std, oday, osec, qc, obs)
 
@@ -328,8 +329,11 @@ enddo FileLoop
 
 ! if we added any obs to the sequence, write it out to a file now.
 if ( get_num_obs(obs_seq) > 0 ) then
-   if (verbose) print *, 'writing obs_seq, obs_count = ', get_num_obs(obs_seq)
+   write(string1,*) 'writing observations: obs_count = ', get_num_obs(obs_seq)
+   call error_handler(E_MSG, routine, string1)
    call write_obs_seq(obs_seq, obs_out_file)
+else
+   call error_handler(E_MSG, routine, 'no observations to write out.')
 endif
 
 ! end of main program
