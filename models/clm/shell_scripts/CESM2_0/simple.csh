@@ -1,13 +1,21 @@
 #!/bin/csh
+#
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# DART $Id$
+
+# This file is just to see if CESM can be bullt on whatever architecture.
+# Single instance ... nothing fancy ... no DART ... just something simple.
 
 /glade/p/work/thoar/CESM/clm_dev_branch/cime/scripts/query_config  --compsets clm
 
-set CASE = pmo
+set CASE = pmo_2000
 set CASEDIR = /glade/p/work/thoar/cases
-set COMPSET = I2000Clm50BgcCrop
-set COMPSET = 2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_RTM_SGLC_SWAV
 set COMPSET = I2000Clm45Sp
-set COMPSET = 2000_DATM%GSWP3v1_CLM45%SP_SICE_SOCN_RTM_SGLC_SWAV 
+set COMPSET = I2000Clm50BgcCrop
+set COMPSET = 2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
 set CASEROOT = ${CASEDIR}/${CASE}
 
 \rm -rf ${CASEROOT}
@@ -24,14 +32,16 @@ echo "TJH: Starting create_newcase ..."
     --project P86850054 \
     --run-unsupported || exit 1
 
-    --ninst 3 \
+#    --ninst 2 \
+#    --multi-driver \
 
 cd ${CASEROOT}
 
 echo "TJH: Finished create_newcase ..."
 echo "TJH: Starting case.setup     ..."
 
-./xmlchange RUN_STARTDATE=2000-07-01
+./xmlchange RUN_TYPE=startup
+./xmlchange RUN_STARTDATE=2000-01-01
 ./xmlchange DOUT_S=FALSE
 ./xmlchange CALENDAR=GREGORIAN
 
@@ -47,14 +57,24 @@ echo "TJH: Starting case.build     ..."
 ./case.build || exit 3
 
 echo "TJH: Finished case.build     ..."
+echo ""
+echo "  cd  ${CASEROOT}"
+echo "  ./case.submit"
+echo ""
+echo "  if that works, try a do_nothing assimilation cycle."
+
+# These modify env_run.xml so they can be executed AFTER a successful clm cycle.
+if ( 1 == 2 ) then
+   ./xmlchange DATA_ASSIMILATION=TRUE
+   ./xmlchange DATA_ASSIMILATION_CYCLES=1
+   ./xmlchange DATA_ASSIMILATION_SCRIPT=do_nothing.csh
+   echo "echo Hello from `hostname`" >! do_nothing.csh
+   chmod 755 do_nothing.csh
+endif
 
 exit 0
 
-
-# These modify the env_run.xml so they should be 
-./xmlchange DATA_ASSIMILATION=TRUE
-./xmlchange DATA_ASSIMILATION_CYCLES=1
-./xmlchange DATA_ASSIMILATION_SCRIPT=do_nothing.csh
-echo "echo Hello World" >! do_nothing.csh
-chmod 755 do_nothing.csh
-
+# <next few lines under version control, do not edit>
+# $URL$
+# $Revision$
+# $Date$
