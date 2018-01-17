@@ -2024,8 +2024,8 @@ cam_tod  = ihour*3600  + iminute*60 + isecond
 
 ! if the file doesn't already have a "date" variable, so we make one
 if (.not. nc_variable_exists(ncid, "date")) then
-   call error_handler(E_MSG, routine,'"date" variable not found in file ', &
-                      source, revision, revdate, text2='creating one')
+   call error_handler(E_MSG, routine,'"date" variable not found in file, creating one', &
+                      source, revision, revdate)
 
    call nc_begin_define_mode(ncid, routine)
    call nc_define_integer_variable(ncid, 'date', (/ 'time' /), routine)
@@ -2036,8 +2036,8 @@ endif
 ! if the file doesn't already have a "datesec" variable, so we make one
 if (.not. nc_variable_exists(ncid, "datesec")) then
 
-   call error_handler(E_MSG, routine,'"datesec" variable not found in file ', &
-                      source, revision, revdate, text2='creating one')
+   call error_handler(E_MSG, routine,'"datesec" variable not found in file, creating one', &
+                      source, revision, revdate)
 
    call nc_begin_define_mode(ncid, routine)
    call nc_define_integer_variable(ncid, 'datesec', (/ 'time' /), routine)
@@ -3277,6 +3277,12 @@ character(len=*), parameter :: routine = 'obs_vertical_to_scaleheight'
 
 ens_size = 1
 
+! by definition
+if (query_location(location) == VERTISSURFACE) then
+   call set_vertical(location, -log(1.0_r8), VERTISSCALEHEIGHT)
+   return
+endif
+   
 call ok_to_interpolate(QTY_PRESSURE, varid1, stat1)
 call ok_to_interpolate(QTY_SURFACE_PRESSURE, varid2, stat2)
 if (stat1 /= 0 .or. stat2 /= 0) then
