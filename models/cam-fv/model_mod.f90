@@ -2958,7 +2958,7 @@ call cam_height_levels(ens_handle, ens_size, iloc, jloc, grid_data%lev%nsize, &
 !>@todo FIXME this can only be used if ensemble size is 1
 call set_vertical(location, height_array(vloc,1), VERTISHEIGHT)
 
-end subroutine  state_vertical_to_height
+end subroutine state_vertical_to_height
 
 !--------------------------------------------------------------------
 
@@ -2995,7 +2995,7 @@ scaleheight_val = scale_height(surface_pressure(1), pressure_array(vloc))
 
 call set_vertical(location, scaleheight_val, VERTISSCALEHEIGHT)
 
-end subroutine  state_vertical_to_scaleheight
+end subroutine state_vertical_to_scaleheight
 
 !--------------------------------------------------------------------
 
@@ -3484,6 +3484,22 @@ call error_handler(E_MSG, routine, string1, source, revision, revdate, text2=str
 end subroutine init_damping_ramp_info
 
 !--------------------------------------------------------------------
+! pressure gets smaller as you go up, everything else gets larger.
+! return true or false if this value is above the start of the ramp.
+
+function above_ramp_start(test_value)
+real(r8), intent(in) :: test_value
+logical :: above_ramp_start
+
+if (vertical_localization_type == VERTISPRESSURE) then
+   above_ramp_start = (test_value < ramp_start)
+else
+   above_ramp_start = (test_value > ramp_start)
+endif
+
+end function above_ramp_start
+
+!--------------------------------------------------------------------
 ! returns the pressure at the largest model level number (therefore the 
 ! lowest in the atmosphere) that still has no input from the surface elevation.
 
@@ -3583,7 +3599,7 @@ do i=1, num_close
    if (.not. are_damping) cycle
 
    vert_value = query_location(locs(this), 'VLOC')
-   if (vert_value < ramp_start) then
+   if (above_ramp_start(vert_value)) then
       this_loc = set_location(0.0_r8, 0.0_r8, vert_value, vertical_localization_type)
       damping_dist = get_dist(ramp_start_loc, this_loc)
       dist(i) = dist(i) + (damping_dist * damping_dist) * damp_weight
@@ -3677,7 +3693,7 @@ do i=1, num_close
    if (.not. are_damping) cycle
 
    vert_value = query_location(locs(this), 'VLOC')
-   if (vert_value < ramp_start) then
+   if (above_ramp_start(vert_value)) then
       this_loc = set_location(0.0_r8, 0.0_r8, vert_value, vertical_localization_type)
       damping_dist = get_dist(ramp_start_loc, this_loc)
       dist(i) = dist(i) + (damping_dist * damping_dist) * damp_weight
