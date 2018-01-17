@@ -36,7 +36,7 @@ use          obs_kind_mod,  only : QTY_SURFACE_ELEVATION, QTY_PRESSURE, &
                                    QTY_TEMPERATURE, QTY_SPECIFIC_HUMIDITY, &
                                    QTY_GEOPOTENTIAL_HEIGHT,  &
                                    get_index_for_quantity, get_num_quantities, &
-                                   get_name_for_quantity
+                                   get_name_for_quantity, get_quantity_for_type_of_obs
 use     mpi_utilities_mod,  only : my_task_id
 use        random_seq_mod,  only : random_seq_type, init_random_seq, random_gaussian
 use  ensemble_manager_mod,  only : ensemble_type, get_my_num_vars, get_my_vars
@@ -793,6 +793,10 @@ call quad_lon_lat_evaluate(interp_handle, lon_fract, lat_fract, ens_size, &
 if (any(status_array /= 0)) then
    istatus(:) = 8   ! cannot evaluate in the quad
    return
+endif
+
+if (using_chemistry) then
+   interp_vals = interp_vals * chem_convert_factor(obs_qty)
 endif
 
 ! all interp values should be set by now.  set istatus
@@ -2885,11 +2889,15 @@ integer :: current_vert_type, ens_size, i
 
 ens_size = 1
 
+!print *, 'convert_vertical_state, num = ', num
 do i=1,num
    current_vert_type = nint(query_location(locs(i)))
 
    if ( current_vert_type == which_vert ) cycle
 
+   if ( current_vert_type == VERTISUNDEF) cycle
+
+!print *, 'i = ', i, ' current vert_type = ', current_vert_type
    select case (which_vert)
       case (VERTISPRESSURE)
          call state_vertical_to_pressure(    ens_handle, ens_size, locs(i), loc_indx(i), loc_qtys(i) )
@@ -2903,6 +2911,7 @@ do i=1,num
          write(string1,*)'unable to convert vertical state "', which_vert, '"'
          call error_handler(E_MSG,routine,string1,source,revision,revdate)
    end select
+!print *, 'vloc now = ', query_location(locs(i), 'VLOC')
 enddo
 
 istatus = 0
@@ -2927,11 +2936,15 @@ call get_model_variable_indices(location_indx, iloc, jloc, vloc, kind_index=myqt
 
 if (is_surface_field(myqty)) then
    
+!print *, 'surface field ', iloc, jloc, vloc
    level_one = 1
-   call get_staggered_values_from_qty(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
-                                      iloc, jloc, level_one, qty, surface_pressure, status1)
+   call get_values_from_single_level(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
+                                     iloc, jloc, level_one, surface_pressure, status1)
 
-   if (status1 /= 0) return
+   if (status1 /= 0) then
+!print *, 'err - status1 = ', status1
+      return
+   endif
    call set_vertical(location, surface_pressure(1), VERTISPRESSURE)
 else
    call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, grid_data%lev%nsize, &
@@ -3144,6 +3157,8 @@ do i=1,num
          call obs_vertical_to_pressure(   ens_handle, locs(i), my_status(i))
       case (VERTISHEIGHT)
          call obs_vertical_to_height(     ens_handle, locs(i), my_status(i))
+!call write_location(0, locs(i), charstring=string1)
+!print *, 'converting vert height to: '//trim(string1)
       case (VERTISLEVEL)
          call obs_vertical_to_level(      ens_handle, locs(i), my_status(i))
       case (VERTISSCALEHEIGHT)
@@ -3288,6 +3303,34 @@ scaleheight_val = scale_height(surface_pressure_array(1), pressure_array(1))
 call set_vertical(location, scaleheight_val, VERTISSCALEHEIGHT)
 
 end subroutine obs_vertical_to_scaleheight
+
+!--------------------------------------------------------------------
+
+subroutine convert_vert_one_obs(ens_handle, loc, otype, vert_type, status1)
+type(ensemble_type), intent(in)    :: ens_handle
+type(location_type), intent(inout) :: loc
+integer,             intent(in)    :: otype
+integer,             intent(in)    :: vert_type
+integer,             intent(out)   :: status1
+
+type(location_type) :: bl(1)
+integer :: bq(1), bt(1), status(1)
+
+! these need to be arrays.  kinda a pain.
+bl(1) = loc
+bt(1) = otype
+bq(1) = get_quantity_for_type_of_obs(otype)
+
+call convert_vertical_obs(ens_handle, 1, bl, bq, bt, &
+                             vert_type, status)
+if (status(1) /= 0) then
+   status1 = status(1)
+   return
+endif
+
+loc = bl(1)
+
+end subroutine convert_vert_one_obs
 
 !-----------------------------------------------------------------------
 !> Store a generic column of pressures and heights.
@@ -3475,7 +3518,8 @@ character(len=*), parameter :: routine = 'get_close_obs'
 
 integer :: i, status(1), this, vert_type
 real(r8) :: vert_value, damping_dist
-type(location_type) :: this_loc
+type(location_type) :: this_loc, bl(1)
+integer :: bq(1), bt(1)
 real(r8), parameter :: LARGE_DIST = 999999.0  ! positive and large
 
 ! if absolute distances aren't needed, or vertical localization isn't on,
@@ -3491,6 +3535,18 @@ if (.not. present(ens_handle)) then
    call error_handler(E_ERR, routine,  &
            'unexpected error: cannot convert distances without an ensemble handle', &
            source, revision, revdate)
+endif
+
+! does the base obs need conversion first?
+vert_type = query_location(base_loc)
+
+if (vert_type /= vertical_localization_type) then
+   call convert_vert_one_obs(ens_handle, base_loc, base_type, &
+                             vertical_localization_type, status(1))
+   if (status(1) /= 0) then
+      num_close = 0
+      return
+   endif
 endif
 
 ! ok, distance is needed and we are localizing in the vertical.
@@ -3514,8 +3570,6 @@ do i=1, num_close
          cycle
       endif
 
-      call set_vertical(locs(this), vert_value, vertical_localization_type)
-    
    endif
 
    dist(i) = get_dist(base_loc, locs(this))
@@ -3571,6 +3625,18 @@ if (.not. present(ens_handle)) then
            source, revision, revdate)
 endif
 
+! does the base obs need conversion first?
+vert_type = query_location(base_loc)
+
+if (vert_type /= vertical_localization_type) then
+   call convert_vert_one_obs(ens_handle, base_loc, base_type, &
+                             vertical_localization_type, status)
+   if (status /= 0) then
+      num_close = 0
+      return
+   endif
+endif
+
 ! ok, distance is needed and we are localizing in the vertical.
 ! call default get close to get potentically close locations
 ! but call without distance so it doesn't do extra work.
@@ -3591,8 +3657,14 @@ do i=1, num_close
          dist(i) = LARGE_DIST
          cycle
       endif
-      call set_vertical(locs(this), vert_value, vertical_localization_type)
+
    endif
+
+!call write_location(0, base_loc,   charstring=string1)
+!call write_location(0, locs(this), charstring=string2)
+!print *, 'get_close_state: distance between '
+!print *, trim(string1)
+!print *, trim(string2)
 
    dist(i) = get_dist(base_loc, locs(this))
 
