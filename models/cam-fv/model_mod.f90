@@ -290,16 +290,9 @@ if (start_damping_ramp_at_pressure > 0.0_r8 .and. vertical_localization_on()) th
    are_damping = .true.
 endif
 
-! set top limit where obs are discarded
+! set top limit where obs are discarded.  -1 to disable.
 if (no_assim_above_pressure > 0.0_r8) then
-   write(string1, *) 'discarding observations above a pressure level of ', &
-                      no_assim_above_pressure, ' Pascals' 
-   call error_handler(E_MSG, 'static_init_model', string1, source, revision, revdate)
-
-   ! compute both height and pressure columns once, based on a surface
-   ! pressure of 1010 mb.  use for quick conversions when absolute accuracy 
-   ! isn't a primary concern.
-   call store_generic_columns()
+   call init_discard_high_obs()
 endif
 
 
@@ -3379,6 +3372,24 @@ if (allocated(generic_height_column)) deallocate(generic_height_column)
 if (allocated(generic_pressure_column)) deallocate(generic_pressure_column)
 
 end subroutine free_generic_columns
+
+!--------------------------------------------------------------------
+
+subroutine init_discard_high_obs()
+
+! compute a conversion table between height and pressure based on
+! a surface pressure of 1010 mb.  this is a fixed table and does not
+! vary with temperature, humidity or surface elevation. 
+! use only for quick conversions when absolute accuracy 
+! isn't a primary concern.
+
+call store_generic_columns()
+
+write(string1, *) 'Discarding observations above a pressure level of ', &
+                   no_assim_above_pressure, ' Pascals' 
+call error_handler(E_MSG, 'init_discard_high_obs', string1, source, revision, revdate)
+
+end subroutine init_discard_high_obs
 
 !--------------------------------------------------------------------
 ! initialize the info needed to damp the assimilation increments at
