@@ -109,10 +109,12 @@
    silence                  = .false.
    /
      
+   ! init_time_days             = 150650
+   ! init_time_seconds          = 0,
 &perfect_model_obs_nml
    read_input_state_from_file = .true.,
    input_state_files          = "caminput.nc",
-   init_time_days             = -1,
+   init_time_days             = -1
    init_time_seconds          = -1,
 
    write_output_state_to_file = .false.,
@@ -134,7 +136,7 @@
 &model_nml
    cam_template_filename       = 'caminput.nc' 
    cam_phis_filename           = 'cam_phis.nc'
-   vertical_localization_coord = 'PRESSURE'
+   vertical_localization_coord = 'SCALEHEIGHT'
    state_variables             = 'T'  'QTY_TEMPERATURE',       'NA', 'NA', 'UPDATE'
                                  'US' 'QTY_U_WIND_COMPONENT',  'NA', 'NA', 'UPDATE'
                                  'VS' 'QTY_V_WIND_COMPONENT',  'NA', 'NA', 'UPDATE'
@@ -142,13 +144,14 @@
                                  'PS' 'QTY_SURFACE_PRESSURE',  'NA', 'NA', 'UPDATE'
    assimilation_period_seconds = 21600
    assimilation_period_days    = 0
+   use_log_vertical_scale      = .true.
    no_assim_above_pressure     = 2000.0
-   start_damping_ramp_at_pressure  = -1.0
+   start_damping_ramp_at_pressure  = 6000.0
    suppress_grid_info_in_output    = .false.
    custom_routine_to_generate_ensemble = .true.
    fields_to_perturb               = 'QTY_TEMPERATURE'
    perturbation_amplitude          = 0.0001
-   debug_level                     = 13
+   debug_level                     = 0
    /
 
 !#!    vert_coord          = 'log_invP'
@@ -199,6 +202,8 @@
    adaptive_localization_threshold = -1,
    output_localization_diagnostics = .false.,
    localization_diagnostics_file   = 'localization_diagnostics',
+   convert_all_obs_verticals_first = .true.,
+   convert_all_state_verticals_first = .false., 
    print_every_nth_obs             = 10000,
    distribute_mean                 = .false.,
    /
@@ -372,19 +377,22 @@
 &obs_kind_nml
    assimilate_these_obs_types = 'RADIOSONDE_TEMPERATURE',
                                 'RADIOSONDE_U_WIND_COMPONENT',
-                                'GPSRO_REFRACTIVITY', 
+                                'RADIOSONDE_V_WIND_COMPONENT',
+                                'AIRCRAFT_U_WIND_COMPONENT',
+                                'AIRCRAFT_V_WIND_COMPONENT',
+                                'AIRCRAFT_TEMPERATURE',
+                                'ACARS_U_WIND_COMPONENT',
+                                'ACARS_V_WIND_COMPONENT',
+                                'ACARS_TEMPERATURE',
+                                'SAT_U_WIND_COMPONENT',
+                                'SAT_V_WIND_COMPONENT',
+                                'RADIOSONDE_SURFACE_ALTIMETER',
+                                'MARINE_SFC_ALTIMETER',
+                                'LAND_SFC_ALTIMETER',
+                                'GPSRO_REFRACTIVITY'
 
    evaluate_these_obs_types = 'RADIOSONDE_SPECIFIC_HUMIDITY',
    /
-                                'RADIOSONDE_V_WIND_COMPONENT',
-                                'AIRCRAFT_TEMPERATURE',
-                                'ACARS_TEMPERATURE',
-                                'AIRCRAFT_U_WIND_COMPONENT',
-                                'AIRCRAFT_V_WIND_COMPONENT',
-                                'ACARS_U_WIND_COMPONENT',
-                                'ACARS_V_WIND_COMPONENT',
-                                'SAT_U_WIND_COMPONENT',
-                                'SAT_V_WIND_COMPONENT',
 
 
 !  : error codes >= TERMLEVEL will cause termination

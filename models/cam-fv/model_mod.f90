@@ -140,6 +140,7 @@ namelist /model_nml/  &
    state_variables,                 &
    assimilation_period_days,        &
    assimilation_period_seconds,     &
+   use_log_vertical_scale,          &
    no_assim_above_pressure,         &
    start_damping_ramp_at_pressure,  &
    suppress_grid_info_in_output,    &
