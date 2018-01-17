@@ -2889,15 +2889,12 @@ integer :: current_vert_type, ens_size, i
 
 ens_size = 1
 
-!print *, 'convert_vertical_state, num = ', num
 do i=1,num
    current_vert_type = nint(query_location(locs(i)))
 
    if ( current_vert_type == which_vert ) cycle
-
    if ( current_vert_type == VERTISUNDEF) cycle
 
-!print *, 'i = ', i, ' current vert_type = ', current_vert_type
    select case (which_vert)
       case (VERTISPRESSURE)
          call state_vertical_to_pressure(    ens_handle, ens_size, locs(i), loc_indx(i), loc_qtys(i) )
@@ -2911,7 +2908,6 @@ do i=1,num
          write(string1,*)'unable to convert vertical state "', which_vert, '"'
          call error_handler(E_MSG,routine,string1,source,revision,revdate)
    end select
-!print *, 'vloc now = ', query_location(locs(i), 'VLOC')
 enddo
 
 istatus = 0
@@ -2936,13 +2932,11 @@ call get_model_variable_indices(location_indx, iloc, jloc, vloc, kind_index=myqt
 
 if (is_surface_field(myqty)) then
    
-!print *, 'surface field ', iloc, jloc, vloc
    level_one = 1
    call get_values_from_single_level(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
                                      iloc, jloc, level_one, surface_pressure, status1)
 
    if (status1 /= 0) then
-!print *, 'err - status1 = ', status1
       return
    endif
    call set_vertical(location, surface_pressure(1), VERTISPRESSURE)
@@ -2993,6 +2987,12 @@ real(r8) :: surface_pressure(1), scaleheight_val
 
 level_one = 1
 
+! by definition
+if (query_location(location) == VERTISSURFACE) then
+   call set_vertical(location, -log(1.0_r8), VERTISSCALEHEIGHT)
+   return
+endif
+   
 ! build a height column and a scaleheight column and find the levels?
 call get_model_variable_indices(location_indx, iloc, jloc, vloc)
 
@@ -3151,14 +3151,13 @@ integer :: current_vert_type, i
 do i=1,num
    current_vert_type = nint(query_location(locs(i)))
    if ( current_vert_type == which_vert ) cycle
+   if ( current_vert_type == VERTISUNDEF) cycle
 
    select case (which_vert)
       case (VERTISPRESSURE)
          call obs_vertical_to_pressure(   ens_handle, locs(i), my_status(i))
       case (VERTISHEIGHT)
          call obs_vertical_to_height(     ens_handle, locs(i), my_status(i))
-!call write_location(0, locs(i), charstring=string1)
-!print *, 'converting vert height to: '//trim(string1)
       case (VERTISLEVEL)
          call obs_vertical_to_level(      ens_handle, locs(i), my_status(i))
       case (VERTISSCALEHEIGHT)
@@ -3185,11 +3184,6 @@ real(r8) :: pressure_array(grid_data%lev%nsize)
 character(len=*), parameter :: routine = 'obs_vertical_to_pressure'
 
 ens_size = 1
-
-if (query_location(location) == VERTISUNDEF) then
-   my_status = 0
-   return
-endif
 
 qty = QTY_PRESSURE
 if (query_location(location) == VERTISSURFACE) then
