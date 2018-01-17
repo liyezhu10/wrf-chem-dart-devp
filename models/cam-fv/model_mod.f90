@@ -249,13 +249,6 @@ integer :: nfields
 
 if ( module_initialized ) return
 
-! The Plan:
-!
-! * read in the grid sizes from grid file
-! * allocate space, and read in actual grid values
-! * figure out model timestep
-! * Compute the model size.
-
 ! Record version info
 call register_module(source, revision, revdate)
 
@@ -274,12 +267,12 @@ call set_calendar_type('GREGORIAN')
 
 call read_grid_info(cam_template_filename, grid_data)
 
+! initialize global values that are used frequently
+call init_globals()
+
 ! read the namelist &model_nml :: state_variables
 ! to set up what will be read into the cam state vector
 call set_cam_variable_info(state_variables, nfields)
-
-! initialize global values that are used frequently
-call init_globals()
 
 ! convert from string in namelist to integer (e.g. VERTISxxx)
 ! and tell the dart code which vertical type we want to localize in.
@@ -299,7 +292,8 @@ endif
 ! set top limit where obs are discarded
 if (no_assim_above_pressure > 0.0_r8) then
    write(string1, *) 'discarding observations above a pressure level of ', &
-                      no_assim_above_pressure, ' Pascals'   !>@todo FIXME  units???
+                      no_assim_above_pressure, ' Pascals' 
+   call error_handler(E_MSG, 'static_init_model', string1, source, revision, revdate)
 
    ! compute both height and pressure columns once, based on a surface
    ! pressure of 1000 mb. use for quick conversions when absolute accuracy 
