@@ -297,7 +297,7 @@ if (no_assim_above_pressure > 0.0_r8) then
    call error_handler(E_MSG, 'static_init_model', string1, source, revision, revdate)
 
    ! compute both height and pressure columns once, based on a surface
-   ! pressure of 1000 mb. use for quick conversions when absolute accuracy 
+   ! pressure of 1010 mb.  use for quick conversions when absolute accuracy 
    ! isn't a primary concern.
    call store_generic_columns()
 endif
