@@ -1442,7 +1442,7 @@ enddo
 ! convert entire array to geometric height (from potential height)
 call gph2gmh(height_array, grid_data%lat%vals(lat_index))
 
-! JPU DEBUG
+! JPH DEBUG
 ! if (debug_level > 100) then
 !    do k = 1,nlevels
 !      do imember = 1, ens_size
