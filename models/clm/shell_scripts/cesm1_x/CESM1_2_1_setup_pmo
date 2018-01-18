@@ -60,7 +60,7 @@
 #
 # -- Examine the whole script to identify things to change for your experiments.
 #
-# -- Edit this script in the $DART/models/clm/shell_scripts/CESM1_x directory
+# -- Edit this script in the $DART/models/clm/shell_scripts/cesm1_x directory
 #    or copy it to somewhere where it will be preserved.
 #
 # -- Locate the initial condition files that CESM will need.
@@ -369,7 +369,7 @@ ${COPY} $ThisFileName ${caseroot}/${ThisFileName}.original
 # ==============================================================================
 
 if ( ! -e CESM_DART_config ) then
-   ${COPY} ${dartroot}/models/clm/shell_scripts/CESM1_x/CESM_DART_config .
+   ${COPY} ${dartroot}/models/clm/shell_scripts/cesm1_x/CESM_DART_config .
 endif
 
 if (   -e CESM_DART_config ) then
@@ -380,7 +380,7 @@ if (   -e CESM_DART_config ) then
 else
    echo "WARNING: the script to configure for data assimilation is not available."
    echo "         CESM_DART_config should be present locally or in"
-   echo "         ${dartroot}/models/clm/shell_scripts/CESM1_x/"
+   echo "         ${dartroot}/models/clm/shell_scripts/cesm1_x/"
    echo "         You can stage this script later, but you must manually edit it"
    echo "         to reflect the location of the DART code tree."
 endif
@@ -398,7 +398,7 @@ source ./Tools/ccsm_getenv || exit -2
 if ( (${COMP_OCN} != socn) || (${COMP_ATM} != datm) ) then
    echo " "
    echo "ERROR: This setup script is not appropriate for active ocean or atmospheric compsets."
-   echo "ERROR: Please use the models/CESM/shell_scripts/CESM1_x examples for that case."
+   echo "ERROR: Please use the models/CESM/shell_scripts/cesm1_x examples for that case."
    echo " "
    exit -3
 endif
@@ -815,7 +815,7 @@ end
 # -or-
 #
 # we copy a template stream txt file from the
-# $dartroot/models/clm/shell_scripts/CESM1_x directory and modify one for each instance.
+# $dartroot/models/clm/shell_scripts/cesm1_x directory and modify one for each instance.
 #
 # ==============================================================================
 
@@ -856,11 +856,11 @@ foreach FNAME (user*streams*)
       set instance = `printf %04d $TRUTHinstance`
    endif
 
-   if (-e $dartroot/models/clm/shell_scripts/CESM1_x/user_$streamname*template) then
+   if (-e $dartroot/models/clm/shell_scripts/cesm1_x/user_$streamname*template) then
 
       echo "Copying DART template for ${FNAME} and changing instance, runyear"
 
-      ${COPY} $dartroot/models/clm/shell_scripts/CESM1_x/user_$streamname*template ${FNAME}
+      ${COPY} $dartroot/models/clm/shell_scripts/cesm1_x/user_$streamname*template ${FNAME}
 
       sed s/NINST/$instance/g ${FNAME} >! out.$$
       sed s/RUNYEAR/$start_year/g  out.$$ >! ${FNAME}

@@ -133,7 +133,7 @@ end
 # The standard CESM short-term archiving script may need to be altered
 # to archive additional or subsets of things, or to reduce the amount of
 # data that is sent to the long-term archive.  Put a version of st_archive.sh
-# in  ${DARTROOT}/models/clm/shell_scripts/CESM1_x when/if necessary
+# in  ${DARTROOT}/models/clm/shell_scripts/cesm1_x when/if necessary
 
 if (            ! -e           Tools/st_archive.sh.original ) then
    ${COPY} Tools/st_archive.sh Tools/st_archive.sh.original
@@ -142,9 +142,9 @@ else
    echo ""
 endif
 
-${COPY} ${DARTROOT}/models/clm/shell_scripts/CESM1_x/st_archive.sh           Tools/
-${COPY} ${DARTROOT}/models/clm/shell_scripts/CESM1_x/assimilate.csh          .
-${COPY} ${DARTROOT}/models/clm/shell_scripts/CESM1_x/perfect_model.csh       .
+${COPY} ${DARTROOT}/models/clm/shell_scripts/cesm1_x/st_archive.sh           Tools/
+${COPY} ${DARTROOT}/models/clm/shell_scripts/cesm1_x/assimilate.csh          .
+${COPY} ${DARTROOT}/models/clm/shell_scripts/cesm1_x/perfect_model.csh       .
 ${COPY} ${DARTROOT}/shell_scripts/shell_exit.sh                      .
 ${COPY} ${DARTROOT}/assimilation_code/programs/gen_sampling_err_table/work/sampling_error_correction_table.nc ${RUNDIR}
 
