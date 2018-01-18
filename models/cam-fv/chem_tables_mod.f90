@@ -65,6 +65,11 @@ num_qtys = get_num_quantities()
 
 allocate(chem_conv_table(0:num_qtys))
 
+! the default factor is unity. then you can always multiply
+! by this factor for any quantity.
+ 
+chem_conv_table(:) = 1.0_r8
+
 call add_entry('O3',   47.9982_r8, 'QTY_O3')
 call add_entry('O',    15.9994_r8, 'QTY_O')
 call add_entry('O1D',  15.9994_r8, 'QTY_O1D')
