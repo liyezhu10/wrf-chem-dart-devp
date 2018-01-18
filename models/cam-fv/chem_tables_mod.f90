@@ -59,17 +59,20 @@ subroutine init_chem_tables()
 ! to add more quantities, add entries here following the pattern.
 ! there can be only one entry per 'QTY_xxx'
 
+integer :: i
+
 if (module_initialized) return
 
 num_qtys = get_num_quantities()
 
 allocate(chem_conv_table(0:num_qtys))
 
-! the default factor is unity. then you can always multiply
-! by this factor for any quantity.
- 
-chem_conv_table(:) = 1.0_r8
+! initialize all entries to an empty name and a factor of 1.0
+do i=0, num_qtys
+   call set_entry('', 1.0_r8, i)
+enddo
 
+! and now add entries for real items
 call add_entry('O3',   47.9982_r8, 'QTY_O3')
 call add_entry('O',    15.9994_r8, 'QTY_O')
 call add_entry('O1D',  15.9994_r8, 'QTY_O1D')
@@ -238,6 +241,30 @@ endif
 chem_conv_table(qty_index) = chem_convert(netcdf_varname, convert_factor, quantity_name)
 
 end subroutine add_entry
+
+!--------------------------------------------------------------------
+!>
+
+subroutine set_entry(netcdf_varname, convert_factor, quantity_index)
+
+character(len=*), intent(in) :: netcdf_varname
+real(r8),         intent(in) :: convert_factor
+integer,          intent(in) :: quantity_index
+
+character(len=32) :: quantity_name
+
+quantity_name = get_name_for_quantity(quantity_index)
+if (quantity_name == '') then
+   write(string1,'(3A)') 'quantity index "', quantity_index, &
+                         '" not found in known quantities list'
+   write(string2, *) 'check obs_kind_mod.f90 for valid quantities; defined by preprocess namelist'
+   call error_handler(E_ERR, 'chem_convert_factor', string1, &
+                      source, revision, revdate, text2=string2)
+endif
+
+chem_conv_table(quantity_index) = chem_convert(netcdf_varname, convert_factor, quantity_name)
+
+end subroutine set_entry
 
 !--------------------------------------------------------------------
 !>
