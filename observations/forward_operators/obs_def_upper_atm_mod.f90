@@ -75,7 +75,7 @@
 !      call get_expected_gnd_gps_vtec(state_handle, ens_size, location, expected_obs, istatus)
 ! case(SSUSI_O_N2_RATIO)
 !      call get_expected_O_N2_ratio(state_handle, ens_size, location, expected_obs, istatus)
-! case(SABER_TEMPERATURE, AURAMLS_TEMPERATURE)
+! case(3000)   ! what obs types need this routine?  replace -2 with an obs type
 !      call get_expected_oxygen_ion_density(state_handle, ens_size, location, expected_obs, istatus)
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 
@@ -90,6 +90,8 @@
 !      continue
 ! case(SSUSI_O_N2_RATIO)
 !      continue
+! case(3000)
+!      continue
 ! END DART PREPROCESS READ_OBS_DEF
 
 ! BEGIN DART PREPROCESS WRITE_OBS_DEF
@@ -103,6 +105,8 @@
 !      continue
 ! case(SSUSI_O_N2_RATIO)
 !      continue
+! case(3000)
+!      continue
 ! END DART PREPROCESS WRITE_OBS_DEF
 
 ! BEGIN DART PREPROCESS INTERACTIVE_OBS_DEF
@@ -115,6 +119,8 @@
 ! case(GND_GPS_VTEC)
 !      continue
 ! case(SSUSI_O_N2_RATIO)
+!      continue
+! case(3000)
 !      continue
 ! END DART PREPROCESS INTERACTIVE_OBS_DEF
 
@@ -282,9 +288,8 @@ LEVELS: do iAlt=1, size(ALT)+1
    if (iAlt > size(ALT)) then
       write(string1,'(''more than '',i4,'' levels in the model.'')') MAXLEVELS
       string2='increase MAXLEVELS in obs_def_upper_atm_mod.f90, rerun preprocess and recompile.'
-      string3='increase ALT, IDensityS_ie array sizes in code and recompile'
       call error_handler(E_ERR, 'get_expected_gnd_gps_vtec', string1, &
-           source, revision, revdate, text2=string2, text3=string3)
+           source, revision, revdate, text2=string2)
    endif
 
    ! At each altitude interpolate the 2D IDensityS_ie to the lon-lat where data 
@@ -303,8 +308,14 @@ LEVELS: do iAlt=1, size(ALT)+1
    nAlts = nAlts+1
 enddo LEVELS
 
-if (nAlts == 0) return
+! failed first time through loop - no values to return.
+if (nAlts == 0) then
+   obs_val(:) = MISSING_R8
+   return
+endif
 
+! clear the error from the last level and start again?
+istatus(:) = 0
 tec=0.0_r8 !start with zero for the summation
 
 do iAlt = 1, nAlts-1 !approximate the integral over the altitude as a sum of trapezoids
@@ -315,7 +326,6 @@ enddo
 where (istatus == 0) &
    obs_val = tec * 10.0**(-16) !units of TEC are "10^16" #electron/m^2 instead of just "1" #electron/m^2
 
-! return code set by track_status
 
 end subroutine get_expected_gnd_gps_vtec
 
@@ -410,6 +420,10 @@ loc_lat   = loc_array(2)
 nilevels = 0
 heights = 0.0_r8
 
+!>@todo FIXME: this is setting the same location for VERTISLEVEL
+!> as the loop below, so one can *not* be filling the interfaces and 
+!> the other filling the midpoints.
+
 FILLINTERFACES : do ilayer = 1,MAXLEVELS
 
    loc = set_location(loc_lon, loc_lat, real(ilayer,r8), VERTISLEVEL)
@@ -422,7 +436,10 @@ FILLINTERFACES : do ilayer = 1,MAXLEVELS
 enddo FILLINTERFACES
 
 
-if (nilevels == 0) return
+if (nilevels == 0) then
+   obs_val(:) = missing_r8
+   return
+endif
 
 istatus(:) = 0
 thickness = 0.0_r8
@@ -432,7 +449,8 @@ thickness(:, 1:nilevels-1) = heights(:, 2:nilevels) - heights(:, 1:nilevels-1)
 
 nlevels = 0
 
-FILLMIDPOINTS : do ilayer = 1,MAXLEVELS
+!>@todo FIXME: don't we know how many layers there are now? 
+FILLMIDPOINTS : do ilayer = 1, MAXLEVELS
 
    loc = set_location(loc_lon, loc_lat, real(ilayer,r8), VERTISLEVEL)
 
@@ -456,7 +474,10 @@ FILLMIDPOINTS : do ilayer = 1,MAXLEVELS
 
 enddo FILLMIDPOINTS
 
-if (nlevels == 0) return
+if (nlevels == 0) then
+   obs_val(:) = missing_r8
+   return
+endif
 
 ! Check to make sure we have more interfaces than layers.
 !>@todo should this be an error instead of a message?
@@ -558,7 +579,6 @@ real(r8),            intent(out) :: obs_val(ens_size)
 real(r8), dimension(ens_size)  :: mmr_o1, mmr_o2, mmr_n2, mmr_h1, mmr_op   ! mass mixing ratio 
 real(r8), dimension(ens_size)  :: mbar, pressure, temperature 
 integer,  dimension(ens_size)  :: vstatus
-type
 
 istatus = 0 ! Need to have istatus = 0 for track_status()
 
@@ -593,16 +613,13 @@ if (return_now) return
 !------------------------------------------------------------------------------------------------------
 ! WACCM-X .i file pressure unit is Pa 
 
-mmr_n2 = 1.0_r8 - (mmr_o1 + mmr_o2 + mmr_h1)
-mbar = 1.0_r8/( mmr_o1/O_molar_mass   &
-              + mmr_o2/O2_molar_mass  &
-              + mmr_h1/H_molar_mass   &
-              + mmr_n2/N2_molar_mass)
+where (istatus == 0) mmr_n2 = 1.0_r8 - (mmr_o1 + mmr_o2 + mmr_h1)
+where (istatus == 0) mbar = 1.0_r8/( mmr_o1/O_molar_mass   &
+                           + mmr_o2/O2_molar_mass  &
+                           + mmr_h1/H_molar_mass   &
+                           + mmr_n2/N2_molar_mass)
 
-obs_val = mmr_op * mbar/O_molar_mass * pressure/(kboltz * temperature) * 1.E-06_r8
-
-istatus = 0
-
+where (istatus == 0) obs_val = mmr_op * mbar/O_molar_mass * pressure/(kboltz * temperature) * 1.E-06_r8
 
 end subroutine get_expected_oxygen_ion_density
 
