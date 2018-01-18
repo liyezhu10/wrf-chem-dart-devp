@@ -7,13 +7,18 @@
 # DART $Id$
 
 #=========================================================================
-# Block 0: localize all the machine-specific changes such that the same 
-# script can be used on multiple platforms. Easier to maintain.
+# This block is an attempt to localize all the machine-specific
+# changes to this script such that the same script can be used
+# on multiple platforms. This will help us maintain the script.
 #=========================================================================
 
 echo "`date` -- BEGIN GENERATE CLM TRUE STATE"
+pwd
 
 set nonomatch       # suppress "rm" warnings if wildcard does not match anything
+
+# As of CESM2.0, the perfect_model.csh is called by CESM - and has
+# two arguments: the CASEROOT and the DATA_ASSIMILATION_CYCLE
 
 setenv CASEROOT $1
 setenv ASSIMILATION_CYCLE $2
@@ -25,11 +30,12 @@ setenv ASSIMILATION_CYCLE $2
 # xmlquery must be executed in $CASEROOT.
 cd ${CASEROOT}
 setenv CASE           `./xmlquery CASE        --value`
-setenv ensemble_size  `./xmlquery NINST_LND   --value`
+setenv ENSEMBLE_SIZE  `./xmlquery NINST_LND   --value`
 setenv EXEROOT        `./xmlquery EXEROOT     --value`
 setenv RUNDIR         `./xmlquery RUNDIR      --value`
-setenv archive        `./xmlquery DOUT_S_ROOT --value`
+setenv ARCHIVE        `./xmlquery DOUT_S_ROOT --value`
 setenv TOTALPES       `./xmlquery TOTALPES    --value`
+setenv STOP_N         `./xmlquery STOP_N      --value`
 setenv DATA_ASSIMILATION_CYCLES `./xmlquery DATA_ASSIMILATION_CYCLES --value`
 setenv TASKS_PER_NODE `./xmlquery MAX_TASKS_PER_NODE --value`
 cd ${RUNDIR}
@@ -70,7 +76,7 @@ switch ("`hostname`")
       set  LAUNCHCMD = "mpiexec -n $NTASKS"
    breaksw
 
-   case ch*:
+   case r*:
       # NCAR "cheyenne"
       set   MOVE = 'mv -fv'
       set   COPY = 'cp -fv --preserve=timestamps'
@@ -80,14 +86,19 @@ switch ("`hostname`")
       set  LAUNCHCMD = mpiexec_mpt
    breaksw
 
-   default:
-      # NERSC "hopper"
+   case example*:
       set   MOVE = 'mv -fv'
       set   COPY = 'cp -fv --preserve=timestamps'
       set   LINK = 'ln -fvs'
       set REMOVE = 'rm -fr'
+      set LAUNCHCMD = "aprun -n $NTASKS"
+   breaksw
 
-      set  LAUNCHCMD = "aprun -n $NTASKS"
+   default:
+      echo "FATAL ERROR: The system-specific environment must be specified."   
+      echo "             Add system-specific info to a case statement in"   
+      echo "             ${CASEROOT}/perfect_model.csh"   
+      exit 1
    breaksw
 endsw
 

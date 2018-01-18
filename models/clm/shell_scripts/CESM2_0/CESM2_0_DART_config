@@ -4,7 +4,7 @@
 # by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id: CESM_DART_config 10982 2017-02-01 23:43:10Z thoar@ucar.edu $
+# DART $Id$
 
 # ---------------------
 # Purpose
@@ -46,10 +46,11 @@ cd BOGUS_CASEROOT_STRING
 
 setenv OBSROOT       BOGUS_DART_OBS_STRING
 setenv DARTROOT      BOGUS_DART_ROOT_STRING
-setenv EXEROOT       `./xmlquery EXEROOT    --value`
+setenv EXEROOT       `./xmlquery EXEROOT   --value`
 setenv RUNDIR        `./xmlquery RUNDIR    --value`
 setenv CASEROOT      `./xmlquery CASEROOT  --value`
 setenv CASE          `./xmlquery CASE      --value`
+setenv STOP_N        `./xmlquery STOP_N    --value`
 setenv num_instances `./xmlquery NINST_LND --value`
 
 #>@todo ... if num_instances = 1, the we MUST be pmo ...
@@ -141,8 +142,14 @@ end
 # Stage the required parts of DART in the CASEROOT directory.
 # ==============================================================================
 
-${COPY} ${DARTROOT}/models/clm/shell_scripts/CESM2_0/assimilate.csh     . || exit 3
-${COPY} ${DARTROOT}/models/clm/shell_scripts/CESM2_0/perfect_model.csh  . || exit 3
+set LONGNAME = ${DARTROOT}/models/clm/shell_scripts/CESM2_0/assimilate.csh
+sed -e "s#BOGUSBASEOBSDIR#$OBSROOT#" ${LONGNAME} >! assimilate.csh || exit 3
+chmod 755 assimilate.csh
+
+set LONGNAME = ${DARTROOT}/models/clm/shell_scripts/CESM2_0/perfect_model.csh
+sed -e "s#BOGUSBASEOBSDIR#$OBSROOT#" ${LONGNAME} >! perfect_model.csh || exit 3
+chmod 755 perfect_model.csh
+
 ${COPY} ${DARTROOT}/models/clm/shell_scripts/CESM2_0/no_assimilate.csh  . || exit 3
 
 # The file needed for SAMPLING ERROR CORRECTION is small and may be needed later.
@@ -219,7 +226,7 @@ g;ens_size ;s;= .*;= ${num_instances};
 g;num_output_state_members ;s;= .*;= ${num_instances};
 g;num_output_obs_members ;s;= .*;= ${num_instances};
 g;casename ;s;= .*;= "../${CASE}",;
-g;hist_nhtfrq ;s;= .*;= -HISTORY_OUTPUT_INTERVAL,;
+g;hist_nhtfrq ;s;= .*;= -${STOP_N},;
 g;clm_restart_filename ;s;= .*;= 'clm_restart.nc';
 g;clm_history_filename ;s;= .*;= 'clm_history.nc';
 g;clm_vector_history_filename ;s;= .*;= 'clm_vector_history.nc';
@@ -273,8 +280,12 @@ Check the DART configuration:
    We recommend that you make sure this works before proceeding.
    ./xmlchange DATA_ASSIMILATION=FALSE
 
-2) When you want to run DART, 
+2) When you want to run DART, turn on data assimilation and call 
+   the appropriate script:
+   
    cd ${CASEROOT} 
+   ./xmlchange DATA_ASSIMILATION=TRUE
+
    ./xmlchange DATA_ASSIMILATION_SCRIPT=${CASEROOT}/assimilate.csh
    -or- 
    ./xmlchange DATA_ASSIMILATION_SCRIPT=${CASEROOT}/perfect_model.csh
@@ -306,7 +317,7 @@ cat DART_instructions.txt
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/rma_trunk/models/clm/shell_scripts/CESM_DART_config $
-# $Revision: 10982 $
-# $Date: 2017-02-01 16:43:10 -0700 (Wed, 01 Feb 2017) $
+# $URL$
+# $Revision$
+# $Date$
 

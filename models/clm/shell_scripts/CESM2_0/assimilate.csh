@@ -6,17 +6,19 @@
 #
 # DART $Id$
 
+#=========================================================================
 # This block is an attempt to localize all the machine-specific
 # changes to this script such that the same script can be used
 # on multiple platforms. This will help us maintain the script.
-
-# As of CESM2.0, the assimilate.csh is called by CESM - and has
-# two arguments: the CASEROOT and the DATA_ASSIMILATION_CYCLE
+#=========================================================================
 
 echo "`date` -- BEGIN CLM_ASSIMILATE"
 pwd
 
 set nonomatch       # suppress "rm" warnings if wildcard does not match anything
+
+# As of CESM2.0, the assimilate.csh is called by CESM - and has
+# two arguments: the CASEROOT and the DATA_ASSIMILATION_CYCLE
 
 setenv CASEROOT $1
 setenv ASSIMILATION_CYCLE $2
@@ -28,12 +30,14 @@ setenv ASSIMILATION_CYCLE $2
 # xmlquery must be executed in $CASEROOT.
 cd ${CASEROOT}
 setenv CASE           `./xmlquery CASE        --value`
-setenv ensemble_size  `./xmlquery NINST_LND   --value`
+setenv ENSEMBLE_SIZE  `./xmlquery NINST_LND   --value`
 setenv EXEROOT        `./xmlquery EXEROOT     --value`
 setenv RUNDIR         `./xmlquery RUNDIR      --value`
-setenv archive        `./xmlquery DOUT_S_ROOT --value`
+setenv ARCHIVE        `./xmlquery DOUT_S_ROOT --value`
 setenv TOTALPES       `./xmlquery TOTALPES    --value`
+setenv STOP_N         `./xmlquery STOP_N      --value`
 setenv DATA_ASSIMILATION_CYCLES `./xmlquery DATA_ASSIMILATION_CYCLES --value`
+setenv TASKS_PER_NODE `./xmlquery MAX_TASKS_PER_NODE --value`
 cd ${RUNDIR}
 
 # string to be replaced by the setup script or by hand once
@@ -47,7 +51,6 @@ switch ("`hostname`")
       set   COPY = 'cp -fv --preserve=timestamps'
       set   LINK = 'ln -fvs'
       set REMOVE = 'rm -fr'
-      set TASKS_PER_NODE = `echo $LSB_SUB_RES_REQ | sed -ne '/ptile/s#.*\[ptile=\([0-9][0-9]*\)]#\1#p'`
       setenv MP_DEBUG_NOTIMEOUT yes
 
       set  LAUNCHCMD = mpirun.lsf
@@ -60,7 +63,6 @@ switch ("`hostname`")
       set   LINK = '/bin/ln -fvs'
       set REMOVE = '/bin/rm -fr'
 
-      set BASEOBSDIR = ${WORK}/DART/observations/snow/work/obs_seqs
       set  LAUNCHCMD = mpirun.lsf
    breaksw
 
@@ -70,43 +72,42 @@ switch ("`hostname`")
       set   COPY = 'cp -fv --preserve=timestamps'
       set   LINK = 'ln -fvs'
       set REMOVE = 'rm -fr'
-      set TASKS_PER_NODE = $MAX_TASKS_PER_NODE
 
-      set BASEOBSDIR = /your/observation/directory/here
       set  LAUNCHCMD = "mpiexec -n $NTASKS"
    breaksw
 
-   case ch*:
+   case r*:
       # NCAR "cheyenne"
       set   MOVE = 'mv -fv'
       set   COPY = 'cp -fv --preserve=timestamps'
       set   LINK = 'ln -fvs'
       set REMOVE = 'rm -fr'
-      # echo "Trying to set TASKS_PER_NODE using PBS_NUM_PPN $PBS_NUM_PPN"
-      # Unavailable for some reason:  set TASKS_PER_NODE = $PBS_NUM_PPN
-      set TASKS_PER_NODE = 36
       setenv MP_DEBUG_NOTIMEOUT yes
       set  LAUNCHCMD = mpiexec_mpt
    breaksw
 
-   default:
-      # NERSC "hopper"
+   case example*:
       set   MOVE = 'mv -fv'
       set   COPY = 'cp -fv --preserve=timestamps'
       set   LINK = 'ln -fvs'
       set REMOVE = 'rm -fr'
+      set LAUNCHCMD = "aprun -n $NTASKS"
+   breaksw
 
-      set BASEOBSDIR = /scratch/scratchdirs/nscollin/ACARS
-      set  LAUNCHCMD = "aprun -n $NTASKS"
+   default:
+      echo "FATAL ERROR: The system-specific environment must be specified."   
+      echo "             Add system-specific info to a case statement in"   
+      echo "             ${CASEROOT}/assimilate.csh"   
+      exit 1
    breaksw
 endsw
 
-#-------------------------------------------------------------------------
-# Determine time of model state ... from file name of first member
+#=========================================================================
+# Block 1: Determine time of model state ... from file name of first member
 # of the form "./${CASE}.clm2_${ensemble_member}.r.2000-01-06-00000.nc"
 #
 # Piping stuff through 'bc' strips off any preceeding zeros.
-#-------------------------------------------------------------------------
+#=========================================================================
 
 set FILE = `head -n 1 rpointer.lnd_0001`
 set FILE = $FILE:r
@@ -121,7 +122,10 @@ set LND_HOUR     = `echo $LND_DATE[4] / 3600 | bc`
 echo "valid time of model is $LND_YEAR $LND_MONTH $LND_DAY $LND_SECONDS (seconds)"
 echo "valid time of model is $LND_YEAR $LND_MONTH $LND_DAY $LND_HOUR (hours)"
 
-#-----------------------------------------------------------------------------
+#=========================================================================
+# Block 2: Populate a run-time directory with the input needed to run DART.
+#=========================================================================
+
 # Get observation sequence file ... or die right away.
 # The observation file names have a time that matches the stopping time of CLM.
 #
@@ -134,7 +138,6 @@ echo "valid time of model is $LND_YEAR $LND_MONTH $LND_DAY $LND_HOUR (hours)"
 # The contents of the file must match the history file contents if one is using
 # the obs_def_tower_mod or could be the 'traditional' +/- 12Z ... or both.
 # Since the history file contains the previous days' history ... so must the obs file.
-#-----------------------------------------------------------------------------
 
 if ($STOP_N >= 24) then
    set OBSDIR = `printf %04d%02d    ${LND_YEAR} ${LND_MONTH}`
@@ -153,7 +156,7 @@ else
 endif
 
 #=========================================================================
-# Block 1: Populate a run-time directory with the input needed to run DART.
+# Block 3: Populate a run-time directory with the input needed to run DART.
 #=========================================================================
 
 echo "`date` -- BEGIN COPY BLOCK"
@@ -180,12 +183,12 @@ if ($?TASKS_PER_NODE) then
 endif
 
 #=========================================================================
-# Block 2: the lookup table for SAMPLING ERROR CORRECTION was put in the
+# Block 4: the lookup table for SAMPLING ERROR CORRECTION was put in the
 # RUNDIR by the DART_config script - nothing to do now.
 #=========================================================================
 
 #=========================================================================
-# Block 3: DART INFLATION
+# Block 5: DART INFLATION
 # This stages the files that contain the inflation values.
 # The inflation values change through time and should be archived.
 #
@@ -306,7 +309,7 @@ endif
 ${REMOVE} clm_inflation_cookie
 
 #=========================================================================
-# Block 4: Convert N CLM restart files to DART initial condition files.
+# Block 6: Convert N CLM restart files to DART initial condition files.
 # clm_to_dart is serial code, we can do all of these at the same time
 # as long as we can have unique namelists for each of them.
 #
@@ -332,10 +335,10 @@ ls -1 ${CASE}.clm2_*.r.${LND_DATE_EXT}.nc  >! restart_files.txt
 ls -1 ${CASE}.clm2_*.h0.${LND_DATE_EXT}.nc >! history_files.txt
 ls -1 ${CASE}.clm2_*.h2.${LND_DATE_EXT}.nc >! history_vector_files.txt
 
-echo "`date` -- END CLM-TO-DART for all ${ensemble_size} members."
+echo "`date` -- END CLM-TO-DART for all ${ENSEMBLE_SIZE} members."
 
 #=========================================================================
-# Block 5: Actually run the assimilation.
+# Block 7: Actually run the assimilation.
 # Will result in a set of files : 'filter_restart.xxxx'
 #
 # DART namelist settings required:
