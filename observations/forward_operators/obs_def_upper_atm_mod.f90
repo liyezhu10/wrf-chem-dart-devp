@@ -139,7 +139,8 @@ private
 public :: get_expected_upper_atm_density, &
           get_expected_gnd_gps_vtec, &
           get_expected_vtec, &
-          get_expected_O_N2_ratio
+          get_expected_O_N2_ratio, &
+          get_expected_oxygen_ion_density
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -265,7 +266,6 @@ logical  :: return_now
 if ( .not. module_initialized ) call initialize_module
 
 istatus = 0     ! must be 0 to use track_status()
-obs_val = MISSING_R8
 
 loc_vals = get_location(location)
 
@@ -388,7 +388,6 @@ real(r8) :: layerfraction(ens_size)
 if ( .not. module_initialized ) call initialize_module
 
 istatus = 0
-obs_val = MISSING_R8
 
 call error_handler(E_ERR, 'get_expected_O_N2_ratio', 'routine not tested', &
            source, revision, revdate, &
@@ -538,6 +537,69 @@ deallocate(N2_mmr, mbar, total_number_density, O_number_density, N2_number_densi
 
 end subroutine get_expected_O_N2_ratio
 
+!-----------------------------------------------------------------------------
+! This function was implemented for WACCM-X. 
+! Check the units for use with other models.
+! Given DART state vector and a location, it computes O+ density [1/cm^3].
+! The istatus variable should be returned as 0 unless there is a problem.
+!
+subroutine get_oxygen_ion_density(state_handle, ens_size, lon, lat, lev, obs_val, istatus)
+type(ensemble_type), intent(in)  :: state_handle
+integer,             intent(in)  :: ens_size
+integer,             intent(in)  :: lon, lat, lev
+integer,             intent(out) :: istatus(ens_size)
+real(r8),            intent(out) :: obs_val(ens_size)
+
+real(r8), dimension(ens_size)  :: mmr_o1, mmr_o2, mmr_n2, mmr_h1, mmr_op   ! mass mixing ratio 
+real(r8), dimension(ens_size)  :: mbar, pressure, temperature 
+integer,  dimension(ens_size)  :: vstatus
+
+
+istatus = 0 ! Need to have istatus = 0 for track_status()
+
+call interpolate(state_handle, ens_size, location, QTY_ATOMIC_OXYGEN_MIXING_RATIO, mmr_o1, this_istatus)
+call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
+if (return_now) return
+
+call interpolate(state_handle, ens_size, location, QTY_MOLEC_OXYGEN_MIXING_RATIO, mmr_o2,, this_istatus)
+call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
+if (return_now) return
+
+call interpolate(state_handle, ens_size, location, QTY_ATOMIC_H_MIXING_RATIO, mmr_h1, this_istatus)
+call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
+if (return_now) return
+
+call interpolate(state_handle, ens_size, location, QTY_ION_O_MIXING_RATIO, mmr_op, this_istatus)
+call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
+if (return_now) return
+
+call interpolate(state_handle, ens_size, location, QTY_PRESSURE, pressure, this_istatus)
+call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
+if (return_now) return
+
+call interpolate(state_handle, ens_size, location, QTY_TEMPERATURE, temperature, this_istatus)
+call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
+if (return_now) return
+
+!------------------------------------------------------------------------------------------------------
+!  Need to get number density (cgs units) from mass mixing ratio (kg/kg).  
+!  mbar is g/mole, same as rMass units
+!       kg/kg * (g/mole)/(g/mole) * (Pa = N/m^2)/((Joules/K = N*m/K) * (K)) = m-3 * 1E-06 = cm-3
+!------------------------------------------------------------------------------------------------------
+! WACCM-X .i file pressure unit is Pa 
+
+mmr_n2 = 1.0_r8 - (mmr_o1 + mmr_o2 + mmr_h1)
+mbar = 1.0_r8/( mmr_o1/O_molar_mass   &
+              + mmr_o2/O2_molar_mass  &
+              + mmr_h1/H_molar_mass   &
+              + mmr_n2/N2_molar_mass)
+
+obs_val = mmr_op * mbar/O_molar_mass * pressure/(kboltz * temperature) * 1.E-06_r8
+
+istatus = 0
+
+
+end subroutine get_oxygen_ion_density
 
 end module obs_def_upper_atm_mod
 ! END DART PREPROCESS MODULE CODE      
