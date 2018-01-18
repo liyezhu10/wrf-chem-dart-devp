@@ -52,6 +52,8 @@
 ! MIDAS_TEC,                       QTY_VERTICAL_TEC
 ! SSUSI_O_N2_RATIO,                QTY_O_N2_COLUMN_DENSITY_RATIO
 ! GPS_VTEC_EXTRAP,                 QTY_VERTICAL_TEC,               COMMON_CODE
+! SABER_TEMPERATURE,               QTY_TEMPERATURE,                COMMON_CODE
+! AURAMLS_TEMPERATURE,             QTY_TEMPERATURE,                COMMON_CODE
 ! END DART PREPROCESS KIND LIST
 
 ! BEGIN DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
@@ -59,6 +61,7 @@
 !  use obs_def_upper_atm_mod, only : get_expected_gnd_gps_vtec
 !  use obs_def_upper_atm_mod, only : get_expected_vtec
 !  use obs_def_upper_atm_mod, only : get_expected_O_N2_ratio
+!  use obs_def_upper_atm_mod, only : get_expected_oxygen_ion_density
 ! END DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
 
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
@@ -72,6 +75,8 @@
 !      call get_expected_gnd_gps_vtec(state_handle, ens_size, location, expected_obs, istatus)
 ! case(SSUSI_O_N2_RATIO)
 !      call get_expected_O_N2_ratio(state_handle, ens_size, location, expected_obs, istatus)
+! case(SABER_TEMPERATURE, AURAMLS_TEMPERATURE)
+!      call get_expected_oxygen_ion_density(state_handle, ens_size, location, expected_obs, istatus)
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 
 ! BEGIN DART PREPROCESS READ_OBS_DEF
@@ -543,17 +548,17 @@ end subroutine get_expected_O_N2_ratio
 ! Given DART state vector and a location, it computes O+ density [1/cm^3].
 ! The istatus variable should be returned as 0 unless there is a problem.
 !
-subroutine get_oxygen_ion_density(state_handle, ens_size, lon, lat, lev, obs_val, istatus)
+subroutine get_expected_oxygen_ion_density(state_handle, ens_size, location, obs_val, istatus)
 type(ensemble_type), intent(in)  :: state_handle
 integer,             intent(in)  :: ens_size
-integer,             intent(in)  :: lon, lat, lev
+type(location_type), intent(in)  :: location
 integer,             intent(out) :: istatus(ens_size)
 real(r8),            intent(out) :: obs_val(ens_size)
 
 real(r8), dimension(ens_size)  :: mmr_o1, mmr_o2, mmr_n2, mmr_h1, mmr_op   ! mass mixing ratio 
 real(r8), dimension(ens_size)  :: mbar, pressure, temperature 
 integer,  dimension(ens_size)  :: vstatus
-
+type
 
 istatus = 0 ! Need to have istatus = 0 for track_status()
 
@@ -599,7 +604,7 @@ obs_val = mmr_op * mbar/O_molar_mass * pressure/(kboltz * temperature) * 1.E-06_
 istatus = 0
 
 
-end subroutine get_oxygen_ion_density
+end subroutine get_expected_oxygen_ion_density
 
 end module obs_def_upper_atm_mod
 ! END DART PREPROCESS MODULE CODE      
