@@ -177,6 +177,10 @@ integer, parameter, public :: &
 integer, parameter, public :: &
     KIND_WIND_TURBINE_POWER          = 65
 
+! kind for 1d models, obs to a given power
+integer, parameter, public :: &
+    KIND_STATE_VAR_POWER             = 66
+
 ! kinds for planetary remote sensing (wglawson, c.lee)
 integer, parameter, public :: &
     KIND_SKIN_TEMPERATURE            = 70, &
@@ -555,6 +559,7 @@ obs_kind_names(62) = obs_kind_type(KIND_LANDMASK, 'KIND_LANDMASK')
 obs_kind_names(63) = obs_kind_type(KIND_EDGE_NORMAL_SPEED, 'KIND_EDGE_NORMAL_SPEED')
 obs_kind_names(64) = obs_kind_type(KIND_CLW_PATH, 'KIND_CLW_PATH')
 obs_kind_names(65) = obs_kind_type(KIND_WIND_TURBINE_POWER, 'KIND_WIND_TURBINE_POWER')
+obs_kind_names(66) = obs_kind_type(KIND_STATE_VAR_POWER, 'KIND_STATE_VAR_POWER')
 
 obs_kind_names(70) = obs_kind_type(KIND_SKIN_TEMPERATURE, 'KIND_SKIN_TEMPERATURE')
 obs_kind_names(71) = obs_kind_type(KIND_NADIR_RADIANCE, 'KIND_NADIR_RADIANCE')

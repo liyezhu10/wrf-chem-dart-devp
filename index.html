@@ -87,22 +87,21 @@ reading the tutorial documents in the <a href="DART_LAB/DART_LAB.html">DART_LAB<
 and then the <a href="tutorial/index.html">DART/tutorial</a> directory.
 </P>
 <P>
-The latest official release is named "Lanai".  
+The latest official release is named "Manhattan" but it does not
+include support for all the previous models.  Also, after many years
+of maintaining full backwards compatibility with previous releases,
+the Manhattan release is NOT backwards compatible with previous versions.  
+If you cannot use the Manhattan release, this version is named 'Classic' 
+and will continue to be supported.  Serious bugs will be fixed but 
+no new features will be added.
+</P>
+<P>
+Most of the Lanai release information still applies to Classic.
 See the extensive release notes 
 <a href="doc/html/Lanai_release.html">Lanai_release</a>
 which include installation help, a walk-through of building and
 running a model, and then examples of how to use the diagnostics
 to evaluate the success of the assimilation.
-See <a href="doc/html/Lanai_diffs_from_Kodiak.html">Lanai_diffs_from_Kodiak</a>
-for a brief summary of changes since Kodiak, including new functionality,
-new models and tools, and any non-backwards-compatible changes 
-since the Kodiak release.
-</P>
-<P>
-Future releases of DART are expected to have substantial changes 
-and will be less backwards compatible than has been historically 
-true with DART releases.
-New development will continue on a separate subversion branch.
 </P>
 <P>
 Every source file in the DART system has a corresponding .html file that 
@@ -139,13 +138,6 @@ diagnostics, and non-backwards compatible changes.
 </P>
 
 <P>
-For a shorter summary document of only the changes since the last release
-see <a href="doc/html/Lanai_diffs_from_Kodiak.html">Lanai_diffs_from_Kodiak</a>.
-This may be more helpful for current DART users who are 
-looking for pointers to differences when they update.
-</P>
-
-<P>
 Three tutorials, in PDF format, are available.  The first
 is more introductory and interactive with
 <A HREF="DART_LAB/DART_LAB.html">PDF documents and Hands-On 
@@ -175,7 +167,7 @@ part of DART.  For introductory materials, see the links above.
 
 <P>
 Here are the subversion updates which have been
-committed since the original release of the Lanai code:
+committed since the original release of the Classic code.
 </P>
 
 <div>
@@ -188,7 +180,14 @@ committed since the original release of the Lanai code:
 
 <TBODY valign=top>
 
-<!-- blank template for next update
+<!-- The first line should be short and summarize
+ what kind of update this is: bug fix (serious or minor),
+ documentation update only, or code update.
+ Keep the summary short and as general as possible.
+ Gory details go in other html pages and the svn log.
+-->
+
+<!-- blank template for next update.
 <TR><TD>  </TD>
     <TD>  </TD>
     <TD>
@@ -196,67 +195,89 @@ committed since the original release of the Lanai code:
 </TR>
 -->
 
-<TR><TD> 6 May 2014 </TD>
-    <TD> 6983 </TD>
-    <TD> Bug fix for the random number generator code.  One compiler
-(Hitachi) requires full 64 bit constants inside the code.  Also update
-one of the random number generator tests to compile correctly.
+<TR><TD> 1 Dec 2017 </TD>
+    <TD> 12161 </TD>
+    <TD>Added a debug option to the filter namelist, 'write_obs_every_cycle',
+to output the full obs_seq.final during each cycle of filter.  
+(Very slow - use only when debugging a filter crash.)
+    </TD>
+</TR>
+-->
+
+<TR><TD> 21 Nov 2017 </TD>
+    <TD> 12139 </TD>
+    <TD> Added AVISO observation converter.  Added a forward operator
+for 1D models that raises observation values to powers.  
+Fixed some misleading error messages in the obs_sequence_tool.  
+Improved error messages when the wrong string or observation type is 
+read from an observation sequence file. 
+Updates to the Cosmic Ionosphere observation converter for
+electron density observations. Updates to the ROMS model_mod to support
+a Mean Dynamic Topography field.  Fix for CAM CESM 1.2.1 scripts
+when more than a single SourceMod file is present in a directory.
     </TD>
 </TR>
 
-<TR><TD> 21 Apr 2014 </TD>
-    <TD> 6905 </TD>
-    <TD> Bug fix for time manager code for NAG compiler only.
-It was doing a numerical computation in an unexpected (but legal) order.
-Resulted in all time values in NAG-compiled code having 0 seconds 
-instead of the correct value.
+<TR><TD> 7 Aug 2017 </TD>
+    <TD> 11885 </TD>
+    <TD> Updates to the CESM 1.2.1 scripts for CAM.
     </TD>
 </TR>
 
-<TR><TD> 11 Apr 2014 </TD>
-    <TD> 6881 </TD>
-    <TD> Bug fix in the MPAS-ATM model_mod code which was doing the
-wrong computation for log pressure vertical interpolation.
+<TR><TD> 2 Jun 2017 </TD>
+    <TD> 11695 </TD>
+    <TD> Updates to DART_LAB user interfaces and Matlab diagnostics.
     </TD>
 </TR>
 
-<TR><TD> 10 Apr 2014 </TD>
-    <TD> 6879 </TD>
-    <TD> Bug fix in <em class=file>wrf_dart_obs_preprocess</em> if the case
-had multiple domains defined.  Was increasing obs error values near the
-domain boundaries for nested domains, not just the exterior domains.
+<TR><TD> 22 Mar 2017 </TD>
+    <TD> 11388 </TD>
+    <TD> Adding Jon Poterjoy's particle filter version
+of the assim_tools module.
     </TD>
 </TR>
 
-<TR><TD> 12 Feb 2014 </TD>
-    <TD> 6801 </TD>
-    <TD> Performance improvements in the MPAS-ATM model_mod.  Minor updates to the
-CESM scripts.  Use 'head -n' and 'tail -n' in scripts for portability reasons.
-Fix confusing comments in a few scripts. Fix default values in some namelists.
-    </TD>
-</TR>
-
-<TR><TD> 31 Dec 2013 </TD>
-    <TD> 6708 </TD>
-    <TD> Documentation update about Matlab toolbox requirements.
-    </TD>
-</TR>
-
-<TR><TD> 17 Dec 2013 </TD>
-    <TD> 6686 </TD>
-    <TD> Minor updates to the default values in several of the input.nml namelists.
-    </TD>
-</TR>
-
-<TR><TD> 13 Dec 2013 </TD>
-    <TD> 6681 </TD>
-    <TD> Original Lanai release.
+<TR><TD> 15 Mar 2017 </TD>
+    <TD> 11352 </TD>
+    <TD> Original Classic release.
     </TD>
 </TR>
 
 </TABLE>
-<div>
+</div>
 <br />
+
+<P>
+To update a checked-out version of DART to the most recent
+version of this release, cd into the top level directory and run:
+</P>
+<pre>
+  svn update
+</pre>
+<P>
+To see the commit log messages and the filenames of changed
+files from subversion, cd into the top level DART directory and run:
+</P>
+<pre>
+  svn log -v -r xxxx
+</pre>
+<P>
+where <i>xxxx</i> is the revision number.
+<br />
+<br />
+To see the code differences in a particular file, cd into
+the directory with the file you want to compare and run:
+</P>
+<pre>
+ svn diff -r xxxx filename
+</pre>
+<P>
+where <i>xxxx</i> is the revision number.
+</P>
+
+<P><!-- make sure the 'top' is aligned correctly --></P>
+
+
 
 <!--==================================================================-->
 
@@ -633,7 +654,6 @@ the other categories.
 
 <UL style="list-style: none;">
 <LI><A HREF='doc/html/Lanai_release.html'>Lanai release notes</A></LI>
-<LI><A HREF='doc/html/Lanai_diffs_from_Kodiak.html'>Brief summary of Lanai differences from Kodiak</A></LI>
 <LI><A HREF='doc/html/mpi_intro.html'>MPI intro</A></LI>
 <LI><A HREF='doc/html/filter_async_modes.html'>Filter 'async' modes</A></LI>
 <LI><A HREF='doc/html/history/ASP_DART_exercise.html'>ASP DART exercises</A></LI>
@@ -673,7 +693,6 @@ all model_mod source files in the DART distribution tree:
 <LI><A href="doc/html/history/DART_ASP_Summer2003.html">doc/html/DART_ASP_Summer2003</A></LI>
 <LI><A href="doc/html/filter_async_modes.html">doc/html/filter_async_modes</A></LI>
 <LI><A href="doc/html/header.html">doc/html/header</A></LI>
-<LI><A href="doc/html/Lanai_diffs_from_Kodiak.html">doc/html/Lanai_diffs_from_Kodiak</A></LI>
 <LI><A href="doc/html/Lanai_release.html">doc/html/Lanai_release</A></LI>
 <LI><A href="doc/html/mpi_intro.html">doc/html/mpi_intro</A></LI>
 <LI><A href="ensemble_manager/ensemble_manager_mod.html">ensemble_manager/ensemble_manager_mod</A></LI>
