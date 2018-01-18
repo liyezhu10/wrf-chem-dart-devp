@@ -8,6 +8,25 @@
 !> this is the interface between the cam-fv atmosphere model and dart.
 !> the required public interfaces and arguments cannot be changed.
 !>
+!>@todo FIXME: feedback from WACCM-X meeting
+!>  they need to build a special factor for the height conversion
+!>  it's multiplied by G, so the code in build_heights() has to
+!>  change slightly - they aren't passing in a different R array.
+!>
+!>  test if the constants can be used from types_mod.f90 instead of
+!>  having gravity and r redefined here.
+!>
+!>  not sure about generic height table for rejecting high obs - but
+!>  it's not clear model_interpolate should be rejecting high obs
+!>  at all. suggestions are we cull them from the input obs_seq before
+!>  the run.  in that case we can take it out!
+!>
+!>  going to try to move the oxygen ion density code to a forward
+!>  operator in an obs_def_xxx_mod.f90.
+!>
+!>  test with identity obs to make sure get_close_xx() doesn't need
+!>  special code to handle them.
+!>
 !----------------------------------------------------------------
 
 module model_mod
@@ -1137,11 +1156,8 @@ endif
 select case (obs_qty)
    case (QTY_SURFACE_ELEVATION, &
          QTY_PRESSURE, &
-         QTY_SPECIFIC_HUMIDITY, &
-         QTY_GEOPOTENTIAL_HEIGHT,  &
-         QTY_PRECIPITABLE_WATER, &
          QTY_GEOMETRIC_HEIGHT, &
-         QTY_VERTLEVEL)
+         QTY_VERTLEVEL)    ! add QTY_OXYGEN_ION_DENSITY here for waccm-x
       my_status = 0
    case default
       my_status = 2
@@ -2660,7 +2676,7 @@ real(r8), intent(out), optional :: height_interf(nlevels+1) ! Geopotential heigh
 real(r8), intent(in),  optional :: variable_r(nlevels)      ! Dry air gas constant, if varies, top to bottom
 
 ! Local variables
-!>@todo have a model constants module?
+!>@todo FIXME can we use the types_mod values here?  or have a model constants module?
 real(r8), parameter :: const_r = 287.04_r8    ! Different than model_heights (dry air gas constant)
 real(r8), parameter :: g0 = 9.80616_r8        ! Different than model_heights (gph2gmh:G) !
 
@@ -2675,9 +2691,9 @@ real(r8) :: pm_ln(nlevels+1) ! logs of midpoint pressures plus surface interface
 ! models like waccm change the gas constant with height.
 ! allow for the calling code to pass in an array of r.
 if (present(variable_r)) then
-   r_g0_tv(:) = variable_r(:) / g0 * virtual_temp(:)
+   r_g0_tv(:) = (variable_r(:) / g0) * virtual_temp(:)
 else
-   r_g0_tv(:) = const_r       / g0 * virtual_temp(:)
+   r_g0_tv(:) = (const_r       / g0) * virtual_temp(:)
 endif
 
 ! calculate the log of the pressure column midpoints.
