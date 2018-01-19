@@ -46,7 +46,7 @@
 ! SAT_F107,                        QTY_1D_PARAMETER,               COMMON_CODE
 ! SAT_RHO,                         QTY_DENSITY
 ! GPS_PROFILE,                     QTY_ELECTRON_DENSITY,           COMMON_CODE
-! COSMIC_ELECTRON_DENSITY,         QTY_ELECTRON_DENSITY,           COMMON_CODE
+! COSMIC_ELECTRON_DENSITY,         QTY_ELECTRON_DENSITY
 ! GND_GPS_VTEC,		           QTY_GND_GPS_VTEC
 ! CHAMP_DENSITY,                   QTY_DENSITY
 ! MIDAS_TEC,                       QTY_VERTICAL_TEC
@@ -75,7 +75,7 @@
 !      call get_expected_gnd_gps_vtec(state_handle, ens_size, location, expected_obs, istatus)
 ! case(SSUSI_O_N2_RATIO)
 !      call get_expected_O_N2_ratio(state_handle, ens_size, location, expected_obs, istatus)
-! case(3000)   ! what obs types need this routine?  replace -2 with an obs type
+! case(COSMIC_ELECTRON_DENSITY)
 !      call get_expected_oxygen_ion_density(state_handle, ens_size, location, expected_obs, istatus)
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 
@@ -90,7 +90,7 @@
 !      continue
 ! case(SSUSI_O_N2_RATIO)
 !      continue
-! case(3000)
+! case(COSMIC_ELECTRON_DENSITY)
 !      continue
 ! END DART PREPROCESS READ_OBS_DEF
 
@@ -105,7 +105,7 @@
 !      continue
 ! case(SSUSI_O_N2_RATIO)
 !      continue
-! case(3000)
+! case(COSMIC_ELECTRON_DENSITY)
 !      continue
 ! END DART PREPROCESS WRITE_OBS_DEF
 
@@ -120,7 +120,7 @@
 !      continue
 ! case(SSUSI_O_N2_RATIO)
 !      continue
-! case(3000)
+! case(COSMIC_ELECTRON_DENSITY)
 !      continue
 ! END DART PREPROCESS INTERACTIVE_OBS_DEF
 
