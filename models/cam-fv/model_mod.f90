@@ -51,9 +51,11 @@ use         utilities_mod,  only : find_namelist_in_file, check_namelist_read, &
                                    file_exist, to_upper, E_ERR, E_MSG
 use          obs_kind_mod,  only : QTY_SURFACE_ELEVATION, QTY_PRESSURE, &
                                    QTY_GEOMETRIC_HEIGHT, QTY_VERTLEVEL, &
-                                   QTY_SURFACE_PRESSURE, QTY_PRECIPITABLE_WATER, &
+                                   QTY_SURFACE_PRESSURE, &
                                    QTY_TEMPERATURE, QTY_SPECIFIC_HUMIDITY, &
-                                   QTY_GEOPOTENTIAL_HEIGHT,  &
+                                   QTY_MOLEC_OXYGEN_MIXING_RATIO, &
+                                   QTY_ION_O_MIXING_RATIO, QTY_ATOMIC_H_MIXING_RATIO, &
+                                   QTY_ATOMIC_OXYGEN_MIXING_RATIO, QTY_NITROGEN, &
                                    get_index_for_quantity, get_num_quantities, &
                                    get_name_for_quantity, get_quantity_for_type_of_obs
 use     mpi_utilities_mod,  only : my_task_id
@@ -137,6 +139,7 @@ logical            :: custom_routine_to_generate_ensemble = .false.
 character(len=32)  :: fields_to_perturb(MAX_PERT)     = "QTY_TEMPERATURE"
 real(r8)           :: perturbation_amplitude(MAX_PERT)= 0.00001_r8
 logical            :: using_chemistry                 = .false.
+logical            :: use_variable_mean_mass          = .false.
 
 ! state_variables defines the contents of the state vector.
 ! each line of this input should have the form:
@@ -166,6 +169,8 @@ namelist /model_nml/  &
    custom_routine_to_generate_ensemble, &
    fields_to_perturb,               &
    perturbation_amplitude,          &
+   use_variable_mean_mass,          &
+   using_chemistry,                   &
    debug_level
 
 ! global variables
@@ -837,8 +842,8 @@ interp_vals(:) = MISSING_R8
 istatus(:)     = 99
 
 interp_handle = get_interp_handle(obs_qty)
-lon_lat_vert = get_location(location)
-which_vert = nint(query_location(location)) 
+lon_lat_vert  = get_location(location)
+which_vert    = nint(query_location(location)) 
 
 call quad_lon_lat_locate(interp_handle, lon_lat_vert(1), lon_lat_vert(2), &
                          four_lons, four_lats, lon_fract, lat_fract, istatus(1))
@@ -965,7 +970,6 @@ if (numdims == 3) then
                                 varid, quad_vals, my_status)
 
    else ! get 3d special variables in another ways ( like QTY_PRESSURE )
-
       call get_four_nonstate_values(state_handle, ens_size, four_lons, four_lats, &
                                    four_bot_levs, four_top_levs, four_vert_fracts, &
                                    obs_qty, quad_vals, my_status)
@@ -1412,14 +1416,8 @@ integer,             intent(out) :: my_status(ens_size)
 
 integer  :: k, level_one, imember, status1
 real(r8) :: surface_elevation(1)
-real(r8) :: temperature(ens_size), specific_humidity(ens_size), surface_pressure(ens_size)
+real(r8) :: surface_pressure(ens_size), mbar(ens_size, nlevels)
 real(r8) :: tv(nlevels, ens_size)  ! Virtual temperature, top to bottom
-
-!>@todo this should come from a model specific constant module.
-!> the forward operators and model_mod should use it.
-real(r8), parameter :: rd = 287.05_r8 ! dry air gas constant
-real(r8), parameter :: rv = 461.51_r8 ! wet air gas constant
-real(r8), parameter :: rr_factor = (rv/rd) - 1.0_r8
 
 ! this is for surface obs
 level_one = 1
@@ -1436,36 +1434,33 @@ call get_quad_values(1, lon_index, lat_index, QTY_SURFACE_ELEVATION, qty, surfac
 ! DEBUG
 !print*, 'lon lat surf elev ', lon_index, lat_index, surface_elevation
 
-! construct a virtual temperature column, one for each ensemble member
-do k = 1, nlevels
-   ! temperature
-   call get_staggered_values_from_qty(ens_handle, ens_size, QTY_TEMPERATURE, &
-                                     lon_index, lat_index, k, qty, temperature, status1)
+call compute_virtual_temperature(ens_handle, ens_size, lon_index, lat_index, nlevels, qty, tv, status1)
 
-   ! specific humidity
-   call get_staggered_values_from_qty(ens_handle, ens_size, QTY_SPECIFIC_HUMIDITY, &
-                                     lon_index, lat_index, k, qty, specific_humidity, status1)
-   !>tv == virtual temperature.
-   tv(k,:) = temperature(:)*(1.0_r8 + rr_factor*specific_humidity(:))
-enddo
+if (status1 /= 0) then
+   my_status = status1
+   return
+endif
+
+if (use_variable_mean_mass) then
+  call compute_mean_mass(ens_handle, ens_size, lon_index, lat_index, nlevels, qty, mbar, status1)
+
+  if (status1 /= 0) then
+     my_status = status1
+     return
+  endif
+else
+   mbar(:,:) = 1.0_r8
+endif
 
 ! compute the height columns for each ensemble member
 do imember = 1, ens_size
-   call build_heights(nlevels, surface_pressure(imember), surface_elevation(1), tv(:, imember), &
-                      height_array(:, imember))  ! can pass in variable_r here
+   call build_heights(nlevels, surface_pressure(imember), surface_elevation(1), &
+                      tv(:, imember), mbar, &
+                      height_array(:, imember), mbar)
 enddo
 
 ! convert entire array to geometric height (from potential height)
 call gph2gmh(height_array, grid_data%lat%vals(lat_index))
-
-! JPH DEBUG
-! if (debug_level > 100) then
-!    do k = 1,nlevels
-!      do imember = 1, ens_size
-!        print *, "member, level, height: ", imember, k, height_array(k, imember)
-!      enddo
-!    enddo
-! endif
 
 my_status(:) = 0
 
@@ -2603,6 +2598,109 @@ call nc_close_file(ncid, routine)
 
 end subroutine read_cam_phis_array
 
+
+!-----------------------------------------------------------------------
+!> Compute the virtual temperature at the midpoints
+!>
+!> this version does all ensemble members at once.
+!>
+
+subroutine compute_virtual_temperature(ens_handle, ens_size, lon_index, lat_index, nlevels, qty, tv, istatus)
+
+type(ensemble_type), intent(in)   :: ens_handle
+integer,             intent(in)   :: ens_size
+integer,             intent(in)   :: lon_index
+integer,             intent(in)   :: lat_index
+integer,             intent(in)   :: nlevels
+integer,             intent(in)   :: qty
+real(r8),            intent(out)  :: tv(ens_size, nlevels)
+integer,             intent(out)  :: istatus
+
+integer :: k
+real(r8) :: temperature(ens_size), specific_humidity(ens_size)
+
+!>@todo this should come from a model specific constant module.
+!> the forward operators and model_mod should use it.
+real(r8), parameter :: rd = 287.05_r8 ! dry air gas constant
+real(r8), parameter :: rv = 461.51_r8 ! wet air gas constant
+real(r8), parameter :: rr_factor = (rv/rd) - 1.0_r8
+
+
+! construct a virtual temperature column, one for each ensemble member
+do k = 1, nlevels
+   ! temperature
+   call get_staggered_values_from_qty(ens_handle, ens_size, QTY_TEMPERATURE, &
+                                     lon_index, lat_index, k, qty, temperature, istatus)
+
+   if (istatus < 0) return
+
+   ! specific humidity
+   call get_staggered_values_from_qty(ens_handle, ens_size, QTY_SPECIFIC_HUMIDITY, &
+                                     lon_index, lat_index, k, qty, specific_humidity, istatus)
+   if (istatus < 0) return
+
+   !>tv == virtual temperature.
+   tv(k,:) = temperature(:)*(1.0_r8 + rr_factor*specific_humidity(:))
+enddo
+
+
+end subroutine compute_virtual_temperature
+
+
+!-----------------------------------------------------------------------
+!> loop through all levels to get the mean mass.
+!>
+
+subroutine compute_mean_mass(ens_handle, ens_size, lon_index, lat_index, nlevels, qty, mbar, istatus)
+type(ensemble_type), intent(in)  :: ens_handle
+integer,             intent(in)  :: ens_size
+integer,             intent(in)  :: lon_index
+integer,             intent(in)  :: lat_index
+integer,             intent(in)  :: nlevels
+integer,             intent(in)  :: qty
+real(r8),            intent(out) :: mbar(ens_size, nlevels)
+integer,             intent(out) :: istatus
+
+integer :: k
+real(r8) :: mmr_o1(ens_size, nlevels), &
+            mmr_o2(ens_size, nlevels), &
+            mmr_h1(ens_size, nlevels), &
+            mmr_n2(ens_size, nlevels)
+real(r8) :: O_molar_mass, O2_molar_mass, H_molar_mass, N2_molar_mass 
+
+
+! High topped models (WACCM-X) need to account for the changing composition 
+! of the atmosphere with height.  This requires several variables from the
+! initial file, which may not be available from low topped models.
+do k = 1, nlevels
+
+   call get_staggered_values_from_qty(ens_handle, ens_size, QTY_ATOMIC_OXYGEN_MIXING_RATIO, & 
+                                      lon_index, lat_index, k, qty, mmr_o1(:,k), istatus)
+   if (istatus /= 0) return
+   
+   call get_staggered_values_from_qty(ens_handle, ens_size, QTY_MOLEC_OXYGEN_MIXING_RATIO, & 
+                                      lon_index, lat_index, k, qty, mmr_o2(:,k), istatus)
+   if (istatus /= 0) return
+   
+   call get_staggered_values_from_qty(ens_handle, ens_size, QTY_ATOMIC_H_MIXING_RATIO, &
+                                      lon_index, lat_index, k, qty, mmr_h1(:,k), istatus)
+   if (istatus /= 0) return
+   
+   O_molar_mass  = chem_convert_factor(QTY_ATOMIC_OXYGEN_MIXING_RATIO)
+   O2_molar_mass = chem_convert_factor(QTY_ION_O_MIXING_RATIO)
+   H_molar_mass  = chem_convert_factor(QTY_ATOMIC_H_MIXING_RATIO)
+   N2_molar_mass = chem_convert_factor(QTY_NITROGEN)
+   
+   mmr_n2(:,k) = 1.0_r8 - (mmr_o1(:,k) + mmr_o2(:,k) + mmr_h1(:,k))
+   mbar(:,k) = 1.0_r8/( mmr_o1(:,k)/O_molar_mass  &
+                      + mmr_o2(:,k)/O2_molar_mass &
+                      + mmr_h1(:,k)/H_molar_mass  &
+                      + mmr_n2(:,k)/N2_molar_mass)
+enddo
+
+end subroutine compute_mean_mass
+
+
 !#! !real(r8) :: p_surf = 100183.18209922672_r8
 !#! !real(r8) :: h_surf = 329.4591445914210794_r8
 !#! !!tvX:
@@ -2665,7 +2763,7 @@ end subroutine read_cam_phis_array
 !>   "midpoints") not half levels.
 !>
 
-subroutine build_heights(nlevels,p_surf,h_surf,virtual_temp,height_midpts,height_interf,variable_r)
+subroutine build_heights(nlevels,p_surf,h_surf,virtual_temp,height_midpts,height_interf,mbar)
 
 integer,  intent(in)  :: nlevels                            ! Number of vertical levels
 real(r8), intent(in)  :: p_surf                             ! Surface pressure (pascals)
@@ -2673,7 +2771,7 @@ real(r8), intent(in)  :: h_surf                             ! Surface height (m)
 real(r8), intent(in)  :: virtual_temp( nlevels)             ! Virtual Temperature
 real(r8), intent(out) :: height_midpts(nlevels)             ! Geopotential height at midpoints, top to bottom
 real(r8), intent(out), optional :: height_interf(nlevels+1) ! Geopotential height at interfaces, top to bottom
-real(r8), intent(in),  optional :: variable_r(nlevels)      ! Dry air gas constant, if varies, top to bottom
+real(r8), intent(in),  optional :: mbar(nlevels) !>@todo FIXME : is this simply average moisure???
 
 ! Local variables
 !>@todo FIXME can we use the types_mod values here?  or have a model constants module?
@@ -2690,10 +2788,10 @@ real(r8) :: pm_ln(nlevels+1) ! logs of midpoint pressures plus surface interface
 ! cam uses a uniform gas constant value, but high top
 ! models like waccm change the gas constant with height.
 ! allow for the calling code to pass in an array of r.
-if (present(variable_r)) then
-   r_g0_tv(:) = (variable_r(:) / g0) * virtual_temp(:)
+if (present(mbar)) then
+   r_g0_tv(:) = (const_r / g0*mbar(:)) * virtual_temp(:)
 else
-   r_g0_tv(:) = (const_r       / g0) * virtual_temp(:)
+   r_g0_tv(:) = (const_r / g0) * virtual_temp(:)
 endif
 
 ! calculate the log of the pressure column midpoints.
@@ -3155,6 +3253,7 @@ integer :: current_vert_type, i
 do i=1,num
    current_vert_type = nint(query_location(locs(i)))
    if ( current_vert_type == which_vert ) cycle
+
    if ( current_vert_type == VERTISUNDEF) cycle
 
    select case (which_vert)
@@ -3199,10 +3298,13 @@ if (my_status /= 0) return
 
 call interpolate_values(ens_handle, ens_size, location, &
                         qty, varid, pressure_array(:), status(:))
+
+
 if (status(1) /= 0) then
    my_status = status(1)
    return
 endif
+
 call set_vertical(location, pressure_array(1), VERTISPRESSURE)
 
 end subroutine obs_vertical_to_pressure
@@ -3697,12 +3799,6 @@ do i=1, num_close
       endif
 
    endif
-
-!call write_location(0, base_loc,   charstring=string1)
-!call write_location(0, locs(this), charstring=string2)
-!print *, 'get_close_state: distance between '
-!print *, trim(string1)
-!print *, trim(string2)
 
    dist(i) = get_dist(base_loc, locs(this))
 

@@ -133,6 +133,8 @@ use     location_mod, only : location_type, get_location, set_location, &
                              VERTISHEIGHT, VERTISLEVEL
 use  assim_model_mod, only : interpolate
 use     obs_kind_mod, only : QTY_ATOMIC_OXYGEN_MIXING_RATIO, &
+                             QTY_ATOMIC_H_MIXING_RATIO, &
+                             QTY_ION_O_MIXING_RATIO, &
                              QTY_MOLEC_OXYGEN_MIXING_RATIO, &
                              QTY_TEMPERATURE, &
                              QTY_PRESSURE, &
@@ -164,9 +166,11 @@ logical, save :: module_initialized = .false.
 real(r8), PARAMETER :: N2_molar_mass = 28.0_r8
 real(r8), PARAMETER :: O_molar_mass  = 16.0_r8
 real(r8), PARAMETER :: O2_molar_mass = 32.0_r8
+real(r8), PARAMETER :: H_molar_mass  =  1.0_r8
+! WACCM-X; put into common/types_mod.f90?
+real(r8), PARAMETER :: kboltz = 1.380648E-23_r8    ! [N*m/K]
 real(r8), PARAMETER :: universal_gas_constant = 8314.0_r8 ! [J/K/kmol]
 integer,  PARAMETER :: MAXLEVELS = 100 ! more than max levels expected in the model 
-
 character(len=512) :: string1, string2, string3
 
 contains
@@ -578,7 +582,8 @@ real(r8),            intent(out) :: obs_val(ens_size)
 
 real(r8), dimension(ens_size)  :: mmr_o1, mmr_o2, mmr_n2, mmr_h1, mmr_op   ! mass mixing ratio 
 real(r8), dimension(ens_size)  :: mbar, pressure, temperature 
-integer,  dimension(ens_size)  :: vstatus
+integer,  dimension(ens_size)  :: this_istatus
+logical :: return_now
 
 istatus = 0 ! Need to have istatus = 0 for track_status()
 
@@ -586,7 +591,7 @@ call interpolate(state_handle, ens_size, location, QTY_ATOMIC_OXYGEN_MIXING_RATI
 call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
 if (return_now) return
 
-call interpolate(state_handle, ens_size, location, QTY_MOLEC_OXYGEN_MIXING_RATIO, mmr_o2,, this_istatus)
+call interpolate(state_handle, ens_size, location, QTY_MOLEC_OXYGEN_MIXING_RATIO, mmr_o2, this_istatus)
 call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
 if (return_now) return
 
@@ -613,13 +618,15 @@ if (return_now) return
 !------------------------------------------------------------------------------------------------------
 ! WACCM-X .i file pressure unit is Pa 
 
-where (istatus == 0) mmr_n2 = 1.0_r8 - (mmr_o1 + mmr_o2 + mmr_h1)
-where (istatus == 0) mbar = 1.0_r8/( mmr_o1/O_molar_mass   &
-                           + mmr_o2/O2_molar_mass  &
-                           + mmr_h1/H_molar_mass   &
-                           + mmr_n2/N2_molar_mass)
+where (istatus == 0) 
+   mmr_n2 = 1.0_r8 - (mmr_o1 + mmr_o2 + mmr_h1)
+   mbar   = 1.0_r8/( mmr_o1/O_molar_mass   &
+                   + mmr_o2/O2_molar_mass  &
+                   + mmr_h1/H_molar_mass   &
+                   + mmr_n2/N2_molar_mass)
 
-where (istatus == 0) obs_val = mmr_op * mbar/O_molar_mass * pressure/(kboltz * temperature) * 1.E-06_r8
+   obs_val = mmr_op * mbar/O_molar_mass * pressure/(kboltz * temperature) * 1.E-06_r8
+end where
 
 end subroutine get_expected_oxygen_ion_density
 
