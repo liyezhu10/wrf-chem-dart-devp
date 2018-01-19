@@ -73,9 +73,13 @@ do i=0, num_qtys
 enddo
 
 ! and now add entries for real items
-call add_entry('O3',   47.9982_r8, 'QTY_O3')
-call add_entry('O',    15.9994_r8, 'QTY_O')
+!>todo FIXME : is this correct, or should we be using QTY_O?
+call add_entry('H',     1.0_r8,    'QTY_ATOMIC_H_MIXING_RATIO')
+call add_entry('O',    15.9994_r8, 'QTY_ATOMIC_OXYGEN_MIXING_RATIO')
 call add_entry('O1D',  15.9994_r8, 'QTY_O1D')
+call add_entry('N2',   28.0_r8,    'QTY_NITROGEN')
+call add_entry('O2',   32.0_r8,    'QTY_ION_O_MIXING_RATIO')
+call add_entry('O3',   47.9982_r8, 'QTY_O3') 
 
 !%!  'N2O                            ',       44.01288,     'QTY_N2O                         ', &
 !%!  'NO                             ',       30.00614,     'QTY_NO                          ', &
