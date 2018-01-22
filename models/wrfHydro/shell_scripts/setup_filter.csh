@@ -1,5 +1,7 @@
 #!/bin/csh
+#
 # ex: setup_filter.csh forceCopyDartBuildScripts forceCopyDartScripts forceCopyModelParams
+#
 #==============================================================================
 # DART software - Copyright 2004 - 2013 UCAR. This open source software is
 # provided by UCAR, "as is", without charge, subject to all terms of use at
@@ -33,6 +35,10 @@
 #   centralDir is a "DART" dir in a location-centric wrfHydro dir, it needs to have 
 #     everything above it in place as shown below, except for RUN.xyz/ and OBSERVATIONS/. 
 
+# (r) = required, (o) = optional, (c) = created/managed by this routine,
+# (a) = created in the assimilation,
+# (x) = created/destroyed by dart, must not exist after the run or it's an error (advance_model.csh)
+
 # location (this is typically defined by a location/domain for wrfHydro)
 #      |
 #      + DOMAIN.xyz/ 
@@ -44,11 +50,17 @@
 
 #      + RUN.xyz/  (example of a non-dart run directory setup for reference)    
 #               |
+#               + DOMAIN.xyz/ 
+#               + FORCING.xyz/
+#               + PARAMS.noah.xyz/
+#               + PARAMS.noahMP.xyz/
+#               + PARAMS.hydro.xyz/
+#               + OBSERVATIONS/
 #               + wrf_hydro.exe (-> e.g. wrf_hydro_NoahMP.parallel.exe)   
 #               + *.TBL  -> can be symlinks to ../PARAMS.* or copies.
-#               + namelist.hrldas.xyz
-#               + namelist.hrldas -> namelist.hrldas.xyz
-#               + hydro.namelist.xyz
+#               + namelist.hrldas.xyz (do not use ../ for any files paths, only use ./)
+#               + namelist.hrldas -> namelist.hrldas.xyz 
+#               + hydro.namelist.xyz (do not use ../ for any files paths, only use ./)
 #               + hydro.namelist -> hydro.namelist.xyz
 #               + LOGS/
 #               + OUTPUT/  this can only be specified for noah, not MP nor hydro
@@ -56,11 +68,17 @@
 
 #      + DART.xyz = $centralDir
 #               | (The symlinks are only suggestions)
+#               + DOMAIN.xyz/ 
+#               + FORCING.xyz/
+#               + PARAMS.noah.xyz/
+#               + PARAMS.noahMP.xyz/
+#               + PARAMS.hydro.xyz/
+#               + OBSERVATIONS/
 #               +(r) wrf_hydro.exe (-> e.g. wrf_hydro_NoahMP.parallel.exe)   
 #               +(r) input.nml -> input.nml.xyz  (these *.xyz are likely all in this folder too)
 #               +(r) obs_seq.out -> OBSERVATIONS/obs_seq.out.xyz
-#               +(r) namelist.hrldas -> namelist.hrldas.xyz
-#               +(r) hydro.namelist -> hydro.namelist.xyz
+#               +(r) namelist.hrldas -> namelist.hrldas.xyz (do not use ../ for files paths, use ./)
+#               +(r) hydro.namelist -> hydro.namelist.xyz  (do not use ../ for files paths, use ./)
 #               +(r) DOMAIN/ ->. ../DOMAIN.xyz
 #               +(r) PARAMS.noah/ -> ../PARAMS.noah.xyz         (either this line required
 #               +(r) PARAMS.noahMp/ -> ../PARAMS.noahMP.xyz      or this line, not both)
@@ -135,9 +153,6 @@
 
 #               
 
-# (r) = required, (o) = optional, (c) = created/managed by this routine,
-# (a) = created in the assimilation,
-# (x) = created/destroyed by dart, must not exist after the run or it's an error (advance_model.csh)
 
 # iEns = 4 digit integer indicating the ith ensemble member
 #
@@ -166,13 +181,25 @@ set centralDir = `pwd`
 echo 
 echo 'centralDir =' $centralDir
 
-## where we look for dart 
-set dartDir = /home/jamesmcc/DART/wrfHydro/models/wrfHydro
+## where we look for dart. Put the following in a ~/.wrf_hydro_tools file
+set whtConfigFile=~/.wrf_hydro_tools   ## please dont commit changes
+set whtFileMessage="\e[31mPlease create a $whtConfigFile file to contain wrf_hydro_dart=path/to/wrf_hydro_dart\e[0m"
+if ( ! -e $whtConfigFile ) then
+    echo "$whtFileMessage"
+    exit 1
+endif
+set dartDir = `grep "wrf_hydro_dart=" $whtConfigFile | cut -d '=' -f2 | tr -d ' '` 
+echo $dartDir
+if ( $dartDir == '' ) then
+    echo "$whtFileMessage"
+    exit 2
+endif
+
 echo 'dartDir =' $dartDir
 
 #==============================================================================#
 # copy this script, why not?
-set setupFilterSource = ${dartDir}/shell_scripts/setup_filter.csh 
+set setupFilterSource = ${dartDir}/models/wrfHydro/shell_scripts/setup_filter.csh 
 set setupFilterTarget = setup_filter.csh
 if ( -e $setupFilterTarget ) then 
     if ( `diff -q $setupFilterSource $setupFilterTarget` !~ '' ) then 
@@ -203,6 +230,8 @@ if ( $forceCopyAll ) then
     @ forceCopyDartScripts = 1 
     @ forceCopyModelParams = 1
 endif 
+echo "forceCopyAll: $forceCopyAll"
+
 
 #==============================================================================
 # Set the commands so we can avoid problems with aliases, etc.
@@ -225,34 +254,34 @@ set REMOVE = '/bin/rm -fr'
 # Clean up previous runs
 # Destroy all previous output for the sake of clarity.
 mv OUTPUT OUTPUT.DESTROYING
-\rm -rf OUTPUT.DESTROYING &
+\rm -rf OUTPUT.DESTROYING
 mkdir OUTPUT
 
-\rm -rf advance_temp*
-\rm -f  assim_model_state_ic.*
-\rm -f  assim_model_state_ud.*
-\rm -f  dart_log.*
-\rm -f  filter_control*
-\rm -f  filter_ics.*
-\rm -f  filter_lock*
-\rm -f  filter.log
+\rm -rf advance_temp*          
+\rm -f  assim_model_state_ic.* 
+\rm -f  assim_model_state_ud.* 
+\rm -f  dart_log.*             
+\rm -f  filter_control*        
+\rm -f  filter_ics.*           
+\rm -f  filter_lock*            
+\rm -f  filter.log              
 \rm -f  filter_to_model.lock
-\rm -f  filter_restart.*
-\rm -f  restart*.nc
-\rm -f  model_to_filter.lock
-\rm -f  Posterior_Diag.nc
-\rm -f  Prior_Diag.nc
-\rm -f  nodeDir.control
+\rm -f  filter_restart.*        
+\rm -f  restart*.nc             
+\rm -f  model_to_filter.lock    
+\rm -f  Posterior_Diag.nc       
+\rm -f  Prior_Diag.nc          
+\rm -f  nodeDir.control        
 
 #==============================================================================
 # Check for required  files and dirs (excluding parameters)
+## JLM remove obs_seq.out because it might not yet be created (and want to stage the binary for creating it)
 foreach FILE ( obs_seq.out input.nml wrf_hydro.exe namelist.hrldas hydro.namelist DOMAIN FORCING )
     if (! -e ${FILE} ) then
       echo "MISSING file: ${centralDir}/${FILE}"
       exit 2
    endif
 end
-
 
 #===============================================================================
 # Enforce some common sense namelist settings. 
@@ -267,7 +296,7 @@ set MYSTRING = `echo $MYSTRING | cut -d'!' -f1 | sed -e "s#[=,']# #g"`
 set MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
 set restartFile = `echo $MYSTRING[$#MYSTRING]`
 if ($restartFile !~ 'restart.nc' & $restartFile !~ './restart.nc' ) then
-    echo "The restart file (restart.nc) appears improperly specified in namelist.hrldas"
+    echo "namelist.hrldas: The restart file (restart.nc) appears improperly specified in namelist.hrldas"
     exit 2
 endif 
 
@@ -277,7 +306,7 @@ set MYSTRING = `echo $MYSTRING | cut -d'!' -f1 | sed -e "s#[=,']# #g"`
 set MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
 set hydroRestartFile = `echo $MYSTRING[$#MYSTRING]`
 if ($hydroRestartFile !~ 'restart.hydro.nc' & $hydroRestartFile !~ './restart.hydro.nc' ) then
-    echo "The restart file (restart.hydro.nc) appears improperly specified in hydro.namelist"
+    echo "hydro.namelist: The restart file (restart.hydro.nc) appears improperly specified in hydro.namelist"
     exit 2
 endif 
 
@@ -289,7 +318,7 @@ set MYSTRING = `echo $MYSTRING | cut -d'!' -f1  | sed -e "s#[=,']# #g"`
 set MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
 set KHOUR = `echo $MYSTRING[$#MYSTRING]`
 if ($KHOUR !~ '1') then
-    echo "KHOUR needs to be == 1 or you will hate life and filter will be crazy."
+    echo "namelist.hrldas: KHOUR needs to be == 1 or you will hate life and filter will be crazy."
     exit 2
 endif 
 
@@ -300,7 +329,7 @@ set MYSTRING = `echo $MYSTRING | cut -d'!' -f1 | sed -e "s#[=,']# #g"`
 set MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
 set rstDt = `echo $MYSTRING[$#MYSTRING]`
 if ($rstDt !~ '60') then
-    echo "rstDt needs to be == 60."
+    echo "hydro.namelist: rst_dt needs to be == 60."
     exit 2
 endif 
 
@@ -308,7 +337,7 @@ endif
 ## might do something to make sure this dosent/exist is unique... 
 
 # WRFINPUT
-set MYSTRING = `grep HRLDAS_CONSTANTS_FILE namelist.hrldas | tr -d ' '| egrep -v '^[!\]'`
+set MYSTRING = `grep HRLDAS_SETUP_FILE namelist.hrldas | tr -d ' '| egrep -v '^[!\]'`
 set MYSTRING = `echo $MYSTRING | cut -d'!' -f1 | sed -e "s#[=,']# #g"`
 set MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
 set WRFINPUT = `echo $MYSTRING[$#MYSTRING]`
@@ -338,7 +367,7 @@ set MYSTRING   = `echo $MYSTRING | sed -e 's#"# #g'`
 set fineGridFile = `echo $MYSTRING[$#MYSTRING]`
 
 ## gw basin file, but only if it's set
-set MYSTRING   = `grep gwbasmskfil hydro.namelist | tr -d ' '| egrep -v '^[!\]'`
+set MYSTRING   = `grep -i GWBUCKPARM_file hydro.namelist | tr -d ' '| egrep -v '^[!\]'`
 set MYSTRING   = `echo $MYSTRING | cut -d'!' -f1  | sed -e "s#[=,']# #g"`
 set MYSTRING   = `echo $MYSTRING | sed -e 's#"# #g'`
 set gwBasFile = `echo $MYSTRING[$#MYSTRING]`
@@ -348,22 +377,19 @@ set MYSTRING   = `echo $MYSTRING | cut -d'!' -f1  | sed -e "s#[=,']# #g"`
 set MYSTRING   = `echo $MYSTRING | sed -e 's#"# #g'`
 set gwBasSwitch = `echo $MYSTRING[$#MYSTRING]`
 
-\mkdir tmpTestDir   || exit 2
-cd tmpTestDir || exit 2
-foreach file ( $WRFINPUT $FORCINGDIR $geoFile $geoFileHydro $fineGridFile $gwBasFile)
-    if (! -e ${file} ) then
-	if( $file == $gwBasFile & $gwBasSwitch == '0' ) continue
+## 
+foreach file ($WRFINPUT $FORCINGDIR $geoFile $geoFileHydro $fineGridFile $gwBasFile)
+    echo "file: $file"
+    if (! -e ${file}) then
+ 	if( $file == $gwBasFile & $gwBasSwitch == '0' ) continue
 	echo $file 'Does NOT Exist as specified in a namelist'
 	echo "Note that the path is relative to inside a directory within the calling level." 
 	echo "You may need to make the symlink here (e.g: ln -s $file . )?"
-	cd ..
-	rm -rf tmpTestDir
+	#cd ..
+	#rm -rf tmpTestDir
 	exit 3
     endif
 end
-cd ..
-rm -rf tmpTestDir || exit 3
-
 
 #==============================================================================
 # Parameters.
@@ -417,7 +443,7 @@ if ( "$lsmModel" == "noahmp" ) then
         ${COPY} ${dir}/${FILE} $paramsGathered || exit 6
     end
 endif 
-
+ 
 ## hydro params
 ## (for now we'll assume the hydro component is always used. If it
 ##  is not being used, this is still probably harmless.)
@@ -426,7 +452,7 @@ if (! -e ${dir}) then
     echo "MISSING directory: ${dir}"
     exit 7
 endif 
-foreach FILE ( CHANPARM.TBL GWBUCKPARM.TBL HYDRO.TBL LAKEPARM.TBL )
+foreach FILE ( CHANPARM.TBL HYDRO.TBL LAKEPARM.TBL )
     if (! -e ${dir}/${FILE} )  then
 	echo "MISSING file: ${dir}/${FILE}"
 	exit 7
@@ -444,26 +470,27 @@ foreach FILE ( dart_to_wrfHydro wrfHydro_to_dart filter wakeup_filter \
     if ( -e ${FILE} && ! $forceCopyDartBuilds )  then
 	echo "Using existing $FILE"
     else
-	if(! -e ${dartDir}/work/${FILE} ) then 
-	    echo "MISSING file: ${dartDir}/work/${FILE}"
+	if(! -e ${dartDir}/models/wrfHydro/work/${FILE} ) then 
+	    echo "MISSING file: ${dartDir}/models/wrfHydro/work/${FILE}"
 	    exit 7
 	endif
-	${COPY} ${dartDir}/work/${FILE} . || exit 7
+	${COPY} ${dartDir}/models/wrfHydro/work/${FILE} . || exit 7
    endif
 end
 
 #==============================================================================
 echo
 echo "DART Scripts"
-foreach FILE ( run_filter.csh advance_model.csh run_pmo.csh getNodeFiles.sh gregorian_time )
+foreach FILE ( run_filter.csh run_filter.parallel.csh advance_model.csh run_pmo.csh getNodeFiles.sh ) 
+##  gregorian_time )  is this needed?
    if ( -e ${FILE} && ! $forceCopyDartScripts )  then
       echo "Using existing $FILE"
    else
-	if(! -e ${dartDir}/shell_scripts/${FILE}) then
-	    echo "MISSING file: ${dartDir}/shell_scripts/${FILE}"
+	if(! -e ${dartDir}/models/wrfHydro/shell_scripts/${FILE}) then
+	    echo "MISSING file: ${dartDir}/models/wrfHydro/shell_scripts/${FILE}"
 	    exit 7
 	endif 
-	${COPY} ${dartDir}/shell_scripts/${FILE} . || exit 7
+	${COPY} ${dartDir}/models/wrfHydro/shell_scripts/${FILE} . || exit 7
    endif
 end
 
@@ -478,16 +505,16 @@ end
 #
 
 # link to the useful script for creating initial ensembles. 
-#ln -svf ${dartDir}/shell_scripts/mk_initial_ens.csh . || exit 7 phasing out
-ln -svf ${dartDir}/shell_scripts/perturb_restarts.csh . || exit 7
-ln -svf ${dartDir}/shell_scripts/randomSeq.rsh .  || exit 7
-ln -svf ${dartDir}/shell_scripts/run_initial_ens_fwd.csh .  || exit 7
-ln -svf ${dartDir}/shell_scripts/run_initial_ens_fwd_noQsub.csh .  || exit 7
-ln -svf ${dartDir}/shell_scripts/apply_assimOnly.csh .  || exit 7
-ln -svf ${dartDir}/shell_scripts/run_wrfHydro.csh .  || exit 7
-ln -svf ${dartDir}/shell_scripts/setup_ensemble_run.csh .  || exit 7
-ln -svf ${dartDir}/shell_scripts/log_meta_wrfHydro.csh .  || exit 7
-ln -svf ${dartDir}/shell_scripts/subset_obs_seq.csh .  || exit 7
+#ln -svf ${dartDir}/models/wrfHydro/shell_scripts/mk_initial_ens.csh . || exit 7 phasing out
+ln -svf ${dartDir}/models/wrfHydro/shell_scripts/perturb_restarts.csh . || exit 7
+ln -svf ${dartDir}/models/wrfHydro/shell_scripts/randomSeq.rsh .  || exit 7
+ln -svf ${dartDir}/models/wrfHydro/shell_scripts/run_initial_ens_fwd.csh .  || exit 7
+ln -svf ${dartDir}/models/wrfHydro/shell_scripts/run_initial_ens_fwd_noQsub.csh .  || exit 7
+ln -svf ${dartDir}/models/wrfHydro/shell_scripts/apply_assimOnly.csh .  || exit 7
+ln -svf ${dartDir}/models/wrfHydro/shell_scripts/run_wrfHydro.csh .  || exit 7
+ln -svf ${dartDir}/models/wrfHydro/shell_scripts/setup_ensemble_run.csh .  || exit 7
+ln -svf ${dartDir}/models/wrfHydro/shell_scripts/log_meta_wrfHydro.csh .  || exit 7
+ln -svf ${dartDir}/models/wrfHydro/shell_scripts/subset_obs_seq.csh .  || exit 7
 
 # where the ensemble of initial conditions are located
 set ensembleDir = ${centralDir}/initialEnsemble
@@ -506,16 +533,17 @@ if (! -e ${ensembleDir} ) then
     exit 8
 endif 
 
-set nLsmFiles = `ls -1 ${ensembleDir}/restart.[^ha]* | wc -l`
+set nLsmFiles = `ls -1 ${ensembleDir}/restart.[^ha]*.nc | wc -l`
 set lsmFileList = `ls -1 ${ensembleDir}/restart.[^ha]*`
 
-set   nHydroFiles = `ls -1 ${ensembleDir}/*hydro* | wc -l`
-set hydroFileList = `ls -1 ${ensembleDir}/*hydro*`
+set   nHydroFiles = `ls -1 ${ensembleDir}/*hydro*.nc | wc -l`
+set hydroFileList = `ls -1 ${ensembleDir}/*hydro*.nc`
 
-echo $nLsmFiles
-echo $nHydroFiles
+echo "Number of LSM files: $nLsmFiles"
+echo "Number of HYDRO files: $nHydroFiles"
 
-if ( ! $nLsmFiles | ! $nHydroFiles) then
+## Require one of lsm or hydro files
+if ( $nLsmFiles < 1 & $nHydroFiles < 1 ) then
     echo "No initial restart files provided"
     echo "mk_initial_ens.csh might help!"
     echo "run_initial_ens_fwd.csh might also help!"
@@ -527,32 +555,63 @@ endif
 set assimOnly_active1 = `grep -v '!' input.nml | grep -i assimOnly_state_variables | wc -l`
 set assimOnly_active2 = `grep -v '!' input.nml | grep -i assimOnly_netcdf_filename | \
                          cut -d= -f2 | tr -cd '[[:alnum:]]._-' | wc -m`
+#echo "assimOnly_active1: $assimOnly_active1"
+#echo "assimOnly_active2: $assimOnly_active2"
 set assimOnly_active = 0
 if ($assimOnly_active1 && $assimOnly_active2) set assimOnly_active = 1
 
 if ($assimOnly_active) then 
     set   nAssimOnlyFiles = `ls -1 ${ensembleDir}/*assimOnly* | wc -l`
     set assimOnlyFileList = `ls -1 ${ensembleDir}/*assimOnly*`
-    echo $nAssimOnlyFiles
+    echo "Number of assimOnlyFiles: $nAssimOnlyFiles"
+else
+    echo "AssimOnly is not active."
 endif 
+echo
 
-if ( $nLsmFiles !~ $nHydroFiles ) then
-    echo "The number of LSM and HYDRO restart files do NOT match in $ensembleDir"
-    exit 8
-endif 
-
-if ($assimOnly_active) then
-    if ( $nLsmFiles !~ $nAssimOnlyFiles ) then
-	echo "The number of LSM and assimOnly restart files do NOT match in $ensembleDir"
-	exit 8
+if ( $nLsmFiles > 0 & $nHydroFiles > 0 ) then
+    if ( $nLsmFiles !~ $nHydroFiles ) then
+        echo "The number of LSM and HYDRO restart files do NOT match in $ensembleDir"
+        exit 8
     endif
-endif 
+endif
 
+if ( $nLsmFiles > 0 ) then
+echo nLsmFiles
+    if ($assimOnly_active) then
+        if ( $nLsmFiles !~ $nAssimOnlyFiles ) then
+            echo "The number of LSM and assimOnly restart files do NOT match in $ensembleDir"
+            exit 8
+        endif
+    endif
+endif
+
+if ( $nHydroFiles > 0 ) then
+echo nHydroFiles
+    if ($assimOnly_active) then
+        if ( $nHydroFiles !~ $nAssimOnlyFiles ) then
+            echo "The number of HYDRO and assimOnly restart files do NOT match in $ensembleDir"
+            exit 8
+        endif
+    endif
+endif
+
+set ensSize = $nLsmFiles
+if ( $nLsmFiles == 0 ) set ensSize=$nHydroFiles
+
+
+echo "--------------------------------------------"
 echo "The inital ensemble restart files:"
-echo $lsmFileList
-echo $hydroFileList
+
+echo "LSM restart files ($nLsmFiles): "
+echo "$lsmFileList"
+
+echo "HYDRO restart files ($nHydroFiles): "
+echo "$hydroFileList"
+
 if ($assimOnly_active) then 
-    echo $assimOnlyFileList
+    echo "assimOnly restart files ($nAssimOnlyFiles): "
+    echo "$assimOnlyFileList"
 endif 
 
 #===============================================================================
@@ -569,7 +628,14 @@ endif
 #===============================================================================
 # Set the date in the namelist.hrldas to match that of the first restart file.
 # (because there's no error generate - only bogus output where there is no forcing.).
-set restartFileTime = `ncdump -v Times $ensembleDir/restart.0001.nc | tail -2 | head -1 | cut -d'"' -f2`
+if ( $nLsmFiles > 0 ) then
+    set restartFileTime = `ncdump -v Times $ensembleDir/restart.0001.nc | tail -2 | head -1 | cut -d'"' -f2`
+else
+    set restartFileTime = `ncdump -h $ensembleDir/restart.hydro.0001.nc | grep Restart_Time | cut -d'"' -f2`
+endif
+echo
+echo "Setting namelist.hrldas restart time to match the time of the restarts in $ensembleDir"
+echo
 set restartFileYyyy = `echo $restartFileTime | cut -d- -f1`
 set restartFileMm = `echo $restartFileTime | cut -d- -f2`
 set restartFileDd = `echo $restartFileTime | cut -d- -f3 | cut -d_ -f1`
@@ -592,29 +658,39 @@ set initEnsOutDir = OUTPUT/initial_restarts
 \mkdir -p $initEnsOutDir || exit 9
 @ ifile = 1
 @ ensemble_member = 0
-while ($ifile <= $nLsmFiles)
+while ($ifile <= $ensSize)
     @ ensemble_member = $ensemble_member + 1
     set fext = `printf %04d $ensemble_member`
-    
+    echo '--------------------------------'
+    echo "Start ens member: $fext"
+
     # make initial conditions for DART
-    \ln -svf ${ensembleDir}/restart.$fext.nc restart.nc  || exit 9
-    \ln -svf ${ensembleDir}/restart.hydro.$fext.nc restart.hydro.nc   || exit 9
+    if ( $nLsmFiles > 0 ) \ln -svf ${ensembleDir}/restart.$fext.nc restart.nc  || exit 9
+    if ( $nHydroFiles > 0 ) \ln -svf ${ensembleDir}/restart.hydro.$fext.nc restart.hydro.nc   || exit 9
     if ( $assimOnly_active ) \
 	\ln -svf ${ensembleDir}/restart.assimOnly.$fext.nc restart.assimOnly.nc   || exit 9
 
     ./wrfHydro_to_dart                     || exit 9
+
     ${MOVE} dart_ics filter_ics.$fext      || exit 10 #??where are the naming assumptions explained??
     #${MOVE} dart_ics assim_model_state_ic.$fext      || exit 10
     
-    \cp ${ensembleDir}/restart.$fext.nc $initEnsOutDir/restart.$fext.nc   || exit 10
-    \ln -sf  $initEnsOutDir/restart.$fext.nc .
-    \cp ${ensembleDir}/restart.hydro.$fext.nc $initEnsOutDir/restart.hydro.$fext.nc  || exit 10
-    \ln -sf  $initEnsOutDir/restart.hydro.$fext.nc .  || exit 10
+    if ( $nLsmFiles > 0 ) \
+	\cp ${ensembleDir}/restart.$fext.nc $initEnsOutDir/restart.$fext.nc   || exit 10
+    if ( $nLsmFiles > 0 ) \ln -sf  $initEnsOutDir/restart.$fext.nc .
+
+    if ( $nHydroFiles > 0 ) \
+	\cp ${ensembleDir}/restart.hydro.$fext.nc $initEnsOutDir/restart.hydro.$fext.nc  || exit 10
+    if ( $nHydroFiles > 0 ) \ln -sf  $initEnsOutDir/restart.hydro.$fext.nc .  || exit 10
+    
     if ( $assimOnly_active ) then 
 	\cp ${ensembleDir}/restart.assimOnly.$fext.nc $initEnsOutDir/restart.assimOnly.$fext.nc \
 	    || exit 10
 	\ln -sf  $initEnsOutDir/restart.assimOnly.$fext.nc . || exit 10
     endif
+
+    echo "End ens member: $fext"
+    echo '--------------------------------'
 
    @ ifile = $ifile + 1
 end
@@ -647,7 +723,7 @@ ex_end
 #date >> ${logFile}
 ## This can be massive for forcing dirs with lots of files. I need to make it exclude the forcing dir
 ## or do something else intelligent for forcing files.
-#${dartDir}/shell_scripts/listDirFollowLinks.sh .. >> ${logFile}
+#${dartDir}/models/wrfHydro/shell_scripts/listDirFollowLinks.sh .. >> ${logFile}
 
 echo
 echo "!==============================================================================!"

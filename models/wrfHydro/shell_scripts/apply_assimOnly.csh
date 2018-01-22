@@ -33,7 +33,8 @@
 
 set loginDir=`pwd`
 if ( $?1 ) set loginDir=$1
-echo 'loginDir: '$loginDir
+echo "start apply_assimOnly.csh"
+#echo 'loginDir: '$loginDir
 
 ## Setup
 set restartTime = `ncdump -h restart.hydro.nc | grep Restart_ | cut -d'=' -f2 | tr -d ' ";'`
@@ -41,6 +42,14 @@ set startYyyy = `echo $restartTime | cut -d- -f1`
 set startMm   = `echo $restartTime | cut -d- -f2`
 set startDd   = `echo $restartTime | cut -d- -f3 | cut -d_ -f1`
 set startHh   = `echo $restartTime | cut -d_ -f2 | cut -d: -f1`
+echo "startHh: $startHh"
+## The forcing for hour H -> H+1 are now stampped H+1
+#set startHh   = ( $startHh + 1 )
+#set startHh   = `expr $startHh`
+#if ( $startHh == 24 ) set startHh = 0
+#set startHh   = `printf "%02d" $startHh`
+#echo "startHh: $startHh"
+
 
 ## these need to be gathered from input.nml not restart.assimOnly
 ## that will provide greater flexibility with using subsets of the restart.assimOnly
@@ -61,13 +70,13 @@ endif
 # Edit the path to the forcing dir in the namelist.hrldas to use perturbed forcing
 # in the current dir
 
-set forcingVars = ( precipMult otherVarsHere )
+set forcingVars = ( precipMult qBucketMult qSfcLatRunoffMult otherVarsHere )
 set forcingGrep = `echo $forcingVars | tr ' ' '|'`
 set forcingGrep = `echo "($forcingGrep)"`
 set forcingActive =  `echo $assimOnlyVars | egrep $forcingGrep | wc -l`
 
 # Original forcing location . Note that there no required name for this.
-¡±# We need this even if forcing is not active because the path is one dir deeper
+# We need this even if forcing is not active because the path is one dir deeper
 set inDirIn = `grep INDIR namelist.hrldas | tr -d ' '| egrep -v '^[!\]'`
 set inDirIn = `echo $inDirIn | cut -d'!' -f1  | sed -e "s#[=,']# #g"`
 set inDirIn = `echo $inDirIn | sed -e 's#"# #g'`
@@ -77,7 +86,7 @@ echo 'inDirIn: '$inDirIn
 
 if ( $forcingActive ) then 
 
-    set forcDir = FORCING.assimOnly
+    set forcDir = FORCING.adjByAssimOnly
     ## break it down to build it back up (make sure it's clean)
     ## cant delete it in this routine since the model is called after exit.
     \rm -rf $forcDir
@@ -94,7 +103,7 @@ ex_end
     set forcType = `echo $forcType | cut -d'!' -f1  | sed -e "s#[=,']# #g"`
     set forcType = `echo $forcType | sed -e 's#"# #g'`
     set forcType = `echo $forcType[$#forcType]`
-    if ( $forcType != 1 & $forcType != 6 ) then 
+    if ( $forcType != 1 & $forcType != 6 & $forcType != 9 ) then 
         echo "FORC_TYP = $forcType in namelist.hrldas NOT SUPPORTED CURRENTLY! (apply_assimOnly.csh)"
         exit 8
     endif
@@ -105,21 +114,31 @@ ex_end
     set khourIn = `echo $khourIn | sed -e 's#"# #g'`
     set khourIn = `echo $khourIn[$#khourIn]`
 
-    set endYyyy = `date -ud "UTC $startYyyy-$startMm-$startDd $startHh hour + $khourIn hours" +%Y`
+    #set endYyyy = `date -ud "UTC $startYyyy-$startMm-$startDd $startHh hour + $khourIn hours" +%Y`
 
+    set dateTimeSeq = \
+       `seq 1 $khourIn | xargs -I {} date -d "$startYyyy-$startMm-$startDd $startHh {} hours" +%Y%m%d%H`
+    set dateTimeSeq = `echo $dateTimeSeq | tr ' ' '|'`
+           
     ## This is not easy to do/optimize when there are lots of files. This is my best shot.
     ## It is relatively fast. 
-    set yearSeq = `seq -s, $startYyyy $endYyyy | tr ',' '|'`
+    ##set yearSeq = `seq -s, $startYyyy $endYyyy | tr ',' '|'`
     ## the annchor (^) supposedly gives a speed up
-    ## we always need these 
-    set forcFilesSuper = \
-        `find $inDirIn/ -regextype posix-extended \
-            -regex "^$inDirIn.*/(${yearSeq}).*LDASIN.*" | sort`
-    set forcFilesPosn = `echo $forcFilesSuper | tr ' ' '\n' | \
-                          grep -n "${startYyyy}${startMm}${startDd}${startHh}" | cut -d':' -f1`
-    set forcFilesIn = `echo $forcFilesSuper | tr ' ' '\n' | tail -n+$forcFilesPosn | head -$khourIn`
-    \cp $forcFilesIn $forcDir/.
-    set forcFiles = `ls $forcDir/*`
+    ## we always need these
+
+    echo "forcType: $forcType"
+    
+    if( $forcType == 1 || $forcType == 2) then 
+        set forcFilesSuper = \
+            `find $inDirIn/ -regextype posix-extended \
+                -regex "^$inDirIn.*/(${yearSeq}).*LDASIN.*" | sort`
+        set forcFilesPosn = `echo $forcFilesSuper | tr ' ' '\n' | \
+                            grep -n "${startYyyy}${startMm}${startDd}${startHh}" | cut -d':' -f1`
+                            
+        set forcFilesIn = `echo $forcFilesSuper | tr ' ' '\n' | tail -n+$forcFilesPosn | head -$khourIn`
+        \cp $forcFilesIn $forcDir/.
+        set forcFiles = `ls $forcDir/*`
+    endif
 
     if ( $forcType == 6 ) then 
         set forcFilesSuper6 = \
@@ -132,6 +151,16 @@ ex_end
         set forcFiles = `ls $forcDir/*PRECIP_FORCING*`
     endif            
 
+    if ( $forcType == 9 || $forcType == 10 ) then 
+        echo find $inDirIn/ -regextype posix-extended -regex "^$inDirIn.*/(${dateTimeSeq}).*CHRTOUT.*" | sort
+        set forcFilesInChOnly = `find $inDirIn/ -regextype posix-extended \
+                -regex "^$inDirIn.*/(${dateTimeSeq}).*CHRTOUT.*" | sort`
+        echo $forcFilesInChOnly
+        \cp $forcFilesInChOnly $forcDir/.
+        set forcFiles = `ls $forcDir/*CHRTOUT*`
+        echo "forcFiles: $forcFiles"
+    endif            
+    
     #-----------------------------------------------------------
     # precipMult
     # See if it is among the assimOnlyVars
@@ -153,6 +182,51 @@ ex_end
         endif 
     endif  # precipMult
 
+    #-----------------------------------------------------------
+    # qBucketMult
+    # See if it is among the assimOnlyVars
+    echo "forcFiles: $forcFiles"
+    echo "assimOnlyVars: $assimOnlyVars"
+    if ( `echo $assimOnlyVars | grep qBucketMult | wc -l` ) then 
+        set qBucketMultDims = `ncks -m restart.assimOnly.nc | grep 'qBucketMult dimension' | wc -l`
+
+        if ( $qBucketMultDims == 1 ) then
+            set theQBucketMult = `ncdump -v qBucketMult restart.assimOnly.nc | tail -n2 | head -1 | \
+                                    cut -d'=' -f2 | tr -d ' ;'`
+            foreach iForc ( $forcFiles )
+                ncap2 -O -s "qBucket=qBucket*${theQBucketMult}" $iForc $iForc
+            end
+        endif 
+
+        if ( $qBucketMultDims == 2 ) then
+            echo 'Not yet configured'
+            exit 3
+        endif 
+    endif  # qBucketMult
+
+    #-----------------------------------------------------------
+    # qSfcLatRunoffMult
+    # See if it is among the assimOnlyVars
+    echo "forcFiles: $forcFiles"
+    echo "assimOnlyVars: $assimOnlyVars"
+    if ( `echo $assimOnlyVars | grep qSfcLatRunoffMult | wc -l` ) then 
+        set qSfcLatRunoffMultDims = `ncks -m restart.assimOnly.nc | grep 'qSfcLatRunoffMult dimension' | wc -l`
+
+        if ( $qSfcLatRunoffMultDims == 1 ) then
+            set theQBucketMult = `ncdump -v qSfcLatRunoffMult restart.assimOnly.nc | tail -n2 | head -1 | \
+                                    cut -d'=' -f2 | tr -d ' ;'`
+            foreach iForc ( $forcFiles )
+                ncap2 -O -s "qSfcLatRunoff=qSfcLatRunoff*${theQBucketMult}" $iForc $iForc
+            end
+        endif 
+
+        if ( $qSfcLatRunoffMultDims == 2 ) then
+            echo 'Not yet configured'
+            exit 3
+        endif 
+    endif  # qSfcLatRunoffMult
+
+        
     #-----------------------------------------------------------
     # more vars... to come.
 
@@ -466,7 +540,6 @@ ex_end
         endif 
     endif  # 
 
-echo foo12 >&2
     ## bbMult ------------
     if ( `echo $assimOnlyVars | grep bbMult | wc -l` ) then 
 
@@ -927,5 +1000,7 @@ echo foo12 >&2
     endif  # czil
 
 endif  # paramActive
+
+echo "finish apply_assimOnly.csh"
 
 exit 0

@@ -59,6 +59,7 @@ use    obs_kind_mod, only :                   &
      KIND_SNOW_THICKNESS,                     &
      KIND_SNOW_WATER,                         &
      KIND_SNOWCOVER_FRAC,                     &
+     KIND_1D_PARAMETER,        &     !! eg channel state or flux multipliers
      KIND_2D_PARAMETER,        &     !! eg precip multiplier, soil texture parameter
      KIND_GEOPOTENTIAL_HEIGHT, &     !! maybe be used for model_interpolate
      paramname_length,         &
@@ -92,7 +93,9 @@ public :: &
      get_close_maxdist_init, &
      get_close_obs_init,     &
      get_close_obs,          &
-     ens_mean_for_model
+     ens_mean_for_model,     &
+     lsm_model_active,       &
+     hydro_model_active
 
 ! not required by DART but for larger models can be useful for
 ! utility programs that are tightly tied to the other parts of
@@ -153,6 +156,7 @@ namelist /model_nml/ lsm_model_choice, hydro_model_active,         &
      assimOnly_state_variables
 
 logical               :: assimOnly_active           = .false.
+logical               :: lsm_model_active           = .true.
 
 !------------------------------------------------------------------
 ! From the models' namelists we get everything needed to recreate
@@ -171,7 +175,8 @@ character(len=256) :: hydro_namelist_filename = 'hydro.namelist'  ! mandate
 ! found in the file (which would remain to their default, agnostic values).
 
 !Variables in both noah and noahMP (spaces reflect the general grouping in our nml files)
-character(len=256) :: hrldas_constants_file = " "
+character(len=256) :: hrldas_setup_file = " "
+character(LEN = 256)                    ::  spatial_filename 
 character(len=256) :: indir = "."
 
 character(len=256) :: outdir = "."
@@ -227,23 +232,29 @@ integer            :: SNOW_ALBEDO_OPTION                = 2
 integer            :: PCP_PARTITION_OPTION              = 1
 integer            :: TBOT_OPTION                       = 1
 integer            :: TEMP_TIME_SCHEME_OPTION           = 1
+integer            :: surface_resistance_option
 real(r8), dimension(NSOLDX) :: soil_thick_input         = MISSING_R8
+integer            :: glacier_option
+integer :: rst_bi_out, rst_bi_in !0: default netcdf format. 1: binary write/read by each core.
 
 !! Not in either of our noahlsm_offline nmls but in the earlier noah-DART model_mod
 !character(len=256) :: external_fpar_filename_template = " "
 !character(len=256) :: external_lai_filename_template = " "
 
-namelist /NOAHLSM_OFFLINE/ hrldas_constants_file, indir, outdir, &
+namelist /NOAHLSM_OFFLINE/ hrldas_setup_file, indir, spatial_filename, outdir, &
      start_year, start_month, start_day, start_hour, start_min, &
      restart_filename_requested, kday, khour, forcing_timestep, &
      noah_timestep, output_timestep, restart_frequency_hours, split_output_count, &
-     nsoil, zlvl, iz0tlnd, sfcdif_option, update_snow_from_forcing, &
-     FORC_TYP, GEO_STATIC_FLNM, HRLDAS_ini_typ, SNOW_assim, zsoil, &
-     subwindow_xstart, subwindow_ystart, subwindow_xend, subwindow_yend, zlvl_wind, &
-     MMF_RUNOFF_FILE, DYNAMIC_VEG_OPTION, CANOPY_STOMATAL_RESISTANCE_OPTION, BTR_OPTION, &
+     nsoil, soil_thick_input, zlvl, & 
+                                !FORC_TYP, GEO_STATIC_FLNM, HRLDAS_ini_typ, SNOW_assim, zsoil, &
+                                !iz0tlnd, sfcdif_option, update_snow_from_forcing, &
+                                !subwindow_xstart, subwindow_ystart, subwindow_xend, subwindow_yend, zlvl_wind, &
+                                !MMF_RUNOFF_FILE,  &
+     DYNAMIC_VEG_OPTION, CANOPY_STOMATAL_RESISTANCE_OPTION, BTR_OPTION, &
      RUNOFF_OPTION, SURFACE_DRAG_OPTION, FROZEN_SOIL_OPTION, SUPERCOOLED_WATER_OPTION, &
      RADIATIVE_TRANSFER_OPTION, SNOW_ALBEDO_OPTION, PCP_PARTITION_OPTION, TBOT_OPTION, &
-     TEMP_TIME_SCHEME_OPTION, soil_thick_input
+     TEMP_TIME_SCHEME_OPTION, glacier_option, surface_resistance_option,  &
+     rst_bi_in, rst_bi_out
 
 !&URBAN_OFFLINE
 ! This is in namelist.hrldas.
@@ -254,41 +265,51 @@ namelist /URBAN_OFFLINE/ UCMCALL,  ZLVL_URBAN
 !! &HYDRO_nlist
 !! The noah and noahMP models have some same/repeated variables in their respective namelists.
 !! I note repeated varaibles and any related issues here.
-
+!! Note: These are default values in case a variable is not specified in the namelist.
 integer            :: sys_cpl = 1  !! this is hrldas, should be enforced
 !! character(len=256) :: GEO_STATIC_FLNM = "" !! repeated in the two namelists, but equal
 character(len=256) :: GEO_FINEGRID_FLNM = ""
+character(len=256)  :: hydrotbl_f   = ""
+character(len=1024) :: land_spatial_meta_flnm = ""
 character(len=256) :: RESTART_FILE  = ''
 integer            :: IGRID = 3
 integer            :: rst_dt = 1440
 integer            :: out_dt = 1440
-logical            :: HISTORY_OUTPUT = .true.
 !! integer            :: SPLIT_OUTPUT_COUNT = 1  !! repeated but equal
 integer            :: rst_typ = 1
 integer            :: RSTRT_SWC = 0
-integer            :: HIRES_OUT = 2
 integer            :: order_to_write = 1
 integer            :: TERADJ_SOLAR = 0
 !! integer            :: NSOIL=4  !! repeated but equal
 real(r8), dimension(NSOLDX) :: zsoil8  !! this is for the hydro component (bad name)
 real(r8)           :: DXRT = -999.0_r8
 integer            :: AGGFACTRT = -999
-integer            :: DTRT = 2
+integer            :: DTRT_ter = 2
+integer            :: DTRT_ch = 2
 integer            :: SUBRTSWCRT = 1
 integer            :: OVRTSWCRT = 1
 integer            :: rt_option    = 1
 integer            :: CHANRTSWCRT = 1
-integer            :: channel_option =3
+integer            :: channel_option = 3
 character(len=256) :: route_link_f = ""
+character(len=256) :: route_lake_f = ""
 integer            :: GWBASESWCRT = 2
 integer            :: GW_RESTART = 1
 character(len=256) :: gwbasmskfil = "DOMAIN/basn_msk1k_frng_ohd.txt"
+character(len=256) :: GWBUCKPARM_file = ""
+character(len=256) :: udmap_file =""
+integer            :: iocflag, nwmIo, t0OutputFlag, UDMP_OPT, output_channelBucket_influx
+integer            :: CHRTOUT_DOMAIN, CHRTOUT_GRID, LSMOUT_DOMAIN, RTOUT_DOMAIN, output_gw, outlake
 
-namelist /HYDRO_nlist/ sys_cpl, GEO_STATIC_FLNM, GEO_FINEGRID_FLNM, RESTART_FILE, &
-     IGRID, rst_dt, out_dt, HISTORY_OUTPUT, SPLIT_OUTPUT_COUNT, rst_typ, RSTRT_SWC, HIRES_OUT, &
-     order_to_write, TERADJ_SOLAR, NSOIL, zsoil8, DXRT, AGGFACTRT, DTRT, SUBRTSWCRT, &
-     OVRTSWCRT, rt_option, CHANRTSWCRT, channel_option, route_link_f, GWBASESWCRT, &
-     GW_RESTART, gwbasmskfil
+namelist /HYDRO_nlist/ sys_cpl, GEO_STATIC_FLNM, GEO_FINEGRID_FLNM,  &
+     HYDROTBL_F, land_spatial_meta_flnm, RESTART_FILE, &
+     IGRID, rst_dt, rst_typ, rst_bi_in, rst_bi_out, RSTRT_SWC, &
+     GW_RESTART, out_dt, SPLIT_OUTPUT_COUNT, order_to_write, nwmIo, iocflag, t0OutputFlag, &
+     output_channelBucket_influx, &
+     CHRTOUT_DOMAIN, CHRTOUT_GRID, LSMOUT_DOMAIN, RTOUT_DOMAIN, output_gw, outlake, &
+     TERADJ_SOLAR, NSOIL, zsoil8, DXRT, AGGFACTRT, DTRT_ter, dtrt_ch, SUBRTSWCRT, &
+     OVRTSWCRT, rt_option, CHANRTSWCRT, channel_option, route_link_f, route_lake_f, GWBASESWCRT, &
+     GWBUCKPARM_file, gwbasmskfil, UDMP_OPT, udmap_file
 
 !------------------------------------------------------------------
 ! Everything needed to describe a variable and
@@ -336,8 +357,8 @@ real(r8), allocatable, dimension(:) :: ens_mean ! may be needed for forward ops
 
 !------------------------------------------------------------------
 ! module storage
+!! JLM: WHAT IS ABOVE HERE THEN? dosent appear to just be public (which might make sense)
 !------------------------------------------------------------------
-
 integer            :: model_size       ! the state vector length
 type(time_type)    :: model_time       ! valid time of the model state
 type(time_type)    :: model_time_step  ! smallest time to adv model
@@ -358,8 +379,7 @@ real(R8), dimension(:,:),   allocatable ::              smcMax1, smcWlt1
 real(R8), dimension(:,:,:), allocatable :: sh2oDisag
 real(R8), dimension(:,:),   allocatable :: sfcHeadDisag
 real(r8) :: fineGridArea, coarseGridArea
-logical :: hydroSmcPresent
-logical :: hydroSfcHeadPresent
+logical :: hydroSmcPresent, hydroSfcHeadPresent
 
 interface vector_to_prog_var
    module procedure vector_to_1d_prog_var
@@ -390,7 +410,7 @@ real(r8), allocatable, dimension(:) :: dumGridLon, dumGridLat, dumGridLevel
 real(r8), allocatable, dimension(:) :: zsoilComp  
 integer  :: VarID, dimlen, varsize
 integer  :: iunit, io, ivar, iunit_lsm, iunit_hydro, iunit_assimOnly, igrid, iState
-integer  :: ilat, ilon, ilev, myindex,  i, index1
+integer  :: ilat, ilon, ilev, myindex,  i, index1, dum
 integer  :: nLayers, n_lsm_fields, n_hydro_layers, n_hydro_fields, n_assimOnly_fields
 integer  :: dumNLon, dumNLat, dumSize, wp, dumNumDims, lsmSmcPresent
 integer, allocatable, dimension(:)  :: whichVars, keepLsmVars0, keepLsmVars
@@ -418,14 +438,18 @@ call check_namelist_read(iunit, io, 'model_nml')
 if (do_nml_file()) write(nmlfileunit, nml=model_nml)
 if (do_nml_term()) write(     *     , nml=model_nml)
 
-! Check to make sure the required LSM input files exist
-if ( .not. file_exist(lsm_netcdf_filename) ) then
-   write(string1,*) 'cannot open LSM restart file [', trim(lsm_netcdf_filename),'] for reading.'
-   call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
-endif
-if ( .not. file_exist(lsm_namelist_filename) ) then
-   write(string1,*) 'cannot open LSM namelist file [', trim(lsm_namelist_filename),'] for reading.'
-   call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
+! Check to make sure the LSM is active, if so check that the required LSM input files exist
+lsm_model_active = len(trim(lsm_model_choice)) .gt. 0
+
+if(lsm_model_active) then 
+   if ( .not. file_exist(lsm_netcdf_filename) ) then
+      write(string1,*) 'cannot open LSM restart file [', trim(lsm_netcdf_filename),'] for reading.'
+      call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
+   endif
+   if ( .not. file_exist(lsm_namelist_filename) ) then
+      write(string1,*) 'cannot open LSM namelist file [', trim(lsm_namelist_filename),'] for reading.'
+      call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
+   endif
 endif
 
 ! Check to make sure the required HYDRO input files exist
@@ -482,12 +506,12 @@ if (trim(lsm_model_choice) .eq. 'noah') then
       write(string2,*) 'zsoil   from noah  [',trim(lsm_namelist_filename),']'
       write(string3,*) 'zsoil8  from hydro [',trim(hydro_namelist_filename),']'
       call error_handler(E_ERR, 'static_init_model', string1, &
-                 source, revision, revdate, text2=string2, text3=string3)
+           source, revision, revdate, text2=string2, text3=string3)
    endif
-soil_thick_input = zsoil
-do i=nsoil,2,-1 
-   soil_thick_input(i)=zsoil(i)-zsoil(i-1)
-enddo
+   soil_thick_input = zsoil
+   do i=nsoil,2,-1 
+      soil_thick_input(i)=zsoil(i)-zsoil(i-1)
+   enddo
 endif
 
 if (trim(lsm_model_choice) .eq. 'noahMP') then
@@ -501,10 +525,10 @@ if (trim(lsm_model_choice) .eq. 'noahMP') then
       write(string2,*) 'zsoil   from noahMP [',trim(lsm_namelist_filename),']'
       write(string3,*) 'zsoil8  from hydro  [',trim(hydro_namelist_filename),']'
       call error_handler(E_ERR, 'static_init_model', string1, &
-                 source, revision, revdate, text2=string2, text3=string3)
+           source, revision, revdate, text2=string2, text3=string3)
    endif
    deallocate(zsoilComp)
-endif 
+endif
 
 
 
@@ -519,9 +543,9 @@ if (hydro_model_active) then
 end if
 
 ! Check to make sure the hrldasconstants file exists
-if ( .not. file_exist(hrldas_constants_file) ) then
+if ( .not. file_exist(hrldas_setup_file) ) then
    write(string1,*) &
-      'cannot open NOAH constants file [',trim(hrldas_constants_file),'] for reading.'
+        'cannot open NOAH constants file [',trim(hrldas_setup_file),'] for reading.'
    call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
 endif
 
@@ -533,8 +557,8 @@ if ( (kday             < 0    ) .or. &
      (output_timestep  /= 3600) .or. &
      (restart_frequency_hours /= 1) ) then
    write(string3,*)'the only configuration supported is for hourly timesteps &
-               &(kday, khour, forcing_timestep==3600, noah_timestep=3600, &
-               &output_timestep=3600, restart_frequency_hours=1)'
+        &(kday, khour, forcing_timestep==3600, noah_timestep=3600, &
+        &output_timestep=3600, restart_frequency_hours=1)'
    write(string2,*)'restart_frequency_hours must be equal to the noah_timestep'
    write(string1,*)'unsupported noah namelist settings'
    call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate,&
@@ -543,14 +567,20 @@ endif
 
 ! This gets the LSM geospatial information for the module:
 !   south_north, west_east, xlong, xlat
-call get_hrldas_constants(hrldas_constants_file)
+call get_hrldas_constants(hrldas_setup_file)
 
 if (hydro_model_active) then
-   !  though all non-soil variables are "surface" it may be advisable to extract 
+   ! Though all non-soil variables are "surface" it may be advisable to extract 
    ! elevation at this point?  for localization routines?
    ! **** NOTE that all variables from this file (Fulldom) must  ****
    ! ****      be FLIPPED in y to match the noah/wrf model.      ****
+   ! Note: get_hydro_constants gets gridded-channel information if gridded channel is selected. 
    call get_hydro_constants(GEO_FINEGRID_FLNM) !!
+
+   !! Get routelink file information with NWM or reach-based routing. May need extended to regular muskingum later.
+   if ((CHANRTSWCRT.eq.1.or.CHANRTSWCRT.eq.2).and.channel_option .eq. 2) & ! channel_option==3 => Muskingum-Cunge
+        call get_routelink_constants(route_link_f)
+
    !! global variables defining the aggregation/disaggregation dimension
    !! these are always xyz since they are for dis/agg wrfHydro variables 
    fine2dShape   = (/ n_hlong, n_hlat /)  !! for disaggregating
@@ -566,10 +596,17 @@ endif
 
 ! The time_step in terms of a time type must also be initialized.
 call set_calendar_type( calendar )
-call nc_check(nf90_open(adjustl(lsm_netcdf_filename), NF90_NOWRITE, iunit_lsm), &
-     'static_init_model', 'open '//trim(lsm_netcdf_filename))
 
-model_time = get_state_time(iunit_lsm, trim(lsm_netcdf_filename))
+if (lsm_model_active) then
+   call nc_check(nf90_open(adjustl(lsm_netcdf_filename), NF90_NOWRITE, iunit_lsm), &
+        'static_init_model', 'open '//trim(lsm_netcdf_filename))
+   model_time = get_state_time(iunit_lsm, trim(lsm_netcdf_filename))
+else
+   call nc_check(nf90_open(adjustl(hydro_netcdf_filename), NF90_NOWRITE, iunit_hydro), &
+        'static_init_model', 'open '//trim(hydro_netcdf_filename))
+   model_time = get_state_time(iunit_hydro, trim(hydro_netcdf_filename))
+endif
+
 
 ! FIXME ... make sure model_time_step is attainable given OUTPUT_TIMESTEP
 model_time_step = set_time(assimilation_period_seconds, assimilation_period_days)
@@ -579,32 +616,38 @@ if (do_output() .and. (debug > 0)) then
    call print_time(model_time_step,' static_init_model:model timestep')
 endif
 
-! Make sure the number of soil layers is as we expect
-! Check that LSM and hydro have the same sub-surface dimensions
-call nc_check(nf90_inq_dimid(iunit_lsm, 'soil_layers_stag', dimIDs(1)), &
-     'static_init_model','inq_dimid soil_layers_stag '//trim(lsm_netcdf_filename))
-call nc_check(nf90_inquire_dimension(iunit_lsm, dimIDs(1), len=nLayers), &
-     'static_init_model','inquire_dimension soil_layers_stag '//trim(lsm_netcdf_filename))
-
-if (hydro_model_active) then
-   call nc_check(nf90_open(adjustl(hydro_netcdf_filename), NF90_NOWRITE, iunit_hydro), &
-        'static_init_model', 'open '//trim(hydro_netcdf_filename))
-   call nc_check(nf90_inq_dimid(iunit_hydro, 'depth', dimIDs(1)), &
-        'static_init_model','inq_dimid soil_layers_stag '//trim(hydro_netcdf_filename))
-   call nc_check(nf90_inquire_dimension(iunit_hydro, dimIDs(1), len=n_hydro_layers), &
-        'static_init_model','inquire_dimension soil_layers_stag '//trim(hydro_netcdf_filename))
-else
-   n_hydro_layers = nLayers
+if (lsm_model_active) then
+   ! Make sure the number of soil layers is as we expect
+   ! Check that LSM and hydro have the same sub-surface dimensions
+   call nc_check(nf90_inq_dimid(iunit_lsm, 'soil_layers_stag', dimIDs(1)), &
+        'static_init_model','inq_dimid soil_layers_stag '//trim(lsm_netcdf_filename))
+   call nc_check(nf90_inquire_dimension(iunit_lsm, dimIDs(1), len=nLayers), &
+        'static_init_model','inquire_dimension soil_layers_stag '//trim(lsm_netcdf_filename))
 endif
 
-if (nsoil /= nLayers .or. nsoil /= n_hydro_layers) then
-   if (nsoil /= nLayers) write(string1,*) 'Expected ',nsoil,' soil layers [', &
-        trim(lsm_netcdf_filename),'] has ',nLayers
-   call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
-   if (n_hydro_layers /= nLayers) &
-      write(string1,*) 'LSM and HYDRO components do not have the same number of soil layers.'
-   call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
-endif
+!! JLM TODO: fix this if we start doing hydro soil moisture.
+!! Problem was that channel only does not have a depth dimension.
+!if (hydro_model_active) then   
+!   call nc_check(nf90_open(adjustl(hydro_netcdf_filename), NF90_NOWRITE, iunit_hydro), &
+!        'static_init_model', 'open '//trim(hydro_netcdf_filename))
+!   call nc_check(nf90_inq_dimid(iunit_hydro, 'depth', dimIDs(1)), &
+!        'static_init_model','inq_dimid depth '//trim(hydro_netcdf_filename))
+!   call nc_check(nf90_inquire_dimension(iunit_hydro, dimIDs(1), len=n_hydro_layers), &
+!        'static_init_model','inquire_dimension depth '//trim(hydro_netcdf_filename))
+!else
+!   n_hydro_layers = nLayers
+!endif
+!
+!if (lsm_model_active .and. hydro_model_active) then
+!   if (nsoil /= nLayers .or. nsoil /= n_hydro_layers) then
+!      if (nsoil /= nLayers) write(string1,*) 'Expected ',nsoil,' soil layers [', &
+!           trim(lsm_netcdf_filename),'] has ',nLayers
+!      call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
+!      if (n_hydro_layers /= nLayers) &
+!           write(string1,*) 'LSM and HYDRO components do not have the same number of soil layers.'
+!      call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
+!   endif
+!endif
 
 !---------------------------------------------------------------
 ! Compile the list of NOAH variables to use in the creation
@@ -622,6 +665,10 @@ if (hydro_model_active) then
    call verify_state_variables(iunit_hydro, hydro_netcdf_filename, &
         hydro_state_variables, n_hydro_fields)
 endif
+if (do_output() .and. (debug > 1)) then
+   write(logfileunit,*)'n_hydro_fields: ', n_hydro_fields
+   write(     *     ,*)'n_hydro_fields: ', n_hydro_fields
+endif 
 
 n_assimOnly_fields = 0
 if (assimOnly_active) then 
@@ -630,6 +677,10 @@ if (assimOnly_active) then
    call verify_state_variables(iunit_assimOnly, assimOnly_netcdf_filename, &
         assimOnly_state_variables, n_assimOnly_fields)
 endif
+if (do_output() .and. (debug > 1)) then
+   write(logfileunit,*)'n_assimOnly_fields: ', n_assimOnly_fields
+   write(     *     ,*)'n_assimOnly_fields: ', n_assimOnly_fields
+endif 
 
 !! Dealing with soil mositure is complicated by
 !!  1) duplication between LSM and HYDRO restarts
@@ -650,15 +701,16 @@ keepLsmVars0 = (/ (i, i=1,n_lsm_fields) /)   ! TJH do you mean 1, i=1,n_lsm_fiel
 lsmSmcPresent =  sum( keepLsmVars0 , mask = (lsm_state_variables(1,:) .eq. 'SOIL_W') .or. &
      (lsm_state_variables(1,:) .eq. 'SH2O') )
 
-hydroSmcPresent     = .false.
-hydroSfcHeadPresent = .false.
+hydroSmcPresent = .FALSE.
+hydroSfcHeadPresent = .FALSE.
 if (hydro_model_active) then
    hydroSmcPresent     = any( hydro_state_variables(1,:) .eq. 'sh2ox' )
    hydroSfcHeadPresent = any( hydro_state_variables(1,:) .eq. 'sfcheadrt' )
-
-   if (hydroSmcPresent    ) allocate(sh2oDisag(fine3dShape(1),fine3dShape(2),fine3dShape(3)))
+   if (hydroSmcPresent)     allocate(sh2oDisag(fine3dShape(1),fine3dShape(2),fine3dShape(3)))
    if (hydroSfcHeadPresent) allocate(sfcHeadDisag(fine2dShape(1),fine2dShape(2)))
+
    if (hydroSmcPresent .OR. hydroSfcHeadPresent) call disagHydro()
+
 endif
 
 
@@ -667,6 +719,7 @@ if (lsmSmcPresent > 0 .and. hydroSmcPresent) then
       write(string1,*) 'Seems BAD: Using hydro SMC but rst_type != 1!'
       call error_handler(E_ERR,'static_init_model',string1,source,revision,revdate)
    endif
+   
    allocate(keepLsmVars(n_lsm_fields-1))
    keepLsmVars = pack( keepLsmVars0, mask = (keepLsmVars0 /= lsmSmcPresent) )
    if (do_output() .and. (debug > 0)) then
@@ -697,21 +750,26 @@ endif
 
 !! make a combined list of: state variables, types, component
 nfields = n_lsm_fields + n_hydro_fields + n_assimOnly_fields
+
 allocate(all_state_variables(3,nfields))  !! additional column to identify the model component
-all_state_variables(1:2,1:n_lsm_fields) = lsm_state_variables(1:2,keepLsmVars)
-all_state_variables(3,1:n_lsm_fields) = 'LSM'
+
+if(lsm_model_active) then
+   all_state_variables(1:2,1:n_lsm_fields) = lsm_state_variables(1:2,keepLsmVars)
+   all_state_variables(3,1:n_lsm_fields) = 'LSM'
+endif
+
 if (hydro_model_active) then
-   all_state_variables(1:2,(n_lsm_fields+1):(n_lsm_fields+n_hydro_fields)) = hydro_state_variables
+   all_state_variables(1:2,(n_lsm_fields+1):(n_lsm_fields+n_hydro_fields)) = hydro_state_variables(:,1:n_hydro_fields)
    all_state_variables(  3,(n_lsm_fields+1):(n_lsm_fields+n_hydro_fields)) = 'HYDRO'
 endif
-if (assimOnly_active) then 
+
+if (assimOnly_active) then
    all_state_variables(1:2,(n_lsm_fields+n_hydro_fields+1): &
         (n_lsm_fields+n_hydro_fields+n_assimOnly_fields)) = &
-        assimOnly_state_variables
+        assimOnly_state_variables(:, 1:n_assimOnly_fields)
    all_state_variables(  3, (n_lsm_fields+n_hydro_fields+1): &
         (n_lsm_fields+n_hydro_fields+n_assimOnly_fields)) = 'assimOnly'
 endif
-
 
 if (do_output() .and. (debug > 0)) then
    write(logfileunit,*)
@@ -755,9 +813,11 @@ FILL_PROGVAR : do ivar = 1, nfields
    call nc_check(nf90_inq_varid(iunit, trim(varname), VarID), &
         'static_init_model', 'inq_varid '//trim(string2))
 
-   call nc_check(nf90_inquire_variable(iunit, VarID, dimids=dimIDs, &
-        ndims=progvar(ivar)%numdims, xtype=progvar(ivar)%xtype), &
-        'static_init_model', 'inquire '//trim(string2))
+   call nc_check(nf90_inquire_variable(iunit, VarID,                  &
+                                       dimids=dimIDs,                 &
+                                       xtype=progvar(ivar)%xtype,     &
+                                       ndims=progvar(ivar)%numdims),  &
+                 'static_init_model', 'inquire '//trim(string2))
 
    ! If the long_name and/or units attributes are set, get them.
    ! They are not REQUIRED to exist but are nice to use if they are present.
@@ -801,91 +861,101 @@ FILL_PROGVAR : do ivar = 1, nfields
    progvar(ivar)%maxvalue        = huge(0.0_r8)
 
    ! set minvalue for certain variables which deserve it.
-   if ( varname == 'SNODEP'        .or. &    ! noah
-        varname == 'WEASD'         .or. &
-        varname == 'SNOWH'         .or. &    ! noahMP
-        varname == 'SNEQV'         .or. &
-        varname == 'SNOWC'         .or. &
-        varname == 'SOIL_T'        .or. &
-        varname == 'CANLIQ'        .or. &
-        varname == 'LAI'           .or. &
-        varname == 'WA'            .or. &
-        varname == 'qlink1'        .or. &    ! hydro
-        varname == 'hlink'         .or. &
-        varname == 'cvol'          .or. &
-        varname == 'z_gwsubbas'    .or. &
-        varname == 'sfcheadrt'     .or. &
-        varname == 'infxswgt'      .or. &
-        varname == 'precipMult'    .or. &    ! assimOnly
-        varname == 'OVROUGHRTFAC'  .or. &
-        varname == 'RETDEPRTFAC'   .or. &
-        varname == 'gwCoeff'       .or. &
-        varname == 'gwExpon'       .or. &
-        varname == 'ksatMult'      .or. &
-        varname == 'maxSmcMult'    .or. &
-        varname == 'bbMult'        .or. &
-        varname == 'satPsiMult'    .or. &
-        varname == 'slope'         .or. &
-        varname == 'refkdt'         .or. &
-        varname == 'rsMult'        .or. &
-        varname == 'ch2opMult'     .or. &
-        varname == 'czil'               &
+   if ( varname == 'SNODEP'            .or. &    ! noah
+        varname == 'WEASD'             .or. &
+        varname == 'SNOWH'             .or. &    ! noahMP
+        varname == 'SNEQV'             .or. &
+        varname == 'SNOWC'             .or. &
+        varname == 'SOIL_T'            .or. &
+        varname == 'CANLIQ'            .or. &
+        varname == 'LAI'               .or. &
+        varname == 'WA'                .or. &
+        varname == 'qlink1'            .or. &    ! hydro
+        varname == 'hlink'             .or. &
+        varname == 'cvol'              .or. &
+        varname == 'z_gwsubbas'        .or. &
+        varname == 'sfcheadrt'         .or. &
+        varname == 'infxswgt'          .or. &
+        varname == 'precipMult'        .or. &    ! assimOnly
+        varname == 'OVROUGHRTFAC'      .or. &
+        varname == 'RETDEPRTFAC'       .or. &
+        varname == 'gwCoeff'           .or. &
+        varname == 'gwExpon'           .or. &
+        varname == 'ksatMult'          .or. &
+        varname == 'maxSmcMult'        .or. &
+        varname == 'bbMult'            .or. &
+        varname == 'satPsiMult'        .or. &
+        varname == 'slope'             .or. &
+        varname == 'refkdt'            .or. &
+        varname == 'rsMult'            .or. &
+        varname == 'ch2opMult'         .or. &
+        varname == 'czil'              .or. &
+        varname == 'qBucketMult'       .or. &
+        varname == 'qSfcLatRunoffMult'      &
         ) then
       progvar(ivar)%rangeRestricted = 1
       ! Most vars have minvalue of 0.
       progvar(ivar)%minvalue     = 0
+
       ! Write exceptions here, this is a dummy example.
-      if ( varname == 'SOIL_T' )        progvar(ivar)%minvalue     = 100  !! Kelvin. 
-      if ( varname == 'precipMult' )    progvar(ivar)%minvalue     = .01
-      if ( varname == 'OVROUGHRTFAC' )  progvar(ivar)%minvalue     = .01
-      if ( varname == 'RETDEPRTFAC' )   progvar(ivar)%minvalue     = .01
-      if ( varname == 'gwCoeff' )       progvar(ivar)%minvalue     = .01
-      if ( varname == 'gwExpon' )       progvar(ivar)%minvalue     = .01
-      if ( varname == 'ksatMult' )      progvar(ivar)%minvalue     = .01
-      if ( varname == 'maxSmcMult' )    progvar(ivar)%minvalue     = .01
-      if ( varname == 'bbMult' )        progvar(ivar)%minvalue     = .1
-      if ( varname == 'satPsiMult' )    progvar(ivar)%minvalue     = .001
-      if ( varname == 'slope' )         progvar(ivar)%minvalue     = .01
-      if ( varname == 'refkdt' )         progvar(ivar)%minvalue    = .5
-      if ( varname == 'rsMult' )        progvar(ivar)%minvalue     = .3  
-      if ( varname == 'ch2opMult' )     progvar(ivar)%minvalue     = 0.001  
-      if ( varname == 'czil' )          progvar(ivar)%minvalue     = .01 
+      if ( varname == 'SOIL_T' )            progvar(ivar)%minvalue     = 100  !! Kelvin. 
+      if ( varname == 'precipMult' )        progvar(ivar)%minvalue     = .01
+      if ( varname == 'OVROUGHRTFAC' )      progvar(ivar)%minvalue     = .01
+      if ( varname == 'RETDEPRTFAC' )       progvar(ivar)%minvalue     = .01
+      if ( varname == 'gwCoeff' )           progvar(ivar)%minvalue     = .01
+      if ( varname == 'gwExpon' )           progvar(ivar)%minvalue     = .01
+      if ( varname == 'ksatMult' )          progvar(ivar)%minvalue     = .01
+      if ( varname == 'maxSmcMult' )        progvar(ivar)%minvalue     = .01
+      if ( varname == 'bbMult' )            progvar(ivar)%minvalue     = .1
+      if ( varname == 'satPsiMult' )        progvar(ivar)%minvalue     = .001
+      if ( varname == 'slope' )             progvar(ivar)%minvalue     = .01
+      if ( varname == 'refkdt' )            progvar(ivar)%minvalue     = .5
+      if ( varname == 'rsMult' )            progvar(ivar)%minvalue     = .3  
+      if ( varname == 'ch2opMult' )         progvar(ivar)%minvalue     = 0.001  
+      if ( varname == 'czil' )              progvar(ivar)%minvalue     = .01 
+      if ( varname == 'qBucketMult' )       progvar(ivar)%minvalue     = .001 
+      if ( varname == 'qSfcLatRunoffMult' ) progvar(ivar)%minvalue     = .001 
    end if
 
    ! set maxvalue for those deserving variables. 
-   if ( varname == 'SOIL_T'       .or. &  ! assimOnly
-        varname == 'precipMult'   .or. &  ! assimOnly
-        varname == 'OVROUGHRTFAC' .or. &   
-        varname == 'RETDEPRTFAC'  .or. &
-        varname == 'gwCoeff'      .or. &
-        varname == 'gwExpon'      .or. &
-        varname == 'ksatMult'     .or. &
-        varname == 'maxSmcMult'   .or. &
-        varname == 'bbMult'       .or. &
-        varname == 'satPsiMult'   .or. &
-        varname == 'slope'        .or. &
-        varname == 'refkdt'        .or. &
-        varname == 'rsMult'       .or. &
-        varname == 'ch2opMult'    .or. &
-        varname == 'czil'              &
+   if ( varname == 'SOIL_T'            .or. &  ! assimOnly
+        varname == 'precipMult'        .or. &  ! assimOnly
+        varname == 'OVROUGHRTFAC'      .or. &   
+        varname == 'RETDEPRTFAC'       .or. &
+        varname == 'gwCoeff'           .or. &
+        varname == 'gwExpon'           .or. &
+        varname == 'ksatMult'          .or. &
+        varname == 'maxSmcMult'        .or. &
+        varname == 'bbMult'            .or. &
+        varname == 'satPsiMult'        .or. &
+        varname == 'slope'             .or. &
+        varname == 'refkdt'            .or. &
+        varname == 'rsMult'            .or. &
+        varname == 'ch2opMult'         .or. &
+        varname == 'czil'              .or. &
+        varname == 'qBucketMult'       .or. &
+        varname == 'qSfcLatRunoffMult'      &
         ) then
-      progvar(ivar)%rangeRestricted = progvar(ivar)%rangeRestricted + 2
-      progvar(ivar)%maxvalue        = 14.2  !! total dummy. 
-      if ( varname == 'SOIL_T' )        progvar(ivar)%maxvalue = 273.15+75.  ! Kelvin. 
-      if ( varname == 'precipMult' )    progvar(ivar)%maxvalue = 10.
-      if ( varname == 'OVROUGHRTFAC' )  progvar(ivar)%maxvalue = 20.  ! fairly arbitrary
-      if ( varname == 'RETDEPRTFAC' )   progvar(ivar)%maxvalue = 20.
-      if ( varname == 'gwCoeff' )       progvar(ivar)%maxvalue = 100. ! fairly arbitrary
-      if ( varname == 'gwExpon' )       progvar(ivar)%maxvalue = 100.
-      if ( varname == 'ksatMult' )      progvar(ivar)%maxvalue = 10.
-      if ( varname == 'maxSmcMult' )    progvar(ivar)%maxvalue = 1.25
-      if ( varname == 'bbMult' )        progvar(ivar)%maxvalue = 3.
-      if ( varname == 'satPsiMult' )    progvar(ivar)%maxvalue = 7.
-      if ( varname == 'slope' )         progvar(ivar)%maxvalue = 1.
-      if ( varname == 'refkdt' )        progvar(ivar)%maxvalue = 5.
-      if ( varname == 'rsMult' )        progvar(ivar)%maxvalue = 1.2
-      if ( varname == 'ch2opMult' )     progvar(ivar)%maxvalue = 5.
-      if ( varname == 'czil' )          progvar(ivar)%maxvalue = 1
+          progvar(ivar)%rangeRestricted =     progvar(ivar)%rangeRestricted + 2
+          progvar(ivar)%maxvalue        = 14.2  !! total dummy. 
+      if ( varname == 'SOIL_T' )            progvar(ivar)%maxvalue = 273.15+75.  ! Kelvin. 
+      if ( varname == 'precipMult' )        progvar(ivar)%maxvalue = 10.
+      if ( varname == 'OVROUGHRTFAC' )      progvar(ivar)%maxvalue = 20.  ! fairly arbitrary
+      if ( varname == 'RETDEPRTFAC' )       progvar(ivar)%maxvalue = 20.
+      if ( varname == 'gwCoeff' )           progvar(ivar)%maxvalue = 100. ! fairly arbitrary
+      if ( varname == 'gwExpon' )           progvar(ivar)%maxvalue = 100.
+      if ( varname == 'ksatMult' )          progvar(ivar)%maxvalue = 10.
+      if ( varname == 'maxSmcMult' )        progvar(ivar)%maxvalue = 1.25
+      if ( varname == 'bbMult' )            progvar(ivar)%maxvalue = 3.
+      if ( varname == 'satPsiMult' )        progvar(ivar)%maxvalue = 7.
+      if ( varname == 'slope' )             progvar(ivar)%maxvalue = 1.
+      if ( varname == 'refkdt' )            progvar(ivar)%maxvalue = 5.
+      if ( varname == 'rsMult' )            progvar(ivar)%maxvalue = 1.2
+      if ( varname == 'ch2opMult' )         progvar(ivar)%maxvalue = 5.
+      if ( varname == 'czil' )              progvar(ivar)%maxvalue = 1
+      if ( varname == 'qBucketMult' )       progvar(ivar)%maxvalue = 50 
+      if ( varname == 'qSfcLatRunoffMult' ) progvar(ivar)%maxvalue = 50
+
    end if
 
    ! specify if array bounds are to be used. 
@@ -895,7 +965,7 @@ FILL_PROGVAR : do ivar = 1, nfields
         ) then
       progvar(ivar)%rangeRestricted = 4
    end if
-   
+
    ! These variables have a Time dimension. We only want the most recent time.
    varsize = 1
    dimlen  = 1
@@ -935,7 +1005,7 @@ FILL_PROGVAR : do ivar = 1, nfields
    dumNumDims = progvar(ivar)%numdims
    if (progvar(ivar)%component == 'LSM') dumNumDims = dumNumDims-1  !LSM has time dim of length 1
    if (dumNumDims .eq. 1) then
-      if(progvar(ivar)%component == 'HYDRO') then 
+      if(progvar(ivar)%component == 'HYDRO') then
          if (progvar(ivar)%varsize .eq. n_link) progvar(ivar)%grid = 'link1d'
          if (progvar(ivar)%varsize .eq. n_basn) progvar(ivar)%grid = 'basn1d'
       end if
@@ -1027,15 +1097,20 @@ FILL_PROGVAR : do ivar = 1, nfields
 
 enddo FILL_PROGVAR
 
-call nc_check(nf90_close(iunit_lsm), 'static_init_model', &
-                  'close '//trim(lsm_netcdf_filename))
+
+if(lsm_model_active) then
+   call nc_check(nf90_close(iunit_lsm), 'static_init_model', &
+        'close '//trim(lsm_netcdf_filename))
+endif 
+   
 if (hydro_model_active) then
    call nc_check(nf90_close(iunit_hydro), 'static_init_model', &
-                      'close '//trim(hydro_netcdf_filename))
+        'close '//trim(hydro_netcdf_filename))
 end if
+
 if (assimOnly_active) then
    call nc_check(nf90_close(iunit_assimOnly), 'static_init_model', &
-                     'close '//trim(assimOnly_netcdf_filename))
+        'close '//trim(assimOnly_netcdf_filename))
 end if
 
 model_size = progvar(nfields)%indexN
@@ -1048,7 +1123,11 @@ model_size = progvar(nfields)%indexN
 ! Closer to the center of the earth is an increasingly large negative number
 ! Do the appropriate summing of layer thicknesses and multiplying by -1 for noahMP.
 
-allocate(state_lon(model_size),state_lat(model_size),state_level(model_size))
+allocate( state_lon(model_size) )
+!if(.not. allocated(state_lon)) allocate(state_lon(model_size))
+allocate(state_lat(model_size))
+allocate(state_level(model_size))
+
 !-------------------------------------------------------------------------------
 ! Fill the dart/state coordinate vectors: state_lon, state_lat, and state_level (also elevation?)
 ! TJH FIXME - I cannot envision a scenario where the elevation relative to the geoid would be useful.
@@ -1059,7 +1138,9 @@ allocate(state_lon(model_size),state_lat(model_size),state_level(model_size))
 
 ! Make a unique list of progvar%gridMemOrd
 allocate(uniqueGridMemOrd(nfields))
+uniqueGridMemOrd(:) = ''
 nUniqueGrids = 0
+
 do ivar = 1,nfields
    dumGridMemOrd = progvar(ivar)%gridMemOrd
    if (.not. any(uniqueGridMemOrd == dumGridMemOrd)) then 
@@ -1074,17 +1155,20 @@ enddo
 !   print*,trim(uniqueGridMemOrd(i))
 !end do
 
+!! The following section defines the lat, lon, elevation of the DART state vector.
+
 ! Break this into sub routines named after grids, clarify the overall strategy, 
 ! jlm fixme - ditch identifying unique grids, and just loop through progvar
 do igrid = 1, nUniqueGrids
-   
-   ! identify the progvars with that grid
-   allocate(whichVars( sum( (/ (1, i=1,nfields) /), &
-                           mask=progvar%gridMemOrd .eq. trim(uniqueGridMemOrd(igrid)) )) )
-   whichVars = pack( (/ (i, i=1,size(progvar%gridMemOrd)) /), &
-                     mask = progvar%gridMemOrd .eq. trim(uniqueGridMemOrd(igrid)) )  !! shouldnt need a trim on progvar%grid
 
-      ! create a dummy copy of those coords in 1D for the current grid
+   ! identify the progvars with that grid
+   if(allocated(whichVars)) deallocate(whichVars)
+   allocate(whichVars( sum( (/ (1, i=1,nfields) /), &
+        mask=progvar%gridMemOrd .eq. trim(uniqueGridMemOrd(igrid)) )) )
+   whichVars = pack( (/ (i, i=1,size(progvar%gridMemOrd)) /), &
+        mask = progvar%gridMemOrd .eq. trim(uniqueGridMemOrd(igrid)) )  !! shouldnt need a trim on progvar%grid
+
+   ! create a dummy copy of those coords in 1D for the current grid
    if (size(whichVars) .gt. 0) then
 
       whVar1 = whichVars(1)  !! since all variables identified have same grid and memoryOrder, reference against the first.
@@ -1098,7 +1182,8 @@ do igrid = 1, nUniqueGrids
       endif
 
       ! these "grids" dont have coordinates.
-      if( (trim(progvar(whVar1)%grid) .eq. 'basn1d') .or. (trim(progvar(whVar1)%grid) .eq. 'scalar') ) then
+      if( (trim(progvar(whVar1)%grid) .eq. 'basn1d') .or. & 
+          (trim(progvar(whVar1)%grid) .eq. 'scalar') )      then
          if( trim(progvar(whVar1)%grid) .eq. 'basn1d' ) dumSize=n_basn
          if( trim(progvar(whVar1)%grid) .eq. 'scalar' ) dumSize=1
          allocate(dumGridLon(dumSize),dumGridLat(dumSize),dumGridLevel(dumSize))
@@ -1108,7 +1193,8 @@ do igrid = 1, nUniqueGrids
       endif
 
       !! 2D grids
-      if (trim(progvar(whVar1)%grid) .eq. 'fine2d' .or. trim(progvar(whVar1)%grid) .eq. 'coarse2d') then
+      if (trim(progvar(whVar1)%grid) .eq. 'fine2d' .or. & 
+          trim(progvar(whVar1)%grid) .eq. 'coarse2d')     then
 
          if (trim(progvar(whVar1)%grid) .eq. 'coarse2d') then
             dumNLon=west_east
@@ -1123,24 +1209,24 @@ do igrid = 1, nUniqueGrids
          allocate(dumGridLon(dumSize),dumGridLat(dumSize),dumGridLevel(dumSize))
          myindex=1
          do ilat=1,dumNLat    !Y
-         do ilon=1,dumNLon    !X
-            if (trim(progvar(whVar1)%grid) .eq. 'fine2d') then
-               dumGridLon(myindex) = hlong(ilon, ilat)
-               dumGridLat(myindex) =  hlat(ilon, ilat)
-            endif
-            if (trim(progvar(whVar1)%grid) .eq. 'coarse2d') then
-               dumGridLon(myindex) = xlong(ilon, ilat)
-               dumGridLat(myindex) =  xlat(ilon, ilat)
-            endif
-            myindex = myindex + 1
-         end do              !X
+            do ilon=1,dumNLon    !X
+               if (trim(progvar(whVar1)%grid) .eq. 'fine2d') then
+                  dumGridLon(myindex) = hlong(ilon, ilat)
+                  dumGridLat(myindex) =  hlat(ilon, ilat)
+               endif
+               if (trim(progvar(whVar1)%grid) .eq. 'coarse2d') then
+                  dumGridLon(myindex) = xlong(ilon, ilat)
+                  dumGridLat(myindex) =  xlat(ilon, ilat)
+               endif
+               myindex = myindex + 1
+            end do              !X
          end do              !Y
          dumGridLevel = dumGridLat*0.0_R8 ! surface
       end if
 
       ! 3D
       if (trim(progvar(whVar1)%grid) .eq. 'fine3d'  .or.   &
-          trim(progvar(whVar1)%grid) .eq. 'coarse3d') then
+           trim(progvar(whVar1)%grid) .eq. 'coarse3d') then
 
          if (trim(progvar(whVar1)%grid) .eq. 'coarse3d') then
             dumNLon=west_east
@@ -1154,45 +1240,45 @@ do igrid = 1, nUniqueGrids
          dumSize=dumNLon*dumNLat*nsoil
          allocate(dumGridLon(dumSize),dumGridLat(dumSize),dumGridLevel(dumSize))
          myindex=1
-         
+
          ! XYZ order - Noah or HYDRO
          if (trim(progvar(whVar1)%MemoryOrder) .eq. 'XYZ') then           
             do ilev=1,nsoil     !Z
-            do ilat=1,dumNLat   !Y
-            do ilon=1,dumNLon   !X
-               if (trim(progvar(whVar1)%grid) .eq. 'fine3d') then
-                  dumGridLon(myindex) = hlong(ilon, ilat)
-                  dumGridLat(myindex) =  hlat(ilon, ilat)            
-               endif
-               if (trim(progvar(whVar1)%grid) .eq. 'coarse3d') then
-                  dumGridLon(myindex) = xlong(ilon, ilat)
-                  dumGridLat(myindex) =  xlat(ilon, ilat)
-               endif
-               dumGridLevel(myindex) = zsoil8(ilev)
-               myindex = myindex + 1
-            end do              !X
-            end do              !Y
+               do ilat=1,dumNLat   !Y
+                  do ilon=1,dumNLon   !X
+                     if (trim(progvar(whVar1)%grid) .eq. 'fine3d') then
+                        dumGridLon(myindex) = hlong(ilon, ilat)
+                        dumGridLat(myindex) =  hlat(ilon, ilat)            
+                     endif
+                     if (trim(progvar(whVar1)%grid) .eq. 'coarse3d') then
+                        dumGridLon(myindex) = xlong(ilon, ilat)
+                        dumGridLat(myindex) =  xlat(ilon, ilat)
+                     endif
+                     dumGridLevel(myindex) = zsoil8(ilev)
+                     myindex = myindex + 1
+                  end do              !X
+               end do              !Y
             end do              !Z
          end if !XYZ
 
          ! XZY order - NoahMP
          if (trim(progvar(whVar1)%MemoryOrder) .eq. 'XZY') then
             do ilat=1,dumNLat   !Y
-            do ilev=1,nsoil     !Z
-            do ilon=1,dumNLon   !X
-               if (trim(progvar(whVar1)%grid) .eq. 'fine3d') then
-                  dumGridLon(myindex) = hlong(ilon, ilat)
-                  dumGridLat(myindex) =  hlat(ilon, ilat)
-               endif
-               if (trim(progvar(whVar1)%grid) .eq. 'coarse3d') then
-                  dumGridLon(myindex) = xlong(ilon, ilat)
-                  dumGridLat(myindex) =  xlat(ilon, ilat)
-               endif
-               dumGridLevel(myindex) = zsoil8(ilev)
-               !dumGridLevel(myindex) = -1*sum(soil_thick_input(1:ilev))
-               myindex = myindex + 1
-            end do             !X
-            end do             !Z
+               do ilev=1,nsoil     !Z
+                  do ilon=1,dumNLon   !X
+                     if (trim(progvar(whVar1)%grid) .eq. 'fine3d') then
+                        dumGridLon(myindex) = hlong(ilon, ilat)
+                        dumGridLat(myindex) =  hlat(ilon, ilat)
+                     endif
+                     if (trim(progvar(whVar1)%grid) .eq. 'coarse3d') then
+                        dumGridLon(myindex) = xlong(ilon, ilat)
+                        dumGridLat(myindex) =  xlat(ilon, ilat)
+                     endif
+                     dumGridLevel(myindex) = zsoil8(ilev)
+                     !dumGridLevel(myindex) = -1*sum(soil_thick_input(1:ilev))
+                     myindex = myindex + 1
+                  end do             !X
+               end do             !Z
             end do             !Y
          end if !XZY
 
@@ -1202,10 +1288,18 @@ do igrid = 1, nUniqueGrids
 
       ! Fill the state vector using the dumGrid variables
       do ivar=1,size(whichVars)
+
          wp=whichVars(ivar)
-         state_lon(progvar(wp)%index1:progvar(wp)%indexN) = dumGridLon
-         state_lat(progvar(wp)%index1:progvar(wp)%indexN) = dumGridLat
-         state_level(progvar(wp)%index1:progvar(wp)%indexN) = dumGridLevel
+         !print*,'-------------------------------------------'
+         !print*,'ivar: ', ivar,' wp:',wp,' whichVars:',whichVars
+         !print*,'progvar(wp)%index1,progvar(wp)%indexN: ',progvar(wp)%index1,progvar(wp)%indexN
+         !print*,'dumSize: ', dumSize
+         !print*,'state_lon(progvar(wp)%index1:progvar(wp)%indexN): ', state_lon(progvar(wp)%index1:progvar(wp)%indexN)
+         !print*,'dumGridLon(1:dumSize): ', dumGridLon(1:dumSize)
+         
+         state_lon(progvar(wp)%index1:progvar(wp)%indexN) = dumGridLon(1:dumSize)
+         state_lat(progvar(wp)%index1:progvar(wp)%indexN) = dumGridLat(1:dumSize)
+         state_level(progvar(wp)%index1:progvar(wp)%indexN) = dumGridLevel(1:dumSize)
       end do
 
       deallocate(dumGridLon,dumGridLat,dumGridLevel)
@@ -1231,13 +1325,12 @@ endif
 
 allocate(state_loc(model_size))
 do iState=1,model_size
-   state_loc(iState) = set_location(   state_lon(iState), state_lat(iState), &
+   state_loc(iState) = set_location( state_lon(iState), state_lat(iState), &
                                      state_level(iState), VERTISHEIGHT)
 enddo
 
-
-deallocate(state_lon, state_lat, state_level, &
-           keepLsmVars0, keepLsmVars, uniqueGridMemOrd, whichVars)
+deallocate(state_lon, state_lat, state_level)
+deallocate(keepLsmVars0, keepLsmVars, uniqueGridMemOrd, whichVars)
 
 end subroutine static_init_model
 
@@ -1398,7 +1491,7 @@ do iPt=1,nPts
 enddo
 
 dists = sqrt( (stateVarLat  -loc_lat  )**(2.) + &
-              (stateVarLon  -loc_lon  )**(2.) )
+     (stateVarLon  -loc_lon  )**(2.) )
 !             (stateVarDepth-loc_depth)**(2.) )  !! 3d
 closestIndArr = minloc( dists )
 closestInd = closestIndArr(1) + index1 - 1
@@ -1487,12 +1580,25 @@ subroutine end_model()
 ! good style ... perhaps you could deallocate stuff (from static_init_model?).
 if ( .not. module_initialized ) call static_init_model
 
-deallocate(sh2oDisag, sfcHeadDisag,   &
-           all_state_variables,       &
-           channelIndsX, channelIndsY, linkLong, linkLat, &
-           state_loc, &
-           smcWlt1, smcMax1, sh2oWltRt, sh2oMaxRt, smc, sice, &
-           hlong, hlat, basnMask, basnLon, basnLat)
+if (allocated(sh2oDisag))           deallocate(sh2oDisag)
+if (allocated(sfcHeadDisag))        deallocate(sfcHeadDisag)
+if (allocated(all_state_variables)) deallocate(all_state_variables)
+if (allocated(channelIndsX))        deallocate(channelIndsX)
+if (allocated(channelIndsY))        deallocate(channelIndsY)
+if (allocated(linkLong))            deallocate(linkLong)
+if (allocated(linkLat))             deallocate(linkLat)
+if (allocated(state_loc))           deallocate(state_loc)
+if (allocated(smcWlt1))             deallocate(smcWlt1)
+if (allocated(smcMax1))             deallocate(smcMax1)
+if (allocated(sh2oWltRt))           deallocate(sh2oWltRt)
+if (allocated(sh2oMaxRt))           deallocate(sh2oMaxRt)
+if (allocated(smc))                 deallocate(smc)
+if (allocated(sice))                deallocate(sice)
+if (allocated(hlong))               deallocate(hlong)
+if (allocated(hlat))                deallocate(hlat)
+if (allocated(basnMask))            deallocate(basnMask)
+if (allocated(basnLon))             deallocate(basnLon)
+if (allocated(basnLat))             deallocate(basnLat)
 
 end subroutine end_model
 
@@ -1651,8 +1757,8 @@ call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'calendar',trim(calendar)), &
      'nc_write_model_atts', 'put_att calendar '//trim(filename))
 
 !! LSM namelist -  check noah vs noahMP differences
-call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'HRLDAS_CONSTANTS_FILE',trim(hrldas_constants_file)), &
-     'nc_write_model_atts', 'put_att HRLDAS_CONSTANTS_FILE '//trim(filename))
+call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'HRLDAS_SETUP_FILE',trim(hrldas_setup_file)), &
+     'nc_write_model_atts', 'put_att HRLDAS_SETUP_FILE '//trim(filename))
 call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, 'HRLDAS_INDIR',trim(INDIR)), &
      'nc_write_model_atts', 'put_att HRLDAS_INDIR '//trim(filename))
 
@@ -1791,8 +1897,8 @@ else
         'nc_write_model_atts', 'links def_dim'//trim(filename))
 
    !! basin grid
-   call nc_check(nf90_def_dim(ncid=ncFileID, name='basns', len=n_basn, dimid=basnsDimID), &
-        'nc_write_model_atts', 'basns def_dim'//trim(filename))
+!   call nc_check(nf90_def_dim(ncid=ncFileID, name='basns', len=n_basn, dimid=basnsDimID), &
+!        'nc_write_model_atts', 'basns def_dim'//trim(filename))
 
    !! scalar "grid"
    call nc_check(nf90_def_dim(ncid=ncFileID, name='scalar', len=1, dimid=scalarDimID), &
@@ -1885,11 +1991,11 @@ else
 
    ! basn mask index
    ! fix - this is conditional on gw being active and or in the DART state vector.
-   call nc_check(nf90_def_var(ncFileID,name='basns', xtype=nf90_int, &
-        dimids=(/ basnsDimID /), varid=VarID),&
-        'nc_write_model_atts', 'basns def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'basin mask index '), &
-        'nc_write_model_atts', 'basin mask index long_name '//trim(filename))
+!   call nc_check(nf90_def_var(ncFileID,name='basns', xtype=nf90_int, &
+!        dimids=(/ basnsDimID /), varid=VarID),&
+!        'nc_write_model_atts', 'basns def_var '//trim(filename))
+!   call nc_check(nf90_put_att(ncFileID,  VarID, 'long_name', 'basin mask index '), &
+!        'nc_write_model_atts', 'basin mask index long_name '//trim(filename))
 
    ! scalarInd - seems unnecessary... but at least it's consistent and low-cost.
    if(assimOnly_active) then 
@@ -1915,8 +2021,8 @@ else
 
       ! define the variable and set the attributes
 
-!print*,trim(varname)
-!print*,mydimids(1:myndims)
+      !print*,trim(varname)
+      !print*,mydimids(1:myndims)
 
       call nc_check(nf90_def_var(ncid=ncFileID, name=trim(varname), xtype=progvar(ivar)%xtype, &
            dimids = mydimids(1:myndims), varid=VarID),&
@@ -2002,10 +2108,10 @@ else
         'nc_write_model_atts', 'put_var channelIndsY '//trim(filename))
 
    ! basin mask index
-   call nc_check(nf90_inq_varid(ncFileID, 'basns', VarID), &
-        'nc_write_model_atts', 'inq_varid basns '//trim(filename))
-   call nc_check(nf90_put_var(ncFileID, VarID, basnMask ), &
-        'nc_write_model_atts', 'put_var basns '//trim(filename))
+!   call nc_check(nf90_inq_varid(ncFileID, 'basns', VarID), &
+!        'nc_write_model_atts', 'inq_varid basns '//trim(filename))
+!   call nc_check(nf90_put_var(ncFileID, VarID, basnMask ), &
+!        'nc_write_model_atts', 'put_var basns '//trim(filename))
 
    ! scalar index
    if(assimOnly_active) then 
@@ -2211,7 +2317,7 @@ else
          endif
 
          allocate(data_2d_array( progvar(ivar)%dimlens(1),  &
-                                 progvar(ivar)%dimlens(2) ))
+              progvar(ivar)%dimlens(2) ))
          call vector_to_prog_var(state_vec, ivar, data_2d_array)
          call nc_check(nf90_put_var(ncFileID, VarID, data_2d_array, &
               start = mystart(1:ncNdims), count=mycount(1:ncNdims)), &
@@ -2228,8 +2334,8 @@ else
          endif
 
          allocate(data_3d_array( progvar(ivar)%dimlens(1),  &
-                                 progvar(ivar)%dimlens(2),  &
-                                 progvar(ivar)%dimlens(3) ))
+              progvar(ivar)%dimlens(2),  &
+              progvar(ivar)%dimlens(3) ))
          call vector_to_prog_var(state_vec, ivar, data_3d_array)
          call nc_check(nf90_put_var(ncFileID, VarID, data_3d_array, &
               start = mystart(1:ncNdims), count=mycount(1:ncNdims)), &
@@ -2337,7 +2443,7 @@ MyLoop : do i = 1, size(stateVarList,2)
       string1 = 'model_nml:stateVarList not fully specified'
       string2 = 'reading from ['//trim(filename)//']'
       call error_handler(E_ERR,'verify_state_variables', string1, &
-              source, revision, revdate, text2=string2)
+           source, revision, revdate, text2=string2)
    endif
 
    ! Make sure variable exists in netCDF file
@@ -2346,6 +2452,7 @@ MyLoop : do i = 1, size(stateVarList,2)
         'verify_state_variables', trim(string1))
 
    ! Make sure DART kind is valid
+   ! JLM: this disrespects what is actually being used in this module. Could lead to confusion/inconsistency.
    if( get_raw_obs_kind_index(dartstr) < 0 ) then
       write(string1,'(''there is no obs_kind <'',a,''> in obs_kind_mod.f90'')') trim(dartstr)
       call error_handler(E_ERR,'verify_state_variables',string1,source,revision,revdate)
@@ -2409,12 +2516,14 @@ character(len=*), intent(in)  :: filenameLsm, filenameHydro, filenameAssimOnly
 real(r8),         intent(out) :: state_vector(:)
 type(time_type),  intent(out) :: restart_time
 
+type(time_type) :: restart_time_lsm, restart_time_hydro, restart_time_assimOnly
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, ncstart, nccount
 character(len=NF90_MAX_NAME) :: dimname, varname, filename
 
 integer  :: ncid, ncNdims, dimlen, VarID
-integer  :: ncidLsm, ncidHydro, ncidAssimOnly, ncomponents
+integer  :: ncidLsm, ncidHydro, ncidAssimOnly
 integer  :: i, indx1, indx2, indx3, indx4, indx, ivar, ntimes, ifile
+integer  :: rstTimesDontMatch
 
 ! jlm fixme 2 variables for extreme debugging
 !real(r8), dimension(3)  :: dumLoc
@@ -2429,22 +2538,22 @@ if ( .not. module_initialized ) call static_init_model
 
 state_vector(:) = MISSING_R8
 
-! Check that the input file exists ...
-
-ncomponents=1
-if (hydro_model_active) ncomponents=2
-if (assimOnly_active)   ncomponents=3
 if ( (.not. hydro_model_active) .and. assimOnly_active ) then
    write(string1,*) 'Not configured to have assimOnly_active while not hydro_model_active'
    call error_handler(E_ERR,'model_to_dart_vector',string1,source,revision,revdate)
 endif
 
-do ifile=1,ncomponents
+do ifile=1,3
 
    filename = filenameLsm
    if (ifile==2) filename = filenameHydro
    if (ifile==3) filename = filenameAssimOnly
 
+   print*,'lsm_model_active: ',lsm_model_active
+   if (ifile==1 .and. .not.(lsm_model_active))   cycle
+   if (ifile==2 .and. .not.(hydro_model_active)) cycle
+   if (ifile==3 .and. .not.(assimOnly_active))   cycle 
+   
    if ( .not. file_exist(filename) ) then
       write(string1,*) 'file <', trim(filename),'> does not exist.'
       call error_handler(E_ERR,'model_to_dart_vector',string1,source,revision,revdate)
@@ -2453,7 +2562,7 @@ do ifile=1,ncomponents
    call nc_check(nf90_open(adjustl(filename), NF90_NOWRITE, ncid), &
         'model_to_dart_vector', 'open '//trim(filename))
 
-   if (ifile==1) restart_time = get_state_time(ncid, trim(filename))
+   restart_time = get_state_time(ncid, trim(filename))
 
    if ( (do_output()) .and. debug > 99 ) then
       call print_date(restart_time,'model_to_dart_vector:date of restart file '//trim(filename))
@@ -2461,10 +2570,43 @@ do ifile=1,ncomponents
    endif
 
    if (ifile==1) ncidLsm = ncid
+   if (ifile==1) restart_time_lsm = restart_time
+
    if (ifile==2) ncidHydro = ncid
+   if (ifile==2) restart_time_hydro = restart_time
+
    if (ifile==3) ncidAssimOnly = ncid
+   if (ifile==3) restart_time_assimOnly = restart_time
 
 end do
+
+! Check that the restart times match
+rstTimesDontMatch=0
+if(lsm_model_active .and. hydro_model_active) then
+   if(restart_time_lsm .ne. restart_time_hydro)       rstTimesDontMatch=rstTimesDontMatch+1
+endif
+
+if(lsm_model_active .and. assimOnly_active) then
+   if(restart_time_lsm .ne. restart_time_assimOnly)   rstTimesDontMatch=rstTimesDontMatch+2
+endif
+
+!! JLM TODO: not sure this currently makes sense because the assimOnly times dont get
+!!           advanced with the model. After advance, these are out of synch for wrfHydro_to_dart.
+!if(hydro_model_active .and. assimOnly_active) then
+!   if(restart_time_hydro .ne. restart_time_assimOnly) rstTimesDontMatch=rstTimesDontMatch+4
+!endif
+
+if(rstTimesDontMatch .gt. 0) then
+   write(string1,*) 'File restart times dont match, code:',rstTimesDontMatch
+   call error_handler(E_ERR,'model_to_dart_vector',string1,source,revision,revdate)
+endif
+
+! set the return value
+if(lsm_model_active) then
+   restart_time = restart_time_lsm
+else
+   restart_time = restart_time_hydro
+endif
 
 ! Start counting and filling the state vector one item at a time,
 ! repacking the Nd arrays into a single 1d list of numbers.
@@ -2574,10 +2716,10 @@ do ivar=1, nfields  !! jlm - going to need nfieldsLsm and nfieldsHydro
       end if
 
       do indx2 = 1, nccount(2)
-      do indx1 = 1, nccount(1)
-         state_vector(indx) = data_2d_array(indx1,indx2)
-         indx = indx + 1
-      enddo
+         do indx1 = 1, nccount(1)
+            state_vector(indx) = data_2d_array(indx1,indx2)
+            indx = indx + 1
+         enddo
       enddo
       deallocate(data_2d_array)
 
@@ -2597,12 +2739,12 @@ do ivar=1, nfields  !! jlm - going to need nfieldsLsm and nfieldsHydro
       end if
 
       do indx3 = 1, nccount(3)
-      do indx2 = 1, nccount(2)
-      do indx1 = 1, nccount(1)
-         state_vector(indx) = data_3d_array(indx1,indx2,indx3)
-         indx = indx + 1
-      enddo
-      enddo
+         do indx2 = 1, nccount(2)
+            do indx1 = 1, nccount(1)
+               state_vector(indx) = data_3d_array(indx1,indx2,indx3)
+               indx = indx + 1
+            enddo
+         enddo
       enddo
       deallocate(data_3d_array)
 
@@ -2620,14 +2762,14 @@ do ivar=1, nfields  !! jlm - going to need nfieldsLsm and nfieldsHydro
       ! TJH RAFAEL transform goes here.
 
       do indx4 = 1, nccount(4)
-      do indx3 = 1, nccount(3)
-      do indx2 = 1, nccount(2)
-      do indx1 = 1, nccount(1)
-         state_vector(indx) = data_4d_array(indx1,indx2,indx3,indx4)
-         indx = indx + 1
-      enddo
-      enddo
-      enddo
+         do indx3 = 1, nccount(3)
+            do indx2 = 1, nccount(2)
+               do indx1 = 1, nccount(1)
+                  state_vector(indx) = data_4d_array(indx1,indx2,indx3,indx4)
+                  indx = indx + 1
+               enddo
+            enddo
+         enddo
       enddo
       deallocate(data_4d_array)
 
@@ -2640,12 +2782,12 @@ do ivar=1, nfields  !! jlm - going to need nfieldsLsm and nfieldsHydro
 
    endif
 
-! jlm fixme - extreme debugging
-!do ii = progvar(ivar)%index1, progvar(ivar)%indexN 
-!   dumLoc = get_location( state_loc(ii) )
-!   state_vector(ii) = dumLoc(2)  ! lon, lat, ele
-!end do
-! end extreme debugging
+   ! jlm fixme - extreme debugging
+   !do ii = progvar(ivar)%index1, progvar(ivar)%indexN 
+   !   dumLoc = get_location( state_loc(ii) )
+   !   state_vector(ii) = dumLoc(2)  ! lon, lat, ele
+   !end do
+   ! end extreme debugging
 
    indx = indx - 1
    if ( indx /= progvar(ivar)%indexN ) then
@@ -2783,7 +2925,7 @@ call nc_check(nf90_get_var(ncid, VarID, sh2owgt),'disagHydro', 'get_var: '//trim
 
 if (hydroSfcHeadPresent) then 
    allocate(sfcHeadRt(west_east,south_north), &
-            infxsWgt(n_hlong,n_hlat), sfcHeadSubRt(n_hlong,n_hlat) )
+        infxsWgt(n_hlong,n_hlat), sfcHeadSubRt(n_hlong,n_hlat) )
 
    !! sfcHeadRt
    errString    = 'disagHydro: sfcHeadRt'
@@ -2808,7 +2950,7 @@ do J=1,JX  !! also know as y
    do I=1,IX
 
       if (hydroSfcHeadPresent) &
-           !LSMVOL=INFXSRT(I,J)*area_lsm(I,J)
+                                !LSMVOL=INFXSRT(I,J)*area_lsm(I,J)
            LSMVOL=sfcHeadRt(I,J)*area_lsm
 
       do AGGFACYRT=AGGFACTRT-1,0,-1
@@ -2818,7 +2960,7 @@ do J=1,JX  !! also know as y
             JYYRT=J*AGGFACTRT-AGGFACYRT
 
             if (hydroSfcHeadPresent) &
-                 !INFXSUBRT(IXXRT,JYYRT)=LSMVOL*INFXSWGT(IXXRT,JYYRT)/fineGridArea
+                                !INFXSUBRT(IXXRT,JYYRT)=LSMVOL*INFXSWGT(IXXRT,JYYRT)/fineGridArea
                  sfcHeadSubRt(IXXRT,JYYRT)=LSMVOL*INFXSWGT(IXXRT,JYYRT)/fineGridArea
 
             !! note that this block could be moved out of the agg do loop as nothing
@@ -2884,7 +3026,7 @@ do J=1,JX  !! also know as y
                        "SMCMAX exceeded upon disagg. Inds & values: ixxrt,jyyrt,krt,sh2oRt,sh2oMaxRt"
                   write(string2,*) ixxrt,jyyrt,krt, sh2oRt(IXXRT,JYYRT,KRT),sh2oMaxRt(IXXRT,JYYRT,KRT)
                   call error_handler(E_ERR, 'disaggregateHydro', string1, &
-                                     source, revision, revdate, text2=string2)
+                       source, revision, revdate, text2=string2)
                else if (sh2oRt(IXXRT,JYYRT,KRT).le.0.) then
                   string1 = &
                        "SMCRT depleted on disag. Inds &values:ixxrt,jyyrt,krt,sh2oRt,sh2oMaxRt,sh2ox"
@@ -2892,7 +3034,7 @@ do J=1,JX  !! also know as y
                        sh2oRt(IXXRT,JYYRT,KRT),sh2oMaxRt(IXXRT,JYYRT,KRT),sh2ox(I,J,KRT)
                   write(string3,*) "i,j,krt, nsoil",i,j,krt,nsoil
                   call error_handler(E_ERR, 'disaggregateHydro', string1, &
-                                     source, revision, revdate, text2=string2, text3=string3)
+                       source, revision, revdate, text2=string2, text3=string3)
                end if
             end do !debug loop
 
@@ -2902,7 +3044,7 @@ do J=1,JX  !! also know as y
 end do !JX
 
 !! this is not vegas? (what happens here stays here or not).
-if (hydroSmcPresent    ) sh2oDisag    = sh2oRt
+if (hydroSmcPresent)     sh2oDisag    = sh2oRt
 if (hydroSfcHeadPresent) sfcHeadDisag = sfcHeadSubRt
 
 if (hydroSfcHeadPresent) then 
@@ -2956,20 +3098,24 @@ if ( .not. module_initialized ) call static_init_model
 
 ! Check that the output file exists ...
 ! LSM
-if ( .not. file_exist(filenameLsm) ) then
-   write(string1,*) 'cannot open file ', trim(filenameLsm),' for writing.'
-   call error_handler(E_ERR,'dart_vector_to_model_files',string1,source,revision,revdate)
-endif
-call nc_check(nf90_open(trim(filenameLsm), NF90_WRITE, ncidLsm), &
-     'dart_vector_to_model_files','open '//trim(filenameLsm))
-
+if(lsm_model_active) then
+   if ( .not. file_exist(filenameLsm) ) then
+      write(string1,*) 'cannot open file ', trim(filenameLsm),' for writing.'
+      call error_handler(E_ERR,'dart_vector_to_model_files',string1,source,revision,revdate)
+   endif
+   call nc_check(nf90_open(trim(filenameLsm), NF90_WRITE, ncidLsm), &
+        'dart_vector_to_model_files','open '//trim(filenameLsm))
+endif 
+   
 ! Hydro
-if ( .not. file_exist(filenameHydro) ) then
-   write(string1,*) 'cannot open file ', trim(filenameHydro),' for writing.'
-   call error_handler(E_ERR,'dart_vector_to_model_files',string1,source,revision,revdate)
+if(hydro_model_active) then
+   if ( .not. file_exist(filenameHydro) ) then
+      write(string1,*) 'cannot open file ', trim(filenameHydro),' for writing.'
+      call error_handler(E_ERR,'dart_vector_to_model_files',string1,source,revision,revdate)
+   endif
+   call nc_check(nf90_open(trim(filenameHydro), NF90_WRITE, ncidHydro), &
+        'dart_vector_to_model_files','open '//trim(filenameHydro))
 endif
-call nc_check(nf90_open(trim(filenameHydro), NF90_WRITE, ncidHydro), &
-     'dart_vector_to_model_files','open '//trim(filenameHydro))
 
 ! AssimOnly
 if(assimOnly_active) then
@@ -2985,38 +3131,45 @@ endif
 ! comment out for lsm and see if it breaks anything...
 !call nc_check(nf90_inquire(ncFileID,nDimensions,nVariables,nAttributes,unlimitedDimID), &
 !                  'dart_vector_to_model_files', 'inquire '//trim(filename))
-
 ! There is no time dimension in the hydro restarts. so I skip this for hydro
-call nc_check(nf90_inq_dimid(ncidLsm, 'Time', TimeDimID), &
-     'dart_vector_to_model_files','inq_dimid Time '//trim(filenameLsm))
+!call nc_check(nf90_inq_dimid(ncidLsm, 'Time', TimeDimID), &
+!     'dart_vector_to_model_files','inq_dimid Time '//trim(filenameLsm))
 
 ! make sure the time in the file is the same as the time on the data
 ! we are trying to insert.  we are only updating part of the contents
 ! of the NOAH restart file, and state vector contents from a different
 ! time won't be consistent with the rest of the file.
 
-lsm_time = get_state_time(ncidLsm, trim(filenameLsm), timeindex)
-! needs implimented for the new hydro global att restart time.
-hydro_time = lsm_time  !! dummy for now
-!hydro_time = get_state_time(ncidHydro, trim(filenameHydro), timeindex)
-!! jlm fix - can now get the time for hydro and should also have the 
+if(lsm_model_active) then 
+   lsm_time = get_state_time(ncidLsm, trim(filenameLsm), timeindex)
+endif
+
+if(hydro_model_active) then 
+   hydro_time = get_state_time(ncidHydro, trim(filenameHydro), timeindex)
+endif
+
+!! JLM fix - can now get the time for hydro and should also have the 
 !! time in the restart.assimOnly.nc as well. 
 
-if ( lsm_time /= dart_time ) then 
+call print_time(dart_time,'DART current time',logfileunit)
+call print_time(dart_time,'DART current time')
+
+if(lsm_model_active) then
    if ( lsm_time /= dart_time ) then
-      call print_time(dart_time,'DART current time',logfileunit)
       call print_time(lsm_time,'LSM current time',logfileunit)
-      call print_time(dart_time,'DART current time')
       call print_time(lsm_time,'LSM current time')
+      write(string1,*) ' lsm time /= dart time. FATAL error.'
+      call error_handler(E_ERR,'dart_vector_to_model_files',string1,source,revision,revdate)
    end if
+endif
+
+if(hydro_model_active) then
    if ( hydro_time /= dart_time ) then
-      call print_time(dart_time,'DART current time',logfileunit)
       call print_time(hydro_time,'HYDRO current time',logfileunit)
-      call print_time(dart_time,'DART current time')
       call print_time(hydro_time,'HYDRO current time')
+      write(string1,*) ' hydro time /= dart time. FATAL error.'
+      call error_handler(E_ERR,'dart_vector_to_model_files',string1,source,revision,revdate)
    end if
-   write(string1,*),' current time /= model time. FATAL error.'
-   call error_handler(E_ERR,'dart_vector_to_model_files',string1,source,revision,revdate)
 endif
 
 if (do_output() .and. (debug > 0)) then
@@ -3080,7 +3233,7 @@ UPDATE : do ivar=1, nfields
       write(string1,*) trim(string2),' required to have "Time" as the last/unlimited dimension'
       write(string2,*)' last dimension is ',trim(dimnames(ncNdims))
       call error_handler(E_ERR, 'dart_vector_to_model_files', string1, &
-                         source, revision, revdate, text2=string2)
+           source, revision, revdate, text2=string2)
       where(dimIDs == TimeDimID) mystart = timeindex
       where(dimIDs == TimeDimID) mycount = 1
    endif
@@ -3109,13 +3262,13 @@ UPDATE : do ivar=1, nfields
    elseif ( numdims == 2 ) then
 
       allocate(data_2d_array(progvar(ivar)%dimlens(1), &
-                             progvar(ivar)%dimlens(2)) )
+           progvar(ivar)%dimlens(2)) )
       call vector_to_prog_var(state_vector, ivar, data_2d_array,limit=.true.)
 
       !! I really need to do these in a better way, just dont have time right now.
       if (trim(varname) .eq. 'sfcheadrt') then
          allocate(sfcHeadAgg(coarse2dShape(1),coarse2dShape(2)), &
-                  infxsWeights(fine2dShape(1),fine2dShape(2))     )
+              infxsWeights(fine2dShape(1),fine2dShape(2))     )
          sfcHeadDisag = data_2d_array ! global, but declared yet??
          deallocate(data_2d_array)
          call aggSfcHead(sfcHeadAgg, infxsWeights)
@@ -3125,7 +3278,7 @@ UPDATE : do ivar=1, nfields
          deallocate(sfcHeadAgg)
          varidOrig = varid !! this will be written to file after this if statment
          ncNdimsOrig = ncNdims
-         
+
          !! output sh2owgts to the ncid file
          !! i'm kinda cheating by not doing all the dimension checks...
          varname = 'infxswgt'
@@ -3162,8 +3315,8 @@ UPDATE : do ivar=1, nfields
    elseif ( numdims == 3) then
 
       allocate(data_3d_array(progvar(ivar)%dimlens(1), &
-                             progvar(ivar)%dimlens(2), &
-                             progvar(ivar)%dimlens(3)) )
+           progvar(ivar)%dimlens(2), &
+           progvar(ivar)%dimlens(3)) )
 
       ! This applies physical limits 
       call vector_to_prog_var(state_vector, ivar, data_3d_array,limit=.true.)
@@ -3447,60 +3600,81 @@ end subroutine aggSfcHead
 
 !===============================================================================
 function get_state_time(ncid, filename, timeindex)
-! The LSM restart files have "time".
-! We are always using the 'most recent' which is, by defn, the last one.
-! The time in the restart file is NOT the time at which the state is valid.
-! It is one noah_timestep AHEAD of the valid time.
-! Example:
-! the noah_timestep = 3600 seconds &
-! restart_frequency_hours = 1
-! LSM restart filename is RESTART.2004010102_DOMAIN1 has
-!     Times = '2004-01-01_02:00:00' ;
-! The data is valid @ 2004-01-01_01:00:00, the previous noah_timestep
-! (The time in the restart file name is the time of the restart, not the valid state time.
-!  The valid state time was one noah_timestep previously.)
+!! The LSM restart files have "time".
+!! We are always using the 'most recent' which is, by defn, the last one.
+!! The time in the restart file USDED to DIFFER from time at which the state was valid.
+!! And therefore we used to shift the time one time step back
+!! But in the recent development of the model, this has been fixed
+!! Therefore, the time of the restart file is the valid time now.
+!! Example:
+!! the noah_timestep = 3600 seconds &
+!! restart_frequency_hours = 1
+!! LSM restart filename is RESTART.2004010102_DOMAIN1 has
+!!     Times = '2004-01-01_02:00:00' ;
+!! The data is valid @ 2004-01-01_02:00:00
 
 type(time_type) :: get_state_time
-integer,           intent(in)  :: ncid
-character(len=*),  intent(in)  :: filename
-integer, optional, intent(out) :: timeindex
+integer,           intent(in)  :: ncid        !! ncid of the file
+character(len=*),  intent(in)  :: filename    !! the file name
+integer, optional, intent(out) :: timeindex   !! the length of the returned time vector
 
 character(len=19), allocatable, dimension(:) :: datestring
+character(len=19)                            :: datestring_scalar
 integer               :: year, month, day, hour, minute, second
 integer               :: DimID, VarID, strlen, ntimes
 type(time_type)       :: filetime, timestep
+logical               :: isLsmFile 
 
-! Get the dimensions for the strings of times
+! Test if "Time" is a dimension in the file.
+isLsmFile = nf90_inq_dimid(ncid, 'Time', DimID) == NF90_NOERR
 
-call nc_check(nf90_inq_dimid(ncid, 'Time', DimID), &
-     'get_state_time','inq_dimid Time '//trim(filename))
-call nc_check(nf90_inquire_dimension(ncid, DimID, len=ntimes), &
-     'get_state_time','inquire_dimension Time '//trim(filename))
+if(isLsmFile) then
+   ! Get the time from the LSM restart file
+   
+   ! Get the dimensions for the strings of times
+   call nc_check(nf90_inq_dimid(ncid, 'Time', DimID), &
+        'get_state_time','inq_dimid Time '//trim(filename))
+   call nc_check(nf90_inquire_dimension(ncid, DimID, len=ntimes), &
+        'get_state_time','inquire_dimension Time '//trim(filename))
+   
+   call nc_check(nf90_inq_dimid(ncid, 'DateStrLen', DimID), &
+        'get_state_time','inq_dimid DateStrLen '//trim(filename))
+   call nc_check(nf90_inquire_dimension(ncid, DimID, len=strlen), &
+        'get_state_time','inquire_dimension DateStrLen '//trim(filename))
+   
+   if (strlen /= len(datestring)) then
+      write(string1,*)'DatStrLen string length ',strlen,' /= ',len(datestring)
+      call error_handler(E_ERR,'get_state_time', string1, source, revision, revdate)
+   endif
+   
+   ! Get all the Time strings, use the last one.
+   call nc_check(nf90_inq_varid(ncid, 'Times', VarID), &
+        'get_state_time', 'inq_varid Times '//trim(filename))
+   
+   allocate(datestring(ntimes))
+   
+   call nc_check(nf90_get_var(ncid, VarID, datestring), &
+        'get_state_time', 'get_var Times '//trim(filename))
 
-call nc_check(nf90_inq_dimid(ncid, 'DateStrLen', DimID), &
-     'get_state_time','inq_dimid DateStrLen '//trim(filename))
-call nc_check(nf90_inquire_dimension(ncid, DimID, len=strlen), &
-     'get_state_time','inquire_dimension DateStrLen '//trim(filename))
+else
 
-if (strlen /= len(datestring)) then
-   write(string1,*)'DatStrLen string length ',strlen,' /= ',len(datestring)
-   call error_handler(E_ERR,'get_state_time', string1, source, revision, revdate)
+   !! Get the time from the hydro restart file
+   call nc_check(nf90_inquire_attribute(ncid, NF90_GLOBAL, 'Restart_Time', len=strlen), &
+                 'get_state_time', 'inquire_attribute Restart_Time '//trim(filename))
+   !! nf90_get_att only takes scalars
+   call nc_check(nf90_get_att(ncid, NF90_GLOBAL, 'Restart_Time', datestring_scalar),           &
+                 'get_att', 'inquire_attribute Restart_Time '//trim(filename))
+   ntimes = 1
+   allocate(datestring(ntimes))
+   datestring(1) = datestring_scalar
+   
 endif
-
-! Get all the Time strings, use the last one.
-call nc_check(nf90_inq_varid(ncid, 'Times', VarID), &
-     'get_state_time', 'inq_varid Times '//trim(filename))
-
-allocate(datestring(ntimes))
-
-call nc_check(nf90_get_var(ncid, VarID, datestring), &
-     'get_state_time', 'get_var Times '//trim(filename))
-
+   
 read(datestring(ntimes),'(i4,5(1x,i2))') year, month, day, hour, minute, second
 
 timestep       = set_time(noah_timestep, 0)
 filetime       = set_date(year, month, day, hours=hour, minutes=minute, seconds=second)
-get_state_time = filetime - timestep
+get_state_time = filetime  
 
 if (present(timeindex)) timeindex = ntimes
 
@@ -3508,11 +3682,12 @@ if ( (do_output()) .and. debug > 99 ) write(*,*)'get_state_time: Last time strin
 if ( (do_output()) .and. debug > 99 ) call print_date(get_state_time,' get_state_time: means valid time is ')
 
 deallocate(datestring)
-
+!deallocate(datestring) ! dummy to match two matching allocate statements in if..else block
+      
 end function get_state_time
-
-
-
+   
+   
+   
 !===============================================================================
 subroutine get_hrldas_constants(filename)
 ! Read the 'wrfinput' netCDF file for grid information, etc.
@@ -3568,8 +3743,10 @@ do i = 1,numdims
    endif
 enddo
 
-if ( (do_output()) .and. debug > 99 ) write(*,*)'DEBUG get_hrldas_constants ncstart is',ncstart(1:numdims)
-if ( (do_output()) .and. debug > 99 ) write(*,*)'DEBUG get_hrldas_constants nccount is',nccount(1:numdims)
+if ( (do_output()) .and. debug > 99 ) then
+   write(*,*)'DEBUG get_hrldas_constants ncstart is',ncstart(1:numdims)
+   write(*,*)'DEBUG get_hrldas_constants nccount is',nccount(1:numdims)
+end if
 
 !get the longitudes
 call nc_check(nf90_get_var(iunit, VarID, xlong, &
@@ -3606,12 +3783,13 @@ character(len=*), intent(in) :: filename
 
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, ncstart, nccount
 character(len=NF90_MAX_NAME)          :: dimname
-integer, allocatable, dimension(:,:) ::  basnGrid
+integer, allocatable, dimension(:,:)  ::  basnGrid
 real(r8), allocatable, dimension(:,:) ::  hlongFlip, hlatFlip ! local dummies
-integer, allocatable, dimension(:) ::  basnMaskTmp
-real(r8), allocatable, dimension(:) ::  channelLon1D, channelLat1D
+real(r8), allocatable, dimension(:)   ::  channelLon1D, channelLat1D
+integer, allocatable, dimension(:)    ::  basnMaskTmp
 integer :: i, ii, jj, iunit, DimID, VarID, numdims, dimlen, xtype
 integer :: indx, indx1, indx2, indx3, indx4, dumSum
+logical :: nBasnWasZero
 
 call nc_check(nf90_open(adjustl(filename), NF90_NOWRITE, iunit), &
      'get_hydro_constants', 'open '//trim(filename))
@@ -3627,12 +3805,13 @@ call nc_check(nf90_inquire_dimension(iunit, DimID, len=n_hlong), &
      'get_hydro_constants','inquire_dimension x '//trim(filename))
 
 !! module allocation
-allocate(hlong(n_hlong, n_hlat), &
-         hlat(n_hlong, n_hlat)) 
+
+allocate(hlong(n_hlong, n_hlat))
+allocate( hlat(n_hlong, n_hlat)) 
 !! local allocation
-allocate( basnGrid(n_hlong, n_hlat), &
-         hlongFlip(n_hlong, n_hlat), &
-          hlatFlip(n_hlong, n_hlat))
+allocate( basnGrid(n_hlong, n_hlat))
+allocate(hlongFlip(n_hlong, n_hlat))
+allocate( hlatFlip(n_hlong, n_hlat))
 
 ! Require that the xlong and xlat are the same shape.??
 call nc_check(nf90_inq_varid(iunit, 'LONGITUDE', VarID), &
@@ -3709,6 +3888,13 @@ do indx = 1,maxval(basnGrid)
    end if
 enddo
 n_basn = indx2
+
+nBasnWasZero = .FALSE.
+if(n_basn .eq. 0) then
+   nBasnWasZero = .true.
+   n_basn=1
+end if
+
 allocate(basnMask(n_basn),basnLon(n_basn),basnLat(n_basn))
 where(basnMaskTmp .ne. -9999)
    basnMask(:) = basnMaskTmp(1:n_basn)
@@ -3716,10 +3902,14 @@ end where
 
 ! geolocate the basins
 do indx = 1, n_basn
-      basnLon = sum(hlong, basnGrid .eq. indx) / count(basnGrid .eq. indx)
-      basnLat = sum( hlat, basnGrid .eq. indx) / count(basnGrid .eq. indx)
-enddo 
+   basnLon = sum(hlong, basnGrid .eq. indx) / count(basnGrid .eq. indx)
+   basnLat = sum( hlat, basnGrid .eq. indx) / count(basnGrid .eq. indx)
+enddo
 
+if(nBasnWasZero) then
+   basnLon = 0 !sum(hlong) / size(hlong)
+   basnLat = 0 !sum( hlat) / size( hlat)
+end if
 
 
 !get the channelgrid
@@ -3729,7 +3919,8 @@ enddo
 ! and therefore these can be used to grab other channel attributes in that file. 
 ! but the code is really long so I've put it in a module subroutine. 
 ! Dont need to flip lat and lon in this (already done) but will flip other vars from Fulldom file.
-call getChannelCoords(filename, iunit, numdims, ncstart, nccount)
+if ((CHANRTSWCRT.eq.1.or.CHANRTSWCRT.eq.2).and.channel_option .eq. 3) &   ! channel_option==3 => Diff.Wave-gridded.
+     call getChannelGridCoords(filename, iunit, numdims, ncstart, nccount)
 
 
 call nc_check(nf90_close(iunit), 'get_hydro_constants '//trim(filename))
@@ -3780,7 +3971,7 @@ DEFDIM : do i = 1,progvar(ivar)%numdims
    !! though hydro sh2ox is output on the coarse grid with the weights sh2owgts
    !! i'd rather have the fine grid sh2ox in the diagnostic files. 
    if (progvar(ivar)%component == 'HYDRO' ) then 
-      if (progvar(ivar)%varname == 'sh2ox' .OR. &
+      if (progvar(ivar)%varname == 'sh2ox' .or. &
           progvar(ivar)%varname == 'sfcheadrt' ) then 
          if (trim(theDimname) == 'ix')      theDimname = 'ixrt'
          if (trim(theDimname) == 'iy')      theDimname = 'iyrt'
@@ -3862,10 +4053,10 @@ if (present(limit)) then
          where(data_1d_array < progvar(ivar)%minvalue) data_1d_array = progvar(ivar)%minvalue
          where(data_1d_array > progvar(ivar)%maxvalue) data_1d_array = progvar(ivar)%maxvalue
       elseif (progvar(ivar)%rangeRestricted == 4) then
-         write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' has rangeRestricted==4.'
-         write(string2, *)'No code written to restrict its range, however.'
-         call error_handler(E_ERR,'vector_to_1d_prog_var', string1, &
-              source, revision, revdate, text2=string2)
+!         write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' has rangeRestricted==4.'
+!         write(string2, *)'No code written to restrict its range, however.'
+!         call error_handler(E_ERR,'vector_to_1d_prog_var', string1, &
+!              source, revision, revdate, text2=string2)
       endif
    endif
 endif
@@ -3985,10 +4176,10 @@ if (present(limit)) then
             endif
             data_3d_array = max( min( data_3d_array, sh2oMaxRt ), sh2oWltRt )
          else 
-            write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' has rangeRestricted==4.'
-            write(string2, *)'No code written to restrict its range, however.'
-            call error_handler(E_ERR,'vector_to_2d_prog_var', string1, &
-                 source, revision, revdate, text2=string2)
+!            write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' has rangeRestricted==4.'
+!            write(string2, *)'No code written to restrict its range, however.'
+!            call error_handler(E_ERR,'vector_to_2d_prog_var', string1, &
+!                 source, revision, revdate, text2=string2)
          endif
       endif
    endif
@@ -4019,7 +4210,7 @@ end subroutine get_model_timestepping
 !===============================================================================
 ! Painful amount of code for getting the channell lat/lon/ele which matches
 ! the wrfHydro state variable
-subroutine getChannelCoords(filename, iunit, numdims, ncstart, nccount)
+subroutine getChannelGridCoords(filename, iunit, numdims, ncstart, nccount)
 
 integer,               intent(in) :: iunit
 integer,               intent(in) :: numdims
@@ -4042,34 +4233,36 @@ character(len=155) :: header
 
 ! allocate the local variables
 ! these grid ones have to be flipped on y.
+
+
 allocate(channelGrid_in(n_hlong,n_hlat), LAKE_MSKRT_in(n_hlong,n_hlat), &
            DIRECTION_in(n_hlong,n_hlat),       ELRT_in(n_hlong,n_hlat) )
 allocate(   channelGrid(n_hlong,n_hlat),    LAKE_MSKRT(n_hlong,n_hlat), &
               DIRECTION(n_hlong,n_hlat),          ELRT(n_hlong,n_hlat) )
 
 call nc_check(nf90_inq_varid(iunit, 'CHANNELGRID', VarID), &
-     'getChannelCoords','inq_varid CHANNELGRID '//trim(filename))
+     'getChannelGridCoords','inq_varid CHANNELGRID '//trim(filename))
 call nc_check(nf90_get_var(iunit, VarID, channelGrid_in, &
      start=ncstart(1:numdims), count=nccount(1:numdims)), &
-     'getChannelCoords', 'get_var CHANNELGRID '//trim(filename))
+     'getChannelGridCoords', 'get_var CHANNELGRID '//trim(filename))
 
 call nc_check(nf90_inq_varid(iunit, 'LAKEGRID', VarID), &
-     'getChannelCoords','inq_varid LAKEGRID '//trim(filename))
+     'getChannelGridCoords','inq_varid LAKEGRID '//trim(filename))
 call nc_check(nf90_get_var(iunit, VarID, LAKE_MSKRT_in, &
-     start=ncstart(1:numdims), count=nccount(1:numdims)), &
-     'getChannelCoords', 'get_var LAKEGRID '//trim(filename))
+        start=ncstart(1:numdims), count=nccount(1:numdims)), &
+        'getChannelGridCoords', 'get_var LAKEGRID '//trim(filename))
 
 call nc_check(nf90_inq_varid(iunit, 'FLOWDIRECTION', VarID), &
-     'getChannelCoords','inq_varid FLOWDIRECTION '//trim(filename))
+     'getChannelGridCoords','inq_varid FLOWDIRECTION '//trim(filename))
 call nc_check(nf90_get_var(iunit, VarID, DIRECTION_in, &
      start=ncstart(1:numdims), count=nccount(1:numdims)), &
-     'getChannelCoords', 'get_var FLOWDIRECTION '//trim(filename))
+     'getChannelGridCoords', 'get_var FLOWDIRECTION '//trim(filename))
 
 call nc_check(nf90_inq_varid(iunit, 'TOPOGRAPHY', VarID), &
-     'getChannelCoords','inq_varid TOPOGRAPHY '//trim(filename))
+     'getChannelGridCoords','inq_varid TOPOGRAPHY '//trim(filename))
 call nc_check(nf90_get_var(iunit, VarID, ELRT_in, &
      start=ncstart(1:numdims), count=nccount(1:numdims)), &
-     'getChannelCoords', 'get_var TOPOGRAPHY '//trim(filename))
+     'getChannelGridCoords', 'get_var TOPOGRAPHY '//trim(filename))
 
 ixrt = n_hlong
 jxrt = n_hlat
@@ -4088,8 +4281,9 @@ deallocate(channelGrid_in, LAKE_MSKRT_in, DIRECTION_in, ELRT_in)
 ! subset to the 1D channel network as presented in the hydro restart file.
 n_link = sum(channelGrid_in*0+1, mask = channelGrid .ge. 0)
 
-! allocate the necessary wrfHydro variables with module scope
-allocate(channelIndsX(n_link), channelIndsY(n_link), linkLong(n_link), linkLat(n_link))
+! allocate the necessary wrfHydro variables with module scope 
+allocate(channelIndsX(n_link), channelIndsY(n_link))
+allocate(    linkLong(n_link),      linkLat(n_link))
 
 ! temp fix for buggy Arc export...
 do j=1,jxrt
@@ -4098,172 +4292,167 @@ do j=1,jxrt
    end do
 end do
 
-if ((CHANRTSWCRT.eq.1.or.CHANRTSWCRT.eq.2).and.channel_option .ne. 3) then
-   ! not routing on grid, read from file
-   write(string1, *)'Reach based routing not currently enabled in DART.'
-   call error_handler(E_ERR,'getChannelCoords', string1, &
-        source, revision, revdate, text2=string1)
+cnt = 0
 
-elseif ((CHANRTSWCRT.eq.1.or.CHANRTSWCRT.eq.2).and.channel_option.eq.3) then
+!! Looks like all of the if-else statements could be removed because they all result
+!! in the same action. But because this code needs to match the WRF-Hydro topology
+!! setup exactly, it seems convenient to keep the overall structure identical. 
+!! This topology should really be calculated off line
+do j = 1, JXRT  !rows
+   do i = 1 ,IXRT   !colsumns
+      if (CHANNELGRID(i, j) .ge. 0) then !get its direction and assign its elevation and order
+         if ((DIRECTION(i, j) .eq. 64) .and. (j + 1 .le. JXRT) .and. &
+              (CHANNELGRID(i,j+1).ge.0) ) then !North
+            cnt = cnt + 1
+            linkLat(cnt) = hlat(i,j)
+            linkLong(cnt) = hlong(i,j)
+            channelIndsX(cnt) = i
+            channelIndsY(cnt) = j  !! again have to match the flip
+         else if ((DIRECTION(i, j) .eq. 128) .and. (i + 1 .le. IXRT) &
+              .and. (j + 1 .le. JXRT) .and. (CHANNELGRID(i+1,j+1).ge.0) ) then !North East
+            cnt = cnt + 1
+            linkLat(cnt) = hlat(i,j)
+            linkLong(cnt) = hlong(i,j)
+            channelIndsX(cnt) = i
+            channelIndsY(cnt) = j
+         else if ((DIRECTION(i, j) .eq. 1) .and. (i + 1 .le. IXRT) &
+              .and. (CHANNELGRID(i+1,j).ge.0) ) then !East
+            cnt = cnt + 1
+            linkLat(cnt) = hlat(i,j)
+            linkLong(cnt) = hlong(i,j)
+            channelIndsX(cnt) = i
+            channelIndsY(cnt) = j
+         else if ((DIRECTION(i, j) .eq. 2) .and. (i + 1 .le. IXRT) &
+              .and. (j - 1 .ne. 0) .and. (CHANNELGRID(i+1,j-1).ge.0) ) then !south east
+            cnt = cnt + 1
+            linkLat(cnt) = hlat(i,j)
+            linkLong(cnt) = hlong(i,j)
+            channelIndsX(cnt) = i
+            channelIndsY(cnt) = j
+         else if ((DIRECTION(i, j) .eq. 4) .and. (j - 1 .ne. 0).and.(CHANNELGRID(i,j-1).ge.0) ) then !due south
+            cnt = cnt + 1
+            linkLat(cnt) = hlat(i,j)
+            linkLong(cnt) = hlong(i,j)
+            channelIndsX(cnt) = i
+            channelIndsY(cnt) = j
+         else if ((DIRECTION(i, j) .eq. 8) .and. (i - 1 .gt. 0) &
+              .and. (j - 1 .ne. 0) .and. (CHANNELGRID(i-1,j-1).ge.0)) then !south west
+            cnt = cnt + 1
+            linkLat(cnt) = hlat(i,j)
+            linkLong(cnt) = hlong(i,j)
+            channelIndsX(cnt) = i
+            channelIndsY(cnt) = j
+         else if ((DIRECTION(i, j) .eq. 16) .and. (i - 1 .gt. 0).and.(CHANNELGRID(i-1,j).ge.0) ) then !West
+            cnt = cnt + 1
+            linkLat(cnt) = hlat(i,j)
+            linkLong(cnt) = hlong(i,j)
+            channelIndsX(cnt) = i
+            channelIndsY(cnt) = j
+         else if ((DIRECTION(i, j) .eq. 32) .and. (i - 1 .gt. 0) &
+              .and. (j + 1 .le. JXRT) .and. (CHANNELGRID(i-1,j+1).ge.0) ) then !North West
+            cnt = cnt + 1
+            linkLat(cnt) = hlat(i,j)
+            linkLong(cnt) = hlong(i,j)
+            channelIndsX(cnt) = i
+            channelIndsY(cnt) = j
+         else
+            write(string1,*)"NO MATCH", i,j
+            call error_handler(E_MSG,'getChannelGridCoords',string1)
+         end if
 
-   cnt = 0
+      end if !CHANNELGRID check for this node
 
-   do j = 1, JXRT  !rows
-      do i = 1 ,IXRT   !colsumns
-         if (CHANNELGRID(i, j) .ge. 0) then !get its direction and assign its elevation and order
-            if ((DIRECTION(i, j) .eq. 64) .and. (j + 1 .le. JXRT) .and. &
-                 (CHANNELGRID(i,j+1).ge.0) ) then !North
-               cnt = cnt + 1
-               linkLat(cnt) = hlat(i,j)
-               linkLong(cnt) = hlong(i,j)
-               channelIndsX(cnt) = i
-               channelIndsY(cnt) = j  !! again have to match the flip
-            else if ((DIRECTION(i, j) .eq. 128) .and. (i + 1 .le. IXRT) &
-                 .and. (j + 1 .le. JXRT) .and. (CHANNELGRID(i+1,j+1).ge.0) ) then !North East
-               cnt = cnt + 1
-               linkLat(cnt) = hlat(i,j)
-               linkLong(cnt) = hlong(i,j)
-               channelIndsX(cnt) = i
-               channelIndsY(cnt) = j
-            else if ((DIRECTION(i, j) .eq. 1) .and. (i + 1 .le. IXRT) &
-                 .and. (CHANNELGRID(i+1,j).ge.0) ) then !East
-               cnt = cnt + 1
-               linkLat(cnt) = hlat(i,j)
-               linkLong(cnt) = hlong(i,j)
-               channelIndsX(cnt) = i
-               channelIndsY(cnt) = j
-            else if ((DIRECTION(i, j) .eq. 2) .and. (i + 1 .le. IXRT) &
-                 .and. (j - 1 .ne. 0) .and. (CHANNELGRID(i+1,j-1).ge.0) ) then !south east
-               cnt = cnt + 1
-               linkLat(cnt) = hlat(i,j)
-               linkLong(cnt) = hlong(i,j)
-               channelIndsX(cnt) = i
-               channelIndsY(cnt) = j
-            else if ((DIRECTION(i, j) .eq. 4) .and. (j - 1 .ne. 0).and.(CHANNELGRID(i,j-1).ge.0) ) then !due south
-               cnt = cnt + 1
-               linkLat(cnt) = hlat(i,j)
-               linkLong(cnt) = hlong(i,j)
-               channelIndsX(cnt) = i
-               channelIndsY(cnt) = j
-            else if ((DIRECTION(i, j) .eq. 8) .and. (i - 1 .gt. 0) &
-                 .and. (j - 1 .ne. 0) .and. (CHANNELGRID(i-1,j-1).ge.0)) then !south west
-               cnt = cnt + 1
-               linkLat(cnt) = hlat(i,j)
-               linkLong(cnt) = hlong(i,j)
-               channelIndsX(cnt) = i
-               channelIndsY(cnt) = j
-            else if ((DIRECTION(i, j) .eq. 16) .and. (i - 1 .gt. 0).and.(CHANNELGRID(i-1,j).ge.0) ) then !West
-               cnt = cnt + 1
-               linkLat(cnt) = hlat(i,j)
-               linkLong(cnt) = hlong(i,j)
-               channelIndsX(cnt) = i
-               channelIndsY(cnt) = j
-            else if ((DIRECTION(i, j) .eq. 32) .and. (i - 1 .gt. 0) &
-                 .and. (j + 1 .le. JXRT) .and. (CHANNELGRID(i-1,j+1).ge.0) ) then !North West
-               cnt = cnt + 1
-               linkLat(cnt) = hlat(i,j)
-               linkLong(cnt) = hlong(i,j)
-               channelIndsX(cnt) = i
-               channelIndsY(cnt) = j
-            else
-               write(string1,*)"NO MATCH", i,j
-               call error_handler(E_MSG,'getChannelCoords',string1)
-            end if
-
-         end if !CHANNELGRID check for this node
-
-      end do
    end do
+end do
 
 !   print *, "after exiting the channel, this many nodes", cnt
 !   write(*,*) " "
 
-   !Find out if the boundaries are on an edge
-   do j = 1,JXRT
-      do i = 1 ,IXRT
-         if (CHANNELGRID(i, j) .ge. 0) then !get its direction
-            !-- 64's can only flow north
-            if (((DIRECTION(i, j).eq. 64) .and. (j + 1 .gt. JXRT)) .or. &
-                 ((DIRECTION(i, j).eq. 64) .and. (j < jxrt) .and.  &
-                 (CHANNELGRID(i,j+1) .lt. 0))) then !North
-               cnt = cnt + 1
-               linkLat(cnt) = hlat(i,j)
-               linkLong(cnt) = hlong(i,j)
-               channelIndsX(cnt) = i
-               channelIndsY(cnt) = j
-!               print *, "Pour Point N"
-            else if ( ((DIRECTION(i, j) .eq. 128) .and. (i + 1 .gt. IXRT))  &
+!Find out if the boundaries are on an edge
+do j = 1,JXRT
+   do i = 1 ,IXRT
+      if (CHANNELGRID(i, j) .ge. 0) then !get its direction
+         !-- 64's can only flow north
+         if (((DIRECTION(i, j).eq. 64) .and. (j + 1 .gt. JXRT)) .or. &
+              ((DIRECTION(i, j).eq. 64) .and. (j < jxrt) .and.  &
+              (CHANNELGRID(i,j+1) .lt. 0))) then !North
+            cnt = cnt + 1
+            linkLat(cnt) = hlat(i,j)
+            linkLong(cnt) = hlong(i,j)
+            channelIndsX(cnt) = i
+            channelIndsY(cnt) = j
+            !               print *, "Pour Point N"
+         else if ( ((DIRECTION(i, j) .eq. 128) .and. (i + 1 .gt. IXRT))  &
                                 !-- 128's can flow out of the North or East edge
-                 .or.  ((DIRECTION(i, j) .eq. 128) .and. (j + 1 .gt. JXRT))  &
+              .or.  ((DIRECTION(i, j) .eq. 128) .and. (j + 1 .gt. JXRT))  &
                                 !   this is due north edge
-                 .or.  ((DIRECTION(i, j) .eq. 128) .and. (i<ixrt .and. j<jxrt) .and. &
-                 (CHANNELGRID(i + 1, j + 1).lt.0))) then !North East
-               cnt = cnt + 1
-               linkLat(cnt) = hlat(i,j)
-               linkLong(cnt) = hlong(i,j)
-               channelIndsX(cnt) = i
-               channelIndsY(cnt) = j
-!               print *, "Pour Point NE"
-            else if (((DIRECTION(i, j) .eq. 1) .and. (i + 1 .gt. IXRT)) .or. &    !-- 1's can only flow due east
-                 ((DIRECTION(i, j) .eq. 1) .and. (i<ixrt) .and. (CHANNELGRID(i + 1, j) .lt. 0))) then !East
-               cnt = cnt + 1
-               linkLat(cnt) = hlat(i,j)
-               linkLong(cnt) = hlong(i,j)
-               channelIndsX(cnt) = i
-               channelIndsY(cnt) = j
-!               print *, "Pour Point E"
-            else if ( ((DIRECTION(i, j) .eq. 2) .and. (i + 1 .gt. IXRT))    &      !-- 2's can flow out of east or south edge
-                 .or. ((DIRECTION(i, j) .eq. 2) .and. (j - 1 .eq. 0))       &      !-- this is the south edge
-                 .or. ((DIRECTION(i, j) .eq. 2) .and. (i<ixrt .and. j>1) .and.(CHANNELGRID(i + 1, j - 1) .lt.0))) then !south east
-               cnt = cnt + 1
-               linkLat(cnt) = hlat(i,j)
-               linkLong(cnt) = hlong(i,j)
-               channelIndsX(cnt) = i
-               channelIndsY(cnt) = j
-!               print *, "Pour Point SE"
-            else if (((DIRECTION(i, j) .eq. 4) .and. (j - 1 .eq. 0)) .or. &       !-- 4's can only flow due south
-                 ((DIRECTION(i, j) .eq. 4) .and. (j>1) .and.(CHANNELGRID(i, j - 1) .lt. 0))) then !due south
-               cnt = cnt + 1
-               !ZELEV(cnt) = ELRT(i,j)
-               linkLat(cnt) = hlat(i,j)
-               linkLong(cnt) = hlong(i,j)
-               channelIndsX(cnt) = i
-               channelIndsY(cnt) = j
-!               print *, "Pour Point S"
-            else if ( ((DIRECTION(i, j) .eq. 8) .and. (i - 1 .le. 0))      &      !-- 8's can flow south or west
-                 .or.  ((DIRECTION(i, j) .eq. 8) .and. (j - 1 .eq. 0))      &      !-- this is the south edge
-                 .or.  ((DIRECTION(i, j).eq.8).and. (i>1 .and. j>1) .and.(CHANNELGRID(i - 1, j - 1).lt.0))) then !south west
-               cnt = cnt + 1
-               !ZELEV(cnt) = ELRT(i,j)
-               linkLat(cnt) = hlat(i,j)
-               linkLong(cnt) = hlong(i,j)
-               channelIndsX(cnt) = i
-               channelIndsY(cnt) = j
-!               print *, "Pour Point SW"
-            else if (((DIRECTION(i, j) .eq. 16) .and. (i - 1 .le.0) ) &                  !16's can only flow due west
-                 .or.((DIRECTION(i, j).eq.16) .and. (i>1) .and.(CHANNELGRID(i - 1, j).lt.0))) then !West
-               cnt = cnt + 1
-               !ZELEV(cnt) = ELRT(i,j)
-               linkLat(cnt) = hlat(i,j)
-               linkLong(cnt) = hlong(i,j)
-               channelIndsX(cnt) = i
-               channelIndsY(cnt) = j
-!               print *, "Pour Point W"
-            else if ( ((DIRECTION(i, j) .eq. 32) .and. (i - 1 .le. 0))      &      !-- 32's can flow either west or north
-                 .or.  ((DIRECTION(i, j) .eq. 32) .and. (j + 1 .gt. JXRT))   &      !-- this is the north edge
-                 .or.  ((DIRECTION(i, j).eq.32) .and. (i>1 .and. j<jxrt) .and.(CHANNELGRID(i - 1, j + 1).lt.0))) then !North West
-               cnt = cnt + 1
-               !ZELEV(cnt) = ELRT(i,j)
-               linkLat(cnt) = hlat(i,j)
-               linkLong(cnt) = hlong(i,j)
-               channelIndsX(cnt) = i
-               channelIndsY(cnt) = j
-!               print *, "Pour Point NW"
-            endif
-         endif !CHANNELGRID check for this node
-      end do
+              .or.  ((DIRECTION(i, j) .eq. 128) .and. (i<ixrt .and. j<jxrt) .and. &
+              (CHANNELGRID(i + 1, j + 1).lt.0))) then !North East
+            cnt = cnt + 1
+            linkLat(cnt) = hlat(i,j)
+            linkLong(cnt) = hlong(i,j)
+            channelIndsX(cnt) = i
+            channelIndsY(cnt) = j
+            !               print *, "Pour Point NE"
+         else if (((DIRECTION(i, j) .eq. 1) .and. (i + 1 .gt. IXRT)) .or. &    !-- 1's can only flow due east
+              ((DIRECTION(i, j) .eq. 1) .and. (i<ixrt) .and. (CHANNELGRID(i + 1, j) .lt. 0))) then !East
+            cnt = cnt + 1
+            linkLat(cnt) = hlat(i,j)
+            linkLong(cnt) = hlong(i,j)
+            channelIndsX(cnt) = i
+            channelIndsY(cnt) = j
+            !               print *, "Pour Point E"
+         else if ( ((DIRECTION(i, j) .eq. 2) .and. (i + 1 .gt. IXRT))    &      !-- 2's can flow out of east or south edge
+              .or. ((DIRECTION(i, j) .eq. 2) .and. (j - 1 .eq. 0))       &      !-- this is the south edge
+              .or. ((DIRECTION(i, j) .eq. 2) .and. (i<ixrt .and. j>1) .and.(CHANNELGRID(i + 1, j - 1) .lt.0))) then !south east
+            cnt = cnt + 1
+            linkLat(cnt) = hlat(i,j)
+            linkLong(cnt) = hlong(i,j)
+            channelIndsX(cnt) = i
+            channelIndsY(cnt) = j
+            !               print *, "Pour Point SE"
+         else if (((DIRECTION(i, j) .eq. 4) .and. (j - 1 .eq. 0)) .or. &       !-- 4's can only flow due south
+              ((DIRECTION(i, j) .eq. 4) .and. (j>1) .and.(CHANNELGRID(i, j - 1) .lt. 0))) then !due south
+            cnt = cnt + 1
+            !ZELEV(cnt) = ELRT(i,j)
+            linkLat(cnt) = hlat(i,j)
+            linkLong(cnt) = hlong(i,j)
+            channelIndsX(cnt) = i
+            channelIndsY(cnt) = j
+            !               print *, "Pour Point S"
+         else if ( ((DIRECTION(i, j) .eq. 8) .and. (i - 1 .le. 0))      &      !-- 8's can flow south or west
+              .or.  ((DIRECTION(i, j) .eq. 8) .and. (j - 1 .eq. 0))      &      !-- this is the south edge
+              .or.  ((DIRECTION(i, j).eq.8).and. (i>1 .and. j>1) .and.(CHANNELGRID(i - 1, j - 1).lt.0))) then !south west
+            cnt = cnt + 1
+            !ZELEV(cnt) = ELRT(i,j)
+            linkLat(cnt) = hlat(i,j)
+            linkLong(cnt) = hlong(i,j)
+            channelIndsX(cnt) = i
+            channelIndsY(cnt) = j
+            !               print *, "Pour Point SW"
+         else if (((DIRECTION(i, j) .eq. 16) .and. (i - 1 .le.0) ) &                  !16's can only flow due west
+              .or.((DIRECTION(i, j).eq.16) .and. (i>1) .and.(CHANNELGRID(i - 1, j).lt.0))) then !West
+            cnt = cnt + 1
+            !ZELEV(cnt) = ELRT(i,j)
+            linkLat(cnt) = hlat(i,j)
+            linkLong(cnt) = hlong(i,j)
+            channelIndsX(cnt) = i
+            channelIndsY(cnt) = j
+            !               print *, "Pour Point W"
+         else if ( ((DIRECTION(i, j) .eq. 32) .and. (i - 1 .le. 0))      &      !-- 32's can flow either west or north
+              .or.  ((DIRECTION(i, j) .eq. 32) .and. (j + 1 .gt. JXRT))   &      !-- this is the north edge
+              .or.  ((DIRECTION(i, j).eq.32) .and. (i>1 .and. j<jxrt) .and.(CHANNELGRID(i - 1, j + 1).lt.0))) then !North West
+            cnt = cnt + 1
+            !ZELEV(cnt) = ELRT(i,j)
+            linkLat(cnt) = hlat(i,j)
+            linkLong(cnt) = hlong(i,j)
+            channelIndsX(cnt) = i
+            channelIndsY(cnt) = j
+            !               print *, "Pour Point NW"
+         endif
+      endif !CHANNELGRID check for this node
    end do
-endif
+end do
 
 !close(79)
 
@@ -4271,10 +4460,58 @@ deallocate(channelGrid, LAKE_MSKRT, DIRECTION, ELRT)
 
 if (cnt .ne. n_link) then
    write(string1,*) 'Error with number of links in the channel grid.'
-   call error_handler(E_ERR,'getChannelCoords',string1,source,revision,revdate)
+   call error_handler(E_ERR,'getChannelGridCoords',string1,source,revision,revdate)
 endif
 
-end subroutine getChannelCoords
+end subroutine getChannelGridCoords
+
+
+!===============================================================================
+subroutine get_routelink_constants(filename)
+! read the necessary 'route_link_f' file variables. 
+!
+character(len=*), intent(in) :: filename
+integer :: iunit, DimID, i, VarID 
+
+!! module variables set: n_link, channelIndsX, channelIndsY, linkLong, linkLat
+print*,'get_routelink_constants **************'
+
+!! open the file
+call nc_check(nf90_open(adjustl(filename), NF90_NOWRITE, iunit), &
+     'get_routelink_constants', 'open '//trim(filename))
+
+!! get the linkDim
+call nc_check(nf90_inq_dimid(iunit, 'linkDim', DimID), &
+     'get_routelink_constants','inq_dimid y '//trim(filename))
+!! This sets n_link
+call nc_check(nf90_inquire_dimension(iunit, DimID, len=n_link), &
+     'get_routelink_constants','inquire_dimension y '//trim(filename))
+
+!! Allocate these module variables
+allocate(channelIndsX(n_link), channelIndsY(n_link))
+allocate(    linkLong(n_link),      linkLat(n_link))
+
+call nc_check(nf90_inq_varid(iunit, 'lon', VarID), &
+     'get_routelink_constants','inq_varid lon '//trim(filename))
+call nc_check(nf90_get_var(iunit, VarID, linkLong), &
+     'get_routelink_constants', 'get_var lon '//trim(filename))
+
+call nc_check(nf90_inq_varid(iunit, 'lat', VarID), &
+     'get_routelink_constants','inq_varid lat '//trim(filename))
+call nc_check(nf90_get_var(iunit, VarID, linkLat), &
+     'get_routelink_constants', 'get_var lats '//trim(filename))
+
+channelIndsX = (/ (i, i=1,n_link) /)
+channelIndsY = (/ (i, i=1,n_link) /)
+
+!Convert signs of linkLong by SJN
+where(linkLong < 0.0_r8)    linkLong = linkLong + 360.0_r8
+where(linkLong == 360.0_r8) linkLong = 0.0_r8
+
+call nc_check(nf90_close(iunit), 'get_routelink_constants '//trim(filename))
+
+end subroutine get_routelink_constants
+
 
 !===================================================================
 ! End of model_mod

@@ -7,11 +7,18 @@
    input_files              = '../../../obs_def/obs_def_streamflow_mod.f90'
  /
 
+# convert_streamflow_nml:
+# input_files is a list of all input data
+# gages_list_file is a list of all desired gages
+# look for examples in:
+# /glade/u/home/arezoo/wrf_hydro/wrf_hydro_dart/observations/USGS/work
+
 &convert_streamflow_nml
-   input_file = '/glade/p/work/jamesmcc/DART/04233300_VM/nudgingTimeSliceObs/2013-09-30_22:30:00.15min.usgsTimeSlice.ncdf'
-   location_file = '/glade/p/work/jamesmcc/DART/04233300_VM/DOMAIN/RouteLink.nc'
+   input_files     = 'list_of_obs_files.txt'
+   location_file   = '/glade/p/work/jamesmcc/DART/04233300_VM/DOMAIN/RouteLink.nc'
+   gages_list_file = ''
+   verbose         = 0
    obs_fraction_for_error = 0.01
-   verbose = 0
  /
 
 &obs_kind_nml

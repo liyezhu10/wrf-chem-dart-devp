@@ -104,7 +104,7 @@ else
   echo "edit the quickbuild.csh script and remove the exit line"
   echo "to compile with MPI to run in parallel on multiple cpus."
   echo ""
-#  exit 0
+  exit 0
 endif
 
 #----------------------------------------------------------------------

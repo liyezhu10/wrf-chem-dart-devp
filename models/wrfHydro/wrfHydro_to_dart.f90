@@ -5,7 +5,6 @@
 ! $Id$
 
 program wrfHydro_to_dart
-!! JLM dummy
 
 !----------------------------------------------------------------------
 ! purpose: interface between wrfHydro and DART
@@ -66,13 +65,17 @@ call static_init_model()
 ! Read the namelist to get the input filename.
 
 call find_namelist_in_file("input.nml", "wrfHydro_to_dart_nml", iunit)
+
 read(iunit, nml = wrfHydro_to_dart_nml, iostat = io)
+
 call check_namelist_read(iunit, io, "wrfHydro_to_dart_nml")
 
 ! the output filename comes from the initialization of model_mod
 
 call get_lsm_restart_filename( lsm_restart_filename )
+
 call get_hydro_restart_filename( hydro_restart_filename )
+
 call get_assimOnly_restart_filename( assimOnly_restart_filename )
 
 !----------------------------------------------------------------------
@@ -80,12 +83,19 @@ call get_assimOnly_restart_filename( assimOnly_restart_filename )
 !----------------------------------------------------------------------
 write(*,*)
 write(*,'(''wrfHydro_to_dart:converting restart files <'',A, &
-      &'' & '', A, ''> to DART file <'',A,''>'')') &
-       trim(lsm_restart_filename), trim(hydro_restart_filename), trim(wrfHydro_to_dart_output_file)
+         &''> and <'', A, ''> to DART file <'',A,''>'')') &
+       trim(lsm_restart_filename), &
+       trim(hydro_restart_filename), &
+       trim(wrfHydro_to_dart_output_file)
+call flush
+
 write(logfileunit,*)
 write(logfileunit,'(''wrfHydro_to_dart:converting noah restart file <'',A, &
-      &'' & '', A, ''> to DART file <'',A,''>'')') &
-       trim(lsm_restart_filename), trim(hydro_restart_filename), trim(wrfHydro_to_dart_output_file)
+                   &''> and <'', A, ''> to DART file <'',A,''>'')') &
+       trim(lsm_restart_filename), &
+       trim(hydro_restart_filename), &
+       trim(wrfHydro_to_dart_output_file)
+call flush
 
 x_size = get_model_size()
 allocate(statevector(x_size))
@@ -99,6 +109,8 @@ call model_to_dart_vector(lsm_restart_filename, &
 iunit = open_restart_write(wrfHydro_to_dart_output_file)
 call awrite_state_restart(model_time, statevector, iunit)
 call close_restart(iunit)
+
+deallocate(statevector)
 
 !----------------------------------------------------------------------
 ! call finalize_utilities()

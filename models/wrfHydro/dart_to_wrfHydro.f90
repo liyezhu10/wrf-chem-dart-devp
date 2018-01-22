@@ -36,7 +36,8 @@ use        model_mod, only : static_init_model, dart_vector_to_model_files, &
                              get_lsm_restart_filename, &
                              get_hydro_restart_filename, & 
                              get_assimOnly_restart_filename, & 
-                             get_model_timestepping, get_debug_level
+                             get_model_timestepping, get_debug_level, &
+                             lsm_model_active, hydro_model_active
 
 implicit none
 
@@ -132,7 +133,7 @@ call dart_vector_to_model_files(statevector, &
                                hydro_restart_filename, &
                                assimOnly_restart_filename, &
                                model_time, skip_variables)
-
+deallocate(statevector)
 !----------------------------------------------------------------------
 ! Convey adv_to_time to noah by updating kday or khour in the namelist.
 ! Predict the names of the LDASIN files needed -
@@ -170,8 +171,13 @@ if ( advance_time_present ) then
          mytime = mytime + nexttimestep
    enddo TIMELOOP
 
-   if (get_debug_level() > 0) &
-   write(*,*)'needed ',nfiles,' LDASIN files to get from model_time to adv_to_time.'
+   if(lsm_model_active) then
+      if (get_debug_level() > 0) &
+           write(*,*)'needed ',nfiles,' LDASIN files to get from model_time to adv_to_time.'
+   else
+      if (get_debug_level() > 0) &
+           write(*,*)'needed ',nfiles,' CHRTOUT forcing files to get from model_time to adv_to_time.'
+   endif
 
    iunit = open_file('wrfHydro_advance_information.txt',form='formatted',action='write')
    call print_date(  model_time,'dart_to_wrfHydro:wrfHydro  model      date',iunit)

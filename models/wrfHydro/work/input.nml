@@ -1,7 +1,8 @@
 # WRF_Hydro model namelist
 
 &model_nml
-     !! LSM choices: 'noah' | 'noahMP'
+     !! LSM choices: 'noah' | 'noahMP', ''
+     !! the null string deactivates the lsm model
      lsm_model_choice             = 'noahMP',
      hydro_model_active           = .true.,
      !! these are the respective names for the restart files
@@ -27,11 +28,13 @@
      !                                !'SNOWC',    'KIND_SNOWCOVER_FRAC',  !diagnostic, not in restart
      !                               'LAI',       'KIND_LEAF_AREA_INDEX',
      !                               'WA',        'KIND_WATER_TABLE_DEPTH'
-     hydro_state_variables        = 'sh2ox',      'KIND_SOIL_MOISTURE',  
+     hydro_state_variables        = 'qlink1',     'KIND_STREAM_FLOW'
+                                    !'sh2ox',      'KIND_SOIL_MOISTURE',  
                                     !'sfcheadrt',  'KIND_SURFACE_HEAD',
-    				    'qlink1',     'KIND_STREAM_FLOW',
- 				    'z_gwsubbas', 'KIND_DEEP_GROUNDWATER_LEVEL'
-     assimOnly_state_variables    = 'precipMult', 'KIND_1D_PARAMETER'
+ 				    !'z_gwsubbas', 'KIND_DEEP_GROUNDWATER_LEVEL'
+     assimOnly_state_variables    = !'precipMult',       'KIND_1D_PARAMETER', !! really 1D?
+                                    'qBucketMult',       'KIND_1D_PARAMETER',
+                                    'qSfcLatRunoffMult', 'KIND_1D_PARAMETER'
   /
 
 &wrfHydro_to_dart_nml

@@ -45,12 +45,15 @@ set      process = $1
 set   num_states = $2
 set control_file = $3
 
+set debug = `grep -i debug input.nml | cut -d'=' -f2 | cut -d',' -f 1 | tr -d ' '`
+if ($debug > 0) echo "advance_model.csh: start"
 #----------------------------------------------------------------------
 # Block 1: copy necessary input files/executables/files common
 #          to all model advances to a clean, temporary directory.
 #          These will be used by ALL of the ensemble
 #          members being advanced by this script.
 #----------------------------------------------------------------------
+if ($debug > 2) echo "advance_model.csh: block 1, setup files"
 
 # Create a unique temporary working directory for this process's stuff
 # The run-time directory for the entire experiment is called CENTRALDIR;
@@ -87,21 +90,35 @@ cd        $temp_dir  || exit 1
 ##
 #if ($?loginUp1Dir) then
     foreach ff ( namelist.hrldas hydro.namelist )
-        echo $ff
+        if ($debug > 2) echo $ff
         foreach i ( `egrep '[.][.][/]' $ff | tr -d ' ' | egrep -v '^(!)' | cut -d'=' -f2` )
-            echo $i
+            if ($debug > 2) echo $i
             set whLine = `grep -n $i $ff | cut -d':' -f1`
             sed -i "${whLine}s&../&${loginUp1Dir}/&" $ff
         end
     end
 #endif 
 
+## Get the DOMAIN
+ln -s ${loginDir}/DOMAIN .
+ln -s ${loginDir}/FORCING .
+
+    
 # Get parameters.
 foreach FILE ( ${loginDir}/PARAMS.gathered/* ) 
-    echo $FILE
+    if ($debug > 2) echo $FILE
 #   \cp -v ${loginDir}/$FILE . || exit 2 ## if these are to be changed, that's handled below.
     \ln -sf $FILE . || exit 2  
 end
+
+## JLM TODO: figure if lsm_model_active and if hydro_model_active
+set lsm_model_active1 = `grep -v '!' input.nml | grep -i lsm_model_choice | cut -d= -f2 | tr -cd '[[:alnum:]]._-' | wc -m`
+set lsm_model_active = 0
+if ($lsm_model_active > 0) set lsm_model_active = 1
+
+set hydro_model_active1 = `grep -v '!' input.nml | grep -i hydro_model_active | cut -d= -f2 | tr -cd '[[:alnum:]]._-'`
+set hydro_model_active = 0
+if ($hydro_model_active1 == ".true.") set hydro_model_active = 1
 
 # From the namelist determine if the noAssim restarts are needed. 
 # The line could be commented out (default is blank in model_mod.f90) or set to ''.
@@ -137,8 +154,8 @@ while($state_copy <= $num_states)
     #          * dart_to_wrfHydro: convert the DART state vector to model format
     #-------------------------------------------------------------------
 
-    echo "advance_model.csh block 2 converting ensemble member $instance"
-echo `pwd`
+    if ($debug > 2) echo "advance_model.csh: block 2, converting ensemble member $instance"
+
     # clean up from last advance
     # some of these must be copied at some point?? for diagnostics?
     \rm -f  restart.nc  restart.hydro.nc  dart_restart  restart.assimOnly.nc
@@ -148,10 +165,12 @@ echo `pwd`
     \rm -f  *.LDASOUT_DOMAIN*  *LDASIN_DOMAIN*
     \rm -f  *.LSMOUT_DOMAIN*  *.RTOUT_DOMAIN*  *.CHRTOUT*  *.CHANOBS*  frxst_pts_out.txt
     \rm -f  qstrmvol*  diag_hydro.*  stderr.txt stdout.txt  GW_*.txt  *.GW_DOMAIN*
- 
+
     # need the wrfHydro restart files for the output of dart_to_wrfHydro
-    \ln -sv ${loginDir}/restart.$instance.nc  restart.nc   || exit 2
-    \ln -sv ${loginDir}/restart.hydro.$instance.nc  restart.hydro.nc   || exit 2
+    if ($lsm_model_active > 0) \
+        \ln -sv ${loginDir}/restart.$instance.nc  restart.nc   || exit 2
+    if ($hydro_model_active > 0) \
+        \ln -sv ${loginDir}/restart.hydro.$instance.nc  restart.hydro.nc   || exit 2
 
     if ( $assimOnly_active ) \
 	\ln -sv ${loginDir}/restart.assimOnly.$instance.nc  restart.assimOnly.nc   || exit 2
@@ -159,14 +178,17 @@ echo `pwd`
     if ( $assimOnly_active ) then 
 	## these guys depend on their initial values in call to apply_assimOnly
 	## e.g. need to know the original geo_finegrid file to copy and modify it.
-#	\cp ${temp_dir}/namelist.hrldas .
-#	\cp ${temp_dir}/hydro.namelist .
+	\cp ${loginDir}/namelist.hrldas .
+	\cp ${loginDir}/hydro.namelist .
+	#\cp ${temp_dir}/namelist.hrldas .
+	#\cp ${temp_dir}/hydro.namelist .
         # Since parameter files are potentially altered in assimOnly,
 	# refresh and dont use symlinks.
 	foreach FILE ( ${loginDir}/PARAMS.gathered/* ) 
 	    echo $FILE
 	    \cp -v --remove-destination $FILE . || exit 2 ## these might change so dont link
 	end
+
     endif
 
     # the input file is the name of the dart_restart.instance? 
@@ -178,6 +200,7 @@ echo `pwd`
     # restart.nc -> ${loginDir}/restart.$instance.nc
     # restart.hydro.nc -> ${loginDir}/restart.hydro.$instance.nc
     # restart.assimOnly.nc -> ${loginDir}/restart.assimOnly.$instance.nc
+    echo `pwd`
     ${loginDir}/dart_to_wrfHydro                          || exit 2
 
     if ( ! -e wrfHydro_advance_information.txt ) then
@@ -203,7 +226,12 @@ echo `pwd`
 
     ## ALSO have to keep the start time in hrldas abreast of the advancing.
     ## else the forcing data seems to have no effect.
-    set restartFileTime = `ncdump -v Times restart.nc | tail -2 | head -1 | cut -d'"' -f2`
+    if ($lsm_model_active > 0) then
+        set restartFileTime = `ncdump -v Times restart.nc | tail -2 | head -1 | cut -d'"' -f2`
+    else
+        set restartFileTime = `ncdump -h restart.hydro.nc | grep Restart_Time | cut -d'"' -f2`
+    endif
+    
     set restartFileYyyy = `echo $restartFileTime | cut -d- -f1`
     set restartFileMm = `echo $restartFileTime | cut -d- -f2`
     set restartFileDd = `echo $restartFileTime | cut -d- -f3 | cut -d_ -f1`
@@ -217,11 +245,10 @@ g;START_DAY;s;=.*;= $restartFileDd;
 g;START_HOUR;s;=.*;= $restartFileHh;
 wq
 ex_end
-echo "The above error is apparently harmless. Might move to sed."
 
     echo '******************************************************************************'
     echo ' Ensemble member:' $instance
-    grep START_ namelist.hrldas | grep -v !
+    egrep 'START_(Y|M|D|H)' namelist.hrldas | grep -v !
     echo '******************************************************************************'
 
     # The forcing has to be for the NEXT "FORCING_TIMESTEP", apparently.
@@ -242,8 +269,8 @@ echo "The above error is apparently harmless. Might move to sed."
       ./apply_assimOnly.csh ${loginDir}
       set failure = $?
       if ( $failure ) exit 22
-    endif    
-
+    endif
+    
     #-------------------------------------------------------------------
     # Block 3: advance the model
     #          In this case, we are saving the run-time messages to
@@ -252,43 +279,49 @@ echo "The above error is apparently harmless. Might move to sed."
     #          and it creates temp_ud as output. 
     #          Your model will likely be different.
     #-------------------------------------------------------------------
-    echo "advance the model"
-    ## i just want the model to be quiet so I can focus on the DART output
-    if ( `readlink ${loginDir}/wrf_hydro.exe | grep serial | wc -l` ) then 
-        ${loginDir}/wrf_hydro.exe >& /tmp/jamesmccWfrHydroEnsOutputJunk.$process
-    else
-	mpirun -np 6 ${loginDir}/wrf_hydro.exe >& /tmp/jamesmccWfrHydroEnsOutputJunk.$process
-    endif 
+    if ($debug > 2) echo "advance_model.csh: block 3, advance the model"
+    if ($debug <= 2) echo "advance the model"
+    
+    set logTime=`date +%Y-%m-%d_%H.%M.%S`
+    #mpirun -np 2 ${loginDir}/wrf_hydro.exe |& tee ${logTime}.stdout
+    ## The next line is for shared nodes on cheyenne. It DOES use mpirun instead of mpiexec_mpt
+    #mpirun `hostname` -np 2 ${loginDir}/wrf_hydro.exe >& ${logTime}.stdout 
+    mpiexec_mpt -np 2 ${loginDir}/wrf_hydro.exe >& ${logTime}.stdout
 
-    \rm -f /tmp/jamesmccWfrHydroEnsOutputJunk.$process
-
-    @ lsm_status = `\ls -1 RESTART*DOMAIN* | wc -l`
-    @ hydro_status = `\ls -1 HYDRO_RST* | wc -l`
     @ numadvancesNum = $numadvances
 
-    if ( $lsm_status < 1 || $hydro_status < 1 )  then
-	echo "ERROR: wrfHydro died"
-	echo "ERROR: wrfHydro died"
-	\ls -l
-	exit 23
-    endif 
-
-    if ( $lsm_status > $numadvancesNum || $hydro_status > $numadvances )  then
+    if ($lsm_model_active) then
+        @ lsm_status = `\ls -1 RESTART*DOMAIN* | wc -l`
+        if ( $lsm_status < 1 )  then
+            echo "ERROR: wrfHydro died without RESTART files."
+            \ls -l
+            exit 23
+        endif 
 	if ( $lsm_status > $numadvancesNum ) then 
 	    \ls -l RESTART*DOMAIN*
 	    echo "WARNING: wrfHydro created the above RESTART files. only expected # $numadvances" 
 	endif 
-	if ( $hydro_status > $numadvancesP1 ) then 
+    endif
+
+    if ($hydro_model_active) then
+        @ hydro_status = `\ls -1 HYDRO_RST* | wc -l`
+        if ( $hydro_model_active > 0 && $hydro_status < 1 )  then
+            echo "ERROR: wrfHydro died without HYDRO_RST files."
+            \ls -l
+            exit 23
+        endif
+        if ( $hydro_status > $numadvances ) then 
 	    \ls -l HYDRO_RST*
 	    echo "WARNING: wrfHydro created the above HYDRO_RST files. Only expected # $numadvances" 
 	endif 
     endif
 
+
     #-------------------------------------------------------------------
     # Block 4: wrfHydro_to_dart and managing output files. 
     #          rename files to reflect the ensemble member ID
     #-------------------------------------------------------------------
-
+    if ($debug > 2) echo "advance_model.csh: block 4, manage/rename output files"
     # Do this before setting up the next run as there is an unwatned hydro restart file.
 
     # Determine model integration period of interest (which may contain multiple indiv
@@ -297,8 +330,20 @@ echo "The above error is apparently harmless. Might move to sed."
     # The timestamps of the first and last LDASOUT files give us this even though we 
     # dont want the last LDASOUT file (it's for one hour beyond the desired integration period
     # thanks to HRLDAS).
-    set integStart = `\ls -1 *LDASOUT_DOMAIN* | \head -1 | \cut -d. -f1`
-    set integEnd   = `\ls -1 RESTART*_DOMAIN* | \tail -1 | \cut -d. -f2 | cut -d_ -f1`
+    if ($lsm_model_active) then
+        set integStart = `\ls -1 *LDASOUT_DOMAIN* | \head -n1 | \cut -d. -f1`
+        set integEnd = `\ls -1 *LDASOUT_DOMAIN* | \tail -n1 | \cut -d. -f1`
+    else
+        set integStart = `\ls -1 *CHRTOUT_DOMAIN* | \head -n1 | \cut -d. -f1`
+        set integEnd = `\ls -1 *CHRTOUT_DOMAIN* | \tail -n1 | \cut -d. -f1`
+    endif
+
+    set integStartYMD = `echo $integStart | cut -c1-8`
+    set integStartH = `echo $integStart | cut -c9-10`
+    set integStartM = `echo $integStart | cut -c11-12`
+    set timeStep = `grep -i OUTPUT_TIMESTEP namelist.hrldas | cut -d'=' -f2 | tr -d ' '`
+    set integStart = `date -d "$integStartYMD ${integStartH}:${integStartM} ${timeStep} seconds ago" +%Y%m%d%H%M`
+        
     set integDir =  OUTPUT/model_integration.${integStart}-${integEnd}.$instance
     set integDirCurrent = ${nodeDir}/${integDir}
     \mkdir $integDirCurrent
@@ -307,9 +352,10 @@ echo "The above error is apparently harmless. Might move to sed."
     # with/after wrfHydro. So I dont have to clean up a bunch of files.
 
     # Move the output files (*not* restarts)
-    foreach outFile ( GW_*.txt frxst_pts_out.txt qstrmvolrt_accum.txt )
-	\mv $outFile ${integDirCurrent}/.
-    end 
+    # Arezoo: Have removed these since it is not generated at this verison, and cause the script to fail ....
+#    foreach outFile ( GW_*.txt frxst_pts_out.txt qstrmvolrt_accum.txt )
+#	\mv $outFile ${integDirCurrent}/.
+#    end 
     # these have their own timestamps but tag them with ensId/instance. 
     foreach outFile ( *.LDASOUT_DOMAIN* *.LSMOUT_DOMAIN* *.RTOUT_DOMAIN* *.CHRTOUT* *.CHANOBS* )
 	\mv $outFile ${integDirCurrent}/${outFile}.${instance}.nc
@@ -319,21 +365,31 @@ echo "The above error is apparently harmless. Might move to sed."
    if ( $assimOnly_active ) cp restart.assimOnly.nc $integDirCurrent/.
 
     # Set the new/latest restart for ingest to dart
-    set RESTARTlsm = `\ls -1  RESTART* | \tail -1`
-    set RESTARThydro = `\ls -1  HYDRO_RST* | \tail -1`
-    # must force overwrite these existing links
-    \ln -sf $RESTARTlsm    restart.nc        || exit 4
-    \ln -sf $RESTARThydro  restart.hydro.nc  || exit 4
+    if ($lsm_model_active) then
+        set RESTARTlsm = `\ls -1  RESTART* | \tail -1`
+        \ln -sf $RESTARTlsm    restart.nc        || exit 4
+    endif
+    
+    if ($hydro_model_active) then
+        set RESTARThydro = `\ls -1  HYDRO_RST* | \tail -1`
+        \ln -sf $RESTARThydro  restart.hydro.nc  || exit 4
+    endif
 
     ${loginDir}/wrfHydro_to_dart              || exit 4
 
     \mv -v  dart_ics  ${loginDir}/$output_file          || exit 5
     # this breaks the restart.nc and restart.hydro.nc symlinks
     # but they are reset in the next loop
-    \mv -v  ${RESTARTlsm}    ${integDirCurrent}/${RESTARTlsm}.$instance.nc   || exit 5
-    \mv -v  ${RESTARThydro}  ${integDirCurrent}/${RESTARThydro}.$instance.nc || exit 5
-    \ln -sfv ${integDirCurrent}/${RESTARTlsm}.$instance.nc   ${loginDir}/restart.$instance.nc
-    \ln -sfv ${integDirCurrent}/${RESTARThydro}.$instance.nc ${loginDir}/restart.hydro.$instance.nc
+    if ($lsm_model_active) then
+        \mv -v  ${RESTARTlsm}    ${integDirCurrent}/${RESTARTlsm}.$instance.nc   || exit 5
+        \ln -sfv ${integDirCurrent}/${RESTARTlsm}.$instance.nc   ${loginDir}/restart.$instance.nc
+    endif
+    
+    if ($hydro_model_active) then
+        \mv -v  ${RESTARThydro}  ${integDirCurrent}/${RESTARThydro}.$instance.nc || exit 5
+        \ln -sfv ${integDirCurrent}/${RESTARThydro}.$instance.nc ${loginDir}/restart.hydro.$instance.nc
+    endif
+    
     # the linking (vs. cp ing) in these last two lines implies that the model-created 
     # restart files are not sacred, they will be overwritten by dart_to_wrfHydro
 
@@ -365,7 +421,9 @@ if ($?geoFineFileSrc) then
     echo 'fofofofofofofofofofofofofofofofofofofofofofofofofofofofof'
     \cp $geoFineFileOrig $geoFineFile
     \rm -f $geoFineFileOrig
-endif 
+endif
+
+if ($debug > 0) echo "advance_model.csh: finish"
 
 exit 0
 

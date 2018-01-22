@@ -73,6 +73,7 @@ character(len=timeStrLen),      allocatable ::    time_string(:)
 character(len=stationIdStrLen), allocatable :: station_string(:)
 character(len=IDLength),        allocatable ::    gage_string(:)
 integer,                        allocatable :: discharge_quality(:)
+character(len=stationIdStrLen), allocatable :: gages_list(:)
 
 ! variables needed for create_3d_obs 
 
@@ -85,15 +86,23 @@ integer               :: oday, osec
 type(obs_type)        :: obs
 
 ! namelist variables
-
-character(len=256) :: input_file    = 'input.nc'
-character(len=256) :: location_file = 'location.nc'
-character(len=256) :: output_file   = 'obs_seq.out'
+character(len=256) :: input_files     = 'inputs.txt' ! This exists in the namelist ...
+! which is the address to a file having all the files we want to process 
+character(len=256) :: input_file      = 'input.nc'  ! This would be a line of ...
+! input_files which is one time slice file 
+character(len=256) :: location_file   = 'location.nc'
+character(len=256) :: output_file     = 'obs_seq.out'
+character(len=256) :: gages_list_file = 'gage_lists.txt'
 real(r8)           :: obs_fraction_for_error = 0.01
 integer            :: verbose = 0
 
-namelist / convert_streamflow_nml / input_file, output_file, location_file, &
-                                    obs_fraction_for_error, verbose
+! local variabls
+integer            :: fileEnd = 0
+integer            :: nlines  = 0
+
+namelist / convert_streamflow_nml / input_files, output_file, location_file, &
+                                    obs_fraction_for_error, verbose, &
+                                    gages_list_file
 
 ! Get going
 
@@ -104,6 +113,14 @@ call find_namelist_in_file('input.nml', 'convert_streamflow_nml', iunit)
 read(iunit, nml = convert_streamflow_nml, iostat = io)
 call check_namelist_read(iunit, io, 'convert_streamflow_nml')
 
+! print the content of the namelist for clarification 
+print*, "input_files : ", input_files
+print*, "output_file : ", output_file
+print*, "location_file : ", location_file
+print*, "obs_fraction_for_error : ", obs_fraction_for_error
+print*, "verbose : ", verbose
+print*, "gages_list_file : ", gages_list_file
+
 ! Record the DART namelist values used for the run ...
 if (do_nml_file()) write(nmlfileunit, nml=convert_streamflow_nml)
 if (do_nml_term()) write(     *     , nml=convert_streamflow_nml)
@@ -111,18 +128,11 @@ if (do_nml_term()) write(     *     , nml=convert_streamflow_nml)
 ! put the reference date into DART format
 call set_calendar_type(GREGORIAN)
 
-first_obs = .true.
-
-call nc_check( nf90_open(input_file, nf90_nowrite, ncid_d), &
-               routine, 'opening file '//trim(input_file) )
-
-call getdimlen(ncid_d, "stationIdInd", nobs)
-
-write(string1,*)'number of obs is ',nobs
-call error_handler(E_MSG, routine, string1)
-
+!*****************************************************************************************
+! READ the file with the location information 
+!*****************************************************************************************
 call nc_check( nf90_open(location_file, nf90_nowrite, ncid_l), &
-               routine, 'opening file '//trim(location_file) )
+             routine, 'opening file '//trim(location_file) )
 call getdimlen(ncid_l, "linkDim", nlinks)
 
 write(string1,*)'number of links is ',nlinks
@@ -133,17 +143,11 @@ allocate( lon(nlinks))
 allocate(altitude(nlinks))
 allocate(gage_string(nlinks))
 
-allocate(discharge(nobs))
-allocate(discharge_quality(nobs))
-allocate(time_string(nobs))
-allocate(station_string(nobs))
-
 ! read in the data arrays
-call getvar_real(ncid_l, "lat",       lat       )  ! latitudes
-call getvar_real(ncid_l, "lon",       lon       )  ! longitudes
-call getvar_real(ncid_l, "alt",       altitude  )  ! elevation
-call getvar_real(ncid_d, "discharge", discharge )  ! streamflow
-call getvar_int( ncid_d, "discharge_quality", discharge_quality)
+call getvar_real(     ncid_l, "lat",  lat       )  ! latitudes
+call getvar_real(     ncid_l, "lon",  lon       )  ! longitudes
+call getvar_real(     ncid_l, "alt",  altitude  )  ! elevation
+call get_gage_strings(ncid_l, "gages"           ) ! character string ID
 
 ! convert all lons to [0,360], replace any bad lat lims
 ! check the lat/lon values to see if they are ok
@@ -153,74 +157,150 @@ where (lat >  90.0_r8) lat =  90.0_r8
 where (lat < -90.0_r8) lat = -90.0_r8
 where (lon <   0.0_r8) lon = lon + 360.0_r8
 
-call get_gage_strings(   ncid_l, "gages"     ) ! character string ID
-call get_station_strings(ncid_d, "stationId" ) ! dew-point temperature
-call get_time_strings(   ncid_d, "time"      ) ! observation time
-
-call nc_check(nf90_close(ncid_d), routine, 'closing file '//trim(input_file) )
-call nc_check(nf90_close(ncid_l), routine, 'closing file '//trim(location_file) )
-
-! Done with reading the data ... 
+call nc_check(nf90_close(ncid_l), routine, 'closing file '//trim(location_file))
 
 call static_init_obs_sequence()
 call init_obs(obs,      num_copies=NUM_COPIES, num_qc=NUM_QC)
 call init_obs(prev_obs, num_copies=NUM_COPIES, num_qc=NUM_QC)
 
-!  either read existing obs_seq or create a new one
+!*****************************************************************************************
+!    Read the list of the gages to proprocess
+!*****************************************************************************************
 
-inquire(file=output_file, exist=file_exist)
+!>@todo FIXME ... remove hardcoded units, use function to count lines, etc.
 
-if ( file_exist ) then
+! find out the number of lines 
+if (gages_list_file /= "") then 
+        nlines = 0
+        OPEN(222,FILE=gages_list_file)
+        do
+         READ(222, *, IOSTAT = fileEnd) 
+         if (fileEnd == 0) then
+         nlines = nlines + 1
+         else if (fileEnd < 0 ) then
+                exit
+         end if
+        enddo
+        CLOSE(222)
 
-  ! existing file found, append to it
-  call read_obs_seq(output_file, 0, 0, nobs, obs_seq)
+        print*, "number of gages to read from the time slices :", nlines
 
-else
-
-  ! create a new one ... 
-  call init_obs_sequence(obs_seq, NUM_COPIES, NUM_QC, nobs)
-  do i=1,NUM_COPIES ! kinda silly ... only 1 type of observation
-     call set_copy_meta_data(obs_seq, i, 'observation')
-  enddo
-  do i=1,NUM_QC ! kinda silly ... only 1 type of qc
-     call set_qc_meta_data(obs_seq, i, 'Data QC')
-  enddo
-
+        ! allocate ...
+        allocate(gages_list(nlines))
+        OPEN(222,FILE=gages_list_file)
+        do i = 1, nlines
+                READ(222, '(A15)' , IOSTAT = fileEnd), gages_list(i)
+        enddo
+        print*, "List of the gages to process", gages_list
 endif
 
-! Set the DART data quality control.  Be consistent with NCEP codes;
-! 0 is 'must use', 1 is good, no reason not to use it.
+!*****************************************************************************************
+!   Loop through the time slices and adding the data to obs_seq.out 
+!   if the gage is in the gage_list
+!*****************************************************************************************
 
-qc = 1.0_r8   ! modify based on discharge_quality ... perhaps
+OPEN(111,FILE=input_files)
+do
+ READ(111, '(A256)', IOSTAT = fileEnd) input_file
+ print*, input_file
+ if (fileEnd > 0 ) then 
+     Print*, "There was a probelm reading : ", input_files
+     stop
+ else if (fileEnd == 0 ) then 
+        
+        first_obs = .true.
+        call nc_check( nf90_open(input_file, nf90_nowrite, ncid_d), &
+                       routine, 'opening file '//trim(input_file) )
 
-obsloop1: do n = 1, nobs
+        call getdimlen(ncid_d, "stationIdInd", nobs)
 
-   if ( discharge(n) < 0.0_r8 ) cycle
+        write(string1,*)'number of obs in the time slice is ',nobs
+        call error_handler(E_MSG, routine, string1)
 
-   ! oerr is the observation error standard deviation in this application.
-   ! The observation error variance encoded in the observation file
-   ! will be oerr*oerr
-   oerr = max(discharge(n)*obs_fraction_for_error, MIN_OBS_ERR_STD)
+        allocate(discharge(nobs))
+        allocate(discharge_quality(nobs))
+        allocate(time_string(nobs))
+        allocate(station_string(nobs))
 
-   call convert_time_string(time_string(n),oday,osec)
+        ! read in the data arrays
+        call getvar_real(ncid_d, "discharge", discharge )  ! streamflow
+        call getvar_int( ncid_d, "discharge_quality", discharge_quality)
 
-   ! find the lat/lon for the station,link that match this obs.
-   indx = find_matching_gage_index(n)
+        call get_station_strings(ncid_d, "stationId" ) ! Name of the gage
+        call get_time_strings(   ncid_d, "time"      ) ! observation time
 
-   call create_3d_obs(lat(indx), lon(indx), altitude(indx), VERTISHEIGHT, discharge(n), &
-                              STREAM_FLOW, oerr, oday, osec, qc, obs)
-   call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
+        call nc_check(nf90_close(ncid_d), routine, 'closing file '//trim(input_file) )
 
-end do obsloop1
+        ! Done with reading the data ... 
 
-! if we added any obs to the sequence, write it now.
-if ( get_num_obs(obs_seq) > 0 )  call write_obs_seq(obs_seq, output_file)
+        !  either read existing obs_seq or create a new one
+
+        inquire(file=output_file, exist=file_exist)
+        if ( file_exist ) then
+
+          ! existing file found, append to it
+          call read_obs_seq(output_file, 0, 0, nobs, obs_seq)
+
+        else
+
+          ! create a new one ... 
+          call init_obs_sequence(obs_seq, NUM_COPIES, NUM_QC, nobs)  !!!!Arezoo: I want to reduce the number of observation .... to what is in the gage list 
+        
+          do i=1,NUM_COPIES ! kinda silly ... only 1 type of observation
+             call set_copy_meta_data(obs_seq, i, 'observation')
+          enddo
+          do i=1,NUM_QC ! kinda silly ... only 1 type of qc
+             call set_qc_meta_data(obs_seq, i, 'Data QC')
+          enddo
+
+        endif
+        ! Set the DART data quality control.  Be consistent with NCEP codes;
+        ! 0 is 'must use', 1 is good, no reason not to use it.
+
+        qc = 1.0_r8   ! modify based on discharge_quality ... perhaps
+
+        obsloop1: do n = 1, nobs
+
+           if (.not.allocated(gages_list) .or. ANY(gages_list == adjustl(station_string(n)))) then 
+               if ( discharge(n) < 0.0_r8 ) cycle
+
+               ! oerr is the observation error standard deviation in this application.
+               ! The observation error variance encoded in the observation file
+               ! will be oerr*oerr
+               oerr = max(discharge(n)*obs_fraction_for_error, MIN_OBS_ERR_STD)
+
+               call convert_time_string(time_string(n),oday,osec)
+
+               ! find the lat/lon for the station,link that match this obs.
+               indx = find_matching_gage_index(n)
+
+               call create_3d_obs(lat(indx), lon(indx), altitude(indx), VERTISHEIGHT, discharge(n), &
+                                      STREAM_FLOW, oerr, oday, osec, qc, obs)
+               call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
+           endif
+        end do obsloop1
+    
+
+        ! if we added any obs to the sequence, write it now.
+        if ( get_num_obs(obs_seq) > 0 )  call write_obs_seq(obs_seq, output_file)
+
+        deallocate(discharge, discharge_quality)
+        deallocate(time_string, station_string)
+
+ else if (fileEnd < 0 ) then
+        print*, "Reached End of the file"
+        exit
+ end if
+        
+end do
+CLOSE(111)
+stop
 
 ! end of main program
 
 deallocate(lat,lon, altitude, discharge, discharge_quality)
 deallocate(gage_string, time_string, station_string)
-
+if (allocated(gages_list)) deallocate(gages_list)
 call finalize_utilities()
 
 contains

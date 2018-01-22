@@ -1,6 +1,4 @@
 #!/bin/csh
-
-
 #
 # DART software - Copyright 2004 - 2013 UCAR. This open source software is
 # provided by UCAR, "as is", without charge, subject to all terms of use at
@@ -21,8 +19,6 @@
 #
 ##=============================================================================
 ## This block of directives constitutes the preamble for the PBS queuing system
-## PBS is used on the CGD Linux cluster 'bangkok'
-## PBS is used on the CGD Linux cluster 'calgary'
 ##
 ## the normal way to submit to the queue is:    qsub run_filter.csh
 ##
@@ -34,11 +30,25 @@
 ## -q <arg>   Queue name (small, medium, long, verylong)
 ## -l nodes=1:ppn=1   (ppn == Processors Per Node)
 ##=============================================================================
-#PBS -N run_filter
-#PBS -r n
-#PBS -e filter.err
-#PBS -o filter.log
-#PBS -l nodes=3:ppn=11,walltime=168:00:00
+#PBS -m e 
+#PBS -M jamesmcc@ucar.edu
+#PBS -N filter
+#PBS -eo
+#PBS -A NRAL0017
+#PBS -l walltime=00:09:00
+## NODE EXCLUSIVE
+#PBS -q economy
+#PBS -l select=1:ncpus=2:mpiprocs=2
+
+# NODE (single node) SHARE
+#PXX -q share
+#PXX -l select=1:mpiprocs=2
+
+#mkdir -p /glade/scratch/`whoami`/temp
+#setenv TMPDIR /glade/scratch/`whoami`/temp
+#setenv MPI_USE_ARRAY false
+
+## CHANGES IN ADVANCE FILTER NEEDED
 
 ####################################################################
 ####################################################################
@@ -92,13 +102,13 @@ set ENSEMBLESTRING = `grep -A 42 filter_nml input.nml | grep ens_size`
 set NUM_ENS = `echo $ENSEMBLESTRING[3] | sed -e "s#,##"`
 
 set ADVANCESTRING = `grep -A 42 filter_nml input.nml | grep adv_ens_command | grep -v '!'`
-set ADV_CMD  = `echo $ADVANCESTRING | cut -d= -f2 | tr -d '"'`
-echo $ADV_CMD
+set ADV_CMD  = `echo $ADVANCESTRING | cut -d= -f2 | tr -d '"' | tr -d ','`
+echo "ADV_CMD: $ADV_CMD"
 
 # this variable is optional. helps manage writing files to node disks rather than 
 # across the network. 
 # nodeDisk should be a location available on all nodes for writing. 
-set nodeDisk = '/c1'
+#set nodeDisk = '/c1'
 if ($?nodeDisk) then 
     set nodeDir  = ${nodeDisk}/DART.RUN.`date | tr ' ' '-'`
     echo $nodeDir > nodeDir.control
@@ -117,15 +127,17 @@ if ($?PBS_O_WORKDIR) then
     #####################################################################
     #####################################################################
     # PBS has a list of processors in a file whose name is (PBS_NODEFILE)
-    echo "PBS - using mpirun for execution"
+    echo "PBS - using mpiexec_mpt for execution"
     # each filter task advances the ensembles, each running on 1 proc.
     if ( "$parallel_model" == "false" ) then  
     ## async==2 ##
-
-      mpirun ./filter
+      echo "async == 2"
+      mpiexec_mpt ./filter
 
     else  
     ## async==4 ##
+
+      echo "async == 4"
    
     # filter runs in parallel until time to do a model advance,
     # and then this script starts up the modelxxx jobs, each one
@@ -141,7 +153,7 @@ if ($?PBS_O_WORKDIR) then
       # this starts filter but also returns control back to
       # this script immediately.
 
-      (setenv HOME $filterhome; mpirun ./filter) &
+      (setenv HOME $filterhome; mpiexec_mpt ./filter) &
 
       while ( -e filter_to_model.lock )
 
@@ -164,7 +176,7 @@ if ($?PBS_O_WORKDIR) then
           ${ADV_CMD} 0 ${NUM_ENS} filter_control00000 || exit 9
 
           echo "restarting filter."
-          mpirun ./wakeup_filter
+          mpiexec_mpt ./wakeup_filter
 
         else
 
