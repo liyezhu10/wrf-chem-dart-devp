@@ -128,9 +128,9 @@ LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf
 #FFLAGS  = -g -C -CB -ftz -vec-report0 -mcmodel=medium -shared-intel -fp-model precise $(INCS)
 #
 # for development or debugging, use this instead:
- FFLAGS = -g -C -CB -check noarg_temp_created -fpe0 -mcmodel=large -shared-intel \
+ FFLAGS = -g -C -check noarg_temp_created -fpe0 -mcmodel=large -shared-intel \
           -fp-model precise  -ftrapuv -traceback \
-          -warn argument_checking,declarations,uncalled,unused $(INCS)
+          -warn declarations,uncalled,unused $(INCS)
  LDFLAGS = $(FFLAGS) $(LIBS)
 #
 # for speed on yellowstone (verify against a run with with -O and -fp-model precise

@@ -1,4 +1,6 @@
-#!/bin/ksh -aeux
+#!/bin/ksh -aux
+. /glade/u/apps/ch/opt/Lmod/default/lmod/lmod/init/sh
+#
 #########################################################################
 #
 # Purpose: Run_the WRF-Chem/DART PANDA test case
@@ -47,7 +49,7 @@ export ADD_EMISS=.false.
 export EMISS_DAMP_CYCLE=0.5
 export EMISS_DAMP_INTRA_CYCLE=0.5
 #
-let BAND_ISO_VAL_CO=.09
+BAND_ISO_VAL_CO=0.09
 #
 #########################################################################
 # Run fine scale forecast only
@@ -95,7 +97,7 @@ export RUN_INTERPOLATE=false
 # for 20142912
 export BACK_DATE=2014072906
 export FORW_DATE=2014072918
-let BACK_WT=.5000
+BACK_WT=.5000
 #
 #########################################################################
 while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
@@ -115,28 +117,24 @@ export END_IASI_O3_DATA=2014073118
 export NL_DEBUG_LEVEL=200
 #
 # CODE VERSIONS:
-export WPS_VER=WPSv3.6.1_dmpar
-export WPS_GEOG_VER=WPSv3.6.1_GEOG_DATA
-export WRFDA_VER=WRFDAv3.4_dmpar
-export WRF_VER=WRFv3.6.1_dmpar
-export WRFCHEM_VER=WRFCHEMv3.6.1_dmpar
+export WPS_VER=WPSv3.9.1.1_dmpar
+export WPS_GEOG_VER=GEOG_DATA
+export WRFDA_VER=WRFDAv3.9.1.1_dmpar
+export WRF_VER=WRFv3.9.1.1_dmpar
+export WRFCHEM_VER=WRFCHEMv3.9.1.1_dmpar
 export DART_VER=DART_CHEM_REPOSITORY
 #
 # ROOT DIRECTORIES:
 export SCRATCH_DIR=/glade/scratch/mizzi
 export WORK_DIR=/glade/p/work/mizzi
 export ACD_DIR=/glade/p/acd/mizzi
-export FRAPPE_DIR=/glade/p/FRAPPE
 #
 # DEPENDENT INPUT DATA DIRECTORIES:
-export EXPERIMENT_DIR=${FRAPPE_DIR}
+export EXPERIMENT_DIR=${SCRATCH_DIR}
 export RUN_DIR=${EXPERIMENT_DIR}/real_PANDA_RETR_VARLOC_RELEASE_TEST
 export TRUNK_DIR=${WORK_DIR}/TRUNK
-export WPS_DIR_v3p4p1=/glade/p/work/wrfhelp/PRE_COMPILED_CODE/WPSV3.4.1_intel_dmpar
-export WPS_DIR_v3p7p1=/glade/p/work/wrfhelp/PRE_COMPILED_CODE/WPSV3.7.1_intel_serial_large-file
-export WPS_DIR_v3p8p1=/glade/p/work/wrfhelp/PRE_COMPILED_CODE/WPSV3.8.1_intel_serial_large-file
 export WPS_DIR=${TRUNK_DIR}/${WPS_VER}
-export WPS_GEOG_DIR=${TRUNK_DIR}/${WPS_GEOG_VER}/geog
+export WPS_GEOG_DIR=${TRUNK_DIR}/${WPS_GEOG_VER}
 export WRFCHEM_DIR=${TRUNK_DIR}/${WRFCHEM_VER}
 export WRFDA_DIR=${TRUNK_DIR}/${WRFDA_VER}
 export DART_DIR=${TRUNK_DIR}/${DART_VER}
@@ -144,8 +142,7 @@ export BUILD_DIR=${WRFDA_DIR}/var/da
 export WRF_DIR=${TRUNK_DIR}/${WRF_VER}
 export HYBRID_SCRIPTS_DIR=${DART_DIR}/models/wrf_chem/hybrid_scripts
 export ADJUST_EMISS_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_EMISS_INV
-export EXPERIMENT_DATA_DIR=${EXPERIMENT_DIR}/PANDA_REAL_TIME_DATA
-#export EXPERIMENT_DATA_DIR=${EXPERIMENT_DIR}/PANDA_REAL_TIME_DATA_IDIR
+export EXPERIMENT_DATA_DIR=${ACD_DIR}/PANDA_REAL_TIME_DATA
 export MOZBC_DATA_DIR=${EXPERIMENT_DATA_DIR}/mozart_forecasts
 export EXPERIMENT_STATIC_FILES=${EXPERIMENT_DATA_DIR}/static_files
 export EXPERIMENT_WRFCHEMI_DIR=${EXPERIMENT_DATA_DIR}/anthro_emissions
@@ -163,7 +160,6 @@ export EXPERIMENT_GFS_DIR=${EXPERIMENT_DATA_DIR}/gfs_forecasts
 export EXPERIMENT_DUST_DIR=${EXPERIMENT_DATA_DIR}/dust_fields
 export EXPERIMENT_HIST_IO_DIR=${EXPERIMENT_DATA_DIR}/hist_io_files
 export VTABLE_DIR=${WPS_DIR}/ungrib/Variable_Tables
-#export VTABLE_DIR=${WPS_DIR_v3p7p1}/ungrib/Variable_Tables
 export BE_DIR=${WRFDA_DIR}/var/run
 export PERT_CHEM_INPUT_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_PERT_CHEM/ICBC_PERT
 export PERT_CHEM_EMISS_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_PERT_CHEM/EMISS_PERT
@@ -272,14 +268,14 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_PERT_WRFCHEM_CHEM_ICBC=true
    export RUN_PERT_WRFCHEM_CHEM_EMISS=true
    export RUN_MOPITT_CO_OBS=true
-   export RUN_IASI_CO_OBS=false
+   export RUN_IASI_CO_OBS=true
    export RUN_IASI_O3_OBS=false
-   export RUN_AIRNOW_O3_OBS=false
-   export RUN_AIRNOW_CO_OBS=false
-   export RUN_PANDA_CO_OBS=false
-   export RUN_PANDA_O3_OBS=false
-   export RUN_PANDA_PM25_OBS=false
-   export RUN_MODIS_AOD_OBS=false
+   export RUN_AIRNOW_O3_OBS=true
+   export RUN_AIRNOW_CO_OBS=true
+   export RUN_PANDA_CO_OBS=true
+   export RUN_PANDA_O3_OBS=true
+   export RUN_PANDA_PM25_OBS=true
+   export RUN_MODIS_AOD_OBS=true
    export RUN_MET_OBS=true
    export RUN_COMBINE_OBS=true
    export RUN_PREPROCESS_OBS=true
@@ -449,31 +445,32 @@ export GRIB_PART1=gfs_4_
 export GRIB_PART2=.g2.tar
 #
 # COMPUTER PARAMETERS:
-export PROJ_NUMBER=NACD0002
-export PROJ_NUMBER_ACD=P19010000
-export PROJ_NUMBER_NSC=NACD0006
-export PROJ_NUMBER_NSC=${PROJ_NUMBER_ACD}
-export GENERAL_JOB_CLASS=geyser
-export GEOGRID_TIME_LIMIT=0:10
-export GEOGRID_NUM_TASKS=32
-export GEOGRID_TASKS_PER_NODE=8
-export GEOGRID_JOB_CLASS=geyser
-export WRFCHEM_TIME_LIMIT=6:00
-export WRFCHEM_NUM_TASKS=32
-export WRFCHEM_TASKS_PER_NODE=8
-export WRFCHEM_JOB_CLASS=geyser
-export WRFDA_TIME_LIMIT=0:20
-export WRFDA_NUM_TASKS=32
-export WRFDA_TASKS_PER_NODE=8
-export WRFDA_JOB_CLASS=geyser
-export FILTER_TIME_LIMIT=7:59
-export FILTER_NUM_TASKS=32
-export FILTER_TASKS_PER_NODE=8
-export FILTER_JOB_CLASS=geyser
-export MISC_TIME_LIMIT=0:02
-export MISC_NUM_TASKS=1
-export MISC_TASKS_PER_NODE=8
-export MISC_JOB_CLASS=geyser
+export PROJ_NUMBER=P93300612
+export GENERAL_JOB_CLASS=regular
+export GENERAL_TIME_LIMIT=00:10:00
+export GENERAL_NODES=1
+export GENERAL_CORES=36
+export GENERAL_PROCS=36
+export WRFCHEM_JOB_CLASS=regular
+export WRFCHEM_TIME_LIMIT=06:00:00
+export WRFCHEM_NODES=1
+export WRFCHEM_CORES=36
+export WRFCHEM_PROCS=36
+export WRFDA_JOB_CLASS=regular
+export WRFDA_TIME_LIMIT=00:20:00
+export WRFDA_NODES=1
+export WRFDA_CORES=36
+export WRFDA_PROCS=36
+export BIO_JOB_CLASS=regular
+export BIO_TIME_LIMIT=00:30:00
+export BIO_NODES=1
+export BIO_CORES=36
+export BIO_PROCS=36
+export FILTER_JOB_CLASS=regular
+export FILTER_TIME_LIMIT=07:59:00
+export FILTER_NODES=1
+export FILTER_CORES=36
+export FILTER_PROCS=36
 #
 # RUN DIRECTORIES
 export GEOGRID_DIR=${RUN_DIR}/geogrid
@@ -569,7 +566,6 @@ export NL_I_PARENT_START=${ISTR_CR},${ISTR_FR}
 export NL_J_PARENT_START=${JSTR_CR},${JSTR_FR}
 export NL_GEOG_DATA_RES=\'30s\',\'30s\'
 #export NL_GEOG_DATA_RES=\'10s\',\'10s\'
-#export NL_GEOG_DATA_RES=\'gtopo_10m+usgs_10m+nesdis_greenfrac+10m\',\'gtopo_2m+usgs_2m+nesdis_greenfrac+2m\'
 export NL_DX=${DX_CR}
 export NL_DY=${DX_CR}
 export NL_MAP_PROJ=\'mercator\'
@@ -701,8 +697,8 @@ export NL_ICLOUD=1
 export NL_SURFACE_INPUT_SOURCE=1
 export NL_NUM_SOIL_LAYERS=4
 export NL_MP_ZERO_OUT=2
-export NL_NUM_LAND_CAT=24
-export NL_SF_URBAN_PHYSICS=0,1
+export NL_NUM_LAND_CAT=21
+export NL_SF_URBAN_PHYSICS=1,1
 export NL_MAXIENS=1
 export NL_MAXENS=3
 export NL_MAXENS2=3
@@ -1252,29 +1248,23 @@ if [[ ${RUN_GEOGRID} = "true" ]] then
    cp ${WPS_DIR}/geogrid.exe ./.
    export NL_DX=${DX_CR}
    export NL_DY=${DX_CR}
-#   export NL_START_DATE=${FILE_DATE}
-#   export NL_END_DATE=${NEXT_FILE_DATE}
+   export NL_START_DATE=${FILE_DATE}
+   export NL_END_DATE=${NEXT_FILE_DATE}
    ${HYBRID_SCRIPTS_DIR}/da_create_wps_namelist_RT.ksh
 #
    if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
    touch job.ksh
    RANDOM=$$
-   export JOBRND=geogrid_${RANDOM}
-   rm -rf *.jerr
-   rm -rf *.jout
-   cat << EOF >job.ksh
+   export JOBRND=${RANDOM}_geogrid
+   cat << EOF > job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_ACD}
-#BSUB -n 1                                          # number of total (MPI) tasks
-#BSUB -R "span[ptile=${GEOGRID_TASKS_PER_NODE}]"    # mpi tasks per node
-#BSUB -J ${JOBRND}                                  # job name
-#BSUB -o ${JOBRND}.jout                             # output filename
-#BSUB -e ${JOBRND}.jerr                             # error filename
-#BSUB -W ${GEOGRID_TIME_LIMIT}                      # wallclock time (minutes)
-#BSUB -q geyser 
-#
-mpirun.lsf ./geogrid.exe  > index.html 2>&1 
-#
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${GENERAL_TIME_LIMIT}
+#PBS -q ${GENERAL_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${GENERAL_NODES}:ncpus=${GENERAL_CORES}:mpiprocs=${GENERAL_PROCS}
+mpiexec_mpt ./geogrid.exe  > index.html 2>&1 
 export RC=\$?     
 if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
 if [[ -f FAILED ]]; then rm -rf FAILED; fi          
@@ -1285,7 +1275,8 @@ else
    exit
 fi
 EOF
-   bsub -K < job.ksh 
+#
+   qsub -Wblock=true job.ksh 
 fi
 #
 #########################################################################
@@ -1300,8 +1291,7 @@ if [[ ${RUN_UNGRIB} = "true" ]]; then
    rm -rf GRIBFILE.*
 #
    cp ${VTABLE_DIR}/Vtable.${VTABLE_TYPE} Vtable
-#   cp ${WPS_DIR}/ungrib.exe ./.
-   cp ${WPS_DIR_v3p7p1}/ungrib.exe ./.
+   cp ${WPS_DIR}/ungrib.exe ./.
 #
    export L_FCST_RANGE=${LBC_END}
    export L_START_DATE=${DATE}
@@ -1359,13 +1349,31 @@ if [[ ${RUN_UNGRIB} = "true" ]]; then
 # LINK GRIB FILES
    ${WPS_DIR}/link_grib.csh $FILES
 #
-# RUN UNGRIB
-   ./ungrib.exe
-   RC=$?
-   if [[ $RC != 0 ]]; then
-      echo ungrib failed with error $RC
-      exit $RC
-   fi
+   if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
+   touch job.ksh
+   RANDOM=$$
+   export JOBRND=${RANDOM}_ungrib
+   cat << EOF > job.ksh
+#!/bin/ksh -aeux
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${GENERAL_TIME_LIMIT}
+#PBS -q ${GENERAL_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${GENERAL_NODES}:ncpus=${GENERAL_CORES}:mpiprocs=${GENERAL_PROCS}
+mpiexec_mpt ./ungrib.exe  > index.html 2>&1 
+export RC=\$?     
+if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
+if [[ -f FAILED ]]; then rm -rf FAILED; fi          
+if [[ \$RC = 0 ]]; then
+   touch SUCCESS
+else
+   touch FAILED 
+   exit
+fi
+EOF
+#
+   qsub -Wblock=true job.ksh 
 #
 # TAR THE PARENT FORECAST FILES
    if [[ -e ${EXPERIMENT_GFS_DIR}/${DATE}/${GRIB_PART1}${DATE}${GRIB_PART2} ]]; then
@@ -1425,24 +1433,18 @@ if [[ ${RUN_METGRID} = "true" ]]; then
 #
 # JOB SCRIPT
    if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
-   rm -rf *.err
-   rm -rf *.out
    touch job.ksh
    RANDOM=$$
-   export JOBRND=metgrid_${RANDOM}
-   cat << EOF >job.ksh
+   export JOBRND=${RANDOM}_metgrid
+   cat << EOF > job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_ACD}
-#BSUB -n 1                                  # number of total (MPI) tasks
-#BSUB -J ${JOBRND}                          # job name
-#BSUB -o ${JOBRND}.out                      # output filename
-#BSUB -e ${JOBRND}.err                      # error filename
-#BSUB -W 00:10                              # wallclock time (minutes)
-#BSUB -q geyser
-#
-# Run metgrid
-mpirun.lsf ./metgrid.exe  > index.html 2>&1 
-#
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${GENERAL_TIME_LIMIT}
+#PBS -q ${GENERAL_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${GENERAL_NODES}:ncpus=${GENERAL_CORES}:mpiprocs=${GENERAL_PROCS}
+mpiexec_mpt ./metgrid.exe  > index.html 2>&1 
 export RC=\$?     
 if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
 if [[ -f FAILED ]]; then rm -rf FAILED; fi          
@@ -1454,7 +1456,7 @@ else
 fi
 EOF
 #
-   bsub -K < job.ksh 
+   qsub -Wblock=true job.ksh 
 fi
 #
 #########################################################################
@@ -1520,24 +1522,18 @@ if [[ ${RUN_REAL} = "true" ]]; then
 #
 # JOB SCRIPT
       if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
-      rm -rf *.err
-      rm -rf *.out
       touch job.ksh
       RANDOM=$$
-      export JOBRND=real_${RANDOM}
-      cat << EOF >job.ksh
+      export JOBRND=${RANDOM}_real
+      cat << EOF > job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_ACD}
-#BSUB -n 1                                  # number of total (MPI) tasks
-#BSUB -J ${JOBRND}                          # job name
-#BSUB -o ${JOBRND}.out                      # output filename
-#BSUB -e ${JOBRND}.err                      # error filename
-#BSUB -W 00:14                              # wallclock time (minutes)
-#BSUB -q geyser
-#
-# Run real
-mpirun.lsf ./real.exe  > index.html 2>&1 
-#
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${GENERAL_TIME_LIMIT}
+#PBS -q ${GENERAL_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${GENERAL_NODES}:ncpus=${GENERAL_CORES}:mpiprocs=${GENERAL_PROCS}
+mpiexec_mpt ./real.exe  > index.html 2>&1 
 export RC=\$?     
 if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
 if [[ -f FAILED ]]; then rm -rf FAILED; fi          
@@ -1549,7 +1545,7 @@ else
 fi
 EOF
 #
-      bsub -K < job.ksh 
+      qsub -Wblock=true job.ksh 
 #
       mv wrfinput_d${CR_DOMAIN} wrfinput_d${CR_DOMAIN}_$(${BUILD_DIR}/da_advance_time.exe ${P_DATE} 0 -W 2>/dev/null)
       mv wrfinput_d${FR_DOMAIN} wrfinput_d${FR_DOMAIN}_$(${BUILD_DIR}/da_advance_time.exe ${P_DATE} 0 -W 2>/dev/null)
@@ -1972,95 +1968,83 @@ if [[ ${RUN_PERT_WRFCHEM_MET_IC} = "true" ]]; then
 #
 # JOB SCRIPT 
          if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
-         rm -rf *.err
-         rm -rf *.out
          touch job.ksh
-         export JOBRND=wrfda_cr_${TRANDOM}
-         cat << EOF >job.ksh
+         export JOBRND=${TRANDOM}_wrfda_cr
+         cat << EOF > job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_NSC}
-#BSUB -n ${WRFDA_NUM_TASKS}                       # number of total (MPI) tasks
-#BSUB -R "span[ptile=${WRFDA_TASKS_PER_NODE}]"    # mpi tasks per node
-#BSUB -J ${JOBRND}                          # job name
-#BSUB -o ${JOBRND}.out                      # output filename
-#BSUB -e ${JOBRND}.err                      # error filename
-#BSUB -W ${WRFDA_TIME_LIMIT}               # wallclock time (minutes)
-#BSUB -q ${WRFDA_JOB_CLASS}
-#
-mpirun.lsf ./da_wrfvar.exe  > index.html 2>&1 
-#
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${WRFDA_TIME_LIMIT}
+#PBS -q ${WRFDA_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${WRFDA_NODES}:ncpus=${WRFDA_CORES}:mpiprocs=${WRFDA_PROCS}
+mpiexec_mpt ./da_wrfvar.exe  > index.html 2>&1 
 export RC=\$?     
-if [[ -f SUCCESS ]]; then rm -rf SUCCESS_*; fi     
-if [[ -f FAILED ]]; then rm -rf FAILED_*; fi          
+if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
+if [[ -f FAILED ]]; then rm -rf FAILED; fi          
 if [[ \$RC = 0 ]]; then
-   touch SUCCESS_${JOBRND}
+   touch SUCCESS
 else
-   touch FAILED_${JOBRND} 
+   touch FAILED 
    exit
 fi
 EOF
 #
-         bsub < job.ksh 
+         qsub job.ksh 
 #
 # FINE RESOLUTION GRID
-         cd ${RUN_DIR}/${DATE}/wrfchem_met_ic
-         export LFR_DIR=wrfda_fr_${MEM}
-         if [[ ! -e ${LFR_DIR} ]]; then
-            mkdir ${LFR_DIR}
-            cd ${LFR_DIR}
-         else
-            cd ${LFR_DIR}
-            rm -rf *
-         fi
-         export NL_E_WE=${NNXP_STAG_FR}
-         export NL_E_SN=${NNYP_STAG_FR}
-         export NL_DX=${DX_FR}
-         export NL_DY=${DX_FR}
-         export NL_GRID_ID=2
-         export NL_PARENT_ID=1
-         export NL_PARENT_GRID_RATIO=3
-         export NL_I_PARENT_START=${ISTR_FR}
-         export NL_J_PARENT_START=${JSTR_FR}
-         export DA_INPUT_FILE=../../real/wrfinput_d${FR_DOMAIN}_${ANALYSIS_DATE}
-         ${HYBRID_SCRIPTS_DIR}/da_create_wrfda_namelist.ksh
-         cp ${EXPERIMENT_PREPBUFR_DIR}/${DATE}/prepbufr.gdas.${DATE}.wo40.be ob.bufr
-#         cp ${EXPERIMENT_PREPBUFR_DIR}/${YYYY}${MM}${DD}/${YYYY}${MM}${DD}.nr/prepbufr.gdas.${YYYY}${MM}${DD}.t${HH}z.nr ob.bufr
-         cp ${DA_INPUT_FILE} fg
-         cp ${BE_DIR}/be.dat.cv3 be.dat
-         cp ${WRFDA_DIR}/run/LANDUSE.TBL ./.
-         cp ${WRFDA_DIR}/var/da/da_wrfvar.exe ./.
+#         cd ${RUN_DIR}/${DATE}/wrfchem_met_ic
+#         export LFR_DIR=wrfda_fr_${MEM}
+#         if [[ ! -e ${LFR_DIR} ]]; then
+#            mkdir ${LFR_DIR}
+#            cd ${LFR_DIR}
+#         else
+#            cd ${LFR_DIR}
+#            rm -rf *
+#         fi
+#         export NL_E_WE=${NNXP_STAG_FR}
+#         export NL_E_SN=${NNYP_STAG_FR}
+#         export NL_DX=${DX_FR}
+#         export NL_DY=${DX_FR}
+#         export NL_GRID_ID=2
+#         export NL_PARENT_ID=1
+#         export NL_PARENT_GRID_RATIO=3
+#         export NL_I_PARENT_START=${ISTR_FR}
+#         export NL_J_PARENT_START=${JSTR_FR}
+#         export DA_INPUT_FILE=../../real/wrfinput_d${FR_DOMAIN}_${ANALYSIS_DATE}
+#         ${HYBRID_SCRIPTS_DIR}/da_create_wrfda_namelist.ksh
+#         cp ${EXPERIMENT_PREPBUFR_DIR}/${DATE}/prepbufr.gdas.${DATE}.wo40.be ob.bufr
+##         cp ${EXPERIMENT_PREPBUFR_DIR}/${YYYY}${MM}${DD}/${YYYY}${MM}${DD}.nr/prepbufr.gdas.${YYYY}${MM}${DD}.t${HH}z.nr ob.bufr
+#         cp ${DA_INPUT_FILE} fg
+#         cp ${BE_DIR}/be.dat.cv3 be.dat
+#         cp ${WRFDA_DIR}/run/LANDUSE.TBL ./.
+#         cp ${WRFDA_DIR}/var/da/da_wrfvar.exe ./.
 #
 # JOB SCRIPT 
-         if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
-         rm -rf *.err
-         rm -rf *.out
-         touch job.ksh
-         export JOBRND=wrfda_fr_${TRANDOM}
-         cat << EOF >job.ksh
-#!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_NSC}
-#BSUB -n ${WRFDA_NUM_TASKS}                       # number of total (MPI) tasks
-#BSUB -R "span[ptile=${WRFDA_TASKS_PER_NODE}]"    # mpi tasks per node
-#BSUB -J ${JOBRND}                          # job name
-#BSUB -o ${JOBRND}.out                      # output filename
-#BSUB -e ${JOBRND}.err                      # error filename
-#BSUB -W ${WRFDA_TIME_LIMIT}               # wallclock time (minutes)
-#BSUB -q ${WRFDA_JOB_CLASS}
+#         if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
+#         touch job.ksh
+#         export JOBRND=${TRANDOM}_wrfda_fr
+#         cat << EOF > job.ksh
+##!/bin/ksh -aeux
+##PBS -N ${JOBRND}
+##PBS -A ${PROJ_NUMBER}
+##PBS -l walltime=${WRFDA_TIME_LIMIT}
+##PBS -q ${WRFDA_JOB_CLASS}
+##PBS -j oe
+##PBS -l select=${WRFDA_NODES}:ncpus=${WRFDA_CORES}:mpiprocs=${WRFDA_PROCS}
+#mpiexec_mpt ./da_wrfvar.exe  > index.html 2>&1 
+#export RC=\$?     
+#if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
+#if [[ -f FAILED ]]; then rm -rf FAILED; fi          
+#if [[ \$RC = 0 ]]; then
+#   touch SUCCESS
+#else
+#   touch FAILED 
+#   exit
+#fi
+#EOF
 #
-mpirun.lsf ./da_wrfvar.exe  > index.html 2>&1 
-#
-export RC=\$?     
-if [[ -f SUCCESS ]]; then rm -rf SUCCESS_*; fi     
-if [[ -f FAILED ]]; then rm -rf FAILED_*; fi          
-if [[ \$RC = 0 ]]; then
-   touch SUCCESS_${JOBRND}
-else
-   touch FAILED_${JOBRND}
-   exit
-fi
-EOF
-#
-         bsub < job.ksh 
+#         qsub job.ksh 
          let MEM=${MEM}+1
       done
 #
@@ -2078,13 +2062,13 @@ EOF
          if [[ -e ${LCR_DIR}/wrfvar_output ]]; then
             cp ${LCR_DIR}/wrfvar_output wrfinput_d${CR_DOMAIN}_${ANALYSIS_DATE}.${CMEM}
          else
-            sleep 45
+            sleep 15
             cp ${LCR_DIR}/wrfvar_output wrfinput_d${CR_DOMAIN}_${ANALYSIS_DATE}.${CMEM}
          fi 
          if [[ -e ${LFR_DIR}/wrfvar_output ]]; then
             cp ${LFR_DIR}/wrfvar_output wrfinput_d${FR_DOMAIN}_${ANALYSIS_DATE}.${CMEM}
          else
-            sleep 45
+            sleep 15
             cp ${LFR_DIR}/wrfvar_output wrfinput_d${FR_DOMAIN}_${ANALYSIS_DATE}.${CMEM}
          fi
          let MEM=${MEM}+1
@@ -2154,23 +2138,17 @@ if [[ ${RUN_PERT_WRFCHEM_MET_BC} = "true" ]]; then
 #
 # JOB SCRIPT 
          if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
-         rm -rf *.err
-         rm -rf *.out
          touch job.ksh
-         export JOBRND=pert_bc_${TRANDOM}
-         cat << EOF >job.ksh
+         export JOBRND=${TRANDOM}_pert_bc
+         cat << EOF > job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_NSC}
-#BSUB -n ${MISC_NUM_TASKS}
-#BSUB -R "span[ptile=${MISC_TASKS_PER_NODE}]"
-#BSUB -J ${JOBRND}
-#BSUB -o ${JOBRND}.out
-#BSUB -e ${JOBRND}.err
-#BSUB -W ${MISC_TIME_LIMIT}
-#BSUB -q ${MISC_JOB_CLASS}
-#
-mpirun.lsf ./pert_wrf_bc  > index.html 2>&1 
-#
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${WRFDA_TIME_LIMIT}
+#PBS -q ${WRFDA_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${WRFDA_NODES}:ncpus=${WRFDA_CORES}:mpiprocs=${WRFDA_PROCS}
+mpiexec_mpt ./perf_wrf_bc.exe  > index.html 2>&1 
 export RC=\$?     
 if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
 if [[ -f FAILED ]]; then rm -rf FAILED; fi          
@@ -2182,15 +2160,10 @@ else
 fi
 EOF
 #
-         bsub -K < job.ksh 
-#         RC=$?
-#         if [[ $RC != 0 ]]; then
-#            echo pert_wrf_bc failed with error $RC
-#            exit $RC
-#         fi
+         qsub job.ksh 
          export L_DATE=${NEXT_L_DATE}
       done
-#      ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${TRANDOM}
+      ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${TRANDOM}
       export ANALYSIS_DATE=$(${BUILD_DIR}/da_advance_time.exe ${DATE} 0 -W 2>/dev/null)
       mv wrfbdy_this wrfbdy_d${CR_DOMAIN}_${ANALYSIS_DATE}.${CMEM}
       let MEM=${MEM}+1
@@ -2359,41 +2332,30 @@ start_lai_mnth = 1,
 end_lai_mnth = 12
 /
 EOF
-#
-# CREATE job.ksh
-      rm -rf job.ksh
-      rm -rf wrf_bio_*.err
-      rm -rf wrf_bio_*.out
-      rm -rf core.*
+      if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
       touch job.ksh
       RANDOM=$$
-      export JOBRND=wrf_bio_${RANDOM}
-      cat << EOF >job.ksh
+      export JOBRND=${RANDOM}_bio
+      cat << EOF > job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_NSC}
-#BSUB -n 1
-#BSUB -R "span[ptile=8]"    
-#BSUB -J ${JOBRND}
-#BSUB -o ${JOBRND}.out
-#BSUB -e ${JOBRND}.err
-#BSUB -W 00:30        
-#BSUB -q ${GENERAL_JOB_CLASS}
-#
-# RUN megan_bio_emis
-./megan_bio_emiss < megan_bio_emiss.inp > index_megan_bio 2>&1
-# 
-export RC=\$?     
-rm -rf WRFCHEM_BIO_SUCCESS
-rm -rf WRFCHEM_BIO_FAILED          
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${BIO_TIME_LIMIT}
+#PBS -q ${BIO_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${BIO_NODES}:ncpus=${BIO_CORES}:mpiprocs=${BIO_PROCS}
+./megan_bio_emiss < megan_bio_emiss.inp > index.html 2>&1 
+export RC=\$?
+if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
+if [[ -f FAILED ]]; then rm -rf FAILED; fi          
 if [[ \$RC = 0 ]]; then
-   touch WRFCHEM_BIO_SUCCESS
+   touch SUCCESS
 else
-   touch WRFCHEM_BIO_FAILED 
+   touch FAILED 
    exit
 fi
 EOF
-#
-      bsub -K < job.ksh 
+      qsub -Wblock=true job.ksh 
 #
 # TEST WHETHER OUTPUT EXISTS
       export FILE_CR=wrfbiochemi_d${CR_DOMAIN}
@@ -2472,32 +2434,27 @@ EOF
    if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
    touch job.ksh
    RANDOM=$$
-   export JOBRND=wrf_fire_${RANDOM}
-   cat << EOF >job.ksh
+   export JOBRND=${RANDOM}_fire
+   cat << EOF > job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_NSC}
-#BSUB -n 1
-#BSUB -R "span[ptile=8]"    
-#BSUB -J ${JOBRND}
-#BSUB -o ${JOBRND}.out
-#BSUB -e ${JOBRND}.err
-#BSUB -W 00:20        
-#BSUB -q ${GENERAL_JOB_CLASS}
-#
-./fire_emis < fire_emis.mozc.inp > index_fire_emis 2>&1
-# 
-export RC=\$?     
-rm -rf WRFCHEM_FIRE_SUCCESS     
-rm -rf WRFCHEM_FIRE_FAILED          
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${GENERAL_TIME_LIMIT}
+#PBS -q ${GENERAL_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${GENERAL_NODES}:ncpus=${GENERAL_CORES}:mpiprocs=${GENERAL_PROCS}
+./fire_emis < fire_emis.mozc.inp > index.html 2>&1
+export RC=\$?
+if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
+if [[ -f FAILED ]]; then rm -rf FAILED; fi          
 if [[ \$RC = 0 ]]; then
-   touch WRFCHEM_FIRE_SUCCESS
+   touch SUCCESS
 else
-   touch WRFCHEM_FIRE_FAILED 
+   touch FAILED 
    exit
 fi
 EOF
-#
-   bsub -K < job.ksh 
+   qsub -Wblock=true job.ksh 
    export L_DATE=${DATE}
    while [[ ${L_DATE} -le ${END_DATE} ]]; do
       export L_YYYY=$(echo $L_DATE | cut -c1-4)
@@ -2570,7 +2527,7 @@ if ${RUN_PERT_WRFCHEM_CHEM_ICBC}; then
    cp ${PERT_CHEM_INPUT_DIR}/runICBC_parent_rt_FR.ksh ./.
    cp ${PERT_CHEM_INPUT_DIR}/runICBC_setN_rt_CR.ksh ./.
    cp ${PERT_CHEM_INPUT_DIR}/runICBC_setN_rt_FR.ksh ./.
-   cp ${PERT_CHEM_INPUT_DIR}/random_correlated_perts_mirror.py ./random.py
+   cp ${PERT_CHEM_INPUT_DIR}/random_correlated_perts_mirror.py ./APM_random.py
    cp ${PERT_CHEM_INPUT_DIR}/run_mozbc_rt_CR.csh ./.
    cp ${PERT_CHEM_INPUT_DIR}/run_mozbc_rt_FR.csh ./.
    cp ${PERT_CHEM_INPUT_DIR}/mozbc-dart/mozbc ./.
@@ -2612,7 +2569,34 @@ met_file_suffix    = '.nc'
 met_file_separator = '.'
 EOF
    cp ${METGRID_DIR}/met_em.d${CR_DOMAIN}.*:00:00.nc ./.
-   ./random.py ${MOZ_SPREAD} ${NUM_MEMBERS} ${PERT_CHEM_INPUT_DIR} ${RUN_DIR}/${DATE}/wrfchem_chem_icbc ${RUN_DIR} ${NL_SW_GENERATE}
+#
+# JOB SCRIPT
+   if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
+   touch job.ksh
+   RANDOM=$$
+   export JOBRND=${RANDOM}_icbc_pert
+   cat << EOF > job.ksh
+#!/bin/ksh -aeux
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${GENERAL_TIME_LIMIT}
+#PBS -q ${GENERAL_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${GENERAL_NODES}:ncpus=${GENERAL_CORES}:mpiprocs=${GENERAL_PROCS}
+#
+. /glade/u/apps/ch/opt/Lmod/default/lmod/lmod/init/sh
+python APM_random.py ${MOZ_SPREAD} ${NUM_MEMBERS} ${PERT_CHEM_INPUT_DIR} ${RUN_DIR}/${DATE}/wrfchem_chem_icbc ${RUN_DIR} ${NL_SW_GENERATE}
+export RC=\$?
+if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
+if [[ -f FAILED ]]; then rm -rf FAILED; fi          
+if [[ \$RC = 0 ]]; then
+   touch SUCCESS
+else
+   touch FAILED 
+   exit
+fi
+EOF
+   qsub -Wblock=true job.ksh 
    ./runICBC_parent_rt_CR.ksh
    ./runICBC_setN_rt_CR.ksh
 #
@@ -2794,7 +2778,30 @@ ch_bio_spc='MSEBIO_ISOP',
 EOF
 #
 # RUN PERTURBATION CODE    
-      ./perturb_chem_emiss_CORR_RT_CONST.exe
+   if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
+   touch job.ksh
+   RANDOM=$$
+   export JOBRND=${RANDOM}_cr_emis_pert
+   cat << EOF > job.ksh
+#!/bin/ksh -aeux
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${GENERAL_TIME_LIMIT}
+#PBS -q ${GENERAL_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${GENERAL_NODES}:ncpus=${GENERAL_CORES}:mpiprocs=${GENERAL_PROCS}
+./perturb_chem_emiss_CORR_RT_CONST.exe > index.html 2>&1
+export RC=\$?
+if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
+if [[ -f FAILED ]]; then rm -rf FAILED; fi          
+if [[ \$RC = 0 ]]; then
+   touch SUCCESS
+else
+   touch FAILED 
+   exit
+fi
+EOF
+   qsub -Wblock=true job.ksh 
 #
 # GET FINE GRID EMISSON FILES FOR THIS MEMBER
 #      export WRFCHEMI=wrfchemi_d${FR_DOMAIN}_${L_YYYY}-${L_MM}-${L_DD}_${L_HH}:00:00
@@ -2857,9 +2864,32 @@ EOF
 #EOF
 ##
 ## RUN PERTURBATION CODE    
-#      ./perturb_chem_emiss_CORR_RT_CONST.exe
+#   if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
+#   touch job.ksh
+#   RANDOM=$$
+#   export JOBRND=${RANDOM}_fr_emis_pert
+#   cat << EOF > job.ksh
+##!/bin/ksh -aeux
+##PBS -N ${JOBRND}
+##PBS -A ${PROJ_NUMBER}
+##PBS -l walltime=${GENERAL_TIME_LIMIT}
+##PBS -q ${GENERAL_JOB_CLASS}
+##PBS -j oe
+##PBS -l select=${GENERAL_NODES}:ncpus=${GENERAL_CORES}:mpiprocs=${GENERAL_PROCS}
+#./perturb_chem_emiss_CORR_RT_CONST.exe > index.html 2>&1
+#export RC=\$?
+#if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
+#if [[ -f FAILED ]]; then rm -rf FAILED; fi          
+#if [[ \$RC = 0 ]]; then
+#   touch SUCCESS
+#else
+#   touch FAILED 
+#   exit
+#fi
+#EOF
+#   qsub -Wblock=true job.ksh 
 ##
-## ADVANCE TIME
+# ADVANCE TIME
       export L_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} 1 2>/dev/null)
    done
 fi
@@ -2908,16 +2938,15 @@ if ${RUN_MOPITT_CO_OBS}; then
    rm -rf idl_*.out
    touch job.ksh
    RANDOM=$$
-   export JOBRND=idl_${RANDOM}
-   cat <<EOFF >job.ksh
+   export JOBRND=${RANDOM}_idl_mopitt
+   cat << EOFF > job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_ACD}
-#BSUB -n 1
-#BSUB -J ${JOBRND}
-#BSUB -o ${JOBRND}.out
-#BSUB -e ${JOBRND}.err
-#BSUB -W 00:10
-#BSUB -q geyser
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${GENERAL_TIME_LIMIT}
+#PBS -q ${GENERAL_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${GENERAL_NODES}:ncpus=${GENERAL_CORES}:mpiprocs=${GENERAL_PROCS}
 #
 idl << EOF
 .compile mopitt_extract_no_transform_RT.pro
@@ -2925,7 +2954,7 @@ mopitt_extract_no_transform_RT, ${MOP_INFILE}, ${MOP_OUTFILE}, ${BIN_BEG}, ${BIN
 exit
 EOF
 EOFF
-   bsub -K < job.ksh
+   qsub -Wblock=true job.ksh 
 #
 # GET ADDITIONAL DATA FOR DAY-TO-DAY CROSSOVER
    if [[ ${FLG} -eq 1 ]];  then
@@ -2936,16 +2965,15 @@ EOFF
       rm -rf job.ksh
       touch job.ksh
       RANDOM=$$
-      export JOBRND=idl_${RANDOM}
-      cat <<EOFF >job.ksh
+      export JOBRND=${RANDOM}_idl_mopitt
+      cat << EOFF > job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_ACD}
-#BSUB -n 1
-#BSUB -J ${JOBRND}
-#BSUB -o ${JOBRND}.out
-#BSUB -e ${JOBRND}.err
-#BSUB -W 00:10
-#BSUB -q geyser
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${GENERAL_TIME_LIMIT}
+#PBS -q ${GENERAL_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${GENERAL_NODES}:ncpus=${GENERAL_CORES}:mpiprocs=${GENERAL_PROCS}
 #
 idl << EOF
 .compile mopitt_extract_no_transform_RT.pro
@@ -2953,8 +2981,8 @@ mopitt_extract_no_transform_RT, ${MOP_INFILE}, ${MOP_OUTFILE}, ${BIN_BEG}, ${BIN
 exit
 EOF
 EOFF
-      bsub -K < job.ksh
-   fi   
+      qsub -Wblock=true job.ksh 
+   fi
 #
 # SET NAMELIST TO CONVERT MOPITT ASCII TO OBS_SEQ 
    export NL_YEAR=${D_YYYY}
@@ -3080,25 +3108,23 @@ if ${RUN_IASI_CO_OBS}; then
                 rm -rf idl_*.out
                 touch job.ksh
                 RANDOM=$$
-                export JOBRND=idl_${RANDOM}
+                export JOBRND=${RANDOM}_idl_iasi
                 cat <<EOFF >job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_ACD}
-#BSUB -n 1                                  # number of total (MPI) tasks
-#BSUB -J ${JOBRND}                          # job name
-#BSUB -o ${JOBRND}.out                      # output filename
-#BSUB -e ${JOBRND}.err                      # error filename
-#BSUB -W 00:10                              # wallclock time (minutes)
-#BSUB -q geyser
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${GENERAL_TIME_LIMIT}
+#PBS -q ${GENERAL_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${GENERAL_NODES}:ncpus=${GENERAL_CORES}:mpiprocs=${GENERAL_PROCS}
 #
-idl <<EOF
+idl << EOF
 .compile iasi_extract_no_transform_UA.pro
 iasi_extract_no_transform_UA,${INFILE},${OUTFILE},${BIN_BEG_SEC},${BIN_END_SEC}, ${NNL_MIN_LON}, ${NNL_MAX_LON}, ${NNL_MIN_LAT}, ${NNL_MAX_LAT}
 exit
 EOF
 EOFF
-#
-               bsub -K < job.ksh
+               qsub -Wblock=true job.ksh 
 #
 # cat the output file to the assimlation window file
                export ASIM_OUTFILE=${YYYY}${MM}${DD}${HH}.dat
@@ -3171,25 +3197,23 @@ EOFF
                 rm -rf idl_*.out
                 touch job.ksh
                 RANDOM=$$
-                export JOBRND=idl_${RANDOM}
+                export JOBRND=${RANDOM}_idl_iasi
                 cat <<EOFF >job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_ACD}
-#BSUB -n 1                                  # number of total (MPI) tasks
-#BSUB -J ${JOBRND}                          # job name
-#BSUB -o ${JOBRND}.out                      # output filename
-#BSUB -e ${JOBRND}.err                      # error filename
-#BSUB -W 00:10                              # wallclock time (minutes)
-#BSUB -q geyser
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${GENERAL_TIME_LIMIT}
+#PBS -q ${GENERAL_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${GENERAL_NODES}:ncpus=${GENERAL_CORES}:mpiprocs=${GENERAL_PROCS}
 #
-idl <<EOF
+idl << EOF
 .compile iasi_extract_no_transform_UA.pro
 iasi_extract_no_transform_UA,${INFILE},${OUTFILE},${BIN_BEG_SEC},${BIN_END_SEC}, ${NNL_MIN_LON}, ${NNL_MAX_LON}, ${NNL_MIN_LAT}, ${NNL_MAX_LAT}
 exit
 EOF
 EOFF
-#
-               bsub -K < job.ksh
+               qsub -Wblock=true job.ksh 
 #
 # cat the output file to the assimlation window file
                export ASIM_OUTFILE=${YYYY}${MM}${DD}${HH}.dat
@@ -3329,24 +3353,22 @@ if ${RUN_IASI_O3_OBS}; then
    rm -rf idl_*.out
    touch job.ksh
    RANDOM=$$
-   export JOBRND=idl_${RANDOM}
+   export JOBRND=${RANDOM}_idl_iasi
    cat <<EOFF >job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_ACD}
-#BSUB -n 1                                  # number of total (MPI) tasks
-#BSUB -J ${JOBRND}                          # job name
-#BSUB -o ${JOBRND}.out                      # output filename
-#BSUB -e ${JOBRND}.err                      # error filename
-#BSUB -W 01:59                              # wallclock time (minutes)
-#BSUB -q geyser
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${GENERAL_TIME_LIMIT}
+#PBS -q ${GENERAL_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${GENERAL_NODES}:ncpus=${GENERAL_CORES}:mpiprocs=${GENERAL_PROCS}
 #
-idl <<EOF
+idl << EOF
 .run run_idl_code.pro
 exit
 EOF
 EOFF
-#
-   bsub -K < job.ksh
+   qsub -Wblock=true job.ksh 
 #
 # convert to obs_seq file
    if [[ ${HH} -eq 0 ]] then
@@ -4109,35 +4131,27 @@ if ${RUN_PREPROCESS_OBS}; then
    if [[ -f job.ksh ]]; then rm -rf job.ksh; fi
    touch job.ksh
    RANDOM=$$
-   export JOBRND=pre_${RANDOM}
-   cat << EOF >job.ksh
+   export JOBRND=${RANDOM}_pre
+   cat << EOF > job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_ACD}
-#BSUB -n 1
-#BSUB -J ${JOBRND}
-#BSUB -o ${JOBRND}.out
-#BSUB -e ${JOBRND}.err
-#BSUB -W 00:10
-#BSUB -q geyser
-#
-# Run wrf_obs_preprocess
-rm -rf pre_*.err
-rm -rf pre_*.out
-./wrf_dart_obs_preprocess ${DAY_GREG} ${SEC_GREG} > index_preprocess 2>&1 
-#
-export RC=\$?     
-if [[ -f PRE_SUCCESS ]]; then rm -rf PRE_SUCCESS; fi     
-if [[ -f PRE_FAILED ]]; then rm -rf PRE_FAILED; fi          
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${GENERAL_TIME_LIMIT}
+#PBS -q ${GENERAL_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${GENERAL_NODES}:ncpus=${GENERAL_CORES}:mpiprocs=${GENERAL_PROCS}
+./wrf_dart_obs_preprocess ${DAY_GREG} ${SEC_GREG} > index_html 2>&1 
+export RC=\$?
+if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
+if [[ -f FAILED ]]; then rm -rf FAILED; fi          
 if [[ \$RC = 0 ]]; then
-   touch PRE_SUCCESS
+   touch SUCCESS
 else
-   touch PRE_FAILED 
+   touch FAILED 
    exit
 fi
 EOF
-#
-   bsub -K < job.ksh
-#
+   qsub -Wblock=true job.ksh 
    mv obs_seq.new obs_seq_comb_filtered_${DATE}.out 
 fi
 #
@@ -4274,31 +4288,27 @@ if ${RUN_WRFCHEM_INITIAL}; then
 # Create job script for this member and run it 
       rm -rf job.ksh
       touch job.ksh
-      export JOBRND=advm_${TRANDOM}
+      export JOBRND=${TRANDOM}_adv
       cat << EOF >job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_NSC}
-#BSUB -n ${WRFCHEM_NUM_TASKS}                       # number of total (MPI) tasks
-#BSUB -R "span[ptile=${WRFCHEM_TASKS_PER_NODE}]"    # mpi tasks per node
-#BSUB -J ${JOBRND}                          # job name
-#BSUB -o ${JOBRND}.out                      # output filename
-#BSUB -e ${JOBRND}.err                      # error filename
-#BSUB -W ${WRFCHEM_TIME_LIMIT}               # wallclock time (minutes)
-#BSUB -q ${WRFCHEM_JOB_CLASS}
-#
-mpirun.lsf ./wrf.exe > index_wrfchem_${KMEM} 2>&1 
-export RC=\$?     
-rm -rf WRFCHEM_SUCCESS_*
-rm -rf WRFCHEM_FAILED_*
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${WRFCHEM_TIME_LIMIT}
+#PBS -q ${WRFCHEM_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${WRFCHEM_NODES}:ncpus=${WRFCHEM_CORES}:mpiprocs=${WRFCHEM_PROCS}
+mpiexec_mpt ./wrf.exe > index_${KMEM} 2>&1 
+export RC=\$?
+if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
+if [[ -f FAILED ]]; then rm -rf FAILED; fi          
 if [[ \$RC = 0 ]]; then
-   touch WRFCHEM_SUCCESS_${JOBRND}
+   touch SUCCESS
 else
-   touch WRFCHEM_FAILED_${JOBRND} 
+   touch FAILED 
    exit
 fi
 EOF
-#
-      bsub < job.ksh 
+      qsub job.ksh 
       let IMEM=${IMEM}+1
    done
 #
@@ -4431,33 +4441,28 @@ if ${RUN_DART_FILTER}; then
       cd ${RUN_DIR}/${DATE}/dart_filter/wrk_wrf_${CMEM}
       rm -rf job.ksh
       touch job.ksh
-      export JOBRND=wf2dt_${TRANDOM}
+      export JOBRND=${TRANDOM}_wf2dt
       cat << EOF >job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_ACD}
-#BSUB -n 1                                  # number of total (MPI) tasks
-#BSUB -J ${JOBRND}                          # job name
-#BSUB -o ${JOBRND}.out                      # output filename
-#BSUB -e ${JOBRND}.err                      # error filename
-#BSUB -W 00:05                              # wallclock time (minutes)
-#BSUB -q geyser
-#
-# Run wrf_to_dart
-./wrf_to_dart > index_wrf_to_dart 2>&1 
-#
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${GENERAL_TIME_LIMIT}
+#PBS -q ${GENERAL_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${GENERAL_NODES}:ncpus=${GENERAL_CORES}:mpiprocs=${GENERAL_PROCS}
+mpiexec_mpt ./wrf_to_dart > index.html 2>&1 
 export RC=\$?     
-rm -rf WRF2DART_SUCCESS_*
-rm -rf WRF2DART_FAILED_*
+if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
+if [[ -f FAILED ]]; then rm -rf FAILED; fi          
 if [[ \$RC = 0 ]]; then
-   touch WRF2DART_SUCCESS_${JOBRND}
+   touch SUCCESS
 else
-   touch WRF2DART_FAILED_${JOBRND} 
+   touch FAILED 
    exit
 fi
 EOF
 #
-# Submit convert file script for each and wait until job completes
-      bsub < job.ksh 
+      qsub job.ksh 
       let MEM=${MEM}+1
    done
 #
@@ -4531,31 +4536,28 @@ EOF
    rm -rf job.ksh
    touch job.ksh
    RANDOM=$$
-   export JOBRND=filter_${RANDOM}
+   export JOBRND=${RANDOM}_filter
    cat << EOF >job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_NSC}
-#BSUB -n ${FILTER_NUM_TASKS}
-#BSUB -R "span[ptile=${FILTER_TASKS_PER_NODE}]"
-#BSUB -J ${JOBRND}
-#BSUB -o ${JOBRND}.out
-#BSUB -e ${JOBRND}.err
-#BSUB -W ${FILTER_TIME_LIMIT}
-#BSUB -q ${FILTER_JOB_CLASS}
-#
-mpirun.lsf ./filter > index_filter 2>&1 
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${FILTER_TIME_LIMIT}
+#PBS -q ${FILTER_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${FILTER_NODES}:ncpus=${FILTER_CORES}:mpiprocs=${FILTER_PROCS}
+mpiexec_mpt ./filter > index.html 2>&1 
 export RC=\$?     
-rm -rf FILTER_SUCCESS     
-rm -rf FILTER_FAILED          
+if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
+if [[ -f FAILED ]]; then rm -rf FAILED; fi          
 if [[ \$RC = 0 ]]; then
-   touch FILTER_SUCCESS
+   touch SUCCESS
 else
-   touch FILTER_FAILED 
+   touch FAILED 
    exit
 fi
 EOF
 #
-   bsub -K < job.ksh
+   qsub -Wblock=true job.ksh 
 #
 # Run DART_TO_WRF 
    TRANDOM=$$
@@ -4617,33 +4619,27 @@ EOF
 # Create job script 
       rm -rf job.ksh
       touch job.ksh
-      export JOBRND=dt2wf_${TRANDOM}
+      export JOBRND=${TRANDOM}_dt2wf
       cat << EOF >job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_ACD}
-#BSUB -n 1                                  # number of total (MPI) tasks
-#BSUB -J ${JOBRND}                          # job name
-#BSUB -o ${JOBRND}.out                      # output filename
-#BSUB -e ${JOBRND}.err                      # error filename
-#BSUB -W 00:05                              # wallclock time (minutes)
-#BSUB -q geyser
-#
-# Run wrf_to_dart
-./dart_to_wrf > index_dart_to_wrf 2>&1 
-#
-export RC=\$?     
-rm -rf DART2WRF_SUCCESS_*
-rm -rf DART2WRF_FAILED_*
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${FILTER_TIME_LIMIT}
+#PBS -q ${FILTER_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${FILTER_NODES}:ncpus=${FILTER_CORES}:mpiprocs=${FILTER_PROCS}
+mpiexec_mpt ./dart_to_filter > index.html 2>&1 
+if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
+if [[ -f FAILED ]]; then rm -rf FAILED; fi          
 if [[ \$RC = 0 ]]; then
-   touch DART2WRF_SUCCESS_${JOBRND}
+   touch SUCCESS
 else
-   touch DART2WRF_FAILED_${JOBRND}
+   touch FAILED 
    exit
 fi
 EOF
 #
-# Submit convert file script for each and wait until job completes
-      bsub < job.ksh 
+      qsub job.ksh
       let MEM=${MEM}+1
    done
 #
@@ -4901,31 +4897,28 @@ EOF
 # Create job script for this member and run it 
       rm -rf job.ksh
       touch job.ksh
-      export JOBRND=advm_${TRANDOM}
+      export JOBRND=${TRANDOM}_adv
       cat << EOF >job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_NSC}
-#BSUB -n ${WRFCHEM_NUM_TASKS}                       # number of total (MPI) tasks
-#BSUB -R "span[ptile=${WRFCHEM_TASKS_PER_NODE}]"    # mpi tasks per node
-#BSUB -J ${JOBRND}                          # job name
-#BSUB -o ${JOBRND}.out                      # output filename
-#BSUB -e ${JOBRND}.err                      # error filename
-#BSUB -W ${WRFCHEM_TIME_LIMIT}               # wallclock time (minutes)
-#BSUB -q ${WRFCHEM_JOB_CLASS}
-#
-mpirun.lsf ./wrf.exe > index_wrfchem_${KMEM} 2>&1 
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${WRFCHEM_TIME_LIMIT}
+#PBS -q ${WRFCHEM_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${WRFCHEM_NODES}:ncpus=${WRFCHEM_CORES}:mpiprocs=${WRFCHEM_PROCS}
+mpiexec_mpt ./wrf.exe > index.html 2>&1 
 export RC=\$?     
-rm -rf WRFCHEM_SUCCESS_*
-rm -rf WRFCHEM_FAILED_*
+if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
+if [[ -f FAILED ]]; then rm -rf FAILED; fi          
 if [[ \$RC = 0 ]]; then
-   touch WRFCHEM_SUCCESS_${JOBRND}     
+   touch SUCCESS
 else
-   touch WRFCHEM_FAILED_${JOBRND} 
+   touch FAILED 
    exit
 fi
 EOF
 #
-      bsub < job.ksh 
+      qsub job.ksh 
       let IMEM=${IMEM}+1
    done
 #
@@ -4982,21 +4975,28 @@ if ${RUN_BAND_DEPTH}; then
    rm -rf mat_*.out
    touch job.ksh
    RANDOM=$$
-   export JOBRND=mat_${RANDOM}
+   export JOBRND=${RANDOM}_matlab
    cat <<EOF >job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_ACD}
-#BSUB -n 1
-#BSUB -J ${JOBRND}
-#BSUB -o ${JOBRND}.out
-#BSUB -e ${JOBRND}.err
-#BSUB -W 00:02
-#BSUB -q geyser
-#
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${WRFCHEM_TIME_LIMIT}
+#PBS -q ${WRFCHEM_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${WRFCHEM_NODES}:ncpus=${WRFCHEM_CORES}:mpiprocs=${WRFCHEM_PROCS}
 matlab -nosplash -nodesktop -r 'ComputeBandDepth(.09)'
-exit
+export RC=\$?     
+if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
+if [[ -f FAILED ]]; then rm -rf FAILED; fi          
+if [[ \$RC = 0 ]]; then
+   touch SUCCESS
+else
+   touch FAILED 
+   exit
+fi
 EOF
-   bsub -K < job.ksh
+#
+   qsub -Wblock=true job.ksh 
 #
 # run band depth script
    source shell_file.ksh
@@ -5131,31 +5131,28 @@ if ${RUN_WRFCHEM_CYCLE_FR}; then
    rm -rf job.ksh
    touch job.ksh
    RANDOM=$$
-   export JOBRND=advm_${RANDOM}
+   export JOBRND=${RANDOM}_adv
    cat << EOF >job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_NSC}
-#BSUB -n ${WRFCHEM_NUM_TASKS}
-#BSUB -R "span[ptile=${WRFCHEM_TASKS_PER_NODE}]"
-#BSUB -J ${JOBRND}
-#BSUB -o ${JOBRND}.out
-#BSUB -e ${JOBRND}.err
-#BSUB -W ${WRFCHEM_TIME_LIMIT}
-#BSUB -q ${WRFCHEM_JOB_CLASS}
-#
-mpirun.lsf ./wrf.exe > index_wrfchem 2>&1 
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${WRFCHEM_TIME_LIMIT}
+#PBS -q ${WRFCHEM_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${WRFCHEM_NODES}:ncpus=${WRFCHEM_CORES}:mpiprocs=${WRFCHEM_PROCS}
+mpiexec_mpt ./wrf.exe > index.html 2>&1 
 export RC=\$?     
-rm -rf WRFCHEM_SUCCESS; fi     
-rm -rf WRFCHEM_FAILED; fi          
+if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
+if [[ -f FAILED ]]; then rm -rf FAILED; fi          
 if [[ \$RC = 0 ]]; then
-   touch WRFCHEM_SUCCESS
+   touch SUCCESS
 else
-   touch WRFCHEM_FAILED 
+   touch FAILED 
    exit
 fi
 EOF
 #
-   bsub -K < job.ksh 
+   qsub -Wblock=true job.ksh 
 fi
 #
 #########################################################################
@@ -5304,32 +5301,28 @@ if ${RUN_ENSMEAN_CYCLE_FR}; then
    rm -rf job.ksh
    touch job.ksh
    RANDOM=$$
-   export JOBRND=advm_${RANDOM}
+   export JOBRND=${RANDOM}_adv
    cat << EOF >job.ksh
 #!/bin/ksh -aeux
-#BSUB -P ${PROJ_NUMBER_NSC}
-#BSUB -n ${WRFCHEM_NUM_TASKS}
-#BSUB -R "span[ptile=${WRFCHEM_TASKS_PER_NODE}]"
-#BSUB -J ${JOBRND}
-#BSUB -o ${JOBRND}.out
-#BSUB -e ${JOBRND}.err
-#BSUB -W ${L_TIME_LIMIT}
-#BSUB -q ${WRFCHEM_JOB_CLASS}
-#
-mpirun.lsf ./wrf.exe > index_wrfchem 2>&1 
+#PBS -N ${JOBRND}
+#PBS -A ${PROJ_NUMBER}
+#PBS -l walltime=${WRFCHEM_TIME_LIMIT}
+#PBS -q ${WRFCHEM_JOB_CLASS}
+#PBS -j oe
+#PBS -l select=${WRFCHEM_NODES}:ncpus=${WRFCHEM_CORES}:mpiprocs=${WRFCHEM_PROCS}
+mpiexec_mpt ./wrf.exe > index.html 2>&1 
 export RC=\$?     
-rm -rf WRFCHEM_SUCCESS; fi     
-rm -rf WRFCHEM_FAILED; fi          
+if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
+if [[ -f FAILED ]]; then rm -rf FAILED; fi          
 if [[ \$RC = 0 ]]; then
-   touch WRFCHEM_SUCCESS
+   touch SUCCESS
 else
-   touch WRFCHEM_FAILED 
+   touch FAILED 
    exit
 fi
 EOF
 #
-   bsub -K < job.ksh 
-#
+   qsub -Wblock=true job.ksh 
 fi
 #
 #########################################################################

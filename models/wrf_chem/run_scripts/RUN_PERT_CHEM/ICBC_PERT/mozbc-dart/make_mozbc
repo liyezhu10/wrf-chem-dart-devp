@@ -1,10 +1,10 @@
 #!/bin/csh
 
-set NETCDF_DIR=/glade/apps/opt/netcdf/4.3.0/pgi/13.3
 set OP_SYS=`uname -s`
 if( ! $?FC ) then
   if( $OP_SYS == "Linux" ) then
     setenv FC pgf90
+    setenv FC ifort
   else
     setenv FC xlf90
   endif
@@ -27,7 +27,7 @@ if( ! $?NETCDF_DIR ) then
 #  check for netcdf library
 #------------------------------------------------------------
   set found_ncf_lib = 0
-  foreach tst_dir (/usr/local /usr /opt)
+  foreach tst_dir (/glade/u/apps/ch/opt /usr/local /usr /opt)
     foreach tst_lib (lib64 lib netcdf)
       if( -e $tst_dir/$tst_lib/libnetcdf.a ) then
          set found_ncf_lib = 1
