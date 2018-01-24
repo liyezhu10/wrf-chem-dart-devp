@@ -238,7 +238,7 @@ type(location_type) :: ramp_start_loc
 
 ! Precompute pressure -> height map once based on 1010mb surface pressure.
 ! Used only to discard obs on heights above the user-defined top threshold.
-integer, parameter :: generic_nlevels = 17
+integer, parameter :: generic_nlevels = 35
 real(r8), allocatable :: generic_height_column(:)
 real(r8), allocatable :: generic_pressure_column(:)
 
@@ -318,7 +318,6 @@ endif
 if (no_assim_above_pressure > 0.0_r8) then
    call init_discard_high_obs()
 endif
-
 
 end subroutine static_init_model
 
@@ -647,7 +646,7 @@ vals(:) = MISSING_R8
 my_status(:) = 99
 
 select case (obs_quantity)
-   case (QTY_PRESSURE, QTY_GEOMETRIC_HEIGHT) 
+   case (QTY_PRESSURE)
       if (obs_quantity == QTY_PRESSURE) then
          call cam_pressure_levels(ens_handle, ens_size, &
                                   lon_index, lat_index, grid_data%lev%nsize, &
@@ -778,6 +777,8 @@ endif
 call get_quad_vals(state_handle, ens_size, varid, obs_qty, four_lons, four_lats, &
                    lon_lat_vert, which_vert, quad_vals, status_array)
 
+print*, 'STATUS GET QUADS', status_array
+
 !>@todo FIXME : Here we are failing if any ensemble member fails. Instead
 !>              we should be using track status...
 if (any(status_array /= 0)) then
@@ -788,6 +789,8 @@ endif
 ! do the horizontal interpolation for each ensemble member
 call quad_lon_lat_evaluate(interp_handle, lon_fract, lat_fract, ens_size, &
                            quad_vals, interp_vals, status_array)
+
+print*, 'STATUS MI EVAL', status_array(1)
 
 ! print*, 'lon_ind_below ', four_lons(1)
 ! print*, 'lon_ind_above ', four_lons(2)
@@ -847,6 +850,7 @@ which_vert    = nint(query_location(location))
 
 call quad_lon_lat_locate(interp_handle, lon_lat_vert(1), lon_lat_vert(2), &
                          four_lons, four_lats, lon_fract, lat_fract, istatus(1))
+print*, 'STATUS ARRAY IV', istatus(1)
 if (istatus(1) /= 0) then
    istatus(:) = 3  ! cannot locate enclosing horizontal quad
    return
@@ -854,10 +858,12 @@ endif
 
 call get_quad_vals(state_handle, ens_size, varid, obs_qty, four_lons, four_lats, &
                    lon_lat_vert, which_vert, quad_vals, istatus)
+print*, 'ISTATUS VALS', istatus
 if (any(istatus /= 0)) return
 
 call quad_lon_lat_evaluate(interp_handle, lon_fract, lat_fract, ens_size, &
                            quad_vals, interp_vals, istatus)
+print*, 'ISTATUS EVAL', istatus
 if (any(istatus /= 0)) then
    istatus(:) = 8   ! cannot evaluate in the quad
    return
@@ -876,10 +882,10 @@ integer, intent(out) :: my_status
 
 integer   :: bot_lev, top_lev
 real(r8)  :: fract, this_pressure
-
-
 ! assume ok to begin with
 my_status = 0
+
+print*, 'which_vert, vert_value', which_vert, vert_value
 
 ! obs with a vertical type of pressure:
 !  lower pressures are higher; watch the less than/greater than tests
@@ -1124,11 +1130,11 @@ else
    select case (obs_quantity)
       case (QTY_SURFACE_ELEVATION)
          get_dims_from_qty = 2
-      case (QTY_PRESSURE)
+      case (QTY_PRESSURE, QTY_GEOMETRIC_HEIGHT)
          get_dims_from_qty = 3
       case default 
-         write(string1, *) 'we can not interpolate qty', obs_quantity, &
-                           ' if the dimension is not known'
+         write(string1, *) 'we can not interpolate qty "', get_name_for_quantity(obs_quantity), &
+                           '" if the dimension is not known'
          call error_handler(E_ERR,routine, string1,source,revision,revdate)
     end select
 endif
@@ -1353,7 +1359,7 @@ select case (which_vert)
       if (debug_level > 100) then
          do k = 1,ens_size
             print*, 'ISHEIGHT bot_levs(k), top_levs(k), vert_fracts(k)', &
-                     bot_levs(k), top_levs(k), vert_fracts(k)
+                     k, bot_levs(k), top_levs(k), vert_fracts(k), height_array(k,1)
          enddo
       endif
       
@@ -1416,7 +1422,7 @@ integer,             intent(out) :: my_status(ens_size)
 
 integer  :: k, level_one, imember, status1
 real(r8) :: surface_elevation(1)
-real(r8) :: surface_pressure(ens_size), mbar(ens_size, nlevels)
+real(r8) :: surface_pressure(ens_size), mbar(nlevels, ens_size)
 real(r8) :: tv(nlevels, ens_size)  ! Virtual temperature, top to bottom
 
 ! this is for surface obs
@@ -1452,12 +1458,20 @@ else
    mbar(:,:) = 1.0_r8
 endif
 
+  print*, 'mbar', mbar(1,1), mbar(nlevels,1), my_status, status1
 ! compute the height columns for each ensemble member
 do imember = 1, ens_size
    call build_heights(nlevels, surface_pressure(imember), surface_elevation(1), &
-                      tv(:, imember), mbar, &
-                      height_array(:, imember), mbar)
+                      tv(:, imember), height_array(:, imember), mbar=mbar)
 enddo
+
+do k = 1, nlevels
+   print*, 'height(level)', k, height_array(k, 1)
+enddo
+
+!do k = 1, nlevels
+!   print*, 'tv(level)    ', k, tv(k, 1)
+!enddo
 
 ! convert entire array to geometric height (from potential height)
 call gph2gmh(height_array, grid_data%lat%vals(lat_index))
@@ -1743,8 +1757,8 @@ fract_level = vert_value - integer_level
 !>them correctly in the calling and vert_interp() code.
 
 ! out of range checks
+print*,  'vert_value,  valid_range', vert_value,  valid_range
 if (vert_value < 1.0_r8 .or. vert_value > valid_range) return
-
 if (vert_value /= valid_range) then
    top = integer_level
    bot = top + 1
@@ -1755,6 +1769,8 @@ else
    bot = integer_level
    fract = 1.0_r8
 endif
+
+print*, 'top, bot, fract', top, bot, fract
 
 range_set = .true.
 
@@ -2424,7 +2440,7 @@ call nc_get_variable(ncid, varname, grid_array%vals, routine)
 !call array_dump2(varname, grid_array%vals(:,:), nper_linei, nsize)
 
 if (debug_level > 10) then
-   per_line = 5
+   per_line = 3
    print*, 'variable name ', trim(varname)
    do i=1, grid_array%nsize, per_line
       print*,  grid_array%vals(i:min(grid_array%nsize,i+per_line-1))
@@ -2613,7 +2629,7 @@ integer,             intent(in)   :: lon_index
 integer,             intent(in)   :: lat_index
 integer,             intent(in)   :: nlevels
 integer,             intent(in)   :: qty
-real(r8),            intent(out)  :: tv(ens_size, nlevels)
+real(r8),            intent(out)  :: tv(nlevels, ens_size)
 integer,             intent(out)  :: istatus
 
 integer :: k
@@ -2641,6 +2657,7 @@ do k = 1, nlevels
 
    !>tv == virtual temperature.
    tv(k,:) = temperature(:)*(1.0_r8 + rr_factor*specific_humidity(:))
+   print*, 'tv(levels)', k,tv(k,1), temperature(1), specific_humidity(1)
 enddo
 
 
@@ -2658,14 +2675,14 @@ integer,             intent(in)  :: lon_index
 integer,             intent(in)  :: lat_index
 integer,             intent(in)  :: nlevels
 integer,             intent(in)  :: qty
-real(r8),            intent(out) :: mbar(ens_size, nlevels)
+real(r8),            intent(out) :: mbar(nlevels, ens_size)
 integer,             intent(out) :: istatus
 
 integer :: k
-real(r8) :: mmr_o1(ens_size, nlevels), &
-            mmr_o2(ens_size, nlevels), &
-            mmr_h1(ens_size, nlevels), &
-            mmr_n2(ens_size, nlevels)
+real(r8) :: mmr_o1(nlevels, ens_size), &
+            mmr_o2(nlevels, ens_size), &
+            mmr_h1(nlevels, ens_size), &
+            mmr_n2(nlevels, ens_size)
 real(r8) :: O_molar_mass, O2_molar_mass, H_molar_mass, N2_molar_mass 
 
 
@@ -2675,27 +2692,27 @@ real(r8) :: O_molar_mass, O2_molar_mass, H_molar_mass, N2_molar_mass
 do k = 1, nlevels
 
    call get_staggered_values_from_qty(ens_handle, ens_size, QTY_ATOMIC_OXYGEN_MIXING_RATIO, & 
-                                      lon_index, lat_index, k, qty, mmr_o1(:,k), istatus)
+                                      lon_index, lat_index, k, qty, mmr_o1(k,:), istatus)
    if (istatus /= 0) return
    
    call get_staggered_values_from_qty(ens_handle, ens_size, QTY_MOLEC_OXYGEN_MIXING_RATIO, & 
-                                      lon_index, lat_index, k, qty, mmr_o2(:,k), istatus)
+                                      lon_index, lat_index, k, qty, mmr_o2(k,:), istatus)
    if (istatus /= 0) return
    
    call get_staggered_values_from_qty(ens_handle, ens_size, QTY_ATOMIC_H_MIXING_RATIO, &
-                                      lon_index, lat_index, k, qty, mmr_h1(:,k), istatus)
+                                      lon_index, lat_index, k, qty, mmr_h1(k,:), istatus)
    if (istatus /= 0) return
    
    O_molar_mass  = chem_convert_factor(QTY_ATOMIC_OXYGEN_MIXING_RATIO)
-   O2_molar_mass = chem_convert_factor(QTY_ION_O_MIXING_RATIO)
+   O2_molar_mass = chem_convert_factor(QTY_MOLEC_OXYGEN_MIXING_RATIO)
    H_molar_mass  = chem_convert_factor(QTY_ATOMIC_H_MIXING_RATIO)
    N2_molar_mass = chem_convert_factor(QTY_NITROGEN)
    
-   mmr_n2(:,k) = 1.0_r8 - (mmr_o1(:,k) + mmr_o2(:,k) + mmr_h1(:,k))
-   mbar(:,k) = 1.0_r8/( mmr_o1(:,k)/O_molar_mass  &
-                      + mmr_o2(:,k)/O2_molar_mass &
-                      + mmr_h1(:,k)/H_molar_mass  &
-                      + mmr_n2(:,k)/N2_molar_mass)
+   mmr_n2(k,:) = 1.0_r8 - (mmr_o1(k,:) + mmr_o2(k,:) + mmr_h1(k,:))
+   mbar(k,:) = 1.0_r8/( mmr_o1(k,:)/O_molar_mass  &
+                      + mmr_o2(k,:)/O2_molar_mass &
+                      + mmr_h1(k,:)/H_molar_mass  &
+                      + mmr_n2(k,:)/N2_molar_mass)
 enddo
 
 end subroutine compute_mean_mass
@@ -3454,23 +3471,59 @@ integer :: i
 real(r8) :: generic_height_to_pressure(2, generic_nlevels)
 
 ! index 1 is height in meters, index 2 is corresponding pressure in pascals
-generic_height_to_pressure(:,  1) =  (/  31055.0_r8,   1000.0_r8 /) 
-generic_height_to_pressure(:,  2) =  (/  26481.0_r8,   2000.0_r8 /)
-generic_height_to_pressure(:,  3) =  (/  23849.0_r8,   3000.0_r8 /)
-generic_height_to_pressure(:,  4) =  (/  20576.0_r8,   5000.0_r8 /)
-generic_height_to_pressure(:,  5) =  (/  18442.0_r8,   7000.0_r8 /)
-generic_height_to_pressure(:,  6) =  (/  16180.0_r8,  10000.0_r8 /)
-generic_height_to_pressure(:,  7) =  (/  13608.0_r8,  15000.0_r8 /)
-generic_height_to_pressure(:,  8) =  (/  11784.0_r8,  20000.0_r8 /)
-generic_height_to_pressure(:,  9) =  (/  10363.0_r8,  25000.0_r8 /)
-generic_height_to_pressure(:, 10) =  (/   9164.0_r8,  30000.0_r8 /)
-generic_height_to_pressure(:, 11) =  (/   7185.0_r8,  40000.0_r8 /)
-generic_height_to_pressure(:, 12) =  (/   5574.0_r8,  50000.0_r8 /)
-generic_height_to_pressure(:, 13) =  (/   3012.0_r8,  70000.0_r8 /)
-generic_height_to_pressure(:, 14) =  (/   1457.0_r8,  85000.0_r8 /)
-generic_height_to_pressure(:, 15) =  (/    766.0_r8,  92500.0_r8 /)
-generic_height_to_pressure(:, 16) =  (/    111.0_r8, 100000.0_r8 /)
-generic_height_to_pressure(:, 17) =  (/      0.0_r8, 101000.0_r8 /) 
+!#! generic_height_to_pressure(:,  1) =  (/  31055.0_r8,   1000.0_r8 /) 
+!#! generic_height_to_pressure(:,  2) =  (/  26481.0_r8,   2000.0_r8 /)
+!#! generic_height_to_pressure(:,  3) =  (/  23849.0_r8,   3000.0_r8 /)
+!#! generic_height_to_pressure(:,  4) =  (/  20576.0_r8,   5000.0_r8 /)
+!#! generic_height_to_pressure(:,  5) =  (/  18442.0_r8,   7000.0_r8 /)
+!#! generic_height_to_pressure(:,  6) =  (/  16180.0_r8,  10000.0_r8 /)
+!#! generic_height_to_pressure(:,  7) =  (/  13608.0_r8,  15000.0_r8 /)
+!#! generic_height_to_pressure(:,  8) =  (/  11784.0_r8,  20000.0_r8 /)
+!#! generic_height_to_pressure(:,  9) =  (/  10363.0_r8,  25000.0_r8 /)
+!#! generic_height_to_pressure(:, 10) =  (/   9164.0_r8,  30000.0_r8 /)
+!#! generic_height_to_pressure(:, 11) =  (/   7185.0_r8,  40000.0_r8 /)
+!#! generic_height_to_pressure(:, 12) =  (/   5574.0_r8,  50000.0_r8 /)
+!#! generic_height_to_pressure(:, 13) =  (/   3012.0_r8,  70000.0_r8 /)
+!#! generic_height_to_pressure(:, 14) =  (/   1457.0_r8,  85000.0_r8 /)
+!#! generic_height_to_pressure(:, 15) =  (/    766.0_r8,  92500.0_r8 /)
+!#! generic_height_to_pressure(:, 16) =  (/    111.0_r8, 100000.0_r8 /)
+!#! generic_height_to_pressure(:, 17) =  (/      0.0_r8, 101000.0_r8 /) 
+
+generic_height_to_pressure(:,  1) =  (/  609600.0_r8,   4.80_r8*10E-10 /)
+generic_height_to_pressure(:,  2) =  (/  152400.0_r8,   4.98_r8*10E-7 /)
+generic_height_to_pressure(:,  3) =  (/  91440.0_r8 ,   1.09_r8*10E-6  /)
+generic_height_to_pressure(:,  4) =  (/  60960.0_r8 ,   2.20_r8*10E-2  /)
+generic_height_to_pressure(:,  5) =  (/  45720.0_r8 ,    14000.0_r8   /)
+generic_height_to_pressure(:,  6) =  (/  30510.0_r8 ,   112000.0_r8   /)
+generic_height_to_pressure(:,  7) =  (/  27459.0_r8 ,   176000.0_r8   /)
+generic_height_to_pressure(:,  8) =  (/  24408.0_r8 ,   280000.0_r8   /)
+generic_height_to_pressure(:,  9) =  (/  21357.0_r8 ,   449000.0_r8   /)
+generic_height_to_pressure(:, 10) =  (/  18306.0_r8 ,   724000.0_r8   /)
+generic_height_to_pressure(:, 11) =  (/  16781.0_r8 ,   917000.0_r8   /)
+generic_height_to_pressure(:, 12) =  (/  15255.0_r8 ,  1165000.0_r8   /)
+generic_height_to_pressure(:, 13) =  (/  13730.0_r8 ,  1482000.0_r8   /)
+generic_height_to_pressure(:, 14) =  (/  12204.0_r8 ,  1882000.0_r8   /)
+generic_height_to_pressure(:, 15) =  (/  10679.0_r8 ,  2393000.0_r8   /)
+generic_height_to_pressure(:, 16) =  (/  9153.0_r8  ,  3013000.0_r8   /)
+generic_height_to_pressure(:, 17) =  (/  7628.0_r8  ,  3765000.0_r8   /)
+generic_height_to_pressure(:, 18) =  (/  6102.0_r8  ,  4661000.0_r8   /)
+generic_height_to_pressure(:, 19) =  (/  4577.0_r8  ,  5716000.0_r8   /)
+generic_height_to_pressure(:, 20) =  (/  3050.0_r8  ,  6964000.0_r8   /)
+generic_height_to_pressure(:, 21) =  (/  2746.0_r8  ,  7240000.0_r8   /)
+generic_height_to_pressure(:, 22) =  (/  2441.0_r8  ,  7522000.0_r8   /)
+generic_height_to_pressure(:, 23) =  (/  2136.0_r8  ,  7819000.0_r8   /)
+generic_height_to_pressure(:, 24) =  (/  1831.0_r8  ,  8122000.0_r8   /)
+generic_height_to_pressure(:, 25) =  (/  1526.0_r8  ,  8433000.0_r8   /)
+generic_height_to_pressure(:, 26) =  (/  1373.0_r8  ,  8591000.0_r8   /)
+generic_height_to_pressure(:, 27) =  (/  1220.0_r8  ,  8749000.0_r8   /)
+generic_height_to_pressure(:, 28) =  (/  1068.0_r8  ,  8915000.0_r8   /)
+generic_height_to_pressure(:, 29) =  (/  915.0_r8   ,  9081000.0_r8   /)
+generic_height_to_pressure(:, 30) =  (/  763.0_r8   ,  9246000.0_r8   /)
+generic_height_to_pressure(:, 31) =  (/  610.0_r8   ,  9419000.0_r8   /)
+generic_height_to_pressure(:, 32) =  (/  458.0_r8   ,  9591000.0_r8   /)
+generic_height_to_pressure(:, 33) =  (/  305.0_r8   ,  9763000.0_r8   /)
+generic_height_to_pressure(:, 34) =  (/  153.0_r8   ,  9949000.0_r8   /)
+generic_height_to_pressure(:, 35) =  (/  0.0_r8     , 10133000.0_r8   /)
 
 allocate(generic_height_column(generic_nlevels), generic_pressure_column(generic_nlevels))
 
