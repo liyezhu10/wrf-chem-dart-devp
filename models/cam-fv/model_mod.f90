@@ -777,7 +777,7 @@ endif
 call get_quad_vals(state_handle, ens_size, varid, obs_qty, four_lons, four_lats, &
                    lon_lat_vert, which_vert, quad_vals, status_array)
 
-print*, 'STATUS GET QUADS', status_array
+!print*, 'STATUS GET QUADS', status_array
 
 !>@todo FIXME : Here we are failing if any ensemble member fails. Instead
 !>              we should be using track status...
@@ -790,7 +790,7 @@ endif
 call quad_lon_lat_evaluate(interp_handle, lon_fract, lat_fract, ens_size, &
                            quad_vals, interp_vals, status_array)
 
-print*, 'STATUS MI EVAL', status_array(1)
+!print*, 'STATUS MI EVAL', status_array(1)
 
 ! print*, 'lon_ind_below ', four_lons(1)
 ! print*, 'lon_ind_above ', four_lons(2)
@@ -850,7 +850,7 @@ which_vert    = nint(query_location(location))
 
 call quad_lon_lat_locate(interp_handle, lon_lat_vert(1), lon_lat_vert(2), &
                          four_lons, four_lats, lon_fract, lat_fract, istatus(1))
-print*, 'STATUS ARRAY IV', istatus(1)
+!print*, 'STATUS ARRAY IV', istatus(1)
 if (istatus(1) /= 0) then
    istatus(:) = 3  ! cannot locate enclosing horizontal quad
    return
@@ -858,12 +858,12 @@ endif
 
 call get_quad_vals(state_handle, ens_size, varid, obs_qty, four_lons, four_lats, &
                    lon_lat_vert, which_vert, quad_vals, istatus)
-print*, 'ISTATUS VALS', istatus
+!print*, 'ISTATUS VALS', istatus
 if (any(istatus /= 0)) return
 
 call quad_lon_lat_evaluate(interp_handle, lon_fract, lat_fract, ens_size, &
                            quad_vals, interp_vals, istatus)
-print*, 'ISTATUS EVAL', istatus
+!print*, 'ISTATUS EVAL', istatus
 if (any(istatus /= 0)) then
    istatus(:) = 8   ! cannot evaluate in the quad
    return
@@ -885,7 +885,7 @@ real(r8)  :: fract, this_pressure
 ! assume ok to begin with
 my_status = 0
 
-print*, 'which_vert, vert_value', which_vert, vert_value
+!print*, 'which_vert, vert_value', which_vert, vert_value
 
 ! obs with a vertical type of pressure:
 !  lower pressures are higher; watch the less than/greater than tests
@@ -1350,16 +1350,23 @@ select case (which_vert)
                              height_array, my_status)
       if (any(my_status /= 0)) return   !>@todo FIXME let successful members continue?
 
+      if (debug_level > 100) then
+         do k = 1,nlevels
+            print*, 'ISHEIGHT: ', k, height_array(k,1)
+         enddo
+      endif
+
       do imember=1, ens_size
          call height_to_level(nlevels, height_array(:, imember), vert_val, &
                               bot_levs(imember), top_levs(imember), vert_fracts(imember), &
                               my_status(imember))
       enddo
+      if (any(my_status /= 0)) return   !>@todo FIXME let successful members continue?
 
       if (debug_level > 100) then
          do k = 1,ens_size
-            print*, 'ISHEIGHT bot_levs(k), top_levs(k), vert_fracts(k)', &
-                     k, bot_levs(k), top_levs(k), vert_fracts(k), height_array(k,1)
+            print*, 'ISHEIGHT ens#, bot_levs(#), top_levs(#), vert_fracts(#), top/bot height(#)', &
+                     k, bot_levs(k), top_levs(k), vert_fracts(k), height_array(1,k), height_array(nlevels, k)
          enddo
       endif
       
@@ -1438,7 +1445,7 @@ call get_staggered_values_from_qty(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
 call get_quad_values(1, lon_index, lat_index, QTY_SURFACE_ELEVATION, qty, surface_elevation)
 
 ! DEBUG
-!print*, 'lon lat surf elev ', lon_index, lat_index, surface_elevation
+print*, 'lon lat surf elev ', lon_index, lat_index, surface_elevation
 
 call compute_virtual_temperature(ens_handle, ens_size, lon_index, lat_index, nlevels, qty, tv, status1)
 
@@ -1462,11 +1469,15 @@ endif
 ! compute the height columns for each ensemble member
 do imember = 1, ens_size
    call build_heights(nlevels, surface_pressure(imember), surface_elevation(1), &
-                      tv(:, imember), height_array(:, imember), mbar=mbar)
+                      tv(:, imember), height_array(:, imember), mbar=mbar(:, imember))
 enddo
 
-do k = 1, nlevels
-   print*, 'height(level)', k, height_array(k, 1)
+
+do imember = 1, ens_size
+ print *, 'geopotential, member: ', imember
+ do k = 1, nlevels
+   print*, 'height(level)', k, height_array(k, imember)
+ enddo
 enddo
 
 !do k = 1, nlevels
@@ -1475,6 +1486,13 @@ enddo
 
 ! convert entire array to geometric height (from potential height)
 call gph2gmh(height_array, grid_data%lat%vals(lat_index))
+
+do imember = 1, ens_size
+ print *, 'geometric, member: ', imember
+ do k = 1, nlevels
+   print*, 'height(level)', k, height_array(k, imember)
+ enddo
+enddo
 
 my_status(:) = 0
 
@@ -1571,6 +1589,11 @@ real(r8), intent(out) :: height_array(n_levels)  ! in meters
 
 ! unlike pressure, we need to start at the surface and work our way up.
 ! we can't compute a height in the middle of the column.
+
+height_array(:) = MISSING_R8
+
+call error_handler(E_ERR, 'cam_h_col_midpts: ', 'routine needs mbar option', &
+                   source, revision, revdate)
 
 call build_heights(n_levels, surface_pressure, surface_elev, virtual_temp, &
                    height_array)
@@ -1694,6 +1717,7 @@ top_lev = MISSING_I
 fract   = MISSING_R8
 
 if (h_val > heights(1) .or. h_val < heights(nlevels)) then
+print *, 'failed above/below test.  low, val, top = ', heights(nlevels), h_val, heights(1)
    my_status = 11
    return
 endif
@@ -1757,7 +1781,7 @@ fract_level = vert_value - integer_level
 !>them correctly in the calling and vert_interp() code.
 
 ! out of range checks
-print*,  'vert_value,  valid_range', vert_value,  valid_range
+!print*,  'vert_value,  valid_range', vert_value,  valid_range
 if (vert_value < 1.0_r8 .or. vert_value > valid_range) return
 if (vert_value /= valid_range) then
    top = integer_level
@@ -1770,7 +1794,7 @@ else
    fract = 1.0_r8
 endif
 
-print*, 'top, bot, fract', top, bot, fract
+!print*, 'top, bot, fract', top, bot, fract
 
 range_set = .true.
 
@@ -2679,11 +2703,17 @@ real(r8),            intent(out) :: mbar(nlevels, ens_size)
 integer,             intent(out) :: istatus
 
 integer :: k
-real(r8) :: mmr_o1(nlevels, ens_size), &
-            mmr_o2(nlevels, ens_size), &
-            mmr_h1(nlevels, ens_size), &
-            mmr_n2(nlevels, ens_size)
+real(r8) :: mmr_o1(ens_size, nlevels), &
+            mmr_o2(ens_size, nlevels), &
+            mmr_h1(ens_size, nlevels), &
+            mmr_n2(ens_size, nlevels)
 real(r8) :: O_molar_mass, O2_molar_mass, H_molar_mass, N2_molar_mass 
+
+O_molar_mass  = chem_convert_factor(QTY_ATOMIC_OXYGEN_MIXING_RATIO)
+O2_molar_mass = chem_convert_factor(QTY_MOLEC_OXYGEN_MIXING_RATIO)
+H_molar_mass  = chem_convert_factor(QTY_ATOMIC_H_MIXING_RATIO)
+N2_molar_mass = chem_convert_factor(QTY_NITROGEN)
+   
 
 
 ! High topped models (WACCM-X) need to account for the changing composition 
@@ -2692,27 +2722,22 @@ real(r8) :: O_molar_mass, O2_molar_mass, H_molar_mass, N2_molar_mass
 do k = 1, nlevels
 
    call get_staggered_values_from_qty(ens_handle, ens_size, QTY_ATOMIC_OXYGEN_MIXING_RATIO, & 
-                                      lon_index, lat_index, k, qty, mmr_o1(k,:), istatus)
+                                      lon_index, lat_index, k, qty, mmr_o1(:, k), istatus)
    if (istatus /= 0) return
    
    call get_staggered_values_from_qty(ens_handle, ens_size, QTY_MOLEC_OXYGEN_MIXING_RATIO, & 
-                                      lon_index, lat_index, k, qty, mmr_o2(k,:), istatus)
+                                      lon_index, lat_index, k, qty, mmr_o2(:, k), istatus)
    if (istatus /= 0) return
    
    call get_staggered_values_from_qty(ens_handle, ens_size, QTY_ATOMIC_H_MIXING_RATIO, &
-                                      lon_index, lat_index, k, qty, mmr_h1(k,:), istatus)
+                                      lon_index, lat_index, k, qty, mmr_h1(:, k), istatus)
    if (istatus /= 0) return
    
-   O_molar_mass  = chem_convert_factor(QTY_ATOMIC_OXYGEN_MIXING_RATIO)
-   O2_molar_mass = chem_convert_factor(QTY_MOLEC_OXYGEN_MIXING_RATIO)
-   H_molar_mass  = chem_convert_factor(QTY_ATOMIC_H_MIXING_RATIO)
-   N2_molar_mass = chem_convert_factor(QTY_NITROGEN)
-   
-   mmr_n2(k,:) = 1.0_r8 - (mmr_o1(k,:) + mmr_o2(k,:) + mmr_h1(k,:))
-   mbar(k,:) = 1.0_r8/( mmr_o1(k,:)/O_molar_mass  &
-                      + mmr_o2(k,:)/O2_molar_mass &
-                      + mmr_h1(k,:)/H_molar_mass  &
-                      + mmr_n2(k,:)/N2_molar_mass)
+   mmr_n2(:,k) = 1.0_r8 - (mmr_o1(:,k) + mmr_o2(:,k) + mmr_h1(:,k))
+   mbar(k,:) = 1.0_r8/( mmr_o1(:,k)/O_molar_mass  &
+                      + mmr_o2(:,k)/O2_molar_mass &
+                      + mmr_h1(:,k)/H_molar_mass  &
+                      + mmr_n2(:,k)/N2_molar_mass)
 enddo
 
 end subroutine compute_mean_mass
@@ -2913,14 +2938,16 @@ end subroutine build_heights
 
 !-----------------------------------------------------------------------
 !>  Convert a 2d array of geopotential altitudes to mean sea level altitudes.
+!>  To avoid overflow with very high model tops, convert to km first, compute,
+!>  then convert back.  bof.
 
 subroutine gph2gmh(h, lat)
 real(r8), intent(inout) :: h(:,:)    ! geopotential altitude in m
 real(r8), intent(in)    :: lat       ! latitude in degrees.
 
-real(r8), parameter ::  be = 6356751.6_r8        ! min earth radius, m
-real(r8), parameter ::  ae = 6378136.3_r8        ! max earth radius, m
-real(r8), parameter ::  G = 9.80665_r8 ! WMO reference g value, m/s**2, at 45.542N(S)
+real(r8), parameter ::  be = 6356.7516_r8        ! min earth radius, km
+real(r8), parameter ::  ae = 6378.1363_r8        ! max earth radius, km
+real(r8), parameter ::  G = 0.00980665_r8 ! WMO reference g value, km/s**2, at 45.542N(S)
 
 real(r8) :: g0
 real(r8) :: r0
@@ -2930,15 +2957,25 @@ integer :: i, j
 
 latr = lat * DEG2RAD  ! convert to radians
 call compute_surface_gravity(latr, g0)
+print *, 'lat, latr, g0: ', lat, latr, g0
 
 ! compute local earth's radius using ellipse equation
 
-r0 = sqrt( ae**2 * cos(latr)**2 + be**2 * sin(latr)**2)
+r0 = sqrt( ae**2 * cos(latr)**2 + be**2 * sin(latr)**2)  
+print *, 'r0: ', r0
 
 ! Compute altitude above sea level
 do j=1, size(h, 2)
    do i=1, size(h, 1)
+      h(i,j) = h(i,j) / 1000.0_r8   ! m to km
+print *, ' '
+print *, 'height before: ', h(i,j)
+print *, 'numerator: ', (r0 * h(i,j))
+print *, 'denominator: ', (((g0*r0)/G) - h(i,j))
+print *, 'denom parts: ', (g0*r0)/G,  h(i,j)
       h(i,j) = (r0 * h(i,j)) / (((g0*r0)/G) - h(i,j))
+      h(i,j) = h(i,j) * 1000.0_r8   ! km to m
+print *, 'height after: ', h(i,j)
    enddo
 enddo
 
@@ -2975,8 +3012,9 @@ real(r8), parameter :: ge = xmu/ae**2/(1.0_r8 - f + 1.5_r8*xm - 15.0_r8/14.0_r8*
 ! compute gravity at any latitude, km/s2
 galt = ge*(1.0_r8 + f2*(sin(xlat))**2 - 1.0_r8/4.0_r8*f4*(sin(2.0_r8*xlat))**2)
 
+! FIXME!!  km/s2 for now
 ! convert to meters/s2
-galt = galt*1000.0_r8
+!galt = galt*1000.0_r8
 
 end subroutine compute_surface_gravity
 
