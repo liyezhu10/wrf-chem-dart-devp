@@ -20,9 +20,10 @@ use obs_kind_mod
 implicit none
 private
 
-public :: init_chem_tables, &
+public :: init_chem_tables,     &
           finalize_chem_tables, &
-          chem_convert_factor
+          get_molar_mass,       &
+          get_volume_mixing_ratio
 
 !public :: chem_convert_factors, molar_mass_dry_air
 
@@ -73,13 +74,12 @@ do i=0, num_qtys
 enddo
 
 ! and now add entries for real items
-call add_entry('H',     1.0_r8,    'QTY_ATOMIC_H_MIXING_RATIO')
-call add_entry('N2',   28.0_r8,    'QTY_NITROGEN')
+call add_entry('H',     1.0074_r8, 'QTY_ATOMIC_H_MIXING_RATIO')
 call add_entry('O',    15.9994_r8, 'QTY_ATOMIC_OXYGEN_MIXING_RATIO')
-call add_entry('O2',   32.0_r8,    'QTY_MOLEC_OXYGEN_MIXING_RATIO')
+call add_entry('O2',   31.9988_r8, 'QTY_MOLEC_OXYGEN_MIXING_RATIO')
 call add_entry('O3',   47.9982_r8, 'QTY_O3') 
+call add_entry('N2',   28.0135_r8, 'QTY_NITROGEN')
 
-! call add_entry('O1D',  15.9994_r8, 'QTY_O1D')
 
 !%!  'N2O                            ',       44.01288,     'QTY_N2O                         ', &
 !%!  'NO                             ',       30.00614,     'QTY_NO                          ', &
@@ -272,22 +272,39 @@ end subroutine set_entry
 
 !--------------------------------------------------------------------
 !>
-
-function chem_convert_factor(qty)
+function get_molar_mass(qty)
 
 integer, intent(in) :: qty
-real(r8)            :: chem_convert_factor
+real(r8)            :: get_molar_mass
 
 if (qty < 0 .or. qty > num_qtys) then
    write(string1,'(A,I6,A,I6)') 'quantity number ', qty, &
                                    ' must be between 0 and ', num_qtys
-   call error_handler(E_ERR, 'chem_convert_factor', string1, &
+   call error_handler(E_ERR, 'get_molar_mass', string1, &
                       source, revision, revdate)
 endif
 
-chem_convert_factor = chem_conv_table(qty)%convert_factor !* molar_mass_dry_air  !??
+get_molar_mass = chem_conv_table(qty)%convert_factor
 
-end function chem_convert_factor
+end function get_molar_mass
+
+!--------------------------------------------------------------------
+!>
+function get_volume_mixing_ratio(qty)
+
+integer, intent(in) :: qty
+real(r8)            :: get_volume_mixing_ratio
+
+if (qty < 0 .or. qty > num_qtys) then
+   write(string1,'(A,I6,A,I6)') 'quantity number ', qty, &
+                                   ' must be between 0 and ', num_qtys
+   call error_handler(E_ERR, 'get_volume_mixing_ratio', string1, &
+                      source, revision, revdate)
+endif
+
+get_volume_mixing_ratio = molar_mass_dry_air / chem_conv_table(qty)%convert_factor
+
+end function get_volume_mixing_ratio
 
 !--------------------------------------------------------------------
 

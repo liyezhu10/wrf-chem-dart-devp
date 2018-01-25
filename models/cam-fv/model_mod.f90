@@ -77,7 +77,7 @@ use  netcdf_utilities_mod,  only : nc_get_variable, nc_get_variable_size, &
                                    nc_begin_define_mode, nc_open_file_readonly, &
                                    nc_close_file, nc_variable_exists
 use        chem_tables_mod, only : init_chem_tables, finalize_chem_tables, &
-                                   chem_convert_factor
+                                   get_molar_mass, get_volume_mixing_ratio
 use        quad_utils_mod,  only : quad_interp_handle, init_quad_interp, &
                                    set_quad_coords, finalize_quad_interp, &
                                    quad_lon_lat_locate, quad_lon_lat_evaluate, &
@@ -170,7 +170,7 @@ namelist /model_nml/  &
    fields_to_perturb,               &
    perturbation_amplitude,          &
    use_variable_mean_mass,          &
-   using_chemistry,                   &
+   using_chemistry,                 &
    debug_level
 
 ! global variables
@@ -534,10 +534,14 @@ integer,             intent(in) :: lev_index
 real(r8),            intent(out) :: vals(ens_size)
 integer,             intent(out) :: my_status
 
+character(len=*), parameter :: routine = 'get_values_from_single_level:'
+
 integer :: varid
 integer(i8) :: state_indx
+real(r8) :: tmp(ens_size)
 
 varid = get_varid_from_kind(domain_id, qty)
+!print *, 'get_vals_single_lvl: qty, varid = ', trim(get_name_for_quantity(qty)), varid
 if (varid < 0) then
    vals(:) = MISSING_R8
    my_status = 12
@@ -545,9 +549,17 @@ if (varid < 0) then
 endif
 
 state_indx = get_dart_vector_index(lon_index, lat_index, lev_index, domain_id, varid)
+if (state_indx < 1 .or. state_indx > get_domain_size(domain_id)) then
+   write(string1, *) 'state_index out of range: ', state_indx, ' not between ', 1, get_domain_size(domain_id)
+   call error_handler(E_ERR,routine,string1,source,revision,revdate,text2=string2)
+endif
 vals(:) = get_state(state_indx, ens_handle)
 
 my_status = 0
+
+!state_indx = get_dart_vector_index(1,1,1,1,varid)
+!tmp(:) = get_state(state_indx, ens_handle)
+!print *, 'get_vals_single_lvl: v(1,1,1) = ', tmp
 
 end subroutine get_values_from_single_level
 
@@ -811,7 +823,9 @@ if (any(status_array /= 0)) then
 endif
 
 if (using_chemistry) then
-   interp_vals = interp_vals * chem_convert_factor(obs_qty)
+print *, 'chem: ', trim(get_name_for_quantity(obs_qty)), interp_vals, get_volume_mixing_ratio(obs_qty), &
+                   interp_vals * get_volume_mixing_ratio(obs_qty)
+   interp_vals = interp_vals * get_volume_mixing_ratio(obs_qty)
 endif
 
 ! all interp values should be set by now.  set istatus
@@ -1350,7 +1364,7 @@ select case (which_vert)
                              height_array, my_status)
       if (any(my_status /= 0)) return   !>@todo FIXME let successful members continue?
 
-      if (debug_level > 100) then
+      if (debug_level > 400) then
          do k = 1,nlevels
             print*, 'ISHEIGHT: ', k, height_array(k,1)
          enddo
@@ -1363,7 +1377,7 @@ select case (which_vert)
       enddo
       if (any(my_status /= 0)) return   !>@todo FIXME let successful members continue?
 
-      if (debug_level > 100) then
+      if (debug_level > 400) then
          do k = 1,ens_size
             print*, 'ISHEIGHT ens#, bot_levs(#), top_levs(#), vert_fracts(#), top/bot height(#)', &
                      k, bot_levs(k), top_levs(k), vert_fracts(k), height_array(1,k), height_array(nlevels, k)
@@ -1473,26 +1487,31 @@ do imember = 1, ens_size
 enddo
 
 
-do imember = 1, ens_size
- print *, 'geopotential, member: ', imember
- do k = 1, nlevels
-   print*, 'height(level)', k, height_array(k, imember)
+if (debug_level > 100) then
+ do imember = 1, ens_size
+  print *, ''
+  print *, 'geopotential, member: ', imember
+  do k = 1, nlevels
+    print*, 'tv(level)    ', k, tv(k, imember)
+  enddo
+  do k = 1, nlevels
+    print*, 'height(level)', k, height_array(k, imember)
+  enddo
  enddo
-enddo
-
-!do k = 1, nlevels
-!   print*, 'tv(level)    ', k, tv(k, 1)
-!enddo
+endif
 
 ! convert entire array to geometric height (from potential height)
 call gph2gmh(height_array, grid_data%lat%vals(lat_index))
 
-do imember = 1, ens_size
- print *, 'geometric, member: ', imember
- do k = 1, nlevels
-   print*, 'height(level)', k, height_array(k, imember)
+if (debug_level > 100) then
+ do imember = 1, ens_size
+  print *, ''
+  print *, 'geometric, member: ', imember
+  do k = 1, nlevels
+    print*, 'height(level)', k, height_array(k, imember)
+  enddo
  enddo
-enddo
+endif
 
 my_status(:) = 0
 
@@ -2702,17 +2721,19 @@ integer,             intent(in)  :: qty
 real(r8),            intent(out) :: mbar(nlevels, ens_size)
 integer,             intent(out) :: istatus
 
-integer :: k
+integer :: k, this_qty
 real(r8) :: mmr_o1(ens_size, nlevels), &
             mmr_o2(ens_size, nlevels), &
             mmr_h1(ens_size, nlevels), &
             mmr_n2(ens_size, nlevels)
 real(r8) :: O_molar_mass, O2_molar_mass, H_molar_mass, N2_molar_mass 
 
-O_molar_mass  = chem_convert_factor(QTY_ATOMIC_OXYGEN_MIXING_RATIO)
-O2_molar_mass = chem_convert_factor(QTY_MOLEC_OXYGEN_MIXING_RATIO)
-H_molar_mass  = chem_convert_factor(QTY_ATOMIC_H_MIXING_RATIO)
-N2_molar_mass = chem_convert_factor(QTY_NITROGEN)
+! do this outside the subroutine?  it never changes throughout the
+! run of the program
+O_molar_mass  = get_molar_mass(QTY_ATOMIC_OXYGEN_MIXING_RATIO)
+O2_molar_mass = get_molar_mass(QTY_MOLEC_OXYGEN_MIXING_RATIO)
+H_molar_mass  = get_molar_mass(QTY_ATOMIC_H_MIXING_RATIO)
+N2_molar_mass = get_molar_mass(QTY_NITROGEN)
    
 
 
@@ -2721,23 +2742,32 @@ N2_molar_mass = chem_convert_factor(QTY_NITROGEN)
 ! initial file, which may not be available from low topped models.
 do k = 1, nlevels
 
-   call get_staggered_values_from_qty(ens_handle, ens_size, QTY_ATOMIC_OXYGEN_MIXING_RATIO, & 
+   this_qty = QTY_ATOMIC_OXYGEN_MIXING_RATIO
+   call get_staggered_values_from_qty(ens_handle, ens_size, this_qty, &
                                       lon_index, lat_index, k, qty, mmr_o1(:, k), istatus)
    if (istatus /= 0) return
+   print *, 'mmr: ', trim(get_name_for_quantity(this_qty)), mmr_o1(1, k)
    
-   call get_staggered_values_from_qty(ens_handle, ens_size, QTY_MOLEC_OXYGEN_MIXING_RATIO, & 
+   this_qty = QTY_MOLEC_OXYGEN_MIXING_RATIO
+   call get_staggered_values_from_qty(ens_handle, ens_size, this_qty, & 
                                       lon_index, lat_index, k, qty, mmr_o2(:, k), istatus)
    if (istatus /= 0) return
+   print *, 'mmr: ', trim(get_name_for_quantity(this_qty)), mmr_o2(1, k)
    
-   call get_staggered_values_from_qty(ens_handle, ens_size, QTY_ATOMIC_H_MIXING_RATIO, &
+   this_qty = QTY_ATOMIC_H_MIXING_RATIO
+   call get_staggered_values_from_qty(ens_handle, ens_size, this_qty, &
                                       lon_index, lat_index, k, qty, mmr_h1(:, k), istatus)
    if (istatus /= 0) return
+   print *, 'mmr: ', trim(get_name_for_quantity(this_qty)), mmr_h1(1, k)
    
    mmr_n2(:,k) = 1.0_r8 - (mmr_o1(:,k) + mmr_o2(:,k) + mmr_h1(:,k))
    mbar(k,:) = 1.0_r8/( mmr_o1(:,k)/O_molar_mass  &
                       + mmr_o2(:,k)/O2_molar_mass &
                       + mmr_h1(:,k)/H_molar_mass  &
                       + mmr_n2(:,k)/N2_molar_mass)
+print *, 'k, mbar, o1, o2, h1, n2: ', k, mbar(k,1), mmr_o1(1,k), mmr_o2(1,k), mmr_h1(1, k), mmr_n2(1, k)
+print *, 'k, mmass o1, o2, h1, n2: ', k, mmr_o1(1,k)/O_molar_mass, mmr_o2(1,k)/O2_molar_mass, &
+                                         mmr_h1(1, k)/H_molar_mass, mmr_n2(1, k)/N2_molar_mass
 enddo
 
 end subroutine compute_mean_mass
@@ -2818,6 +2848,7 @@ real(r8), intent(in),  optional :: mbar(nlevels) !>@todo FIXME : is this simply 
 ! Local variables
 !>@todo FIXME can we use the types_mod values here?  or have a model constants module?
 real(r8), parameter :: const_r = 287.04_r8    ! Different than model_heights (dry air gas constant)
+real(r8), parameter :: universal_gas_constant = 8314.0_r8 ! [J/K/kmol]
 real(r8), parameter :: g0 = 9.80616_r8        ! Different than model_heights (gph2gmh:G) !
 
 integer  :: i,k,l
@@ -2831,7 +2862,7 @@ real(r8) :: pm_ln(nlevels+1) ! logs of midpoint pressures plus surface interface
 ! models like waccm change the gas constant with height.
 ! allow for the calling code to pass in an array of r.
 if (present(mbar)) then
-   r_g0_tv(:) = (const_r / g0*mbar(:)) * virtual_temp(:)
+   r_g0_tv(:) = (universal_gas_constant / (mbar(:)*g0)) * virtual_temp(:)
 else
    r_g0_tv(:) = (const_r / g0) * virtual_temp(:)
 endif
@@ -2957,25 +2988,28 @@ integer :: i, j
 
 latr = lat * DEG2RAD  ! convert to radians
 call compute_surface_gravity(latr, g0)
-print *, 'lat, latr, g0: ', lat, latr, g0
+!print *, 'lat, latr, g0, G: ', lat, latr, g0, G
 
 ! compute local earth's radius using ellipse equation
 
 r0 = sqrt( ae**2 * cos(latr)**2 + be**2 * sin(latr)**2)  
-print *, 'r0: ', r0
+!print *, 'r0: ', r0
 
 ! Compute altitude above sea level
 do j=1, size(h, 2)
    do i=1, size(h, 1)
+!print *, ''
+!print *, 'height before (m) : ', h(i,j)
       h(i,j) = h(i,j) / 1000.0_r8   ! m to km
-print *, ' '
-print *, 'height before: ', h(i,j)
-print *, 'numerator: ', (r0 * h(i,j))
-print *, 'denominator: ', (((g0*r0)/G) - h(i,j))
-print *, 'denom parts: ', (g0*r0)/G,  h(i,j)
-      h(i,j) = (r0 * h(i,j)) / (((g0*r0)/G) - h(i,j))
+!print *, 'height before (km): ', h(i,j)
+!print *, 'numerator  : ', r0 * h(i,j)
+!print *, 'denom parts: ', (g0*r0)/G, h(i,j)
+!print *, 'denominator: ', ((g0*r0)/G) - h(i,j)
+      if ((((g0*r0)/G) - h(i,j)) > 0) &
+         h(i,j) = (r0 * h(i,j)) / (((g0*r0)/G) - h(i,j))
+!print *, 'height after (km): ', h(i,j)
       h(i,j) = h(i,j) * 1000.0_r8   ! km to m
-print *, 'height after: ', h(i,j)
+!print *, 'height after (m) : ', h(i,j)
    enddo
 enddo
 
@@ -3005,12 +3039,24 @@ real(r8),parameter :: xm  = 0.003468_r8            !
 real(r8),parameter :: f2  = 5.3481622134089e-03_r8 ! f2 = -f + 5.0* 0.50*xm - 17.0/14.0*f*xm + 15.0/4.0*xm**2
 real(r8),parameter :: f4  = 2.3448248012911e-05_r8 ! f4 = -f**2* 0.50 + 5.0* 0.50*f*xm
 
+real(r8) :: alt = 0.0_r8
+real(r8) :: g
+
 ! gravity at the equator, km/s2
 real(r8), parameter :: ge = xmu/ae**2/(1.0_r8 - f + 1.5_r8*xm - 15.0_r8/14.0_r8*xm*f)
 
 
 ! compute gravity at any latitude, km/s2
-galt = ge*(1.0_r8 + f2*(sin(xlat))**2 - 1.0_r8/4.0_r8*f4*(sin(2.0_r8*xlat))**2)
+g = ge*(1.0_r8 + f2*(sin(xlat))**2 - 1.0_r8/4.0_r8*f4*(sin(2.0_r8*xlat))**2)
+
+! compute gravity at any latitude and at any height, km/s2
+galt = g - 2.0_r8*ge*alt/ae*(1.0_r8 + f + xm + (-3.0_r8*f + 5.0_r8* 0.50_r8*xm)*  &
+                          (sin(xlat))**2) + 3.0_r8*ge*alt**2/ae**2
+
+if (g /= galt) print *, 'g, galt: ', g, galt
+
+!! compute gravity at any latitude, km/s2
+!galt = ge*(1.0_r8 + f2*(sin(xlat))**2 - 1.0_r8/4.0_r8*f4*(sin(2.0_r8*xlat))**2)
 
 ! FIXME!!  km/s2 for now
 ! convert to meters/s2
@@ -3496,7 +3542,6 @@ end subroutine convert_vert_one_obs
 !-----------------------------------------------------------------------
 !> Store a generic column of pressures and heights.
 !>  not precise - use only when rough numbers are good enough.
-!>@todo FIXME: this will need to go higher for WACCM, WACCM-X
 
 subroutine store_generic_columns()
 
@@ -3507,25 +3552,6 @@ subroutine store_generic_columns()
 
 integer :: i
 real(r8) :: generic_height_to_pressure(2, generic_nlevels)
-
-! index 1 is height in meters, index 2 is corresponding pressure in pascals
-!#! generic_height_to_pressure(:,  1) =  (/  31055.0_r8,   1000.0_r8 /) 
-!#! generic_height_to_pressure(:,  2) =  (/  26481.0_r8,   2000.0_r8 /)
-!#! generic_height_to_pressure(:,  3) =  (/  23849.0_r8,   3000.0_r8 /)
-!#! generic_height_to_pressure(:,  4) =  (/  20576.0_r8,   5000.0_r8 /)
-!#! generic_height_to_pressure(:,  5) =  (/  18442.0_r8,   7000.0_r8 /)
-!#! generic_height_to_pressure(:,  6) =  (/  16180.0_r8,  10000.0_r8 /)
-!#! generic_height_to_pressure(:,  7) =  (/  13608.0_r8,  15000.0_r8 /)
-!#! generic_height_to_pressure(:,  8) =  (/  11784.0_r8,  20000.0_r8 /)
-!#! generic_height_to_pressure(:,  9) =  (/  10363.0_r8,  25000.0_r8 /)
-!#! generic_height_to_pressure(:, 10) =  (/   9164.0_r8,  30000.0_r8 /)
-!#! generic_height_to_pressure(:, 11) =  (/   7185.0_r8,  40000.0_r8 /)
-!#! generic_height_to_pressure(:, 12) =  (/   5574.0_r8,  50000.0_r8 /)
-!#! generic_height_to_pressure(:, 13) =  (/   3012.0_r8,  70000.0_r8 /)
-!#! generic_height_to_pressure(:, 14) =  (/   1457.0_r8,  85000.0_r8 /)
-!#! generic_height_to_pressure(:, 15) =  (/    766.0_r8,  92500.0_r8 /)
-!#! generic_height_to_pressure(:, 16) =  (/    111.0_r8, 100000.0_r8 /)
-!#! generic_height_to_pressure(:, 17) =  (/      0.0_r8, 101000.0_r8 /) 
 
 generic_height_to_pressure(:,  1) =  (/  609600.0_r8,   4.80_r8*10E-10 /)
 generic_height_to_pressure(:,  2) =  (/  152400.0_r8,   4.98_r8*10E-7 /)

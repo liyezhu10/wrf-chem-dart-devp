@@ -163,14 +163,16 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 logical, save :: module_initialized = .false.
 
-real(r8), PARAMETER :: N2_molar_mass = 28.0_r8
-real(r8), PARAMETER :: O_molar_mass  = 16.0_r8
-real(r8), PARAMETER :: O2_molar_mass = 32.0_r8
-real(r8), PARAMETER :: H_molar_mass  =  1.0_r8
+real(r8), parameter :: N2_molar_mass = 28.0_r8
+real(r8), parameter :: O_molar_mass  = 16.0_r8
+real(r8), parameter :: O2_molar_mass = 32.0_r8
+real(r8), parameter :: H_molar_mass  =  1.0_r8
+
 ! WACCM-X; put into common/types_mod.f90?
-real(r8), PARAMETER :: kboltz = 1.380648E-23_r8    ! [N*m/K]
-real(r8), PARAMETER :: universal_gas_constant = 8314.0_r8 ! [J/K/kmol]
-integer,  PARAMETER :: MAXLEVELS = 100 ! more than max levels expected in the model 
+real(r8), parameter :: kboltz = 1.380648E-23_r8    ! [N*m/K]
+real(r8), parameter :: universal_gas_constant = 8314.0_r8 ! [J/K/kmol]
+real(r8), parameter :: molar_mass_dry_air = 28.9644_r8
+integer,  parameter :: MAXLEVELS = 300 ! more than max levels expected in the model (waccm-x has 126)
 character(len=512) :: string1, string2, string3
 
 contains
@@ -399,7 +401,7 @@ real(r8), allocatable :: N2_number_density(:, :)
 real(r8), allocatable :: total_number_density(:, :)
 real(r8), allocatable :: O_number_density(:, :)
 
-real(r8), PARAMETER :: k_constant = 1.381e-23_r8 ! m^2 * kg / s^2 / K
+real(r8), parameter :: k_constant = 1.381e-23_r8 ! m^2 * kg / s^2 / K
 integer :: ilayer, nlevels, nilevels
 integer :: this_istatus(ens_size)
 real(r8) :: layerfraction(ens_size)
@@ -587,17 +589,21 @@ logical :: return_now
 
 istatus = 0 ! Need to have istatus = 0 for track_status()
 
+! cam-fv returns volume mixing ratio, not mass mixing ratio. undo for computation below.
 call interpolate(state_handle, ens_size, location, QTY_ATOMIC_OXYGEN_MIXING_RATIO, mmr_o1, this_istatus)
 call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
 if (return_now) return
+mmr_o1 = mmr_o1 / (molar_mass_dry_air/O_molar_mass)
 
 call interpolate(state_handle, ens_size, location, QTY_MOLEC_OXYGEN_MIXING_RATIO, mmr_o2, this_istatus)
 call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
 if (return_now) return
+mmr_o2 = mmr_o2 / (molar_mass_dry_air/O2_molar_mass)
 
 call interpolate(state_handle, ens_size, location, QTY_ATOMIC_H_MIXING_RATIO, mmr_h1, this_istatus)
 call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
 if (return_now) return
+mmr_h1 = mmr_h1 / (molar_mass_dry_air/H_molar_mass)
 
 call interpolate(state_handle, ens_size, location, QTY_ION_O_MIXING_RATIO, mmr_op, this_istatus)
 call track_status(ens_size, this_istatus, obs_val, istatus, return_now)
