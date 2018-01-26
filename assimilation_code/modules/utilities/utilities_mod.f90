@@ -203,7 +203,8 @@ public :: file_exist, &
           scalar, &
           string_to_real, &
           string_to_integer, &
-          string_to_logical
+          string_to_logical, &
+          array_dump
 
 ! this routine is either in the null_mpi_utilities_mod.f90, or in
 ! the mpi_utilities_mod.f90 file, but it is not a module subroutine.
@@ -225,6 +226,12 @@ interface scalar
    module procedure to_scalar_real
    module procedure to_scalar_int
    module procedure to_scalar_int8
+end interface
+
+interface array_dump
+   module procedure array_1d_dump
+   module procedure array_2d_dump
+   module procedure array_3d_dump
 end interface
 
 ! version controlled file description for error handling, do not edit
@@ -2314,6 +2321,143 @@ end select
 
 end function string_to_logical
 
+!-----------------------------------------------------------------------
+!> dump the contents of a 1d array with a max of N items per line.
+!> optional arguments allow the caller to restrict the output to 
+!> no more than X items, to write to an open file unit, and to
+!> write a text label before the numerical dump.
+!>
+
+subroutine array_1d_dump(array, nper_line, max_items, funit, label)
+real(r8),         intent(in)           :: array(:)
+integer,          intent(in), optional :: nper_line
+integer,          intent(in), optional :: max_items
+integer,          intent(in), optional :: funit
+character(len=*), intent(in), optional :: label
+
+integer :: i, per_line, ounit, asize_i
+logical :: has_label
+
+! set defaults and override if arguments are present
+
+per_line = 4
+if (present(nper_line)) per_line = nper_line
+
+asize_i = size(array)
+if (present(max_items)) asize_i = min(asize_i, max_items)
+
+ounit = 0
+if (present(funit)) ounit = funit
+
+has_label = .false.
+if (present(label)) has_label = .true.
+
+! output section
+
+if (has_label) write(ounit, *) trim(label)
+
+do i=1, asize_i, per_line
+   write(ounit, *) i, ' : ', array(i:min(asize_i,i+per_line-1))
+enddo
+
+end subroutine array_1d_dump
+
+!-----------------------------------------------------------------------
+!> dump the contents of a 2d array with a max of N items per line.
+!> optional arguments allow the caller to restrict the output to 
+!> no more than X items, to write to an open file unit, and to
+!> write a text label before the numerical dump.
+!>
+
+subroutine array_2d_dump(array, nper_line, max_i_items, max_j_items, funit, label)
+real(r8),         intent(in)           :: array(:,:)
+integer,          intent(in), optional :: nper_line
+integer,          intent(in), optional :: max_i_items
+integer,          intent(in), optional :: max_j_items
+integer,          intent(in), optional :: funit
+character(len=*), intent(in), optional :: label
+
+integer :: i, j, per_line, ounit, asize_i, asize_j
+logical :: has_label
+
+! set defaults and override if arguments are present
+
+per_line = 4
+if (present(nper_line)) per_line = nper_line
+
+asize_i = size(array, 1)
+asize_j = size(array, 2)
+if (present(max_i_items)) asize_i = min(asize_i, max_i_items)
+if (present(max_j_items)) asize_j = min(asize_j, max_j_items)
+
+ounit = 0
+if (present(funit)) ounit = funit
+
+has_label = .false.
+if (present(label)) has_label = .true.
+
+! output section
+
+if (has_label) write(ounit, *) trim(label)
+
+do j=1, asize_j
+   do i=1, asize_i, per_line
+      write(ounit, *) i, j, ' : ', array(i:min(asize_i,i+per_line-1), j)
+   enddo
+enddo
+
+end subroutine array_2d_dump
+
+!-----------------------------------------------------------------------
+!> dump the contents of a 3d array with a max of N items per line.
+!> optional arguments allow the caller to restrict the output to 
+!> no more than X items, to write to an open file unit, and to
+!> write a text label before the numerical dump.
+!>
+
+subroutine array_3d_dump(array, nper_line, max_i_items, max_j_items, max_k_items, funit, label)
+real(r8),         intent(in)           :: array(:,:,:)
+integer,          intent(in), optional :: nper_line
+integer,          intent(in), optional :: max_i_items
+integer,          intent(in), optional :: max_j_items
+integer,          intent(in), optional :: max_k_items
+integer,          intent(in), optional :: funit
+character(len=*), intent(in), optional :: label
+
+integer :: i, j, k, per_line, ounit, asize_i, asize_j, asize_k
+logical :: has_label
+
+! set defaults and override if arguments are present
+
+per_line = 4
+if (present(nper_line)) per_line = nper_line
+
+asize_i = size(array, 1)
+asize_j = size(array, 2)
+asize_k = size(array, 3)
+if (present(max_i_items)) asize_i = min(asize_i, max_i_items)
+if (present(max_j_items)) asize_j = min(asize_j, max_j_items)
+if (present(max_k_items)) asize_k = min(asize_k, max_k_items)
+
+ounit = 0
+if (present(funit)) ounit = funit
+
+has_label = .false.
+if (present(label)) has_label = .true.
+
+! output section
+
+if (has_label) write(ounit, *) trim(label)
+
+do k=1, asize_k
+   do j=1, asize_j
+      do i=1, asize_i, per_line
+         write(ounit, *) i, j, k, ' : ', array(i:min(asize_i,i+per_line-1), j, k)
+      enddo
+   enddo
+enddo
+
+end subroutine array_3d_dump
 
 !=======================================================================
 ! End of utilities_mod

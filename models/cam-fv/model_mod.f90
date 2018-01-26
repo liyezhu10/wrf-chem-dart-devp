@@ -48,7 +48,7 @@ use         utilities_mod,  only : find_namelist_in_file, check_namelist_read, &
                                    string_to_logical, string_to_real,& 
                                    logfileunit, do_nml_file, do_nml_term, &
                                    register_module, error_handler, &
-                                   file_exist, to_upper, E_ERR, E_MSG
+                                   file_exist, to_upper, E_ERR, E_MSG, array_dump
 use          obs_kind_mod,  only : QTY_SURFACE_ELEVATION, QTY_PRESSURE, &
                                    QTY_GEOMETRIC_HEIGHT, QTY_VERTLEVEL, &
                                    QTY_SURFACE_PRESSURE, &
@@ -813,9 +813,9 @@ call quad_lon_lat_evaluate(interp_handle, lon_fract, lat_fract, ens_size, &
 ! print*, 'quad_vals(:,1) ', quad_vals(:,1)
 ! print*, 'quad_vals(:,2) ', quad_vals(:,2)
 ! print*, 'quad_vals(:,3) ', quad_vals(:,3)
-! print*, 'inperp_vals(:,1) ', interp_vals(1)
-! print*, 'inperp_vals(:,2) ', interp_vals(2)
-! print*, 'inperp_vals(:,3) ', interp_vals(3)
+! print*, 'interp_vals(:,1) ', interp_vals(1)
+! print*, 'interp_vals(:,2) ', interp_vals(2)
+! print*, 'interp_vals(:,3) ', interp_vals(3)
 
 if (any(status_array /= 0)) then
    istatus(:) = 8   ! cannot evaluate in the quad
@@ -823,8 +823,8 @@ if (any(status_array /= 0)) then
 endif
 
 if (using_chemistry) then
-print *, 'chem: ', trim(get_name_for_quantity(obs_qty)), interp_vals, get_volume_mixing_ratio(obs_qty), &
-                   interp_vals * get_volume_mixing_ratio(obs_qty)
+!print *, 'chem: ', trim(get_name_for_quantity(obs_qty)), interp_vals, get_volume_mixing_ratio(obs_qty), &
+!                   interp_vals * get_volume_mixing_ratio(obs_qty)
    interp_vals = interp_vals * get_volume_mixing_ratio(obs_qty)
 endif
 
@@ -1459,7 +1459,7 @@ call get_staggered_values_from_qty(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
 call get_quad_values(1, lon_index, lat_index, QTY_SURFACE_ELEVATION, qty, surface_elevation)
 
 ! DEBUG
-print*, 'lon lat surf elev ', lon_index, lat_index, surface_elevation
+!print*, 'lon lat surf elev ', lon_index, lat_index, surface_elevation
 
 call compute_virtual_temperature(ens_handle, ens_size, lon_index, lat_index, nlevels, qty, tv, status1)
 
@@ -1479,7 +1479,7 @@ else
    mbar(:,:) = 1.0_r8
 endif
 
-  print*, 'mbar', mbar(1,1), mbar(nlevels,1), my_status, status1
+  !print*, 'mbar', mbar(1,1), mbar(nlevels,1), my_status, status1
 ! compute the height columns for each ensemble member
 do imember = 1, ens_size
    call build_heights(nlevels, surface_pressure(imember), surface_elevation(1), &
@@ -1736,7 +1736,7 @@ top_lev = MISSING_I
 fract   = MISSING_R8
 
 if (h_val > heights(1) .or. h_val < heights(nlevels)) then
-print *, 'failed above/below test.  low, val, top = ', heights(nlevels), h_val, heights(1)
+!print *, 'failed above/below test.  low, val, top = ', heights(nlevels), h_val, heights(1)
    my_status = 11
    return
 endif
@@ -2345,7 +2345,7 @@ domain_id = add_domain(cam_template_filename, nfields, var_names, kind_list, &
 
 call fill_cam_stagger_info(grid_stagger)
 
-if (debug_level > 2) call state_structure_info(domain_id)
+if (debug_level > 100) call state_structure_info(domain_id)
 
 end subroutine set_cam_variable_info
 
@@ -2478,16 +2478,8 @@ allocate(grid_array%vals(grid_array%nsize))
 
 call nc_get_variable(ncid, varname, grid_array%vals, routine)
 
-!>@todo FIXME this should be an array_dump() routine
-!> in a utilities routine somewhere.  e.g:
-!call array_dump2(varname, grid_array%vals(:,:), nper_linei, nsize)
-
-if (debug_level > 10) then
-   per_line = 3
-   print*, 'variable name ', trim(varname)
-   do i=1, grid_array%nsize, per_line
-      print*,  grid_array%vals(i:min(grid_array%nsize,i+per_line-1))
-   enddo
+if (debug_level > 30) then
+   call array_dump(grid_array%vals, label=varname)
 endif
 
 end subroutine fill_cam_1d_array
@@ -2700,7 +2692,7 @@ do k = 1, nlevels
 
    !>tv == virtual temperature.
    tv(k,:) = temperature(:)*(1.0_r8 + rr_factor*specific_humidity(:))
-   print*, 'tv(levels)', k,tv(k,1), temperature(1), specific_humidity(1)
+   !print*, 'tv(levels)', k,tv(k,1), temperature(1), specific_humidity(1)
 enddo
 
 
@@ -2746,28 +2738,28 @@ do k = 1, nlevels
    call get_staggered_values_from_qty(ens_handle, ens_size, this_qty, &
                                       lon_index, lat_index, k, qty, mmr_o1(:, k), istatus)
    if (istatus /= 0) return
-   print *, 'mmr: ', trim(get_name_for_quantity(this_qty)), mmr_o1(1, k)
+   !print *, 'mmr: ', trim(get_name_for_quantity(this_qty)), mmr_o1(1, k)
    
    this_qty = QTY_MOLEC_OXYGEN_MIXING_RATIO
    call get_staggered_values_from_qty(ens_handle, ens_size, this_qty, & 
                                       lon_index, lat_index, k, qty, mmr_o2(:, k), istatus)
    if (istatus /= 0) return
-   print *, 'mmr: ', trim(get_name_for_quantity(this_qty)), mmr_o2(1, k)
+   !print *, 'mmr: ', trim(get_name_for_quantity(this_qty)), mmr_o2(1, k)
    
    this_qty = QTY_ATOMIC_H_MIXING_RATIO
    call get_staggered_values_from_qty(ens_handle, ens_size, this_qty, &
                                       lon_index, lat_index, k, qty, mmr_h1(:, k), istatus)
    if (istatus /= 0) return
-   print *, 'mmr: ', trim(get_name_for_quantity(this_qty)), mmr_h1(1, k)
+   !print *, 'mmr: ', trim(get_name_for_quantity(this_qty)), mmr_h1(1, k)
    
    mmr_n2(:,k) = 1.0_r8 - (mmr_o1(:,k) + mmr_o2(:,k) + mmr_h1(:,k))
    mbar(k,:) = 1.0_r8/( mmr_o1(:,k)/O_molar_mass  &
                       + mmr_o2(:,k)/O2_molar_mass &
                       + mmr_h1(:,k)/H_molar_mass  &
                       + mmr_n2(:,k)/N2_molar_mass)
-print *, 'k, mbar, o1, o2, h1, n2: ', k, mbar(k,1), mmr_o1(1,k), mmr_o2(1,k), mmr_h1(1, k), mmr_n2(1, k)
-print *, 'k, mmass o1, o2, h1, n2: ', k, mmr_o1(1,k)/O_molar_mass, mmr_o2(1,k)/O2_molar_mass, &
-                                         mmr_h1(1, k)/H_molar_mass, mmr_n2(1, k)/N2_molar_mass
+!print *, 'k, mbar, o1, o2, h1, n2: ', k, mbar(k,1), mmr_o1(1,k), mmr_o2(1,k), mmr_h1(1, k), mmr_n2(1, k)
+!print *, 'k, mmass o1, o2, h1, n2: ', k, mmr_o1(1,k)/O_molar_mass, mmr_o2(1,k)/O2_molar_mass, &
+!                                         mmr_h1(1, k)/H_molar_mass, mmr_n2(1, k)/N2_molar_mass
 enddo
 
 end subroutine compute_mean_mass
