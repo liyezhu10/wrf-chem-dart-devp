@@ -301,8 +301,11 @@ if (qty < 0 .or. qty > num_qtys) then
    call error_handler(E_ERR, 'get_volume_mixing_ratio', string1, &
                       source, revision, revdate)
 endif
-
-get_volume_mixing_ratio = molar_mass_dry_air / chem_conv_table(qty)%convert_factor
+if (chem_conv_table(qty)%convert_factor /= 1.0_r8) then
+   get_volume_mixing_ratio = molar_mass_dry_air / chem_conv_table(qty)%convert_factor
+else
+   get_volume_mixing_ratio  = 1.0_r8
+endif
 
 end function get_volume_mixing_ratio
 
