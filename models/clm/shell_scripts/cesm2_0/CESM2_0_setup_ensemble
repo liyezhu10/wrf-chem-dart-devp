@@ -149,16 +149,16 @@ ${cesmroot}/cime/scripts/create_newcase  --res  ${resolution} \
 set ThisFileName = $0:t
 ${COPY} $ThisFileName ${caseroot}/${ThisFileName}.original
 
-if (   -e ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config ) then
+if (   -e ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config.template) then
    sed -e "s#BOGUS_DART_ROOT_STRING#${dartroot}#" \
        -e "s#BOGUS_DART_OBS_STRING#${baseobsdir}#" \
        -e "s#BOGUS_CASEROOT_STRING#${caseroot}#" \
-          ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config \
+          ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config.template \
            >! ${caseroot}/CESM_DART_config  || exit 3
    chmod 755  ${caseroot}/CESM_DART_config
 else
    echo "ERROR: the script to configure for data assimilation is not available."
-   echo "       ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config MUST exist."
+   echo "       ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config.template MUST exist."
    exit 4
 endif
 
@@ -381,15 +381,17 @@ while ( $inst <= $num_instances )
 #  echo "hist_dov2xy = .true., .true., .false."       >> ${fname}
 #  echo "hist_type1d_pertape = ' ', ' ', ' '"         >> ${fname}
 
-   echo "hist_empty_htapes = .true."      >> ${fname}
-   echo "hist_fincl1 = 'NEP'"             >> ${fname}
-   echo "hist_nhtfrq = -$stop_n"          >> ${fname}
-   echo "hist_mfilt  = 1"                 >> ${fname}
-   echo "hist_avgflag_pertape = 'A'"      >> ${fname}
-   echo "hist_dov2xy = .true."            >> ${fname}
-   echo "hist_type1d_pertape = ' '"       >> ${fname}
+   echo "hist_empty_htapes = .true."                                    >> ${fname}
+   echo "hist_fincl1 = 'NEP','TOTECOSYSC','TOTVEGC','TLAI'"             >> ${fname}
+   echo "hist_fincl2 = 'NEP','FSH','EFLX_LH_TOT_R'"                     >> ${fname}
+   echo "hist_fincl3 = 'TV','TLAI','PBOT','TBOT','TSA','RH2M','SNOWDP'" >> ${fname}
+   echo "hist_nhtfrq = -$stop_n,1,-$stop_n"     >> ${fname}
+   echo "hist_mfilt  = 1,$h1nsteps,1"           >> ${fname}
+   echo "hist_avgflag_pertape = 'A','A','I'"    >> ${fname}
+   echo "hist_dov2xy = .true.,.true.,.false."   >> ${fname}
+   echo "hist_type1d_pertape = ' ',' ',' '"     >> ${fname}
 
-    @ inst = $inst + 1
+   @ inst = $inst + 1
 end
 
 ./preview_namelists
