@@ -4,7 +4,7 @@
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id$
+# DART $Id: CESM2_0_setup_ensemble 12382 2018-01-29 18:44:19Z thoar@ucar.edu $
 
 #-----------------------------------------------------------------------
 # Purpose, describe things here, etc.
@@ -23,7 +23,7 @@
 # num_instances The number of ensemble members.
 # ==============================================================================
 
-setenv CASE           clm5_startup_2
+setenv CASE           clm5_hybrid
 setenv resolution     f09_g16
 setenv compset        I2000Clm50BgcCrop
 setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
@@ -32,27 +32,30 @@ setenv num_instances  4
 
 # ==============================================================================
 # Directories:
-# cesmdata        Location of some supporting CESM data files.
-# cesmroot        Location of the CESM code base.  This version of the script
-#                 only supports version cesm1_5_beta06c.
-# caseroot        Defines the CESM case directory - where the CESM+DART
-#                 configuration files will be stored.  This should probably not
-#                 be in scratch (on yellowstone, your 'work' partition is suggested).
-#                 This script will delete any existing caseroot, so this script,
-#                 and other useful things should be kept elsewhere.
-# rundir          Defines the location of the CESM run directory.  Will need large
-#                 amounts of disk space, generally on a scratch partition.
-# exeroot         Defines the location of the CESM executable directory , where the
-#                 CESM executables will be built.  Medium amount of space
-#                 needed, generally on a scratch partition.
-# archdir         Defines the location of the CESM short-term archive directories.
-#                 Requires large amounts of disk space, may be on a scratch partition if
-#                 the long-term archiver is invoked to move these files to permanent storage.
-#                 Files will remain here until the long-term archiver moves it to permanent storage.
-# dartroot        Location of the root of _your_ DART installation
-# baseobsdir      Part of the directory name containing the obs_seq.out files to be used in the
-#                 assimilation. The year, month, and filename will be provided in assimilate.csh.
-#                 Will be inherited by CESM#_#_DART_config and inserted into assimilate.csh
+# cesmdata     Location of some supporting CESM data files.
+# cesmroot     Location of the CESM code base.  This version of the script
+#              only supports version cesm1_5_beta06c.
+# caseroot     Defines the CESM case directory - where the CESM+DART
+#              configuration files will be stored.  This should probably not
+#              be in scratch (on yellowstone, your 'work' partition is suggested).
+#              This script will delete any existing caseroot, so this script,
+#              and other useful things should be kept elsewhere.
+# rundir       Defines the location of the CESM run directory.  Will need large
+#              amounts of disk space, generally on a scratch partition.
+# exeroot      Defines the location of the CESM executable directory , where the
+#              CESM executables will be built.  Medium amount of space
+#              needed, generally on a scratch partition.
+# archdir      Defines the location of the CESM short-term archive directories.
+#              Files remain here until the long-term archiver moves them to 
+#              permanent storage.  Requires large amounts of disk space. Should
+#              not be on a scratch partition unless the long-term archiver is 
+#              invoked to move these files to permanent storage.
+#
+# dartroot     Location of the root of _your_ DART installation
+# baseobsdir   Part of the directory name containing the observation sequence 
+#              files to be used in the assimilation. The observations are presumed
+#              to be stored in sub-directories with names built from the year and
+#              month. 'baseobsdir' will be inserted into the appropriate scripts.
 # ==============================================================================
 
 setenv project      P86850054
@@ -65,7 +68,38 @@ setenv exeroot      /glade/scratch/${USER}/$cesmtag/${CASE}/bld
 setenv archdir      /glade/scratch/${USER}/$cesmtag/${CASE}/archive
 
 setenv dartroot     /glade/p/work/thoar/DART/cesm_clm
-setenv baseobsdir   /glade/p/image/Observations/land/MODIS_SP_VOD_BIOMASS
+setenv baseobsdir   /glade/p/image/Observations/land
+
+# ==============================================================================
+# configure settings:
+#
+# refcase    The name of the existing reference case that this run will
+#            start from.
+#
+# refyear    The specific date/time-of-day in the reference case that this
+# refmon     run will start from.  (Also see 'runtime settings' below for
+# refday     start_year, start_mon, start_day and start_tod.)
+# reftod
+#
+# stagedir   The directory location of the reference case files.
+#            This will surely change based on the compset and machine.
+#
+# startdate  The date used as the starting date for the hybrid run.
+# ==============================================================================
+
+setenv refcase agu_startup_CLM50BGCC_20e
+setenv refyear 2000
+setenv refmon  01
+setenv refday  01
+setenv reftod  00000
+
+# useful combinations of time that we use below
+setenv refdate      $refyear-$refmon-$refday
+setenv reftimestamp $refyear-$refmon-$refday-$reftod
+
+setenv stagedir /glade/p/image/RDA_strawman/CESM_ensembles/CLM/CLM5BGC-Crop/${reftimestamp}
+
+setenv startdate 2004-01-01
 
 # ==============================================================================
 # job settings:
@@ -79,7 +113,7 @@ setenv baseobsdir   /glade/p/image/Observations/land/MODIS_SP_VOD_BIOMASS
 #      less than 10 minutes on yellowstone using 1800 pes (120 nodes)
 # ==============================================================================
 
-setenv queue        economy
+setenv queue        premium
 setenv timewall     0:20
 setenv short_term_archiver off
 
@@ -100,17 +134,39 @@ switch ("`hostname`")
          # NCAR "yellowstone"
          set   MOVE = '/bin/mv -v'
          set   COPY = '/bin/cp -v --preserve=timestamps'
-         set   LINK = '/bin/ln -vs'
+         set   LINK = '/bin/ln -vsf'
          set REMOVE = '/bin/rm -rf'
       breaksw
    default:
          # NERSC "hopper", TACC "stampede" ... many more
          set   MOVE = 'mv -v'
          set   COPY = 'cp -v --preserve=timestamps'
-         set   LINK = 'ln -vs'
+         set   LINK = 'ln -vsf'
          set REMOVE = 'rm -rf'
       breaksw
 endsw
+
+# ==============================================================================
+# Make sure the CESM directories exist.
+# VAR is the shell variable name, DIR is the value
+# ==============================================================================
+
+foreach VAR ( cesmroot dartroot stagedir )
+   set DIR = `eval echo \${$VAR}`
+   if ( ! -d $DIR ) then
+      echo "ERROR: directory '$DIR' not found"
+      echo " In the setup script check the setting of: $VAR "
+      exit -1
+   endif
+end
+
+# ==============================================================================
+# Create the case - this creates the CASEROOT directory.
+#
+# For list of the pre-defined component sets: ./create_newcase -list
+# To create a variant compset, see the CESM documentation and carefully
+# incorporate any needed changes into this script.
+# ==============================================================================
 
 # FATAL idea to make caseroot the same dir as where this setup script is
 # since the build process removes all files in the caseroot dir before
@@ -176,21 +232,21 @@ end
 # Get a bunch of environment variables.
 # If any of these are changed by xmlchange calls in this program,
 # then they must be explicty changed with setenv calls too.
-#
+
 setenv TEST_MPI              `./xmlquery MPI_RUN_COMMAND       --value`
 setenv CLM_CONFIG_OPTS       `./xmlquery CLM_CONFIG_OPTS       --value`
 setenv COMPSET               `./xmlquery COMPSET               --value`
 setenv COMP_ATM              `./xmlquery COMP_ATM              --value`
+setenv COMP_OCN              `./xmlquery COMP_OCN              --value`
 setenv CIMEROOT              `./xmlquery CIMEROOT              --value`
 setenv CASEROOT              `./xmlquery CASEROOT              --value`
 setenv MAX_MPITASKS_PER_NODE `./xmlquery MAX_MPITASKS_PER_NODE --value`
 
 # Make sure the case is configured with a data ocean.
 
-if ( ${COMP_ATM} != datm ) then
+if ( (${COMP_OCN} != socn) || (${COMP_ATM} != datm) ) then
    echo " "
-   echo "ERROR: This setup script is not appropriate for active atmospheric compsets."
-   echo "ERROR: Please use the models/CESM/shell_scripts/cesm2_0 examples for that case."
+   echo "ERROR: This setup script is not appropriate for active ocean or atmospheric compsets."
    echo " "
    exit 5
 endif
@@ -247,11 +303,7 @@ set stream_year_last  = 2010
 #      (normally the second day), and the coupler does a cold start without
 #      a restart file.</desc>
 
-setenv refcase agu_startup_CLM50BGCC_20e
-setenv refdate 2000-01-01
-setenv startdate 2000-01-01
-
-./xmlchange RUN_TYPE=startup
+./xmlchange RUN_TYPE=hybrid
 ./xmlchange RUN_REFCASE=${refcase}
 ./xmlchange RUN_REFDATE=${refdate}
 ./xmlchange RUN_STARTDATE=${startdate}
@@ -320,7 +372,7 @@ endif
 # DEBUG = TRUE implies turning on run and compile time debugging.
 # INFO_DBUG level of debug output, 0=minimum, 1=normal, 2=more, 3=too much.
 ./xmlchange DEBUG=TRUE
-./xmlchange INFO_DBUG=1
+./xmlchange INFO_DBUG=2
 
 @ inst = 1
 while ( $inst <= $num_instances )
@@ -370,17 +422,6 @@ while ( $inst <= $num_instances )
    set fname = "user_nl_clm"_${inst_string}
    # ===========================================================================
 
-   echo "dtime             = $clm_dtime"              >> ${fname}
-#  echo "hist_empty_htapes = .false."                 >> ${fname}
-#  echo "hist_fincl1 = 'NEP'"                         >> ${fname}
-#  echo "hist_fincl2 = 'NEP','FSH','EFLX_LH_TOT_R'"   >> ${fname}
-#  echo "hist_fincl3 = 'TV','TLAI','PBOT','TBOT','TSA','RH2M','SNOWDP'" >> ${fname}
-#  echo "hist_nhtfrq = -$stop_n,1,-$stop_n"           >> ${fname}
-#  echo "hist_mfilt  = 1,$h1nsteps,1"                 >> ${fname}
-#  echo "hist_avgflag_pertape = 'A','A','I'"          >> ${fname}
-#  echo "hist_dov2xy = .true., .true., .false."       >> ${fname}
-#  echo "hist_type1d_pertape = ' ', ' ', ' '"         >> ${fname}
-
    echo "hist_empty_htapes = .true."                                    >> ${fname}
    echo "hist_fincl1 = 'NEP','TOTECOSYSC','TOTVEGC','TLAI'"             >> ${fname}
    echo "hist_fincl2 = 'NEP','FSH','EFLX_LH_TOT_R'"                     >> ${fname}
@@ -390,19 +431,213 @@ while ( $inst <= $num_instances )
    echo "hist_avgflag_pertape = 'A','A','I'"    >> ${fname}
    echo "hist_dov2xy = .true.,.true.,.false."   >> ${fname}
    echo "hist_type1d_pertape = ' ',' ',' '"     >> ${fname}
+   echo "dtime = $clm_dtime"                    >> ${fname}
 
    @ inst = $inst + 1
 end
 
-./preview_namelists
+./preview_namelists || exit 3
+
+# ==============================================================================
+# Stage the restarts now that the run directory exists
+# ==============================================================================
+
+echo "staging restarts"
+
+set init_time = ${reftimestamp}
+
+cat << EndOfText >! stage_cesm_files
+#!/bin/csh -f
+# This script can be used to help restart an experiment from any previous step.
+# The appropriate files are copied to the RUN directory.
+#
+# Before running this script:
+#  1) be sure CONTINUE_RUN is set correctly in the env_run.xml file in
+#     your CASEROOT directory.
+#     CONTINUE_RUN=FALSE => you are starting over at the initial time.
+#     CONTINUE_RUN=TRUE  => you are starting from a previous step but not
+#                           the very first one.
+#  2) be sure 'restart_time' is set to the day and time that you want to
+#     restart from if not the initial time.
+
+set restart_time = $init_time
+
+# get the settings for this case from the CESM environment
+cd ${caseroot}
+
+setenv CONTINUE_RUN   `./xmlquery CONTINUE_RUN     --value`
+setenv RUNDIR         `./xmlquery RUNDIR           --value`
+setenv DOUT_S         `./xmlquery DOUT_S           --value`
+setenv DOUT_S_ROOT    `./xmlquery DOUT_S_ROOT      --value`
+setenv CASE           `./xmlquery CASE             --value`
+
+cd \${RUNDIR}
+
+echo 'Copying the required CESM files to the run directory to rerun'
+echo 'a previous step.  CONTINUE_RUN from env_run.xml is' \${CONTINUE_RUN}
+if ( \${CONTINUE_RUN} == TRUE ) then
+  echo 'so files for some later step than the initial one will be restaged.'
+  echo "Date to reset files to is: \${restart_time}"
+else
+  echo 'so files for the initial step of this experiment will be restaged.'
+  echo "Date to reset files to is: ${init_time}"
+endif
+echo ''
+
+if ( \${CONTINUE_RUN} == TRUE ) then
+
+   #----------------------------------------------------------------------
+   # This block copies over a set of restart files from any previous step of
+   # the experiment that is NOT the initial step.
+   # After running this script resubmit the job to rerun.
+   #----------------------------------------------------------------------
+
+   echo "Staging restart files for run date/time: " \${restart_time}
+
+   #  The short term archiver is on, so the files we want should be in one
+   #  of the short term archive 'rest' restart directories.  This assumes
+   #  the long term archiver has NOT copied these files to the HPSS yet.
+
+   if (  \${DOUT_S} == TRUE ) then
+
+      # The restarts should be in the short term archive directory.  See
+      # www.cesm.ucar.edu/models/cesm1.2/cesm/doc/usersguide1_2/x1565.html#running_ccsm_restarts
+      # for more help and information.
+
+      set RESTARTDIR = \${DOUT_S_ROOT}/rest/\${restart_time}
+
+      if ( ! -d \${RESTARTDIR} ) then
+
+         echo "restart file directory not found: "
+         echo " \${RESTARTDIR}"
+         echo "If the long-term archiver is on, you may have to restore this directory first."
+         echo "You can also check for either a .sta or a .sta2 hidden subdirectory in"
+         echo "\${DOUT_S_ROOT}"
+         echo "which may contain the 'rest' directory you need,"
+         echo "and then modify RESTARTDIR in this script."
+         exit -1
+
+      endif
+
+      ${COPY} \${RESTARTDIR}/* . || exit -1
+
+   else
+
+      # The short term archiver is off, which leaves all the restart files
+      # in the run directory.  The rpointer files must still be updated to
+      # point to the files with the right day/time.
+
+      @ inst=1
+      while (\$inst <= $num_instances)
+
+         set inst_string = \`printf _%04d \$inst\`
+
+         echo "\${CASE}.cpl\${inst_string}.r.\${restart_time}.nc"    >! rpointer.drv\${inst_string}
+         echo "\${CASE}.clm2\${inst_string}.r.\${restart_time}.nc"   >! rpointer.lnd\${inst_string}
+         echo "\${CASE}.datm\${inst_string}.r.\${restart_time}.nc"   >! rpointer.atm\${inst_string}
+         echo "\${CASE}.datm\${inst_string}.rs1.\${restart_time}.nc" >> rpointer.atm\${inst_string}
+         echo "\${CASE}.mosart\${inst_string}.r.\${restart_time}.nc" >! rpointer.rof\${inst_string}
+
+         @ inst ++
+      end
+
+      # If the multi-driver is not being used,
+      # there is only a single coupler restart file.
+      echo "\${case}.cpl.r.\${restart_time}.nc" >! rpointer.drv
+
+   endif
+
+   echo "All files reset to rerun experiment step for time " \$restart_time
+
+else     # CONTINUE_RUN == FALSE
+
+   #----------------------------------------------------------------------
+   # This block links the right files to rerun the initial (very first)
+   # step of an experiment.  The names and locations are set during the
+   # building of the case; to change them rebuild the case.
+   # After running this script resubmit the job to rerun.
+   #----------------------------------------------------------------------
+
+   @ inst=1
+   while (\$inst <= $num_instances)
+
+      set inst_string = \`printf _%04d \$inst\`
+
+      echo "Staging initial files for instance \$inst of $num_instances"
+
+      ${LINK} ${stagedir}/${refcase}.clm2\${inst_string}.r.${init_time}.nc .
+      ${LINK} ${stagedir}/${refcase}.mosart\${inst_string}.r.${init_time}.nc .
+
+      @ inst ++
+   end
+
+   echo "All files set to run the FIRST experiment step at time" $init_time
+
+endif
+exit 0
+
+EndOfText
+chmod 0755 stage_cesm_files
+
+./stage_cesm_files || exit 2
 
 #===============================================================================
 # Copy modified CLM codes into SourceMods
+# src.clm
+# |-- clm4_0
+# |   |-- biogeochem
+# |   |   `-- CNBalanceCheckMod.F90
+# |   `-- biogeophys
+# |       |-- BalanceCheckMod.F90
+# |       |-- SnowHydrologyMod.F90
+# |       `-- UrbanMod.F90
+# `-- clm4_5
+#     |-- biogeochem
+#     |   `-- CNBalanceCheckMod.F90
+#     `-- biogeophys
+#         `-- BalanceCheckMod.F90
 # ==============================================================================
 
-#${COPY} $dartroot/models/cice/SourceMods/ice_restart_driver.F90 $caseroot/SourceMods/src.cice/
-#${COPY} /glade/p/work/yfzhang/cesmcases/cesm2_0_beta05/seq_rest_mod.F90 $caseroot/SourceMods/src.drv/
-#${COPY} /glade/scratch/yfzhang/inputdata_cam/ice/cice/$startdate/* $rundir/
+if (    -d     ~/${cesmtag}/SourceMods ) then
+
+#  ${COPY} -r ~/${cesmtag}/SourceMods/src.clm ${caseroot}/SourceMods/
+
+   set clm_opts = `echo $CLM_CONFIG_OPTS | sed -e "s/-//"`
+
+   @ iarg = 1
+   while ($iarg <= $#clm_opts)
+
+      @ iargp1 = $iarg + 1
+      set option = $clm_opts[$iarg]
+      set  value = $clm_opts[$iargp1]
+
+      switch ( ${option} )
+         case "phys":
+            if ( -e    SourceMods/src.clm/${value} ) then
+               cd      SourceMods/src.clm
+               ${LINK} ${value}/*/*F90 .
+               cd      ../..
+            else
+               echo "No SourceMods for CLM <${value}>."
+               echo "Got the version from CLM_CONFIG_OPTS ...  <${CLM_CONFIG_OPTS}>"
+            endif
+         breaksw
+      #  case "bgc":  no special action needed here at this time
+      #  breaksw
+
+         default:
+         breaksw
+      endsw
+
+      @ iarg = $iarg + 2
+   end
+
+else
+
+   echo "MESSAGE - No SourceMods for this case."
+   echo "MESSAGE - No SourceMods for this case."
+
+endif
 
 ./case.build || exit 7
 
@@ -452,6 +687,6 @@ cat CESM_instructions.txt
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL$
-# $Revision$
-# $Date$
+# $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/cesm_clm/models/clm/shell_scripts/cesm2_0/CESM2_0_setup_ensemble $
+# $Revision: 12382 $
+# $Date: 2018-01-29 11:44:19 -0700 (Mon, 29 Jan 2018) $
