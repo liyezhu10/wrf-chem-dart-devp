@@ -804,15 +804,15 @@ call quad_lon_lat_evaluate(interp_handle, lon_fract, lat_fract, ens_size, &
 
 !print*, 'STATUS MI EVAL', status_array(1)
 
-! print*, 'lon_ind_below ', four_lons(1)
-! print*, 'lon_ind_above ', four_lons(2)
-! print*, 'lat_ind_below ', four_lats(2)
-! print*, 'lat_ind_above ', four_lats(3)
-! print*, 'lon_fract     ', lon_fract
-! print*, 'lat_fract     ', lat_fract
-! print*, 'quad_vals(:,1) ', quad_vals(:,1)
-! print*, 'quad_vals(:,2) ', quad_vals(:,2)
-! print*, 'quad_vals(:,3) ', quad_vals(:,3)
+! print*, 'lon_ind_below    ', four_lons(1)
+! print*, 'lon_ind_above    ', four_lons(2)
+! print*, 'lat_ind_below    ', four_lats(2)
+! print*, 'lat_ind_above    ', four_lats(3)
+! print*, 'lon_fract        ', lon_fract
+! print*, 'lat_fract        ', lat_fract
+! print*, 'quad_vals(:,1)   ', quad_vals(:,1)
+! print*, 'quad_vals(:,2)   ', quad_vals(:,2)
+! print*, 'quad_vals(:,3)   ', quad_vals(:,3)
 ! print*, 'interp_vals(:,1) ', interp_vals(1)
 ! print*, 'interp_vals(:,2) ', interp_vals(2)
 ! print*, 'interp_vals(:,3) ', interp_vals(3)
@@ -3958,9 +3958,11 @@ else if (diff <= tiny .or. p_above <= 0.0_r8) then
 
 else
    ! normal computation - should be safe now
-   scale_height = -log(p_surface / p_above)
+   scale_height = -log(p_above / p_surface )
 
 endif
+
+print*, 'p_surface, p_above', p_surface, p_above, diff
 
 end function scale_height
 
