@@ -2310,7 +2310,7 @@ ParseVariables : do i = 1, MAX_STATE_VARIABLES
    ! Make sure DART kind is valid
 
    if( get_index_for_quantity(dartstr) < 0 ) then
-      write(string1,'(3A)') 'there is no obs_kind <', trim(dartstr), '> in obs_kind_mod.f90'
+      write(string1,'(3A)') 'there is no obs_kind "', trim(dartstr), '" in obs_kind_mod.f90'
       call error_handler(E_ERR,routine,string1,source,revision,revdate)
    endif
 

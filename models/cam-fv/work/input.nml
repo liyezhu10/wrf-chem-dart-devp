@@ -115,6 +115,8 @@
    read_input_state_from_file = .true.,
    input_state_files          = "caminput.nc",
    init_time_days             = -1
+   input_state_files          = "caminput.nc",
+   init_time_days             = -1,
    init_time_seconds          = -1,
 
    write_output_state_to_file = .false.,
@@ -283,8 +285,6 @@
 # vert_normalization_pressure = 20000. is a better choice than
 #         100000. for allowing upper levels to be pulled towards the obs.
 #========================================================================
-
-
 
 &location_nml
    horiz_dist_only             = .false.,
@@ -550,6 +550,24 @@
   calendar                 = 'Gregorian'
   dart_qc_threshold        = 3
   eval_and_assim_can_match = .false.
+  /
+
+&model_mod_check_nml
+   input_state_files     = 'caminput.nc'
+   output_state_files    = 'mmc_output.nc'
+   test1thru             = 0
+   run_tests             = 1,2,3,4,5,7
+   x_ind                 = 10
+   quantity_of_interest  = 'QTY_U_WIND_COMPONENT'
+   loc_of_interest       = 254.727854, 39.9768545, 50000.0
+   interp_test_vertcoord = 'VERTISPRESSURE'
+   interp_test_lonrange  = 0.0, 359.0
+   interp_test_dlon      = 1.0
+   interp_test_latrange  = -89.0, 89.0
+   interp_test_dlat      = 1.0
+   interp_test_vertrange = 1000.0,  1005.0
+   interp_test_dvert     = 2000.0
+   verbose               = .false.
   /
 
 &obs_impact_tool_nml

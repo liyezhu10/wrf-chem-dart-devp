@@ -781,21 +781,6 @@ end subroutine print_obs_time
 
 !-------------------------------------------------------------------------
 
-subroutine perfect_set_initial_time(time)
-
-type(time_type), intent(out) :: time
-
-
-if(init_time_days >= 0) then
-   time = set_time(init_time_seconds, init_time_days)
-else
-   time = set_time(0, 0)
-endif
-
-end subroutine perfect_set_initial_time
-
-!-------------------------------------------------------------------------
-
 subroutine parse_filenames(file_array, files_out, nfiles)
 character(len=*), intent(in)  :: file_array(:)
 integer,          intent(out) :: nfiles

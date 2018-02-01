@@ -463,7 +463,7 @@ ncFileID = file_handle%stage_metadata%ncFileID
 if (my_task_id()==0) then
    ierr = nf90_close(ncFileID%ncid)
    call nc_check(ierr, 'finalize_single_file_io: nf90_close', ncFileID%fname)
-   if (associated(ncFileID%rtimes)) deallocate(ncFileID%rtimes, ncFileID%times )
+   if(associated(ncFileID%rtimes)) deallocate(ncFileID%rtimes, ncFileID%times )
 endif
 
 ncFileID%fname     = "notinuse"
@@ -604,7 +604,7 @@ COPY_LOOP: do icopy = 1, ens_size+extra_size
       !>              Should probably do this in a block?
       !start_rank = get_start_rank(start_var, domain)
 
-      ! this is where we left off writting variables in the case of multiple tasks
+      ! this is where we left off writing variables in the case of multiple tasks
       start_rank = get_start_rank(ivar, domain)
       
       RECEIVING_PE_LOOP: do recv_pe = 0, task_count()-1
@@ -968,7 +968,7 @@ allocate(vector(get_domain_size(domain)))
 istart = dart_index ! position in state_ens_handle%vars
 block_size = 0
 
-! need to read into a tempory array, then fill up copies
+! need to read into a temporary array, then fill up copies
 
 COPIES: do copy = 1, state_ens_handle%my_num_copies
 
@@ -1116,11 +1116,17 @@ COPIES: do c = 1, ens_size
 
    endif
 
-   ! Reading of the state variables is broken up into
-   VARIABLE_LOOP: do dummy_loop = 1, num_state_variables
-      if (start_var > num_state_variables) exit ! instead of using do while loop
+   ! Read the state variables into a buffer to distribute.
+   ! If possible, reading all the variables into a single buffer 
+   ! (i.e. a large block_size) is preferable to reading variables
+   ! into multiple buffers. Huge DART states may require using
+   ! the same buffer multiple times.
 
-      ! calculate how many variables will be read
+   VARIABLE_LOOP: do dummy_loop = 1, num_state_variables
+
+      if (start_var > num_state_variables) exit VARIABLE_LOOP
+
+      ! calculate how many variables will be read into one buffer
       if (read_var_by_var) then 
          end_var = start_var
       else
@@ -1591,7 +1597,7 @@ integer :: ndims
 integer :: xtype ! precision for netcdf file
 integer :: dimids(NF90_MAX_VAR_DIMS)
 
-character(len=NF90_MAX_NAME) :: filename
+character(len=256) :: filename
 
 filename = get_restart_filename(name_handle, copy_number, dom_id)
 
@@ -2459,7 +2465,7 @@ end subroutine write_extra_attributes
 
 
 !------------------------------------------------------------------
-!> helper function to return the netcdf dimension id's and lenghts
+!> helper function to return the netcdf dimension id's and lengths
 
 subroutine get_dimension_info(copy, dom_id, var_id, time, is_extra, numdims, start, lengths)
 
@@ -2831,8 +2837,8 @@ call nc_check(nf90_put_var(my_ncid, TimeVarID, realtime, start=(/ lngth /) ), &
 ncFileID%times( lngth) = time
 ncFileID%rtimes(lngth) = realtime
 
-write(msgstring,*)'ncFileID (',my_ncid,') : ',trim(adjustl(varname)), &
-         ' (should be "time") has length ',lngth, ' appending t= ',realtime
+write(msgstring,*)'ncFileID (',my_ncid,') : "',trim(varname), &
+         '" (should be "time") has length ',lngth, ' appending t= ',realtime
 call error_handler(E_DBG,'nc_append_time',msgstring,source,revision,revdate)
 
 end function nc_append_time

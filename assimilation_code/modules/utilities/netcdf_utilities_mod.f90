@@ -121,7 +121,7 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-character(len=512) :: msgstring1, msgstring2, msgstring3
+character(len=512) :: msgstring1
 
 !> make a derived type that is (ncid, filename) 
 !> store filename on file open, delete it on file close. cache the

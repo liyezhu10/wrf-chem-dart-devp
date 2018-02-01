@@ -155,38 +155,45 @@ foreach MODEL ( $DO_THESE_MODELS )
     @ ncdlfiles = `ls *.cdl | wc -l`
 
     if ( "$MODEL" == "template" ) then
-      echo skipping test of the template directory
+      echo skipping tests of the template directory
 
-    else if ( -f workshop_setup.csh ) then
-      set SAVEDIR = saveme.test_dart
-      mkdir -p ${SAVEDIR}
-      ${COPY} input.nml obs_seq.* ${SAVEDIR}
-
-      echo "Trying to run workshop_setup.csh for model $MODEL as a test"
-      ./workshop_setup.csh || set FAILURE = 1
-      echo "Re-running workshop_setup.csh to test overwriting files for model $MODEL"
-      ./workshop_setup.csh || set FAILURE = 1
-
-      echo "Restoring original input.nml and obs_seq files"
-      ${COPY} ${SAVEDIR}/* .
-      ${REMOVE} ${SAVEDIR}
-
-    else
-      echo "Trying to run pmo for model $MODEL as a test"
-      echo "Will generate NetCDF files from any .cdl files first."
-      # try not to error out if no .cdl files found
-      if ( $ncdlfiles > 0 ) then
-         foreach i ( *.cdl )
-           set base = `basename $i .cdl`
-           if ( -f ${base}.nc ) continue
-           ncgen -o ${base}.nc $i
-         end
+    else 
+      if ( -f workshop_setup.csh ) then
+        set SAVEDIR = saveme.test_dart
+        mkdir -p ${SAVEDIR}
+        ${COPY} input.nml obs_seq.* ${SAVEDIR}
+  
+        echo "Trying to run workshop_setup.csh for model $MODEL as a test"
+        ./workshop_setup.csh || set FAILURE = 1
+        echo "Re-running workshop_setup.csh to test overwriting files for model $MODEL"
+        ./workshop_setup.csh || set FAILURE = 1
+  
+        echo "Restoring original input.nml and obs_seq files"
+        ${COPY} ${SAVEDIR}/* .
+        ${REMOVE} ${SAVEDIR}
+  
+      else
+        echo "Trying to run pmo for model $MODEL as a test"
+        echo "Will generate NetCDF files from any .cdl files first."
+        # try not to error out if no .cdl files found
+        if ( $ncdlfiles > 0 ) then
+           foreach i ( *.cdl )
+             set base = `basename $i .cdl`
+             if ( -f ${base}.nc ) continue
+             ncgen -o ${base}.nc $i
+           end
+        endif
+        # assumes the executables from the first pass are still here
+        ./perfect_model_obs || set FAILURE = 1
+        echo "Rerunning PMO to test for file overwrite"
+        ./perfect_model_obs || set FAILURE = 1
+        # if possible, try running filter here as well?
       endif
-      # assumes the executables from the first pass are still here
-      ./perfect_model_obs || set FAILURE = 1
-      echo "Rerunning PMO to test for file overwrite"
-      ./perfect_model_obs || set FAILURE = 1
-      # if possible, try running filter here as well?
+  
+      if ( -f model_mod_check ) then
+        echo "Trying to run model_mod_check for model $MODEL as a test"
+        ./model_mod_check || set FAILURE = 1 
+      endif
     endif
 
     echo "Removing the newly-built objects"

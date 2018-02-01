@@ -329,7 +329,7 @@ end subroutine adv_1step
 
 function get_model_size()
 
-integer :: get_model_size
+integer(i8) :: get_model_size
 
 get_model_size = l96%model_size
 

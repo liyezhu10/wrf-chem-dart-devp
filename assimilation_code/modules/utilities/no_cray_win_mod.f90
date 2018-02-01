@@ -155,7 +155,7 @@ type(ensemble_type), intent(inout), optional :: qc_ens_handle
 integer :: ierr
 
 if(get_allow_transpose(state_ens_handle)) then ! the forward operators were done var complete
-   !transpose back
+   !transpose back if present
    if (present(fwd_op_ens_handle)) &
       call all_vars_to_all_copies(fwd_op_ens_handle)
    if (present(qc_ens_handle)) &

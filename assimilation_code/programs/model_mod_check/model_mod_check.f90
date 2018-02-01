@@ -49,7 +49,7 @@ use             model_mod, only : get_model_size, get_state_meta_data
 
 use  test_interpolate_mod, only : test_interpolate_single, &
                                   test_interpolate_range, &
-                                  find_closest_state_item
+                                  find_closest_gridpoint
 
 implicit none
 
@@ -59,7 +59,7 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-integer, parameter :: MAX_TESTS = 15
+integer, parameter :: MAX_TESTS = 7
 
 !------------------------------------------------------------------
 ! The namelist variables
@@ -72,7 +72,7 @@ character(len=256)            :: output_state_files(MAX_NUM_DOMS) = 'null'
 character(len=256)            :: all_metadata_file = 'metadata.txt'
 integer(i8)                   :: x_ind   = -1
 real(r8), dimension(3)        :: loc_of_interest = -1.0_r8
-character(len=metadatalength) :: quantity_of_interest = 'QTY_STATE_VECTOR'
+character(len=metadatalength) :: quantity_of_interest = 'NONE'
 character(len=metadatalength) :: interp_test_vertcoord = 'VERTISHEIGHT'
 logical                       :: verbose = .FALSE.
 integer                       :: test1thru = MAX_TESTS
@@ -140,16 +140,20 @@ call check_namelist_read(iunit, io, "model_mod_check_nml")
 call setup_run_array()
 call setup_interp_grid()
 
+!----------------------------------------------------------------------
 ! Calling static_init_assim_model() is required for all tests.
 ! It also calls static_init_model(), so there is no need to explicitly call
 ! that. Furthermore, the low-order models have no check in them to prevent
 ! static_init_model() from being called twice, so it BOMBS if you call both.
+!----------------------------------------------------------------------
 
 call print_test_message('TEST 0', &
          'Reading the model_mod namelist and implicitly running static_init_model', &
          starting=.true.)
 
 call static_init_assim_model()
+
+num_domains = get_num_domains()
 
 call print_test_message('TEST 0', ending=.true.)
 
@@ -164,19 +168,24 @@ if (tests_to_run(1)) then
             starting=.true.)
 
    if (verbose) then
-      do idomain = 1,get_num_domains()
+      string1 = 'To suppress the detailed list of the variables that comprise the DART state'
+      string2 = 'set "verbose = .FALSE." in the model_mod_check_nml namelist.'
+      call print_info_message(string1, string2)
+
+      do idomain = 1,num_domains
          call state_structure_info(idomain)
       enddo
    else
       string1 = 'To print a detailed list of the variables that comprise the DART state'
       string2 = 'set "verbose = .TRUE." in the model_mod_check_nml namelist.'
-      call print_info_message('TEST 1',string1, string2)
+      call print_info_message(string1, string2)
    endif
 
    model_size = get_model_size()
+   call left_just_i8(model_size, string3)
 
-   write(string1, '(A,I10)') 'state vector has length of ', model_size
-   call print_info_message('TEST 1', string1)
+   write(string1, *) 'state vector has a length of ', trim(string3)
+   call print_info_message(string1)
 
    call print_test_message('TEST 1', ending=.true.)
 
@@ -200,7 +209,6 @@ if (tests_to_run(2)) then
 
    call print_model_time(model_time)
 
-   deallocate(file_array_input, file_array_output)
  
    call print_test_message('TEST 2', ending=.true.)
 
@@ -213,13 +221,16 @@ endif
 if (tests_to_run(3)) then
 
    call print_test_message('TEST 3', &
-                           'Testing get_state_meta_data', starting=.true.)
+                           'Testing get_state_meta_data()', &
+                           starting=.true.)
 
    if ( x_ind >= 1 .and. x_ind <= model_size ) then
       call check_meta_data( x_ind )
    else
-      write(string1, *) 'namelist item "x_ind" = ', x_ind, " is not in valid range 1 - ", model_size
-      call print_info_message('TEST 3',string1)
+      call left_just_i8(x_ind, string2)
+      call left_just_i8(model_size, string3)
+      write(string1, *) 'namelist item "x_ind" = '//trim(string2)//" is not in valid range 1 - "//trim(string3)
+      call print_info_message(string1)
    endif
 
    call print_test_message('TEST 3', ending=.true.)
@@ -239,6 +250,9 @@ if (tests_to_run(4)) then
 
    allocate(interp_vals(num_ens), ios_out(num_ens))
 
+   call print_info_message('Interpolating '//trim(quantity_of_interest), &
+                           ' at "loc_of_interest" location')
+
    num_passed = test_interpolate_single( ens_handle,            &
                                          num_ens,               &
                                          interp_test_vertcoord, &
@@ -251,8 +265,7 @@ if (tests_to_run(4)) then
 
    ! test_interpolate_single reports individual interpolation failures internally
    if (num_passed == num_ens) then
-      write(string1,*)'interpolation successful for all ensemble members.'
-      call print_info_message('TEST 4',string1)
+      call print_info_message('interpolation successful for all ensemble members.')
    endif
 
    call free_state_window(ens_handle)
@@ -270,7 +283,7 @@ endif
 if (tests_to_run(5)) then
 
    call print_test_message('TEST 5', &
-                           'Testing range of data for model_interpolate', starting=.true.)
+                           'Testing model_interpolate() with a grid of locations.', starting=.true.)
 
    call create_state_window(ens_handle)
 
@@ -303,14 +316,18 @@ endif
 
 if (tests_to_run(6)) then
 
-   write(string1,*)'Exhaustive test of get_state_meta_data - please be patient.'
-   write(string2,*)'There are ',get_model_size(),' items in the state vector.'
-   call print_test_message('TEST 6', string1, string2, starting=.true.)
+   call print_test_message('TEST 6', &
+                           'Exhaustive test of get_state_meta_data()', &
+                            starting=.true.)
+
+   call left_just_i8(model_size, string3)
+   write(string1,*)'There are '//trim(string3)//' items in the state vector.'
+   write(string2,*)'This might take some time.'
+   call print_info_message(string1, string2)
 
    call check_all_meta_data()
 
-   call print_info_message('TEST 6', &
-              'The table of metadata was written to '//trim(all_metadata_file))
+   call print_info_message('The table of metadata was written to file "'//trim(all_metadata_file)//'"')
 
    call print_test_message('TEST 6', ending=.true.)
 
@@ -326,7 +343,9 @@ if (tests_to_run(7)) then
                            'Finding the state vector index closest to a given location.', &
                             starting=.true.)
 
-   call find_closest_state_item(loc_of_interest, interp_test_vertcoord, quantity_of_interest)
+   call find_closest_gridpoint(loc_of_interest, &
+                               interp_test_vertcoord, &
+                               quantity_of_interest)
 
    call print_test_message('TEST 7', ending=.true.)
 
@@ -386,7 +405,8 @@ type(location_type) :: loc
 integer             :: ix, iy, iz, dom_id, qty_index, var_type
 character(len=256)  :: qty_string
 
-write(string1, *) 'requesting meta data for state vector index ', iloc
+call left_just_i8(iloc, string3)
+write(string1, *) 'requesting meta data for state vector index '//trim(string3)
 write(string2, *) 'set by namelist item "x_ind"'
 call print_info_message(string1, string2)
 
@@ -531,14 +551,15 @@ character(len=256)  :: qty_string, metadata_qty_string
 
 fid = open_file(all_metadata_file)
 
-do iloc = 1,get_model_size()
+do iloc = 1,model_size
 
    call get_model_variable_indices(iloc, ix, iy, iz, &
                                    dom_id=dom_id, &
                                    kind_index=qty_index, &
                                    kind_string=qty_string)
 
-   write(string1,'(i11,1x,''i,j,k'',3(1x,i4),'' domain '',i2)') &
+   ! CLM has (potentially many) columns and needs i7 ish precision
+   write(string1,'(i11,1x,''i,j,k'',3(1x,i7),'' domain '',i2)') &
                   iloc, ix, iy, iz, dom_id
 
    call get_state_meta_data(iloc, loc, var_type)
@@ -575,12 +596,8 @@ type(ensemble_type), intent(inout) :: ens_handle
 ! If perturbing from a single instance the number of input files does not have to
 ! be ens_size but rather a single file (or multiple files if more than one domain)
 
-num_domains = get_num_domains()
-
 allocate(file_array_input( num_ens, num_domains))
-allocate(file_array_output(num_ens, num_domains))
 file_array_input  = RESHAPE(input_state_files,  (/num_ens,  num_domains/))
-file_array_output = RESHAPE(output_state_files, (/num_ens,  num_domains/))
 
 ! Test the read portion.
 call io_filenames_init(file_info_input,             &
@@ -608,11 +625,13 @@ input_restart_files = get_stage_metadata(file_info_input)
 do idom = 1, num_domains
    do imem = 1, num_ens
       write(string1, *) 'Reading File : ', trim(get_restart_filename(input_restart_files, imem, domain=idom))
-      call print_info_message('TEST 2',string1)
+      call print_info_message(string1)
    enddo
 enddo
 
 call read_state(ens_handle, file_info_input, read_time_from_file, model_time)
+
+deallocate(file_array_input)
 
 end subroutine do_read_test
 
@@ -621,6 +640,9 @@ end subroutine do_read_test
 subroutine do_write_test(ens_handle)
 
 type(ensemble_type), intent(inout) :: ens_handle
+
+allocate(file_array_output(num_ens, num_domains))
+file_array_output = RESHAPE(output_state_files, (/num_ens,  num_domains/))
 
 ! Test the write portion.
 call io_filenames_init(file_info_output,           &
@@ -648,11 +670,13 @@ output_restart_files = get_stage_metadata(file_info_output)
 do idom = 1, num_domains
    do imem = 1, num_ens
       write(string1, *) 'Writing File : ', trim(get_restart_filename(output_restart_files, imem, domain=idom))
-      call print_info_message('TEST 2',string1)
+      call print_info_message(string1)
    enddo
 enddo
 
 call write_state(ens_handle, file_info_output)
+
+deallocate(file_array_output)
 
 end subroutine do_write_test
 
@@ -667,13 +691,16 @@ type(time_type), intent(in) :: mtime
 
 if (.not. do_output()) return
 
+write(*,'(A)') ''
+write(*,'(A)') '-------------------------------------------------------------'
+
 ! print date does not work when a model does not have a calendar
 if (get_calendar_type() /= NO_CALENDAR) then
-   write(*,'(A)') '-- printing model date --------------------------------------'
+   write(*,'(A)') 'printing model date: '
    call print_date( mtime,' model_mod_check:model date')
 endif
    
-write(*,'(A)') '-- printing model time --------------------------------------'
+write(*,'(A)') 'printing model time: '
 call print_time( mtime,' model_mod_check:model time')
 write(*,'(A)') '-------------------------------------------------------------'
 write(*,'(A)') ''
@@ -790,6 +817,17 @@ else  ! info message
 endif
 
 end subroutine print_message
+
+!------------------------------------------------------------------
+
+subroutine left_just_i8(ivalue, ostring)
+integer(i8),      intent(in)  :: ivalue
+character(len=*), intent(out) :: ostring
+
+write(ostring, *)  ivalue
+ostring = adjustl(ostring)
+
+end subroutine left_just_i8
 
 !------------------------------------------------------------------
 
