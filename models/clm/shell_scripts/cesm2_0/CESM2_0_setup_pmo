@@ -4,7 +4,7 @@
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id: CESM1_2_1_setup_pmo 12355 2018-01-18 00:25:07Z thoar@ucar.edu $
+# DART $Id$
 
 #-----------------------------------------------------------------------
 # Purpose, describe things here, etc.
@@ -21,14 +21,16 @@
 # resolution    Defines the horizontal resolution and dynamics; see CESM docs.
 # cesmtag       The version of the CESM source code to use when building the code.
 # num_instances The number of ensemble members.
+#
+# For list of the pre-defined component sets: ./query_config --compsets
+# To create a variant compset, see the CESM documentation and carefully
+# incorporate any needed changes into this script.
 # ==============================================================================
-# 2000_DATM%QIA_CLM40%CN_SICE_SOCN_RTM_SGLC_SWAV (I_2000_CN)       (ICN)
-# 2000_DATM%QIA_CLM45%CN_SICE_SOCN_RTM_SGLC_SWAV (I_2000_CLM45_CN) (ICLM45CN)
-# 2000_DATM%QIA_CLM45%BGC_SICE_SOCN_RTM_SGLC_SWAV (I_2000_CLM45_BGC) (ICLM45BGC)
+# the supported compset does not work because CISM only uses a no_leap calendar
+# 2000_DATM%GSWP3v1_CLM45%BGC-CROP_SICE_SOCN_RTM_CISM2%NOEVOLVE_SWAV (I2000Clm45BgcCrop)
 
-setenv CASE           clm45_startup
+setenv CASE           clm45_pmo
 setenv resolution     f09_g16
-setenv compset        I2000Clm50BgcCrop
 setenv compset        2000_DATM%GSWP3v1_CLM45%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
 setenv cesmtag        clm_dev_branch
 setenv num_instances  1
@@ -42,20 +44,20 @@ setenv num_instances  1
 #              configuration files will be stored.  This should probably not
 #              be in scratch (on yellowstone, your 'work' partition is suggested).
 #              This script will delete any existing caseroot, so this script,
-#                 and other useful things should be kept elsewhere.
-# rundir          Defines the location of the CESM run directory.  Will need large
-#                 amounts of disk space, generally on a scratch partition.
-# exeroot         Defines the location of the CESM executable directory , where the
-#                 CESM executables will be built.  Medium amount of space
-#                 needed, generally on a scratch partition.
-# archdir         Defines the location of the CESM short-term archive directories.
-#                 Requires large amounts of disk space, may be on a scratch partition if
-#                 the long-term archiver is invoked to move these files to permanent storage.
-#                 Files will remain here until the long-term archiver moves it to permanent storage.
-# dartroot        Location of the root of _your_ DART installation
-# baseobsdir      Part of the directory name containing the obs_seq.out files to be used in the
-#                 assimilation. The year, month, and filename will be provided in assimilate.csh.
-#                 Will be inherited by CESM#_#_DART_config and inserted into assimilate.csh
+#              and other useful things should be kept elsewhere.
+# rundir       Defines the location of the CESM run directory.  Will need large
+#              amounts of disk space, generally on a scratch partition.
+# exeroot      Defines the location of the CESM executable directory , where the
+#              CESM executables will be built.  Medium amount of space
+#              needed, generally on a scratch partition.
+# archdir      Defines the location of the CESM short-term archive directories.
+#              Requires large amounts of disk space, may be on a scratch partition if
+#              the long-term archiver is invoked to move these files to permanent storage.
+#              Files will remain here until the long-term archiver moves it to permanent storage.
+# dartroot     Location of the root of _your_ DART installation
+# baseobsdir   Part of the directory name containing the obs_seq.out files to be used in the
+#              assimilation. The year, month, and filename will be provided in assimilate.csh.
+#              Will be inherited by CESM#_#_DART_config and inserted into assimilate.csh
 # ==============================================================================
 
 setenv project      P86850054
@@ -116,7 +118,6 @@ setenv TRUTHinstance 23
 # start_tod
 #
 # short_term_archiver  Copies the files from each job step to a 'rest' directory.
-# long_term_archiver   Puts the files from all completed steps on tape storage.
 #
 # resubmit      How many job steps to run on continue runs (should be 0 initially)
 # stop_option   Units for determining the forecast length between assimilations
@@ -149,7 +150,6 @@ setenv start_tod     00000
 setenv               queue premium
 setenv            timewall 0:10
 setenv short_term_archiver off
-setenv long_term_archiver  off
 
 # ==============================================================================
 # standard commands:
@@ -182,10 +182,6 @@ endsw
 
 # ==============================================================================
 # Create the case - this creates the CASEROOT directory.
-#
-# For list of the pre-defined component sets: ./create_newcase -list
-# To create a variant compset, see the CESM documentation and carefully
-# incorporate any needed changes into this script.
 # ==============================================================================
 
 # FATAL idea to make caseroot the same dir as where this setup script is
@@ -202,8 +198,6 @@ endif
 echo "removing old files from ${caseroot}"
 echo "removing old files from ${exeroot}"
 echo "removing old files from ${rundir}"
-
-${cesmroot}/cime/scripts/create_newcase  -list
 
 ${REMOVE} ${caseroot}
 ${REMOVE} ${exeroot}
@@ -324,13 +318,12 @@ set stream_year_last  = 2010
 #      a restart file.</desc>
 
 ./xmlchange RUN_TYPE=hybrid
-./xmlchange RUN_REFCASE=$refcase
-./xmlchange RUN_REFDATE=$refdate
+./xmlchange RUN_REFCASE=${refcase}
+./xmlchange RUN_REFDATE=${refdate}
 ./xmlchange RUN_STARTDATE=${start_year}-${start_month}-${start_day}
 
 ./xmlchange START_TOD=$start_tod
 ./xmlchange RUN_REFTOD=$reftod
-./xmlchange BRNCH_RETAIN_CASENAME=FALSE
 ./xmlchange GET_REFCASE=FALSE
 
 # pnetcdf is default
@@ -389,19 +382,10 @@ echo "case setup finished"
 ./xmlchange --subgroup case.run        --id JOB_WALLCLOCK_TIME --val ${timewall}
 ./xmlchange --subgroup case.st_archive --id JOB_WALLCLOCK_TIME --val 1:00
 
-# These are archiving options that may be used.
-# You can turn the short/long term archivers on or off,
-# but these settings should be made in either event.
-
 if ($short_term_archiver == 'off') then
    ./xmlchange DOUT_S=FALSE
 else
    ./xmlchange DOUT_S=TRUE
-endif
-if ($long_term_archiver == 'off') then
-   ./xmlchange DOUT_L_MS=FALSE
-else
-   ./xmlchange DOUT_L_MS=TRUE
 endif
 
 # DEBUG = TRUE implies turning on run and compile time debugging.
@@ -693,25 +677,10 @@ else
    echo "http://www.image.ucar.edu/pub/DART/CESM"
    echo "untar these into your HOME directory - they will create a"
    echo "~/cesm1_2_1  directory with the appropriate SourceMods structure."
-   exit -4
-endif
+#  exit 4
 
-# The CESM multi-instance capability is relatively new and still has a few
-# implementation bugs. These are known problems and will be fixed soon.
-# this should be removed when the files are fixed:
-
-echo "REPLACING BROKEN CESM FILES HERE - SHOULD BE REMOVED WHEN FIXED"
-echo caseroot is ${caseroot}
-if ( -d ~/${cesmtag} ) then
-
-   # preserve the original version of the files
-   if ( ! -e  ${caseroot}/Buildconf/rtm.buildnml.csh.original ) then
-      ${COPY} ${caseroot}/Buildconf/rtm.buildnml.csh \
-              ${caseroot}/Buildconf/rtm.buildnml.csh.original
-   endif
-
-   # patch/replace the broken files (first used by cesm_setup)
-   ${COPY} ~/${cesmtag}/rtm.buildnml.csh  ${caseroot}/Buildconf/.
+   echo "MESSAGE - No SourceMods for this case."
+   echo "MESSAGE - No SourceMods for this case."
 
 endif
 
@@ -760,14 +729,15 @@ Check the streams listed in the stream text files.  If more or different
 dates need to be added, then do this in the ${CASEROOT}/user_*files*
 then invoke 'preview_namelists' so you can check the information in the
 CaseDocs or ${rundir} directories.
+-------------------------------------------------------------------------
 
 EndOfText
 
+cat CESM_instructions.txt
 
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/cesm_clm/models/clm/shell_scripts/cesm1_x/CESM1_2_1_setup_pmo $
-# $Revision: 12355 $
-# $Date: 2018-01-17 17:25:07 -0700 (Wed, 17 Jan 2018) $
-
+# $URL$
+# $Revision$
+# $Date$

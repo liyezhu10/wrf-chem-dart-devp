@@ -4,7 +4,7 @@
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id: CESM2_0_setup_ensemble 12382 2018-01-29 18:44:19Z thoar@ucar.edu $
+# DART $Id$
 
 #-----------------------------------------------------------------------
 # Purpose, describe things here, etc.
@@ -21,6 +21,10 @@
 # resolution    Defines the horizontal resolution and dynamics; see CESM docs.
 # cesmtag       The version of the CESM source code to use when building the code.
 # num_instances The number of ensemble members.
+#
+# For list of the pre-defined component sets: ./query_config --compsets
+# To create a variant compset, see the CESM documentation and carefully
+# incorporate any needed changes into this script.
 # ==============================================================================
 
 setenv CASE           clm5_hybrid
@@ -73,9 +77,7 @@ setenv baseobsdir   /glade/p/image/Observations/land
 # ==============================================================================
 # configure settings:
 #
-# refcase    The name of the existing reference case that this run will
-#            start from.
-#
+# refcase    Name of the existing reference case that this run will start from.
 # refyear    The specific date/time-of-day in the reference case that this
 # refmon     run will start from.  (Also see 'runtime settings' below for
 # refday     start_year, start_mon, start_day and start_tod.)
@@ -87,11 +89,11 @@ setenv baseobsdir   /glade/p/image/Observations/land
 # startdate  The date used as the starting date for the hybrid run.
 # ==============================================================================
 
-setenv refcase agu_startup_CLM50BGCC_20e
-setenv refyear 2000
-setenv refmon  01
-setenv refday  01
-setenv reftod  00000
+setenv refcase      agu_startup_CLM50BGCC_20e
+setenv refyear      2000
+setenv refmon       01
+setenv refday       01
+setenv reftod       00000
 
 # useful combinations of time that we use below
 setenv refdate      $refyear-$refmon-$refday
@@ -99,14 +101,12 @@ setenv reftimestamp $refyear-$refmon-$refday-$reftod
 
 setenv stagedir /glade/p/image/RDA_strawman/CESM_ensembles/CLM/CLM5BGC-Crop/${reftimestamp}
 
-setenv startdate 2004-01-01
+setenv startdate    2004-01-01
 
 # ==============================================================================
 # job settings:
 #
 # queue      can be changed during a series by changing the case.run
-#            Cheyenne has limited queues in the early months:
-#               capability (> 1152 NODES), regular (<= 1152 nodes), share (< 16 PROCS).
 # timewall   can be changed during a series by changing the case.run
 #
 # TJH: Advancing 30 instances for 6 hours and assimilating took
@@ -145,20 +145,6 @@ switch ("`hostname`")
          set REMOVE = 'rm -rf'
       breaksw
 endsw
-
-# ==============================================================================
-# Make sure the CESM directories exist.
-# VAR is the shell variable name, DIR is the value
-# ==============================================================================
-
-foreach VAR ( cesmroot dartroot stagedir )
-   set DIR = `eval echo \${$VAR}`
-   if ( ! -d $DIR ) then
-      echo "ERROR: directory '$DIR' not found"
-      echo " In the setup script check the setting of: $VAR "
-      exit -1
-   endif
-end
 
 # ==============================================================================
 # Create the case - this creates the CASEROOT directory.
@@ -263,17 +249,17 @@ setenv stop_n              24
 @ clm_dtime = 1800
 @ h1nsteps = $stop_n * 3600 / $clm_dtime
 
-#> @TODO stream template files & multiple years. Do we need to specify
+#>@todo stream template files & multiple years. Do we need to specify
 #> year 1 and year N (performance penalty?). Can we change years on-the-fly
-#> during a run
+#> during a run?
 
 set stream_year_align = 1998
 set stream_year_first = 1998
 set stream_year_last  = 2010
 
 ./xmlchange CALENDAR=GREGORIAN
-./xmlchange EXEROOT="$exeroot"
-./xmlchange RUNDIR="$rundir"
+./xmlchange EXEROOT=${exeroot}
+./xmlchange RUNDIR=${rundir}
 
 ./xmlchange STOP_OPTION=$stop_option
 ./xmlchange STOP_N=$stop_n
@@ -283,9 +269,9 @@ set stream_year_last  = 2010
 ./xmlchange REST_N=1
 
 ./xmlchange DATM_MODE=CPLHISTForcing
+./xmlchange DATM_CPLHIST_YR_ALIGN=$stream_year_align
 ./xmlchange DATM_CPLHIST_YR_START=$stream_year_first
 ./xmlchange DATM_CPLHIST_YR_END=$stream_year_last
-./xmlchange DATM_CPLHIST_YR_ALIGN=$stream_year_align
 
 #      --- In a hybrid run the model is initialized as a startup, BUT uses
 #      initialization datasets FROM A PREVIOUS case.  This
@@ -318,8 +304,6 @@ set stream_year_last  = 2010
 ./xmlchange MAX_MPITASKS_PER_NODE=$ptile
 
 @ nthreads = 1
-
-echo "ptile is $ptile"
 
 # Task layout:
 # Set the nodes_per_instance below to match your case.
@@ -374,52 +358,55 @@ endif
 ./xmlchange DEBUG=TRUE
 ./xmlchange INFO_DBUG=2
 
+# ==============================================================================
+# Modify namelist templates for each instance.
+
 @ inst = 1
 while ( $inst <= $num_instances )
 
-    set inst_string = `printf %04d $inst`
-
-    # ===========================================================================
-    set fname = "user_nl_datm"_${inst_string}
-    # ===========================================================================
-    # DATM namelist
-
-    set FILE1 = datm.streams.txt.CPLHISTForcing.Solar_$inst_string
-    set FILE2 = datm.streams.txt.CPLHISTForcing.nonSolarFlux_$inst_string
-    set FILE3 = datm.streams.txt.CPLHISTForcing.State1hr_$inst_string
-    set FILE4 = datm.streams.txt.CPLHISTForcing.State3hr_$inst_string
-
-    echo "streams = '$FILE1 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
-    echo "          '$FILE2 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
-    echo "          '$FILE3 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
-    echo "          '$FILE4 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
-    echo "          'datm.streams.txt.presaero.clim_2000_$inst_string 1 1 1'"          >> ${fname}
-    echo "vectors  = 'u:v' "     >> ${fname}
-    echo "mapmask  = 'nomask', " >> ${fname}
-    echo "           'nomask', " >> ${fname}
-    echo "           'nomask', " >> ${fname}
-    echo "           'nomask'  " >> ${fname}
-    echo "tintalgo = 'coszen', " >> ${fname}
-    echo "           'nearest'," >> ${fname}
-    echo "           'linear', " >> ${fname}
-    echo "           'linear'  " >> ${fname}
-
-    # Create stream files for each ensemble member
-    set SOURCEDIR = ${dartroot}/models/clm/shell_scripts/cesm2_0
-    ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.Solar_complete        user_${FILE1}
-    ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.nonSolarFlux_complete user_${FILE2}
-    ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.State1hr_complete     user_${FILE3}
-    ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.State3hr_complete     user_${FILE4}
-
-    foreach FNAME ( user_datm.streams.txt*_${inst_string} )
-       echo "modifying $FNAME"
-       sed s/NINST/${inst_string}/g $FNAME >! temp
-       sed s/RUNYEAR/${stream_year_first}/g temp >! $FNAME
-    end
-    ${REMOVE} temp
+   set inst_string = `printf _%04d $inst`
 
    # ===========================================================================
-   set fname = "user_nl_clm"_${inst_string}
+   set fname = "user_nl_datm${inst_string}"
+   # ===========================================================================
+   # DATM namelist
+
+   set FILE1 = datm.streams.txt.CPLHISTForcing.Solar${inst_string}
+   set FILE2 = datm.streams.txt.CPLHISTForcing.nonSolarFlux${inst_string}
+   set FILE3 = datm.streams.txt.CPLHISTForcing.State1hr${inst_string}
+   set FILE4 = datm.streams.txt.CPLHISTForcing.State3hr${inst_string}
+
+   echo "streams = '$FILE1 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
+   echo "          '$FILE2 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
+   echo "          '$FILE3 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
+   echo "          '$FILE4 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
+   echo "          'datm.streams.txt.presaero.clim_2000${inst_string} 1 1 1'"         >> ${fname}
+   echo "vectors  = 'u:v' "     >> ${fname}
+   echo "mapmask  = 'nomask', " >> ${fname}
+   echo "           'nomask', " >> ${fname}
+   echo "           'nomask', " >> ${fname}
+   echo "           'nomask'  " >> ${fname}
+   echo "tintalgo = 'coszen', " >> ${fname}
+   echo "           'nearest'," >> ${fname}
+   echo "           'linear', " >> ${fname}
+   echo "           'linear'  " >> ${fname}
+
+   # Create stream files for each ensemble member
+   set SOURCEDIR = ${dartroot}/models/clm/shell_scripts/cesm2_0
+   ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.Solar_complete        user_${FILE1}
+   ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.nonSolarFlux_complete user_${FILE2}
+   ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.State1hr_complete     user_${FILE3}
+   ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.State3hr_complete     user_${FILE4}
+
+   foreach FNAME ( user_datm.streams.txt*${inst_string} )
+      echo "modifying $FNAME"
+      sed s/NINST/${inst_string}/g $FNAME >! temp
+      sed s/RUNYEAR/${stream_year_first}/g temp >! $FNAME
+   end
+   ${REMOVE} temp
+
+   # ===========================================================================
+   set fname = "user_nl_clm${inst_string}"
    # ===========================================================================
 
    echo "hist_empty_htapes = .true."                                    >> ${fname}
@@ -433,7 +420,7 @@ while ( $inst <= $num_instances )
    echo "hist_type1d_pertape = ' ',' ',' '"     >> ${fname}
    echo "dtime = $clm_dtime"                    >> ${fname}
 
-   @ inst = $inst + 1
+   @ inst ++
 end
 
 ./preview_namelists || exit 3
@@ -687,6 +674,6 @@ cat CESM_instructions.txt
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/cesm_clm/models/clm/shell_scripts/cesm2_0/CESM2_0_setup_ensemble $
-# $Revision: 12382 $
-# $Date: 2018-01-29 11:44:19 -0700 (Mon, 29 Jan 2018) $
+# $URL$
+# $Revision$
+# $Date$

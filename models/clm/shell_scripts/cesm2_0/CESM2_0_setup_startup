@@ -72,8 +72,6 @@ setenv baseobsdir   /glade/p/image/Observations/land
 # job settings:
 #
 # queue      can be changed during a series by changing the case.run
-#            Cheyenne has limited queues in the early months:
-#               capability (> 1152 NODES), regular (<= 1152 nodes), share (< 16 PROCS).
 # timewall   can be changed during a series by changing the case.run
 #
 # TJH: Advancing 30 instances for 6 hours and assimilating took
