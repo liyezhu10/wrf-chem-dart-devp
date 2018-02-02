@@ -24,6 +24,13 @@ module model_mod
 ! 7 ice (new glacier model)
 ! 8 crop (if using crop model)
 
+!>@todo FIXME
+! The allow_missing_in_clm   is now hardwired in the utilities/options_mod.f90 ...
+! since swe is the thing that is used, perhaps we can skip the allow_missing business
+! and just repartition swe in the dart_to_clm.f90 chunk - the number of layers in
+! each ensemble member can be different ...
+! This means we cannot use the snow layers in any of the forward operators ... 
+
 ! Modules that are absolutely required for use are listed
 use        types_mod, only : r4, r8, MISSING_R8, MISSING_I, MISSING_R4, &
                              obstypelength, i8
@@ -151,7 +158,6 @@ integer :: dom_restart, dom_history, dom_vector_history
 !
 !  The DART state vector may consist of things like:
 !
-!  SNOWDP       aka  "snow depth"
 !  frac_sno     aka  "snow cover fraction"
 !  leafc        aka  "leaf carbon"
 !  T_SOISNO     aka  "temperature of soil & snow"
@@ -667,8 +673,8 @@ if ((debug > 0) .and. do_output()) then
 endif
 
 ! Must group the variables according to the file they come from.
-!> @TODO FIXME ... add_domain() must do the right thing if nvars == 0
-!> @TODO FIXME ... io_filenames_nml:rpointer_file order must somehow match 
+!>@todo FIXME ... add_domain() must do the right thing if nvars == 0
+!>@todo FIXME ... io_filenames_nml:rpointer_file order must somehow match 
 !> - or be insensitive to - the add_domain() calls below (if nvars == 0) ...
 
 call cluster_variables(clm_restart_filename, nvars, var_names, var_qtys, var_ranges, var_update)
@@ -2175,7 +2181,7 @@ endwhere
 !#    endif
 !# endif
 
-!> @todo FIXME Need to print debugging info for any task, not just task 0
+!>@todo FIXME Need to print debugging info for any task, not just task 0
 ! Print more information for the really curious
 if ((debug > 5)) then
    ! write(string1,*)'counter, total, total_area', counter, total, total_area
