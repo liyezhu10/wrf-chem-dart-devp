@@ -10,9 +10,9 @@
 # Purpose, describe things here, etc.
 #-----------------------------------------------------------------------
 #
-# CESM2_0_setup_startup   simply spins up an ensemble in 1year chunks.
-#                         writes out restart files once per month. 
-#                         all ensembles start from the same (default) input file 
+# CESM2_0_setup_spinup   Simply spins up an ensemble in 1year chunks.
+#                        Writes out restart files once per month. 
+#                        All ensembles start from the same (default) input file.
 #
 # ==============================================================================
 # Options defining the experiment:
@@ -33,25 +33,32 @@ setenv compset        2000_DATM%GSWP3v1_CLM45%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWA
 setenv cesmtag        clm_dev_branch
 setenv num_instances  4
 
+setenv RUN_TYPE       startup
+setenv RUN_STARTDATE  1998-01-01
+
 # ==============================================================================
 # Directories:
-# cesmdata        Location of some supporting CESM data files.
-# cesmroot        Location of the CESM code base.  This version of the script
-#                 only supports version cesm1_5_beta06c.
-# caseroot        Defines the CESM case directory - where the CESM+DART
-#                 configuration files will be stored.  This should probably not
-#                 be in scratch (on yellowstone, your 'work' partition is suggested).
-#                 This script will delete any existing caseroot, so this script,
-#                 and other useful things should be kept elsewhere.
-# rundir          Defines the location of the CESM run directory.  Will need large
-#                 amounts of disk space, generally on a scratch partition.
-# exeroot         Defines the location of the CESM executable directory , where the
-#                 CESM executables will be built.  Medium amount of space
-#                 needed, generally on a scratch partition.
-# archdir         Defines the location of the CESM short-term archive directories.
-#                 Requires large amounts of disk space, may be on a scratch partition if
-#                 the long-term archiver is invoked to move these files to permanent storage.
-#                 Files will remain here until the long-term archiver moves it to permanent storage.
+# cesmdata     Location of some supporting CESM data files.
+# cesmroot     Location of the CESM code base.  This version of the script
+#              only supports version cesm1_5_beta06c.
+# caseroot     Defines the CESM case directory - where the CESM+DART
+#              configuration files will be stored.  This should probably not
+#              be in scratch (on yellowstone, your 'work' partition is suggested).
+#              This script will delete any existing caseroot, so this script,
+#              and other useful things should be kept elsewhere.
+# rundir       Defines the location of the CESM run directory.  Will need large
+#              amounts of disk space, generally on a scratch partition.
+# exeroot      Defines the location of the CESM executable directory , where the
+#              CESM executables will be built.  Medium amount of space
+#              needed, generally on a scratch partition.
+# archdir      Defines the location of the CESM short-term archive directories.
+#              Files remain here until the long-term archiver moves them to 
+#              permanent storage.  Requires large amounts of disk space. Should
+#              not be on a scratch partition unless the long-term archiver is 
+#              invoked to move these files to permanent storage.
+#
+# dartroot     Location of the root of _your_ DART installation. The stream
+#              template text files for a multi-instance case are stored here.
 # ==============================================================================
 
 setenv project      P86850054
@@ -63,6 +70,8 @@ setenv rundir       /glade/scratch/${USER}/$cesmtag/${CASE}/run
 setenv exeroot      /glade/scratch/${USER}/$cesmtag/${CASE}/bld
 setenv archdir      /glade/scratch/${USER}/$cesmtag/${CASE}/archive
 
+setenv dartroot     /glade/p/work/thoar/DART/cesm_clm
+
 # ==============================================================================
 # job settings:
 #
@@ -73,9 +82,21 @@ setenv archdir      /glade/scratch/${USER}/$cesmtag/${CASE}/archive
 #      less than 10 minutes on yellowstone using 1800 pes (120 nodes)
 # ==============================================================================
 
-setenv queue        regular
-setenv timewall     1:00
+setenv queue               regular
+setenv timewall            1:00
 setenv short_term_archiver off
+
+setenv resubmit            0
+setenv stop_option         nyears
+setenv stop_n              1
+
+#> @TODO stream template files & multiple years. Do we need to specify
+#> year 1 and year N (performance penalty?). Can we change years on-the-fly
+#> during a run
+
+setenv stream_year_align   1998
+setenv stream_year_first   1998
+setenv stream_year_last    2010
 
 # ==============================================================================
 # standard commands:
@@ -94,14 +115,14 @@ switch ("`hostname`")
          # NCAR "yellowstone"
          set   MOVE = '/bin/mv -v'
          set   COPY = '/bin/cp -v --preserve=timestamps'
-         set   LINK = '/bin/ln -vs'
+         set   LINK = '/bin/ln -vsf'
          set REMOVE = '/bin/rm -rf'
       breaksw
    default:
          # NERSC "hopper", TACC "stampede" ... many more
          set   MOVE = 'mv -v'
          set   COPY = 'cp -v --preserve=timestamps'
-         set   LINK = 'ln -vs'
+         set   LINK = 'ln -vsf'
          set REMOVE = 'rm -rf'
       breaksw
 endsw
@@ -157,7 +178,7 @@ end
 # Get a bunch of environment variables.
 # If any of these are changed by xmlchange calls in this program,
 # then they must be explicty changed with setenv calls too.
-#
+
 setenv TEST_MPI              `./xmlquery MPI_RUN_COMMAND       --value`
 setenv CLM_CONFIG_OPTS       `./xmlquery CLM_CONFIG_OPTS       --value`
 setenv COMPSET               `./xmlquery COMPSET               --value`
@@ -167,7 +188,7 @@ setenv CIMEROOT              `./xmlquery CIMEROOT              --value`
 setenv CASEROOT              `./xmlquery CASEROOT              --value`
 setenv MAX_MPITASKS_PER_NODE `./xmlquery MAX_MPITASKS_PER_NODE --value`
 
-# Make sure the case is configured with a data ocean.
+# Make sure the case is configured with a stub ocean and a data atmosphere.
 
 if ( (${COMP_OCN} != socn) || (${COMP_ATM} != datm) ) then
    echo " "
@@ -176,29 +197,12 @@ if ( (${COMP_OCN} != socn) || (${COMP_ATM} != datm) ) then
    exit 5
 endif
 
-# The forward operators for the flux tower obs _require_ that we predict the name of
-# of the history file. The history file names of interest are time-tagged with the
-# _start_ of the forecast - not the restart time. The obs_def_tower_mod.f90 requires
-# the stop_option to be 'nhours', and the stop_n to be accurate.
-
-setenv resubmit            0
-setenv stop_option         nyears
-setenv stop_n              1
-
-@ clm_dtime = 1800
-@ h1nsteps = $stop_n * 3600 / $clm_dtime
-
-#> @TODO stream template files & multiple years. Do we need to specify
-#> year 1 and year N (performance penalty?). Can we change years on-the-fly
-#> during a run
-
-set stream_year_align = 1998
-set stream_year_first = 1998
-set stream_year_last  = 2010
+./xmlchange RUN_TYPE=${RUN_TYPE}
+./xmlchange RUN_STARTDATE=${RUN_STARTDATE}
 
 ./xmlchange CALENDAR=GREGORIAN
-./xmlchange EXEROOT="$exeroot"
-./xmlchange RUNDIR="$rundir"
+./xmlchange EXEROOT=${exeroot}
+./xmlchange RUNDIR=${rundir}
 
 ./xmlchange STOP_OPTION=$stop_option
 ./xmlchange STOP_N=$stop_n
@@ -212,18 +216,10 @@ set stream_year_last  = 2010
 ./xmlchange DATM_CPLHIST_YR_END=$stream_year_last
 ./xmlchange DATM_CPLHIST_YR_ALIGN=$stream_year_align
 
-setenv startdate 1998-01-01
-
-./xmlchange RUN_TYPE=startup
-./xmlchange RUN_REFCASE=${refcase}
-./xmlchange RUN_REFDATE=${refdate}
-./xmlchange RUN_STARTDATE=${startdate}
-
 # pnetcdf is default
 ./xmlchange PIO_TYPENAME=pnetcdf
 
 # MAX_MPITASKS_PER_NODE comes from $case/Tools/mkbatch.$machine
-
 @ ptile = $MAX_MPITASKS_PER_NODE / 2
 ./xmlchange MAX_TASKS_PER_NODE=$ptile
 ./xmlchange MAX_MPITASKS_PER_NODE=$ptile
@@ -283,49 +279,52 @@ endif
 ./xmlchange DEBUG=FALSE
 ./xmlchange INFO_DBUG=0
 
+# ==============================================================================
+# Modify namelist templates for each instance.
+
 @ inst = 1
 while ( $inst <= $num_instances )
 
-    set inst_string = `printf _%04d $inst`
+   set inst_string = `printf _%04d $inst`
 
-    # ===========================================================================
-    set fname = "user_nl_datm_${inst_string}"
-    # ===========================================================================
-    # DATM namelist
+   # ===========================================================================
+   set fname = "user_nl_datm${inst_string}"
+   # ===========================================================================
+   # DATM namelist
 
-    set FILE1 = datm.streams.txt.CPLHISTForcing.Solar${inst_string}
-    set FILE2 = datm.streams.txt.CPLHISTForcing.nonSolarFlux${inst_string}
-    set FILE3 = datm.streams.txt.CPLHISTForcing.State1hr${inst_string}
-    set FILE4 = datm.streams.txt.CPLHISTForcing.State3hr${inst_string}
+   set FILE1 = datm.streams.txt.CPLHISTForcing.Solar${inst_string}
+   set FILE2 = datm.streams.txt.CPLHISTForcing.nonSolarFlux${inst_string}
+   set FILE3 = datm.streams.txt.CPLHISTForcing.State1hr${inst_string}
+   set FILE4 = datm.streams.txt.CPLHISTForcing.State3hr${inst_string}
 
-    echo "streams = '$FILE1 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
-    echo "          '$FILE2 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
-    echo "          '$FILE3 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
-    echo "          '$FILE4 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
-    echo "          'datm.streams.txt.presaero.clim_2000${inst_string} 1 1 1'"         >> ${fname}
-    echo "vectors  = 'u:v' "     >> ${fname}
-    echo "mapmask  = 'nomask', " >> ${fname}
-    echo "           'nomask', " >> ${fname}
-    echo "           'nomask', " >> ${fname}
-    echo "           'nomask'  " >> ${fname}
-    echo "tintalgo = 'coszen', " >> ${fname}
-    echo "           'nearest'," >> ${fname}
-    echo "           'linear', " >> ${fname}
-    echo "           'linear'  " >> ${fname}
+   echo "streams = '$FILE1 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
+   echo "          '$FILE2 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
+   echo "          '$FILE3 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
+   echo "          '$FILE4 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
+   echo "          'datm.streams.txt.presaero.clim_2000${inst_string} 1 1 1'"         >> ${fname}
+   echo "vectors  = 'u:v' "     >> ${fname}
+   echo "mapmask  = 'nomask', " >> ${fname}
+   echo "           'nomask', " >> ${fname}
+   echo "           'nomask', " >> ${fname}
+   echo "           'nomask'  " >> ${fname}
+   echo "tintalgo = 'coszen', " >> ${fname}
+   echo "           'nearest'," >> ${fname}
+   echo "           'linear', " >> ${fname}
+   echo "           'linear'  " >> ${fname}
 
-    # Create stream files for each ensemble member
-    set SOURCEDIR = ${dartroot}/models/clm/shell_scripts/cesm2_0
-    ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.Solar_complete        user_${FILE1}
-    ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.nonSolarFlux_complete user_${FILE2}
-    ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.State1hr_complete     user_${FILE3}
-    ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.State3hr_complete     user_${FILE4}
+   # Create stream files for each ensemble member
+   set SOURCEDIR = ${dartroot}/models/clm/shell_scripts/cesm2_0
+   ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.Solar_complete        user_${FILE1}
+   ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.nonSolarFlux_complete user_${FILE2}
+   ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.State1hr_complete     user_${FILE3}
+   ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.State3hr_complete     user_${FILE4}
 
-    foreach FNAME ( user_datm.streams.txt*${inst_string} )
-       echo "modifying $FNAME"
-       sed s/_NINST/${inst_string}/g $FNAME >! temp
-       sed s/RUNYEAR/${stream_year_first}/g temp >! $FNAME
-    end
-    ${REMOVE} temp
+   foreach FNAME ( user_datm.streams.txt*${inst_string} )
+      echo "modifying $FNAME"
+      sed s/_NINST/${inst_string}/g $FNAME >! temp
+      sed s/RUNYEAR/${stream_year_first}/g temp >! $FNAME
+   end
+   ${REMOVE} temp
 
    # ===========================================================================
    set fname = "user_nl_clm${inst_string}"
@@ -333,7 +332,7 @@ while ( $inst <= $num_instances )
 
    echo "hist_empty_htapes = .true."                                    >> ${fname}
 
-   @ inst = $inst + 1
+   @ inst ++
 end
 
 ./case.build || exit 7
