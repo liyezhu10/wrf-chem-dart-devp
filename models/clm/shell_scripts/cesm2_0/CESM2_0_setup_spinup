@@ -9,7 +9,11 @@
 #-----------------------------------------------------------------------
 # Purpose, describe things here, etc.
 #-----------------------------------------------------------------------
-
+#
+# CESM2_0_setup_startup   simply spins up an ensemble in 1year chunks.
+#                         writes out restart files once per month. 
+#                         all ensembles start from the same (default) input file 
+#
 # ==============================================================================
 # Options defining the experiment:
 #
@@ -23,10 +27,9 @@
 # num_instances The number of ensemble members.
 # ==============================================================================
 
-setenv CASE           clm5_startup
+setenv CASE           clm45_spinup_e4
 setenv resolution     f09_g16
-setenv compset        I2000Clm50BgcCrop
-setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
+setenv compset        2000_DATM%GSWP3v1_CLM45%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
 setenv cesmtag        clm_dev_branch
 setenv num_instances  4
 
@@ -49,10 +52,6 @@ setenv num_instances  4
 #                 Requires large amounts of disk space, may be on a scratch partition if
 #                 the long-term archiver is invoked to move these files to permanent storage.
 #                 Files will remain here until the long-term archiver moves it to permanent storage.
-# dartroot        Location of the root of _your_ DART installation
-# baseobsdir      Part of the directory name containing the obs_seq.out files to be used in the
-#                 assimilation. The year, month, and filename will be provided in assimilate.csh.
-#                 Will be inherited by CESM#_#_DART_config and inserted into assimilate.csh
 # ==============================================================================
 
 setenv project      P86850054
@@ -64,10 +63,6 @@ setenv rundir       /glade/scratch/${USER}/$cesmtag/${CASE}/run
 setenv exeroot      /glade/scratch/${USER}/$cesmtag/${CASE}/bld
 setenv archdir      /glade/scratch/${USER}/$cesmtag/${CASE}/archive
 
-setenv dartroot     /glade/p/work/thoar/DART/cesm_clm
-setenv baseobsdir   /glade/p/image/Observations/land/MODIS_SP_VOD_BIOMASS
-setenv baseobsdir   /glade/p/image/Observations/land
-
 # ==============================================================================
 # job settings:
 #
@@ -78,8 +73,8 @@ setenv baseobsdir   /glade/p/image/Observations/land
 #      less than 10 minutes on yellowstone using 1800 pes (120 nodes)
 # ==============================================================================
 
-setenv queue        premium
-setenv timewall     0:20
+setenv queue        regular
+setenv timewall     1:00
 setenv short_term_archiver off
 
 # ==============================================================================
@@ -148,19 +143,6 @@ ${cesmroot}/cime/scripts/create_newcase  --res  ${resolution} \
 set ThisFileName = $0:t
 ${COPY} $ThisFileName ${caseroot}/${ThisFileName}.original
 
-if (   -e ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config.template) then
-   sed -e "s#BOGUS_DART_ROOT_STRING#${dartroot}#" \
-       -e "s#BOGUS_DART_OBS_STRING#${baseobsdir}#" \
-       -e "s#BOGUS_CASEROOT_STRING#${caseroot}#" \
-          ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config.template \
-           >! ${caseroot}/CESM_DART_config  || exit 3
-   chmod 755  ${caseroot}/CESM_DART_config
-else
-   echo "ERROR: the script to configure for data assimilation is not available."
-   echo "       ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config.template MUST exist."
-   exit 4
-endif
-
 # ==============================================================================
 cd ${caseroot}
 # ==============================================================================
@@ -200,8 +182,8 @@ endif
 # the stop_option to be 'nhours', and the stop_n to be accurate.
 
 setenv resubmit            0
-setenv stop_option         nhours
-setenv stop_n              24
+setenv stop_option         nyears
+setenv stop_n              1
 
 @ clm_dtime = 1800
 @ h1nsteps = $stop_n * 3600 / $clm_dtime
@@ -222,7 +204,7 @@ set stream_year_last  = 2010
 ./xmlchange STOP_N=$stop_n
 ./xmlchange RESUBMIT=0
 
-./xmlchange REST_OPTION=ndays
+./xmlchange REST_OPTION=nmonths
 ./xmlchange REST_N=1
 
 ./xmlchange DATM_MODE=CPLHISTForcing
@@ -230,25 +212,7 @@ set stream_year_last  = 2010
 ./xmlchange DATM_CPLHIST_YR_END=$stream_year_last
 ./xmlchange DATM_CPLHIST_YR_ALIGN=$stream_year_align
 
-#      --- In a hybrid run the model is initialized as a startup, BUT uses
-#      initialization datasets FROM A PREVIOUS case.  This
-#      is somewhat analogous to a branch run with relaxed restart
-#      constraints.  A hybrid run allows users to bring together combinations
-#      of initial/restart files from a previous case (specified by
-#      RUN_REFCASE) at a given model output date (specified by
-#      RUN_REFDATE). Unlike a branch run, the starting date of a hybrid run
-#      (specified by RUN_STARTDATE) can be modified relative to the reference
-#      case. In a hybrid run, the model does not continue in a bit-for-bit
-#      fashion with respect to the reference case. The resulting climate,
-#      however, should be continuous provided that no model source code or
-#      namelists are changed in the hybrid run.  In a hybrid initialization,
-#      the ocean model does not start until the second ocean coupling
-#      (normally the second day), and the coupler does a cold start without
-#      a restart file.</desc>
-
-setenv refcase agu_startup_CLM50BGCC_20e
-setenv refdate 2000-01-01
-setenv startdate 2004-01-01
+setenv startdate 1998-01-01
 
 ./xmlchange RUN_TYPE=startup
 ./xmlchange RUN_REFCASE=${refcase}
@@ -256,7 +220,7 @@ setenv startdate 2004-01-01
 ./xmlchange RUN_STARTDATE=${startdate}
 
 # pnetcdf is default
-./xmlchange PIO_TYPENAME=netcdf
+./xmlchange PIO_TYPENAME=pnetcdf
 
 # MAX_MPITASKS_PER_NODE comes from $case/Tools/mkbatch.$machine
 
@@ -265,8 +229,6 @@ setenv startdate 2004-01-01
 ./xmlchange MAX_MPITASKS_PER_NODE=$ptile
 
 @ nthreads = 1
-
-echo "ptile is $ptile"
 
 # Task layout:
 # Set the nodes_per_instance below to match your case.
@@ -318,29 +280,29 @@ endif
 
 # DEBUG = TRUE implies turning on run and compile time debugging.
 # INFO_DBUG level of debug output, 0=minimum, 1=normal, 2=more, 3=too much.
-./xmlchange DEBUG=TRUE
-./xmlchange INFO_DBUG=2
+./xmlchange DEBUG=FALSE
+./xmlchange INFO_DBUG=0
 
 @ inst = 1
 while ( $inst <= $num_instances )
 
-    set inst_string = `printf %04d $inst`
+    set inst_string = `printf _%04d $inst`
 
     # ===========================================================================
-    set fname = "user_nl_datm"_${inst_string}
+    set fname = "user_nl_datm_${inst_string}"
     # ===========================================================================
     # DATM namelist
 
-    set FILE1 = datm.streams.txt.CPLHISTForcing.Solar_$inst_string
-    set FILE2 = datm.streams.txt.CPLHISTForcing.nonSolarFlux_$inst_string
-    set FILE3 = datm.streams.txt.CPLHISTForcing.State1hr_$inst_string
-    set FILE4 = datm.streams.txt.CPLHISTForcing.State3hr_$inst_string
+    set FILE1 = datm.streams.txt.CPLHISTForcing.Solar${inst_string}
+    set FILE2 = datm.streams.txt.CPLHISTForcing.nonSolarFlux${inst_string}
+    set FILE3 = datm.streams.txt.CPLHISTForcing.State1hr${inst_string}
+    set FILE4 = datm.streams.txt.CPLHISTForcing.State3hr${inst_string}
 
     echo "streams = '$FILE1 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
     echo "          '$FILE2 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
     echo "          '$FILE3 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
     echo "          '$FILE4 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
-    echo "          'datm.streams.txt.presaero.clim_2000_$inst_string 1 1 1'"          >> ${fname}
+    echo "          'datm.streams.txt.presaero.clim_2000${inst_string} 1 1 1'"         >> ${fname}
     echo "vectors  = 'u:v' "     >> ${fname}
     echo "mapmask  = 'nomask', " >> ${fname}
     echo "           'nomask', " >> ${fname}
@@ -358,90 +320,21 @@ while ( $inst <= $num_instances )
     ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.State1hr_complete     user_${FILE3}
     ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.State3hr_complete     user_${FILE4}
 
-    foreach FNAME ( user_datm.streams.txt*_${inst_string} )
+    foreach FNAME ( user_datm.streams.txt*${inst_string} )
        echo "modifying $FNAME"
-       sed s/NINST/${inst_string}/g $FNAME >! temp
+       sed s/_NINST/${inst_string}/g $FNAME >! temp
        sed s/RUNYEAR/${stream_year_first}/g temp >! $FNAME
     end
     ${REMOVE} temp
 
    # ===========================================================================
-   set fname = "user_nl_clm"_${inst_string}
+   set fname = "user_nl_clm${inst_string}"
    # ===========================================================================
 
    echo "hist_empty_htapes = .true."                                    >> ${fname}
-   echo "hist_fincl1 = 'NEP','TOTECOSYSC','TOTVEGC','TLAI'"             >> ${fname}
-   echo "hist_fincl2 = 'NEP','FSH','EFLX_LH_TOT_R'"                     >> ${fname}
-   echo "hist_fincl3 = 'TV','TLAI','PBOT','TBOT','TSA','RH2M','SNOWDP'" >> ${fname}
-   echo "hist_nhtfrq = -$stop_n,1,-$stop_n"     >> ${fname}
-   echo "hist_mfilt  = 1,$h1nsteps,1"           >> ${fname}
-   echo "hist_avgflag_pertape = 'A','A','I'"    >> ${fname}
-   echo "hist_dov2xy = .true.,.true.,.false."   >> ${fname}
-   echo "hist_type1d_pertape = ' ',' ',' '"     >> ${fname}
-   echo "dtime = $clm_dtime"                    >> ${fname}
 
    @ inst = $inst + 1
 end
-
-./preview_namelists
-
-#===============================================================================
-# Copy modified CLM codes into SourceMods
-# src.clm
-# |-- clm4_0
-# |   |-- biogeochem
-# |   |   `-- CNBalanceCheckMod.F90
-# |   `-- biogeophys
-# |       |-- BalanceCheckMod.F90
-# |       |-- SnowHydrologyMod.F90
-# |       `-- UrbanMod.F90
-# `-- clm4_5
-#     |-- biogeochem
-#     |   `-- CNBalanceCheckMod.F90
-#     `-- biogeophys
-#         `-- BalanceCheckMod.F90
-# ==============================================================================
-
-if (    -d     ~/${cesmtag}/SourceMods ) then
-
-#  ${COPY} -r ~/${cesmtag}/SourceMods/src.clm ${caseroot}/SourceMods/
-
-   set clm_opts = `echo $CLM_CONFIG_OPTS | sed -e "s/-//"`
-
-   @ iarg = 1
-   while ($iarg <= $#clm_opts)
-
-      @ iargp1 = $iarg + 1
-      set option = $clm_opts[$iarg]
-      set  value = $clm_opts[$iargp1]
-
-      switch ( ${option} )
-         case "phys":
-            if ( -e    SourceMods/src.clm/${value} ) then
-               cd      SourceMods/src.clm
-               ${LINK} ${value}/*/*F90 .
-               cd      ../..
-            else
-               echo "No SourceMods for CLM <${value}>."
-               echo "Got the version from CLM_CONFIG_OPTS ...  <${CLM_CONFIG_OPTS}>"
-            endif
-         breaksw
-      #  case "bgc":  no special action needed here at this time
-      #  breaksw
-
-         default:
-         breaksw
-      endsw
-
-      @ iarg = $iarg + 2
-   end
-
-else
-
-   echo "MESSAGE - No SourceMods for this case."
-   echo "MESSAGE - No SourceMods for this case."
-
-endif
 
 ./case.build || exit 7
 
@@ -462,24 +355,10 @@ Time to check the case.
 
 3) check things
 
-4) run a single day, verify that it works without assimilation
+4) run a single day, verify that it works 
    ./case.submit
 
-5) IF NEEDED, compile all the DART executables by
-   cd  ${dartroot}/models/clm/work
-   ./quickbuild.csh -mpi
-
-5) Modify the case to enable data assimilation and
-   run DART by executing
-   cd ${caseroot}
-   ./CESM_DART_config
-
-6) Make sure the DART-related parts are appropriate.
-   Check the input.nml
-   Check the assimilate.csh or perfect_model.csh - as appropriate
-   ./case.submit
-
-7) If that works
+5) If that works
    ./xmlchange CONTINUE_RUN=TRUE
    that sort of thing
 -------------------------------------------------------------------------
