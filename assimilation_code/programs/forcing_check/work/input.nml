@@ -1,0 +1,26 @@
+
+&forcing_check_nml
+   debug                   = .false.
+   fail_on_missing_field   = .false.
+   do_all_numeric_fields   = .false.
+   fieldnames              = 'a2x6h_Sa_ptem',
+                             'a2x6h_Sa_shum',
+                             'a2x6h_Sa_dens',
+                             'a2x6h_Sa_pbot',
+                             'a2x6h_Sa_pslv',
+                             'a2x6h_Faxa_lwdn',
+                             'a2x6h_Faxa_rainc',
+                             'a2x6h_Faxa_rainl',
+                             'a2x6h_Faxa_snowc',
+                             'a2x6h_Faxa_snowl',
+                             'a2x6h_Faxa_swndr',
+                             'a2x6h_Faxa_swvdr',
+                             'a2x6h_Faxa_swndf',
+                             'a2x6h_Faxa_swvdf' 
+   fieldlist_file          = ''
+   only_report_differences = .true.
+   /
+
+
+&utilities_nml
+   /
