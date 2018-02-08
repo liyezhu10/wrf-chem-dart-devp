@@ -8,7 +8,7 @@ program forcing_check
 
 ! program to take a netCDF file ...
 
-use     types_mod, only : r4, r8
+use     types_mod, only : r4, MISSING_I, MISSING_R4
 use utilities_mod, only : register_module, error_handler, E_ERR, E_MSG,       &
                           open_file, close_file, get_next_filename, &
                           find_namelist_in_file, check_namelist_read,         &
@@ -32,15 +32,15 @@ character(len=*), parameter :: routine = 'forcing_check'
 
 ! variables used to read the netcdf info
 integer, parameter :: maxd = 7
-integer :: i, j, ndims, odims, ncrc, etype, nitems, nvars, xtype
-integer :: ncinid1
-integer :: invarid1
-integer :: dimid(maxd), dimlen(maxd), odimid(maxd), odimlen(maxd)
-character(128) :: dimname(maxd), odimname(maxd)
+integer :: i, j, ndims, ncrc, etype, nitems, nvars, xtype
+integer :: ncid, varID
+logical :: has_FillValue
+integer :: dimid(maxd), dimlen(maxd)
+character(NF90_MAX_NAME) :: dimname(maxd)
 integer :: nin1Dimensions, nin1Variables, nin1Attributes, in1unlimitedDimID
 
 ! arrays for all possible dimensions, real and int
-real(r4)              ::  r4missing
+real(r4)              ::  r4FillValue
 real(r4)              ::  zerod1
 real(r4), allocatable ::   oned1(:)
 real(r4), allocatable ::   twod1(:,:)
@@ -50,7 +50,7 @@ real(r4), allocatable ::  fived1(:,:,:,:,:)
 real(r4), allocatable ::   sixd1(:,:,:,:,:,:)
 real(r4), allocatable :: sevend1(:,:,:,:,:,:,:)
 
-integer               :: imissing
+integer               :: iFillValue
 integer               ::  izerod1
 integer,  allocatable ::   ioned1(:)
 integer,  allocatable ::   itwod1(:,:)
@@ -63,11 +63,11 @@ integer,  allocatable :: isevend1(:,:,:,:,:,:,:)
 logical, save :: module_initialized = .false.
 
 ! arg parsing code
-character(len=256) :: argline
+character(len=1024) :: argline
 integer :: argcount = 1
-character(len=NF90_MAX_NAME) :: argwords(3)
+character(len=256) :: argwords(3)
 
-character(len=NF90_MAX_NAME) :: infile1
+character(len=256) :: infile1
 character(len=NF90_MAX_NAME) :: nextfield
 logical :: from_file
 
@@ -157,10 +157,10 @@ else
 endif
 
 ! open the files
-ncrc = nf90_open(infile1, NF90_NOWRITE,   ncinid1)
+ncrc = nf90_open(infile1, NF90_NOWRITE,   ncid)
 call nc_check(ncrc, routine, 'nf90_open', infile1)
 
-ncrc = nf90_inquire(ncinid1, nin1Dimensions, nin1Variables, &
+ncrc = nf90_inquire(ncid, nin1Dimensions, nin1Variables, &
                             nin1Attributes, in1unlimitedDimID)
 call nc_check(ncrc, routine, 'nf90_inquire', infile1)
 
@@ -184,7 +184,7 @@ fieldloop : do i=1, nvars
 
    ! get the variable name of interest
    if (do_all_numeric_fields) then
-      ncrc = nf90_inquire_variable(ncinid1, i, nextfield)
+      ncrc = nf90_inquire_variable(ncid, i, nextfield)
       call nc_check(ncrc, routine, 'nf90_inquire_variable', nextfield, infile1)
    else
       if (from_file) then
@@ -196,7 +196,7 @@ fieldloop : do i=1, nvars
    endif
 
    ! check if variable exists, get the ID 
-   ncrc = nf90_inq_varid(ncinid1, nextfield, invarid1)
+   ncrc = nf90_inq_varid(ncid, nextfield, varID)
    if (ncrc /= NF90_NOERR) then
       string2 = ' not found in input file "'//trim(infile1)//'"'
       if (etype == E_ERR) then
@@ -208,7 +208,7 @@ fieldloop : do i=1, nvars
       cycle fieldloop
    endif
    
-   ncrc = nf90_inquire_variable(ncinid1, invarid1, xtype=xtype)
+   ncrc = nf90_inquire_variable(ncid, varID, xtype=xtype)
    call nc_check(ncrc, routine, 'inquire for xtype', nextfield, infile1)
 
    if (xtype /= NF90_INT .and. xtype /= NF90_FLOAT .and. xtype /= NF90_DOUBLE) then
@@ -220,20 +220,20 @@ fieldloop : do i=1, nvars
    endif
 
    if (debug) then
-      write(string1, *) 'invarid1: ',invarid1, trim(nextfield)//' '//trim(infile1)
+      write(string1, *) 'varID: ',varID, trim(nextfield)//' '//trim(infile1)
       call error_handler(E_MSG, routine, string1)
    endif
 
    ! get dimensions
 
-   ncrc = nf90_inquire_variable(ncinid1, invarid1, ndims=ndims,  dimids=dimid)
+   ncrc = nf90_inquire_variable(ncid, varID, ndims=ndims,  dimids=dimid)
    call nc_check(ncrc, routine, 'nf90_inquire_variable', nextfield, infile1)
 
    do j=1,ndims
 
       write(string3,*)j, trim(dimname(j)), trim(nextfield)
 
-      ncrc = nf90_inquire_dimension(ncinid1,  dimid(j),  dimname(j),  dimlen(j))
+      ncrc = nf90_inquire_dimension(ncid,  dimid(j),  dimname(j),  dimlen(j))
       call nc_check(ncrc, routine, 'nf90_inquire_dimension', string3, infile1) 
 
       if (debug) then
@@ -242,6 +242,23 @@ fieldloop : do i=1, nvars
       endif
       
    enddo
+
+   ! get the _FillValue flag if it exists
+  
+   ncrc = nf90_inquire_attribute(ncid, varID, '_FillValue')
+   if (ncrc == NF90_NOERR) then
+      if (xtype == NF90_INT) then
+         ncrc = nf90_get_att(ncid, varid, '_FillValue', iFillValue)
+      else
+         ncrc = nf90_get_att(ncid, varid, '_FillValue', r4FillValue)
+      endif
+      call nc_check(ncrc, routine, 'reading "_FillValue"', nextfield, infile1)
+      has_FillValue = .true.
+   else
+      iFillValue = MISSING_I
+      r4FillValue = MISSING_R4
+      has_FillValue = .false.
+   endif
 
    select case(ndims)
       case (0)
@@ -276,44 +293,44 @@ fieldloop : do i=1, nvars
     case(NF90_INT)
      select case(ndims)
       case (0)
-         ncrc = nf90_get_var(ncinid1, invarid1, izerod1)
+         ncrc = nf90_get_var(ncid, varID, izerod1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
       case (1)
          allocate(ioned1(dimlen(1)))
-         ncrc = nf90_get_var(ncinid1, invarid1, ioned1)
+         ncrc = nf90_get_var(ncid, varID, ioned1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
-         call process(nextfield, imissing, ioned1, nitems)
+         call process(nextfield, ioned1, nitems)
          deallocate(ioned1)
       case (2)
          allocate(itwod1(dimlen(1),dimlen(2)))
-         ncrc = nf90_get_var(ncinid1, invarid1, itwod1)
+         ncrc = nf90_get_var(ncid, varID, itwod1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
-         call process(nextfield, imissing, itwod1, nitems)
+         call process(nextfield, itwod1, nitems)
          deallocate(itwod1)
       case (3)
          allocate(ithreed1(dimlen(1),dimlen(2),dimlen(3)))
-         ncrc = nf90_get_var(ncinid1, invarid1, ithreed1)
+         ncrc = nf90_get_var(ncid, varID, ithreed1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
-         call process(nextfield, imissing, ithreed1, nitems)
+         call process(nextfield, ithreed1, nitems)
          deallocate(ithreed1)
       case (4)
          allocate(ifourd1(dimlen(1),dimlen(2),dimlen(3),dimlen(4)))
-         ncrc = nf90_get_var(ncinid1, invarid1, ifourd1)
+         ncrc = nf90_get_var(ncid, varID, ifourd1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
          deallocate(ifourd1)
       case (5)
          allocate(ifived1(dimlen(1),dimlen(2),dimlen(3),dimlen(4),dimlen(5)))
-         ncrc = nf90_get_var(ncinid1, invarid1, ifived1)
+         ncrc = nf90_get_var(ncid, varID, ifived1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
          deallocate(ifived1)
       case (6)
          allocate(isixd1(dimlen(1),dimlen(2),dimlen(3),dimlen(4),dimlen(5),dimlen(6)))
-         ncrc = nf90_get_var(ncinid1, invarid1, isixd1)
+         ncrc = nf90_get_var(ncid, varID, isixd1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
          deallocate(isixd1)
       case (7)
          allocate(isevend1(dimlen(1),dimlen(2),dimlen(3),dimlen(4),dimlen(5),dimlen(6),dimlen(7)))
-         ncrc = nf90_get_var(ncinid1, invarid1, isevend1)
+         ncrc = nf90_get_var(ncid, varID, isevend1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
          deallocate(isevend1)
       case default
@@ -322,56 +339,47 @@ fieldloop : do i=1, nvars
          call error_handler(E_ERR, routine, string1, source, revision, revdate)
      end select
 
-     ! common reporting code for integers
-     if (nitems > 0) then
-        write(string1, *) 'arrays differ in ', nitems, ' places'
-        call error_handler(E_MSG, routine, string1, source, revision, revdate)
-     else if (.not. only_report_differences) then
-        write(string1, *) 'arrays same'
-        call error_handler(E_MSG, routine, string1, source, revision, revdate)
-     endif
-
     case default
      select case(ndims)
       case (0)
-         ncrc = nf90_get_var(ncinid1, invarid1, zerod1)
+         ncrc = nf90_get_var(ncid, varID, zerod1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
       case (1)
          allocate(oned1(dimlen(1)))
-         ncrc = nf90_get_var(ncinid1, invarid1, oned1)
+         ncrc = nf90_get_var(ncid, varID, oned1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
-         call process(nextfield, r4missing, oned1, nitems)
+         call process(nextfield, oned1, nitems)
          deallocate(oned1)
       case (2)
          allocate(twod1(dimlen(1),dimlen(2)))
-         ncrc = nf90_get_var(ncinid1, invarid1, twod1)
+         ncrc = nf90_get_var(ncid, varID, twod1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
-         call process(nextfield, r4missing, twod1, nitems)
+         call process(nextfield, twod1, nitems)
          deallocate(twod1)
       case (3)
          allocate(threed1(dimlen(1),dimlen(2),dimlen(3)))
-         ncrc = nf90_get_var(ncinid1, invarid1, threed1)
+         ncrc = nf90_get_var(ncid, varID, threed1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
-         call process(nextfield, r4missing, threed1, nitems)
+         call process(nextfield, threed1, nitems)
          deallocate(threed1)
       case (4)
          allocate(fourd1(dimlen(1),dimlen(2),dimlen(3),dimlen(4)))
-         ncrc = nf90_get_var(ncinid1, invarid1, fourd1)
+         ncrc = nf90_get_var(ncid, varID, fourd1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
          deallocate(fourd1)
       case (5)
          allocate(fived1(dimlen(1),dimlen(2),dimlen(3),dimlen(4),dimlen(5)))
-         ncrc = nf90_get_var(ncinid1, invarid1, fived1)
+         ncrc = nf90_get_var(ncid, varID, fived1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
          deallocate(fived1)
       case (6)
          allocate(sixd1(dimlen(1),dimlen(2),dimlen(3),dimlen(4),dimlen(5),dimlen(6)))
-         ncrc = nf90_get_var(ncinid1, invarid1, sixd1)
+         ncrc = nf90_get_var(ncid, varID, sixd1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
          deallocate(sixd1)
       case (7)
          allocate(sevend1(dimlen(1),dimlen(2),dimlen(3),dimlen(4),dimlen(5),dimlen(6),dimlen(7)))
-         ncrc = nf90_get_var(ncinid1, invarid1, sevend1)
+         ncrc = nf90_get_var(ncid, varID, sevend1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
          deallocate(sevend1)
       case default
@@ -380,20 +388,12 @@ fieldloop : do i=1, nvars
          call error_handler(E_ERR, routine, string1, source, revision, revdate)
      end select
 
-     ! common reporting code for reals
-     if (nitems > 0) then
-        write(string1, *) 'arrays differ in ', nitems, ' places'
-        call error_handler(E_MSG, routine, string1, source, revision, revdate)
-     else if (.not. only_report_differences) then
-        write(string1, *) 'arrays same'
-        call error_handler(E_MSG, routine, string1, source, revision, revdate)
-     endif
    end select
 
 enddo fieldloop
 
 !  close up
-call nc_check(nf90_close(ncinid1), 'nf90_close', infile1)
+call nc_check(nf90_close(ncid), 'nf90_close', infile1)
 
 if (debug) then
    write(string1, *) 'closing files ',  trim(infile1)
@@ -419,10 +419,9 @@ end subroutine initialize_module
 
 !----------------------------------------------------------------------
 
-subroutine process_int_1d(varname, missing, datmat, nitems)
+subroutine process_int_1d(varname, datmat, nitems)
 
 character(len=*), intent(in)    :: varname
-integer,          intent(in)    :: missing
 integer,          intent(inout) :: datmat(:)
 integer,          intent(out)   :: nitems
 
@@ -438,10 +437,9 @@ end subroutine process_int_1d
 
 !----------------------------------------------------------------------
 
-subroutine process_int_2d(varname, missing, datmat, nitems)
+subroutine process_int_2d(varname, datmat, nitems)
 
 character(len=*), intent(in)    :: varname
-integer,          intent(in)    :: missing
 integer,          intent(inout) :: datmat(:,:)
 integer,          intent(out)   :: nitems
 
@@ -457,10 +455,9 @@ end subroutine process_int_2d
 
 !----------------------------------------------------------------------
 
-subroutine process_int_3d(varname, missing, datmat, nitems)
+subroutine process_int_3d(varname, datmat, nitems)
 
 character(len=*), intent(in)    :: varname
-integer,          intent(in)    :: missing
 integer,          intent(inout) :: datmat(:,:,:)
 integer,          intent(out)   :: nitems
 
@@ -476,10 +473,9 @@ end subroutine process_int_3d
 
 !----------------------------------------------------------------------
 
-subroutine process_r4_1d(varname, missing, datmat, nitems)
+subroutine process_r4_1d(varname, datmat, nitems)
 
 character(len=*), intent(in)    :: varname
-real(r4),         intent(in)    :: missing
 real(r4),         intent(inout) :: datmat(:)
 integer,          intent(out)   :: nitems
 
@@ -495,10 +491,9 @@ end subroutine process_r4_1d
 
 !----------------------------------------------------------------------
 
-subroutine process_r4_2d(varname, missing, datmat, nitems)
+subroutine process_r4_2d(varname, datmat, nitems)
 
 character(len=*), intent(in)    :: varname
-real(r4),         intent(in)    :: missing
 real(r4),         intent(inout) :: datmat(:,:)
 integer,          intent(out)   :: nitems
 
@@ -514,20 +509,50 @@ end subroutine process_r4_2d
 
 !----------------------------------------------------------------------
 
-subroutine process_r4_3d(varname, missing, datmat, nitems)
+subroutine process_r4_3d(varname, datmat, nitems)
 
 character(len=*), intent(in)    :: varname
-real(r4),         intent(in)    :: missing
 real(r4),         intent(inout) :: datmat(:,:,:)
 integer,          intent(out)   :: nitems
 
-integer :: minimum, maximum
+integer :: minimum, maximum, i, j, k
 
 nitems  = 0
 minimum = minval(datmat)
 maximum = maxval(datmat)
 
-write(*,*)trim(varname), shape(datmat), 'minmmax:', minimum, maximum
+if (has_FillValue) then
+   do k = 1,size(datmat,3)
+      do j = 1,size(datmat,2)
+         do i = 1,size(datmat,1)
+            if (datmat(i,j,k) == r4FillValue ) cycle
+            if (datmat(i,j,k) < 0.0_r4) then
+                datmat(i,j,k) = 0.0_r4
+                nitems = nitems + 1 
+            endif
+         enddo
+      enddo
+   enddo
+else
+   do k = 1,size(datmat,3)
+      do j = 1,size(datmat,2)
+         do i = 1,size(datmat,1)
+            if (datmat(i,j,k) < 0.0_r4) then
+                datmat(i,j,k) = 0.0_r4
+                nitems = nitems + 1 
+            endif
+         enddo
+      enddo
+   enddo
+endif
+
+write(*,*)trim(varname), shape(datmat), 'min max n:', minimum, maximum, nitems
+
+if (nitems > 0 ) then
+   minimum = minval(datmat)
+   maximum = maxval(datmat)
+   write(*,*)trim(varname), shape(datmat), 'MIN MAX N:', minimum, maximum, nitems
+endif
 
 end subroutine process_r4_3d
 

@@ -1,4 +1,21 @@
 
+# variables in the DS199.1 datasets and their 'long_name' attribute
+#    a2x6h_Sa_tbot      "Temperature at the lowest model level" ;
+#    a2x6h_Sa_ptem      "Potential temperature at the lowest model level" ;
+#    a2x6h_Sa_shum      "Specific humidity at the lowest model level" ;
+#    a2x6h_Sa_dens      "Air density at the lowest model level" ;
+#    a2x6h_Sa_pbot      "Pressure at the lowest model level" ;
+#    a2x6h_Sa_pslv      "Sea level pressure" ;
+#    a2x6h_Faxa_lwdn    "Downward longwave heat flux" ;
+#    a2x6h_Faxa_rainc   "Convective precipitation rate" ;
+#    a2x6h_Faxa_rainl   "Large-scale (stable) precipitation rate" ;
+#    a2x6h_Faxa_snowc   "Convective snow rate (water equivalent)" ;
+#    a2x6h_Faxa_snowl   "Large-scale (stable) snow rate (water equivalent)" ;
+#    a2x6h_Faxa_swndr   "Direct near-infrared incident solar radiation" ;
+#    a2x6h_Faxa_swvdr   "Direct visible incident solar radiation" ;
+#    a2x6h_Faxa_swndf   "Diffuse near-infrared incident solar radiation" ;
+#    a2x6h_Faxa_swvdf   "Diffuse visible incident solar radiation" ;
+
 &forcing_check_nml
    debug                   = .false.
    fail_on_missing_field   = .false.
@@ -20,7 +37,6 @@
    fieldlist_file          = ''
    only_report_differences = .true.
    /
-
 
 &utilities_nml
    /
