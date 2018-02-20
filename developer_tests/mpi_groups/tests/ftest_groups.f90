@@ -55,34 +55,88 @@ implicit none
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 ! integer variables
-integer :: ierror, world_rank, world_size, group_rank, group_size, color, i, j
-integer :: MPI_ROW_COMM, MPI_COMM_GRID
-integer :: row_rank, row_size, subgroup, top, bottom
-integer, allocatable :: members(:)
+integer :: ierror, world_rank, world_size, group_rank, group_size
+integer :: i, j
+integer :: static_id
+
 logical :: do_print
+
 integer, parameter :: nxA = 10
 integer, parameter :: nyA = 10
-real :: A(nxA,nyA) = -1
+real, allocatable  :: A(:,:)
+
+integer(KIND=MPI_OFFSET_KIND) :: x_length, num_static_arrays
+integer(KIND=MPI_OFFSET_KIND) :: my_num_y_vals !< splitting up by we
+
 ! real :: B(nxA,nyA) = -1
 ! real :: C(nxA,nyA) = -1
+
+logical :: not_initialized = .true.
+
+allocate(A(nxA, nyA))
+A = -1.0
 
 group_size = 4
 
 ierror = -999
 call MPI_Init(ierror)
 
-world_rank = -1
-call MPI_Comm_rank(MPI_COMM_WORLD, world_rank, ierror)
+call get_world_rank(world_rank)
+do_print = (world_rank == 0)
 
-world_size = -1
-call MPI_Comm_size(MPI_COMM_WORLD, world_size, ierror)
+if (world_rank == 0) then
+   do i = 1,nxA
+     do j = 1,nyA
+        A(i,j) = i + (j-1)*nxA
+     enddo
+   enddo
+endif
+
+call split_groups()
+
+
+static_id = distribute_static_data(nxA, nyA, A) 
+
+ierror = -999
+call MPI_Finalize(ierror)
 if (ierror /= MPI_SUCCESS) then
-   print*, "MPI_Comm_size failed with error code", ierror
+   print *, "MPI_Finalize() did not succeed, error code = ", ierror
    stop
 endif
 
-do_print = (world_rank == 0)
-if (do_print) print *, "Total MPI tasks: ", world_size
+if (do_print) then
+   print *, "All MPI calls succeeded, test passed."
+   print *, "program end"
+endif
+
+contains
+
+!-------------------------------------------------------------------------------
+
+subroutine initialize_mpi()
+
+if (not_initialized) then
+   call MPI_Init(ierror)
+   not_initialized = .false.
+endif
+
+end subroutine initialize_mpi
+
+!-------------------------------------------------------------------------------
+
+subroutine split_groups()
+
+integer :: row_rank
+integer :: row_size
+integer :: MPI_ROW_COMM
+integer :: color
+integer :: world_rank
+integer :: world_size
+
+if( .not. not_initialized ) call initialize_mpi()
+
+call get_world_rank(world_rank)
+call get_world_size(world_size)
 
 ! Testing Split: NOTE can be expensive for large number of processors
 color = world_rank / 4
@@ -108,6 +162,21 @@ if (ierror /= MPI_SUCCESS) then
    print*, "MPI_Comm_free failed with error code", ierror
    stop
 endif
+
+end subroutine split_groups
+
+!-------------------------------------------------------------------------------
+
+function distribute_static_data(NX, NY, ARRAY) result(static_id)
+integer, intent(in) :: NX, NY
+real,    intent(in) :: ARRAY(:,:)
+
+integer :: static_id
+
+integer :: MPI_COMM_GRID
+integer :: bottom, top
+integer :: subgroup
+integer, allocatable :: members(:)
 
 ! Testing Groups
 call MPI_Comm_group(MPI_COMM_WORLD, MPI_COMM_GRID, ierror)
@@ -150,67 +219,110 @@ do i = 0, world_size-1
         enddo
       endif
 enddo
+
 call MPI_Barrier(MPI_COMM_WORLD, ierror)
 
 call MPI_Group_incl(MPI_COMM_GRID, group_size, members, subgroup, ierror)
 call MPI_Comm_create(MPI_COMM_WORLD, subgroup, MPI_COMM_GRID, ierror)
 call MPI_Comm_rank(MPI_COMM_GRID, group_rank, ierror) ! rank within group
 
-if (world_rank == 0) then
-   do i = 1,nxA
-     do j = 1,nyA
-        A(i,j) = i + (j-1)*nxA
-     enddo
-   enddo
-endif
 
-if (world_rank == 0) call print_array('A1', A, nxA, nyA)
+call print_array('A1 rank 0', ARRAY, NX, NY, 0)
+call MPI_Barrier(MPI_COMM_WORLD, ierror)
 
+call print_array('A1 rank 1', ARRAY, NX, NY, 1)
+call MPI_Barrier(MPI_COMM_WORLD, ierror)
 
-! call MPI_Group_rank(subgroup, row_rank, ierror)
-! call MPI_Group_size(subgroup, row_size, ierror)
-! 
-! do i = 1, (world_size-1), 2
-!    call MPI_Barrier(MPI_COMM_WORLD, ierror)
-!    call MPI_Barrier(MPI_ROW_COMM, ierror)
-!    if(world_rank == i) then
-!       write(*,'(''GROUP 2 RANK/SIZE:'',I4,''/'',I4,'' ROW RANK/SIZE:'',I4,''/'',I4)') world_rank, world_size, row_rank, row_size 
-!    endif
-! enddo
-! 
-! call MPI_Group_rank(group2, row_rank, ierror)
-! call MPI_Group_size(group2, row_size, ierror)
-! 
-! do i = 0, (world_size-1), 2
-!    call MPI_Barrier(MPI_COMM_WORLD, ierror)
-!    call MPI_Barrier(MPI_ROW_COMM, ierror)
-!    if(world_rank == i) then
-!       write(*,'(''GROUP 2 RANK/SIZE:'',I4,''/'',I4,'' ROW RANK/SIZE:'',I4,''/'',I4)') world_rank, world_size, row_rank, row_size 
-!    endif
-! enddo
+call MPI_Group_rank(subgroup, group_size, ierror)
+call MPI_Group_size(subgroup, group_rank, ierror)
+
+call MPI_Barrier(MPI_COMM_WORLD, ierror)
+do i = 1, (world_size-1)
+   call MPI_Barrier(MPI_COMM_WORLD, ierror)
+   if(world_rank == i) then
+      write(*,'(''GROUP RANK/SIZE:'',I4,''/'',I4,'' GROUP RANK/SIZE:'',I4,''/'',I4)') world_rank, world_size, group_size, group_rank
+   endif
+enddo
+
+deallocate(members)
+
+static_id = MPI_COMM_GRID
+
+end function distribute_static_data
+
+!-------------------------------------------------------------------------------
+
+subroutine create_window()
+
+integer ierr, sizedouble, datasize, my_window
+integer(KIND=MPI_ADDRESS_KIND) :: window_size
+!real, allocatable :: global_static_data(:) !< local static data 
+real :: global_static_data(*)
+pointer(aa, global_static_data)
+
+if( .not. not_initialized ) call initialize_mpi()
+
+datasize = MPI_REAL ! this should come from MPI_UTILITIES
+
+call mpi_type_size(datasize, sizedouble, ierr) ! datasize comes from mpi_utilities_mod
+window_size = num_static_arrays*x_length*my_num_y_vals*sizedouble
+
+call mpi_win_create(global_static_data,  window_size, sizedouble, MPI_INFO_NULL, mpi_comm_world, my_window, ierr)
+
+end subroutine create_window
+
+!-------------------------------------------------------------------------------
+
+subroutine get_world_size(world_size)
+integer, intent(out) :: world_size
 
 ierror = -999
-call MPI_Finalize(ierror)
+
+if( .not. not_initialized ) call initialize_mpi()
+
+world_size = -1
+call MPI_Comm_size(MPI_COMM_WORLD, world_size, ierror)
 if (ierror /= MPI_SUCCESS) then
-   print *, "MPI_Finalize() did not succeed, error code = ", ierror
+   print*, "MPI_Comm_size failed with error code", ierror
    stop
 endif
 
-if (do_print) then
-   print *, "All MPI calls succeeded, test passed."
-   print *, "program end"
+if (do_print) print *, "Total MPI tasks: ", world_size
+
+end subroutine get_world_size
+!-------------------------------------------------------------------------------
+
+subroutine get_world_rank(world_rank)
+integer, intent(out) :: world_rank
+
+ierror = -999
+
+if( .not. not_initialized ) call initialize_mpi()
+
+world_size = -1
+call MPI_Comm_rank(MPI_COMM_WORLD, world_rank, ierror)
+if (ierror /= MPI_SUCCESS) then
+   print*, "MPI_Comm_rank failed with error code", ierror
+   stop
 endif
 
-contains
+end subroutine get_world_rank
 
-subroutine print_array(name_array,A,nx,ny)
+!-------------------------------------------------------------------------------
+
+subroutine print_array(name_array,A,nx,ny,rank)
 
 character(len=*), intent(in) :: name_array
-real,         intent(in) :: A(:,:)
+real,             intent(in) :: A(:,:)
 integer,          intent(in) :: nx, ny
+integer,          intent(in) :: rank
 
 integer :: i
+integer :: world_rank
 
+call get_world_rank(world_rank)
+
+if(rank == world_rank) then
    write(*,'(A,I2,A,I2,A)') trim(name_array)//'(1:',nx, ',1:',ny,') = '
    do i = 1,nx
      do j = 1,ny
@@ -218,8 +330,10 @@ integer :: i
      enddo
      write(*,*) ''
    enddo
-
+endif
 end subroutine print_array
+
+!-------------------------------------------------------------------------------
 
 end program ftest_mpi
 
