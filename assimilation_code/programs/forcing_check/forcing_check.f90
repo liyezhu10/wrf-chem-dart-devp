@@ -84,10 +84,11 @@ interface process
    procedure process_r4_3d
 end interface
 
-logical :: debug = .false.                   ! or .true.
-logical :: fail_on_missing_field = .true.    ! or .false.
-logical :: do_all_numeric_fields = .true.    ! or .false.
-logical :: only_report_differences = .true.  ! or .false.
+logical :: debug                   = .false.
+logical :: fail_on_missing_field   = .true.
+logical :: do_all_numeric_fields   = .true.
+logical :: only_report_differences = .true.
+
 character(len=NF90_MAX_NAME) :: fieldnames(1000) = ''  ! something large
 character(len=256) :: fieldlist_file = ''
 
@@ -114,6 +115,11 @@ if (do_nml_term()) write(     *     , nml=forcing_check_nml)
 if (debug) then
    call error_handler(E_MSG, routine, ' debug on')
 endif
+if (only_report_differences) then
+   call error_handler(E_MSG, routine, ' Only reporting the differences, not changing anything.')
+else
+   call error_handler(E_MSG, routine, ' Potentially modifying the input file with non-negative replacments.')
+endif
 
 ! whether to fail or just warn if a field is not found
 if (fail_on_missing_field) then
@@ -122,8 +128,7 @@ else
    etype = E_MSG
 endif
 
-!   check inputs - get a string from stdin
-!   eg:  echo infile1.nc | ./forcing_check
+! get filename from stdin. eg:  echo infile1.nc | ./forcing_check
 read(*, '(A)') argline
 call get_args_from_string(argline, argcount, argwords)
 
@@ -157,18 +162,13 @@ else
 endif
 
 ! open the files
-ncrc = nf90_open(infile1, NF90_NOWRITE,   ncid)
+ncrc = nf90_open(infile1, NF90_WRITE,   ncid)
 call nc_check(ncrc, routine, 'nf90_open', infile1)
 
 ncrc = nf90_inquire(ncid, nin1Dimensions, nin1Variables, &
-                            nin1Attributes, in1unlimitedDimID)
+                          nin1Attributes, in1unlimitedDimID)
 call nc_check(ncrc, routine, 'nf90_inquire', infile1)
 
-! for now, loop over the number of vars in file 1.  at some point we
-! should print out vars that are in 1 but not 2, and in 2 but not 1.
-! but for that we need more logic to track which vars are processed.
-! this code loops over the names in file 1 and finds them (or not)
-! in file 2 but doesn't complain about unused vars in file 2.
 nvars = nin1Variables
 
 if (debug) then
@@ -177,8 +177,7 @@ if (debug) then
    call error_handler(E_MSG, routine, string1)
 endif
 
-!    input files to get data from
-!    list of netcdf fields to compare
+! list of variables to check
 
 fieldloop : do i=1, nvars
 
@@ -188,6 +187,7 @@ fieldloop : do i=1, nvars
       call nc_check(ncrc, routine, 'nf90_inquire_variable', nextfield, infile1)
    else
       if (from_file) then
+         ! In this case, get_next_variable_name ... 
          nextfield = get_next_filename(fieldlist_file, i)
       else
          nextfield = fieldnames(i)
@@ -299,19 +299,19 @@ fieldloop : do i=1, nvars
          allocate(ioned1(dimlen(1)))
          ncrc = nf90_get_var(ncid, varID, ioned1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
-         call process(nextfield, ioned1, nitems)
+         call process(ncid, varID, nextfield, ioned1, nitems)
          deallocate(ioned1)
       case (2)
          allocate(itwod1(dimlen(1),dimlen(2)))
          ncrc = nf90_get_var(ncid, varID, itwod1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
-         call process(nextfield, itwod1, nitems)
+         call process(ncid, varID, nextfield, itwod1, nitems)
          deallocate(itwod1)
       case (3)
          allocate(ithreed1(dimlen(1),dimlen(2),dimlen(3)))
          ncrc = nf90_get_var(ncid, varID, ithreed1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
-         call process(nextfield, ithreed1, nitems)
+         call process(ncid, varID, nextfield, ithreed1, nitems)
          deallocate(ithreed1)
       case (4)
          allocate(ifourd1(dimlen(1),dimlen(2),dimlen(3),dimlen(4)))
@@ -348,19 +348,19 @@ fieldloop : do i=1, nvars
          allocate(oned1(dimlen(1)))
          ncrc = nf90_get_var(ncid, varID, oned1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
-         call process(nextfield, oned1, nitems)
+         call process(ncid, varID, nextfield, oned1, nitems)
          deallocate(oned1)
       case (2)
          allocate(twod1(dimlen(1),dimlen(2)))
          ncrc = nf90_get_var(ncid, varID, twod1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
-         call process(nextfield, twod1, nitems)
+         call process(ncid, varID, nextfield, twod1, nitems)
          deallocate(twod1)
       case (3)
          allocate(threed1(dimlen(1),dimlen(2),dimlen(3)))
          ncrc = nf90_get_var(ncid, varID, threed1)
          call nc_check(ncrc, routine, 'nf90_get_var', nextfield, infile1)
-         call process(nextfield, threed1, nitems)
+         call process(ncid, varID, nextfield, threed1, nitems)
          deallocate(threed1)
       case (4)
          allocate(fourd1(dimlen(1),dimlen(2),dimlen(3),dimlen(4)))
@@ -419,8 +419,10 @@ end subroutine initialize_module
 
 !----------------------------------------------------------------------
 
-subroutine process_int_1d(varname, datmat, nitems)
+subroutine process_int_1d(fid, varid, varname, datmat, nitems)
 
+integer,          intent(in)    :: fid           !< netcdf file ID
+integer,          intent(in)    :: varid         !< netcdf variable ID
 character(len=*), intent(in)    :: varname
 integer,          intent(inout) :: datmat(:)
 integer,          intent(out)   :: nitems
@@ -437,8 +439,10 @@ end subroutine process_int_1d
 
 !----------------------------------------------------------------------
 
-subroutine process_int_2d(varname, datmat, nitems)
+subroutine process_int_2d(fid, varid, varname, datmat, nitems)
 
+integer,          intent(in)    :: fid           !< netcdf file ID
+integer,          intent(in)    :: varid         !< netcdf variable ID
 character(len=*), intent(in)    :: varname
 integer,          intent(inout) :: datmat(:,:)
 integer,          intent(out)   :: nitems
@@ -455,8 +459,10 @@ end subroutine process_int_2d
 
 !----------------------------------------------------------------------
 
-subroutine process_int_3d(varname, datmat, nitems)
+subroutine process_int_3d(fid, varid, varname, datmat, nitems)
 
+integer,          intent(in)    :: fid           !< netcdf file ID
+integer,          intent(in)    :: varid         !< netcdf variable ID
 character(len=*), intent(in)    :: varname
 integer,          intent(inout) :: datmat(:,:,:)
 integer,          intent(out)   :: nitems
@@ -473,13 +479,15 @@ end subroutine process_int_3d
 
 !----------------------------------------------------------------------
 
-subroutine process_r4_1d(varname, datmat, nitems)
+subroutine process_r4_1d(fid, varid, varname, datmat, nitems)
 
+integer,          intent(in)    :: fid           !< netcdf file ID
+integer,          intent(in)    :: varid         !< netcdf variable ID
 character(len=*), intent(in)    :: varname
 real(r4),         intent(inout) :: datmat(:)
 integer,          intent(out)   :: nitems
 
-integer :: minimum, maximum
+real(r4) :: minimum, maximum
 
 nitems  = 0
 minimum = minval(datmat)
@@ -491,13 +499,15 @@ end subroutine process_r4_1d
 
 !----------------------------------------------------------------------
 
-subroutine process_r4_2d(varname, datmat, nitems)
+subroutine process_r4_2d(fid, varid, varname, datmat, nitems)
 
+integer,          intent(in)    :: fid           !< netcdf file ID
+integer,          intent(in)    :: varid         !< netcdf variable ID
 character(len=*), intent(in)    :: varname
 real(r4),         intent(inout) :: datmat(:,:)
 integer,          intent(out)   :: nitems
 
-integer :: minimum, maximum
+real(r4) :: minimum, maximum
 
 nitems  = 0
 minimum = minval(datmat)
@@ -508,14 +518,19 @@ write(*,*)trim(varname), shape(datmat), 'minmmax:', minimum, maximum
 end subroutine process_r4_2d
 
 !----------------------------------------------------------------------
+!> routine to replace negative values with zero and write the updated
+!> variable back to the same file it came from.
 
-subroutine process_r4_3d(varname, datmat, nitems)
+subroutine process_r4_3d(fid, varid, varname, datmat, nitems)
 
-character(len=*), intent(in)    :: varname
+integer,          intent(in)    :: fid           !< netcdf file ID
+integer,          intent(in)    :: varid         !< netcdf variable ID
+character(len=*), intent(in)    :: varname       !<  variable name
 real(r4),         intent(inout) :: datmat(:,:,:)
 integer,          intent(out)   :: nitems
 
-integer :: minimum, maximum, i, j, k
+real(r4) :: minimum, maximum
+integer  :: i, j, k, ncrc
 
 nitems  = 0
 minimum = minval(datmat)
@@ -548,10 +563,16 @@ endif
 
 write(*,*)trim(varname), shape(datmat), 'min max n:', minimum, maximum, nitems
 
-if (nitems > 0 ) then
+if (nitems > 0 .and.  .not. only_report_differences) then ! actually update the variable
    minimum = minval(datmat)
    maximum = maxval(datmat)
    write(*,*)trim(varname), shape(datmat), 'MIN MAX N:', minimum, maximum, nitems
+
+   ncrc = nf90_put_var(ncid,varID,datmat)
+   call nc_check(ncrc,'process_r4_3d','nf90_put_var',varname)
+   ncrc = nf90_sync(ncid)
+   call nc_check(ncrc, 'process_r4_3d','nf90_sync',varname)
+
 endif
 
 end subroutine process_r4_3d
