@@ -3400,6 +3400,8 @@ endif
 
 call set_vertical(location, pressure_array(1), VERTISPRESSURE)
 
+my_status = 0
+
 end subroutine obs_vertical_to_pressure
 
 !--------------------------------------------------------------------
@@ -3429,6 +3431,8 @@ endif
 
 call set_vertical(location, height_array(1), VERTISHEIGHT)
 
+my_status = 0
+
 end subroutine obs_vertical_to_height
 
 !--------------------------------------------------------------------
@@ -3453,6 +3457,8 @@ endif
 
 call set_vertical(location, level_array(1), VERTISLEVEL)
 
+my_status = 0
+
 end subroutine obs_vertical_to_level
 
 !--------------------------------------------------------------------
@@ -3473,6 +3479,7 @@ ens_size = 1
 ! by definition
 if (query_location(location) == VERTISSURFACE) then
    call set_vertical(location, -log(1.0_r8), VERTISSCALEHEIGHT)
+   my_status = 2
    return
 endif
    
@@ -3500,6 +3507,8 @@ endif
 scaleheight_val = scale_height(surface_pressure_array(1), pressure_array(1))
 
 call set_vertical(location, scaleheight_val, VERTISSCALEHEIGHT)
+
+my_status = 0
 
 end subroutine obs_vertical_to_scaleheight
 
@@ -3961,8 +3970,6 @@ else
    scale_height = -log(p_above / p_surface )
 
 endif
-
-print*, 'p_surface, p_above', p_surface, p_above, diff
 
 end function scale_height
 
