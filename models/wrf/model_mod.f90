@@ -345,8 +345,6 @@ TYPE wrf_static_data_for_dart
    character(len=10), dimension(:),pointer :: clamp_or_fail
    character(len=129),dimension(:),pointer :: description, units, stagger, coordinates
 
-   integer, dimension(:,:,:,:), pointer :: dart_ind
-
 end type wrf_static_data_for_dart
 
 type wrf_dom
@@ -628,7 +626,6 @@ WRFDomains : do id=1,num_domains
 
 ! indices into 1D array - hopefully this becomes obsolete
 ! JPH changed last dimension here from num_model_var_types
-   !HK allocate(wrf%dom(id)%dart_ind(wrf%dom(id)%wes,wrf%dom(id)%sns,wrf%dom(id)%bts,wrf%dom(id)%number_of_wrf_variables))
 
 ! start and stop of each variable in vector
    allocate(wrf%dom(id)%var_index(2,wrf%dom(id)%number_of_wrf_variables))
@@ -642,10 +639,6 @@ WRFDomains : do id=1,num_domains
 ! then just loop thru the table
 !---------------------------
 
-   !HK wrf%dom(id)%dart_ind = 0
-
-! NOTE: this could be put into the loop above if wrf%dom(id)%dart_ind is
-! eventually not needed
 ! Here we use ind instead of type as the 4th dimension.  In is linked to the
 ! specific type via wrf%dom(id)%var_index_list(ind).  This saves some
 ! space from the previous implementation but I am not yet sure of other
@@ -664,8 +657,6 @@ WRFDomains : do id=1,num_domains
       do k=1,wrf%dom(id)%var_size(3,ind)
          do j=1,wrf%dom(id)%var_size(2,ind)
             do i=1,wrf%dom(id)%var_size(1,ind)
-               ! HK wrf%dom(id)%dart_ind(i,j,k,ind) &
-               !                               = dart_index
                dart_index = dart_index + 1
             enddo
          enddo
@@ -1764,7 +1755,7 @@ else
          ! and interpolate to desired horizontal location
 
          ! Hmmm, it does not appear that Rho is part of the DART state vector, so there
-         !   is not a reference to wrf%dom(id)%dart_ind -- we'll have to go right from
+         !   is not a reference to the DART state index -- we'll have to go right from
          !   the corner indices
 
          ! Interpolation for the Rho field at level k
@@ -1961,7 +1952,7 @@ else
                  print*, 'model_mod.f90 :: model_interpolate :: getCorners P rc = ', rc
          
             ! Hmmm, it does not appear that P is part of the DART state vector, so there
-            !   is not a reference to wrf%dom(id)%dart_ind -- we'll have to go right from
+            !   is not a reference to the DART state index -- we'll have to go right from
             !   the corner indices
 
             ! Interpolation for the P field at level k
@@ -2179,11 +2170,6 @@ else
 
                      if ( zloc(e) >= 1.0_r8 ) then  !  vertically interpolate
 
-!                     ugrid = (dx  * (x(wrf%dom(id)%dart_ind(ii1,  ii2,  k2,  wrf%dom(id)%type_u))  + &
-!                                     x(wrf%dom(id)%dart_ind(ii1+1,ii2,  k2,  wrf%dom(id)%type_u))) + &
-!                              dxm * (x(wrf%dom(id)%dart_ind(ii1,  ii2,  k2+1,wrf%dom(id)%type_u))  + &
-!                                     x(wrf%dom(id)%dart_ind(ii1+1,ii2,  k2+1,wrf%dom(id)%type_u)))) * 0.5_r8
-
                         ugrid_1 = get_dart_vector_index(ii1,  ii2,  k2,   domain_id(id), wrf%dom(id)%type_u)
                         ugrid_2 = get_dart_vector_index(ii1+1,ii2,  k2,   domain_id(id), wrf%dom(id)%type_u)
                         ugrid_3 = get_dart_vector_index(ii1,  ii2,  k2,   domain_id(id), wrf%dom(id)%type_u)
@@ -2206,17 +2192,9 @@ else
                         x_vgrid_3 = get_state(vgrid_3, state_handle)
                         x_vgrid_4 = get_state(vgrid_4, state_handle)
 
-!                     vgrid = (dx  * (x(wrf%dom(id)%dart_ind(ii1,  ii2,  k2,  wrf%dom(id)%type_v))  + &
-!                                     x(wrf%dom(id)%dart_ind(ii1,  ii2+1,k2,  wrf%dom(id)%type_v))) + &
-!                              dxm * (x(wrf%dom(id)%dart_ind(ii1,  ii2,  k2+1,wrf%dom(id)%type_v))  + &
-!                                     x(wrf%dom(id)%dart_ind(ii1,  ii2+1,k2+1,wrf%dom(id)%type_v)))) * 0.5_r8
-
                         vgrid = (dx  * (vgrid_1 + vgrid_2) + dxm * (vgrid_3 + vgrid_4)) * 0.5_r8
 
                      else  !  pressure level below ground.  Take model level 1 winds
-
-!                     ugrid = (x(wrf%dom(id)%dart_ind(ii1,  ii2,  1,wrf%dom(id)%type_u)) + &
-!                              x(wrf%dom(id)%dart_ind(ii1+1,ii2,  1,wrf%dom(id)%type_u))) * 0.5_r8
 
                         ugrid_1 = get_dart_vector_index(ii1,  ii2,  1, domain_id(id),wrf%dom(id)%type_u)
                         ugrid_2 = get_dart_vector_index(ii1+1,ii2,  1, domain_id(id),wrf%dom(id)%type_u)
@@ -2225,9 +2203,6 @@ else
                         x_ugrid_2 = get_state(ugrid_2, state_handle)
  
                         ugrid = (x_ugrid_1 + x_ugrid_2) * 0.5_r8
-
-!                     vgrid = (x(wrf%dom(id)%dart_ind(ii1,  ii2,  1,wrf%dom(id)%type_v)) + &
-!                              x(wrf%dom(id)%dart_ind(ii1,  ii2+1,1,wrf%dom(id)%type_v))) * 0.5_r8
 
                         vgrid_1 = get_dart_vector_index(ii1,  ii2,  1, domain_id(id),wrf%dom(id)%type_v)
                         vgrid_2 = get_dart_vector_index(ii1,  ii2+1,1, domain_id(id),wrf%dom(id)%type_v)
@@ -2400,20 +2375,15 @@ else
                       p1d(k2, :) = model_pressure_t_distrib(ii1,ii2,k2, id, state_handle, ens_size)
                       !print*, 'p1d(k2, 1)', p1d(k2, 1)
 
-!                     t1d(k2) = x(wrf%dom(id)%dart_ind(ii1,ii2,k2,wrf%dom(id)%type_t)) + ts0
                      t1d_ind = get_dart_vector_index(ii1,ii2,k2, domain_id(id),wrf%dom(id)%type_t)
                      t1d(k2, :) = get_state( t1d_ind, state_handle)
                      t1d(k2, :) = t1d(k2, :) + ts0
                      !print*, 't1d(k2, 1)', t1d(k2, 1)
 
-!                     qv1d(k2)= x(wrf%dom(id)%dart_ind(ii1,ii2,k2,wrf%dom(id)%type_qv))
                      qv1d_ind = get_dart_vector_index(ii1,ii2,k2, domain_id(id),wrf%dom(id)%type_qv)
                      qv1d(k2, :) = get_state(qv1d_ind, state_handle)
                      !print*, 'qv1d(k2, 1)', qv1d(k2, 1)
 
-!                     z1d(k2) = (x(wrf%dom(id)%dart_ind(ii1,ii2,k2,  wrf%dom(id)%type_gz))+ &
-!                                x(wrf%dom(id)%dart_ind(ii1,ii2,k2+1,wrf%dom(id)%type_gz))+ &
-!                                wrf%dom(id)%phb(ii1,ii2,k2)+wrf%dom(id)%phb(ii1,ii2,k2+1))*0.5_r8/gravity
                      z1d_ind1 = get_dart_vector_index(ii1,ii2,k2,   domain_id(id),wrf%dom(id)%type_gz)
                      z1d_ind2 = get_dart_vector_index(ii1,ii2,k2+1, domain_id(id),wrf%dom(id)%type_gz)
 
@@ -2511,8 +2481,6 @@ else
                   endif
 
                   if ( ( wrf%dom(id)%type_u10 >= 0 ) .and. ( wrf%dom(id)%type_v10 >= 0 ) ) then
-                     !ugrid = x(wrf%dom(id)%dart_ind(ii1,ii2,1,wrf%dom(id)%type_u10))
-                     !vgrid = x(wrf%dom(id)%dart_ind(ii1,ii2,1,wrf%dom(id)%type_v10))
 
                      ugrid_1 = get_dart_vector_index(ii1,ii2,1, domain_id(id),wrf%dom(id)%type_u10)
                      ugrid = get_state(ugrid_1, state_handle)
@@ -2522,11 +2490,6 @@ else
 
                   else
 
-! Same code as above
-!                     ugrid = 0.5_r8*(x(wrf%dom(id)%dart_ind(ii1,  ii2,1,wrf%dom(id)%type_u)) + &
-!                                     x(wrf%dom(id)%dart_ind(ii1+1,ii2,1,wrf%dom(id)%type_u)))
-!                     vgrid = 0.5_r8*(x(wrf%dom(id)%dart_ind(ii1,ii2,  1,wrf%dom(id)%type_v)) + &
-!                                     x(wrf%dom(id)%dart_ind(ii1,ii2+1,1,wrf%dom(id)%type_v)))
                      ugrid_1 = get_dart_vector_index(ii1,  ii2,  1, domain_id(id),wrf%dom(id)%type_u)
                      ugrid_2 = get_dart_vector_index(ii1+1,ii2,  1, domain_id(id),wrf%dom(id)%type_u)
 
@@ -2676,7 +2639,7 @@ else
    ! 1.x Surface Elevation (HGT)
 
    ! Surface Elevation has been added by Ryan Torn to accommodate altimeter observations.
-   !   HGT is not in the dart_ind vector, so get it from wrf%dom(id)%hgt.
+   !   HGT is not in the dart state vector, so get it from wrf%dom(id)%hgt.
    else if( obs_kind == QTY_SURFACE_ELEVATION ) then
 
       if ( debug ) print*,'Getting surface elevation'
@@ -2713,7 +2676,7 @@ else
    ! 1.z Land Mask (XLAND)
 
    ! Land Mask has been added to accommodate satellite observations.
-   !   XLAND is not in the dart_ind vector, so get it from wrf%dom(id)%land
+   !   XLAND is not in the dart state vector, so get it from wrf%dom(id)%land
    else if( obs_kind == QTY_LANDMASK ) then
       if( my_task_id() == 0 ) print*, '*** Land mask forward operator not tested'
 
@@ -3616,49 +3579,6 @@ if(zout /= missing_r8) istatus = 0
 end subroutine vert_convert
 
 !#######################################################################
-
-
-function get_wrf_index( i,j,k,var_type,id )
-
-integer, intent(in) :: i,j,k,var_type,id
-
-integer :: get_wrf_index
-integer :: in
-
-write(errstring,*)'function get_wrf_index should not be called -- still needs updating!'
-call error_handler(E_ERR,'get_wrf_index', errstring, &
-     source, revision, revdate)
-
-do in = 1, wrf%dom(id)%number_of_wrf_variables
-   if(var_type == wrf%dom(id)%var_type(in) ) then
-      exit
-   endif
-enddo
-
-! If one decides to use get_wrf_index, then the following test should be updated
-!   to take periodicity into account at the boundaries -- or should it?
-if(i >= 1 .and. i <= wrf%dom(id)%var_size(1,in) .and. &
-   j >= 1 .and. j <= wrf%dom(id)%var_size(2,in) .and. &
-   k >= 1 .and. k <= wrf%dom(id)%var_size(3,in)) then
-
-   get_wrf_index = wrf%dom(id)%dart_ind(i,j,k,var_type)
-
-!!$   get_wrf_index = wrf%dom(id)%var_index(1,in)-1 +   &
-!!$        i + wrf%dom(id)%var_size(1,in)*((j-1) + &
-!!$        wrf%dom(id)%var_size(2,in)*(k-1))
-
-else
-
-  write(errstring,*)'Indices ',i,j,k,' exceed grid dimensions: ', &
-       wrf%dom(id)%var_size(1,in), &
-       wrf%dom(id)%var_size(2,in),wrf%dom(id)%var_size(3,in)
-  call error_handler(E_ERR,'get_wrf_index', errstring, &
-       source, revision, revdate)
-
-endif
-
-end function get_wrf_index
-
 
 !***********************************************************************
 
@@ -8530,9 +8450,6 @@ print*, 'description, units, stagger, coordinates ', size(wrf%dom(domain)%descri
                                                      size(wrf%dom(domain)%units), &
                                                      size(wrf%dom(domain)%stagger), &
                                                      size(wrf%dom(domain)%coordinates)
-
-print*, 'dart_ind ', size(wrf%dom(domain)%dart_ind)
-print*
 
 end subroutine static_data_sizes
 
