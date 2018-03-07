@@ -5,6 +5,36 @@
 ! $Id$
 
 !>@todo FIXME
+!>
+!> after discussions with johnny, we are going to tackle the distributed
+!> static data problem in pieces.  first up, we are going to try to 
+!> distribute multiple copies of the ensemble mean across subsets of the
+!> total job tasks.  right now the user choices are 1) a copy of the ensemble
+!> mean on every task or 2) the ensemble mean distributed across all tasks
+!> in the %copies array.  the former may not fit in memory; the latter can
+!> be very very slow during the vertical conversion step as part of get_close.
+!> we are looking at distributing read-only copies of the ensemble mean
+!> across MPI groups, where the group size can be 1 to N tasks, with the
+!> logical first size would either be the number of tasks on a single node
+!> or a small set of nodes.
+!>
+!> this only requires changes to the mpi utilities (to create a group
+!> communicator), the window code, and the ensemble manager.  any calls
+!> to init_ensemble_manager() might need an additional group size which
+!> should be stored in the ensemble handle.  or less flexibly we could
+!> make it a namelist for the window code or mpi code and have the ensemble
+!> manager query it if the transpose_type selected is 3.
+!>
+!> i am also going to try to fold in changes i made for steve g. to
+!> take an already created communicator from the outside - as long as we
+!> are in the mpi code it should have all the capabilities we foresee
+!> needing in the near future.
+!>
+!>
+!> these are older comments related to supporting quad filter and
+!> block distributions, which are currently orthogonal to the limited
+!> tranpose option:
+!>
 !> looking at design decisions to support distributed static data.
 !> also looking at how to support the quad filter layout.  it replicates
 !> each of the state vector items and then distributes pairs of items
