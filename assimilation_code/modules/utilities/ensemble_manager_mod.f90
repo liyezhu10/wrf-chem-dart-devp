@@ -115,7 +115,7 @@ type ensemble_type
 !> we assume that no task will have the memory to allocate a full i8 buffer,
 !> so my_num_vars will remain expressible as an i4.
   
-   ! integer :: num_pes??
+   integer :: num_pes
    integer(i8)                  :: num_vars 
    integer                      :: num_copies, my_num_copies, my_num_vars
    integer,        allocatable  :: my_copies(:)
@@ -133,6 +133,7 @@ type ensemble_type
    integer, allocatable,private :: task_to_pe_list(:), pe_to_task_list(:) ! List of tasks
    ! Flexible my_pe, layout_type which allows different task layouts for different ensemble handles
    integer                      :: my_pe
+   integer                      :: group_num_pes
    integer,private              :: layout_type
    integer,private              :: transpose_type
    integer                      :: num_extras   ! FIXME: this needs to be more general.
@@ -229,6 +230,9 @@ if ( .not. module_initialized ) then
 
    if (do_nml_file()) write(nmlfileunit, nml=ensemble_manager_nml)
    if (do_nml_term()) write(     *     , nml=ensemble_manager_nml)
+
+   ! Get mpi information for this process; it's stored in module storage
+   num_pes = task_count()
 
 endif
 
@@ -759,7 +763,10 @@ type (ensemble_type),  intent(inout)  :: ens_handle
 
 integer :: num_per_pe_below, num_left_over, i
 
-!ens_handle%num_pes = task_count()
+! used to keep track of number of members within group
+ens_handle%num_pes = task_count()
+
+! local to module
 num_pes = task_count()
 
 ! Option 1: Maximum separation for both vars and copies
