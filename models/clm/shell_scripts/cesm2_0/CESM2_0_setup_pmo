@@ -262,7 +262,6 @@ setenv COMP_ATM              `./xmlquery COMP_ATM              --value`
 setenv COMP_OCN              `./xmlquery COMP_OCN              --value`
 setenv CIMEROOT              `./xmlquery CIMEROOT              --value`
 setenv CASEROOT              `./xmlquery CASEROOT              --value`
-setenv MAX_MPITASKS_PER_NODE `./xmlquery MAX_MPITASKS_PER_NODE --value`
 
 # Make sure the case is configured with a stub ocean and a data atmosphere.
 
@@ -337,14 +336,6 @@ set stream_year_last  = 2010
 # pnetcdf is default
 ./xmlchange PIO_TYPENAME=pnetcdf
 
-# MAX_MPITASKS_PER_NODE comes from $case/Tools/mkbatch.$machine
-
-@ ptile = $MAX_MPITASKS_PER_NODE / 2
-./xmlchange MAX_TASKS_PER_NODE=$ptile
-./xmlchange MAX_MPITASKS_PER_NODE=$ptile
-
-@ nthreads = 1
-
 set TEST_MPI = `./xmlquery --value MPI_RUN_COMMAND'`
 if (${TEST_MPI} == 'UNSET') then
    ./xmlchange MPI_RUN_COMMAND=mpirun.lsf
@@ -357,6 +348,7 @@ endif
 # This is a decent layout for a single instance, but should be explored.
 # Presently, all components run 'serially' - one after another.
 
+@ nthreads = 1
 @ nodes_per_instance = 4
 @ ptile = -1
 

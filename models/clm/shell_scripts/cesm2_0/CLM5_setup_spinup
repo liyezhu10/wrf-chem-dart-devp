@@ -4,13 +4,13 @@
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id$
+# DART $Id: CESM2_0_setup_spinup 12397 2018-02-05 22:45:10Z thoar@ucar.edu $
 
 #-----------------------------------------------------------------------
 # Purpose, describe things here, etc.
 #-----------------------------------------------------------------------
 #
-# CESM2_0_setup_spinup   Simply spins up an ensemble in 1year chunks.
+# CESM2_0_setup_spinup   Simply spins up an ensemble in 1 month chunks.
 #                        Writes out restart files once per month. 
 #                        All ensembles start from the same (default) input file.
 #
@@ -27,11 +27,12 @@
 # num_instances The number of ensemble members.
 # ==============================================================================
 
-setenv CASE           clm45_spinup_e4_n2
+setenv CASE           clm5_f09_spinup_e4_n4
 setenv resolution     f09_g16
-setenv compset        2000_DATM%GSWP3v1_CLM45%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
+setenv resolution     f09_f09
+setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
 setenv cesmtag        clm_dev_branch
-setenv num_instances  80
+setenv num_instances  4
 
 setenv RUN_TYPE       startup
 setenv RUN_STARTDATE  1998-01-01
@@ -82,13 +83,13 @@ setenv dartroot     /glade/p/work/thoar/DART/cesm_clm
 #      less than 10 minutes on yellowstone using 1800 pes (120 nodes)
 # ==============================================================================
 
-setenv queue               economy
-setenv timewall            0:30
+setenv queue               regular
+setenv timewall            01:00
 setenv short_term_archiver off
 
-setenv resubmit            0
 setenv stop_option         nmonths
 setenv stop_n              1
+setenv resubmit            0
 
 #> @TODO stream template files & multiple years. Do we need to specify
 #> year 1 and year N (performance penalty?). Can we change years on-the-fly
@@ -205,7 +206,7 @@ endif
 
 ./xmlchange STOP_OPTION=$stop_option
 ./xmlchange STOP_N=$stop_n
-./xmlchange RESUBMIT=0
+./xmlchange RESUBMIT=$resubmit
 
 ./xmlchange REST_OPTION=nmonths
 ./xmlchange REST_N=1
@@ -222,20 +223,20 @@ endif
 # Set the nodes_per_instance below to match your case.
 # By computing task counts like we do below, we guarantee each instance uses
 # a whole number of nodes which is the recommended configuration.
+# CIME interprets a negative task count as representing the number of nodes.
 
+@ nodes_per_instance = 4
 @ nthreads = 1
-@ nodes_per_instance = 2
-@ ptile = -1
 
-@ atm_tasks = $ptile * $nodes_per_instance
-@ cpl_tasks = $ptile * $nodes_per_instance
-@ ocn_tasks = $ptile * $nodes_per_instance
-@ wav_tasks = $ptile * $nodes_per_instance
-@ glc_tasks = $ptile * $nodes_per_instance
-@ ice_tasks = $ptile * $nodes_per_instance
-@ rof_tasks = $ptile * $nodes_per_instance
-@ lnd_tasks = $ptile * $nodes_per_instance
-@ esp_tasks = $ptile * $nodes_per_instance
+@ atm_tasks = -1 * $nodes_per_instance
+@ cpl_tasks = -1 * $nodes_per_instance
+@ ocn_tasks = -1 * $nodes_per_instance
+@ wav_tasks = -1 * $nodes_per_instance
+@ glc_tasks = -1 * $nodes_per_instance
+@ ice_tasks = -1 * $nodes_per_instance
+@ rof_tasks = -1 * $nodes_per_instance
+@ lnd_tasks = -1 * $nodes_per_instance
+@ esp_tasks = -1 * $nodes_per_instance
 
 ./xmlchange ROOTPE_ATM=0,NTHRDS_ATM=$nthreads,NTASKS_ATM=$atm_tasks
 ./xmlchange ROOTPE_CPL=0,NTHRDS_CPL=$nthreads,NTASKS_CPL=$cpl_tasks
@@ -362,6 +363,6 @@ cat CESM_instructions.txt
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL$
-# $Revision$
-# $Date$
+# $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/cesm_clm/models/clm/shell_scripts/cesm2_0/CESM2_0_setup_spinup $
+# $Revision: 12397 $
+# $Date: 2018-02-05 15:45:10 -0700 (Mon, 05 Feb 2018) $

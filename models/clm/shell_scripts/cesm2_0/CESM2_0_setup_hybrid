@@ -226,7 +226,6 @@ setenv COMP_ATM              `./xmlquery COMP_ATM              --value`
 setenv COMP_OCN              `./xmlquery COMP_OCN              --value`
 setenv CIMEROOT              `./xmlquery CIMEROOT              --value`
 setenv CASEROOT              `./xmlquery CASEROOT              --value`
-setenv MAX_MPITASKS_PER_NODE `./xmlquery MAX_MPITASKS_PER_NODE --value`
 
 # Make sure the case is configured with a data ocean.
 
@@ -297,19 +296,12 @@ set stream_year_last  = 2010
 # pnetcdf is default
 ./xmlchange PIO_TYPENAME=netcdf
 
-# MAX_MPITASKS_PER_NODE comes from $case/Tools/mkbatch.$machine
-
-@ ptile = $MAX_MPITASKS_PER_NODE / 2
-./xmlchange MAX_TASKS_PER_NODE=$ptile
-./xmlchange MAX_MPITASKS_PER_NODE=$ptile
-
-@ nthreads = 1
-
 # Task layout:
 # Set the nodes_per_instance below to match your case.
 # By computing task counts like we do below, we guarantee each instance uses
 # a whole number of nodes which is the recommended configuration.
 
+@ nthreads = 1
 @ nodes_per_instance = 4
 @ ptile = -1
 
