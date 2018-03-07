@@ -114,8 +114,8 @@ type ensemble_type
 !> (we could make the option of redefining i8 to be i4 in types_mod.f90)
 !> we assume that no task will have the memory to allocate a full i8 buffer,
 !> so my_num_vars will remain expressible as an i4.
-
->
+  
+   ! integer :: num_pes??
    integer(i8)                  :: num_vars 
    integer                      :: num_copies, my_num_copies, my_num_vars
    integer,        allocatable  :: my_copies(:)
@@ -759,7 +759,8 @@ type (ensemble_type),  intent(inout)  :: ens_handle
 
 integer :: num_per_pe_below, num_left_over, i
 
-ens_handle%num_pes = task_count()
+!ens_handle%num_pes = task_count()
+num_pes = task_count()
 
 ! Option 1: Maximum separation for both vars and copies
 ! Compute the total number of copies I'll get for var complete

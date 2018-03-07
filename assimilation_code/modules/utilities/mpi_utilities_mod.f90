@@ -7,7 +7,7 @@
 
 !> A collection of interfaces to the MPI (Message Passing Interface)
 !> multi-processor communication library routines.
-!>
+!> 
 !> All MPI routines are called from here.  There is a companion
 !> file which has the same module name and entry points but all
 !> routines are stubs.  This allows a single-task version of the
@@ -22,8 +22,7 @@ use utilities_mod, only : register_module, error_handler, &
                           set_output, set_tasknum, initialize_utilities,     &
                           finalize_utilities,                                &
                           nmlfileunit, do_output, do_nml_file, do_nml_term,  &
-                          find_namelist_in_file, check_namelist_read
-
+                             find_namelist_in_file, check_namelist_read
 use time_manager_mod, only : time_type, get_time, set_time
 
 ! BUILD TIP 1
@@ -116,12 +115,14 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-logical :: module_initialized   = .false.
+logical :: module_initialized = .false.
 
-character(len = 129) :: saved_progname = ''
-character(len = 129) :: shell_name = ''   ! if needed, add ksh, tcsh, bash, etc
+character(len = 256) :: saved_progname = ''
+character(len = 256) :: shell_name = ''   ! if needed, add ksh, tcsh, bash, etc
 integer :: head_task = 0         ! def 0, but N-1 if reverse_task_layout true
 logical :: print4status = .true. ! minimal messages for async4 handshake
+
+logical :: given_communicator = .false.   ! if communicator passed in, use it
 
 character(len = 256) :: errstring, errstring1
 
@@ -131,17 +132,21 @@ character(len = 256) :: errstring, errstring1
 integer, parameter :: PACKLIMIT1 = 8
 integer, parameter :: PACKLIMIT2 = 512
 
-! also for broadcasts, make sure message size is not too large.  if so,
-! split a single request into two or more broadcasts.  i know 2G is really
-! 2 * 1024 * 1024 * 1024, but err on the conservative side here.
+! also for broadcasts, make sure message size is not too large.  the MPI
+! standard has a max limit on the number of items in a single message
+! (independent of item byte count).  if larger, split the request into
+! multiples, each less than the limit.  the current standard is 2G, but 
+! be a little conservative and use 2 billion and not 2**31.
 integer, parameter :: BCAST_MAXSIZE = 2 * 1000 * 1000 * 1000
 
-! option for simple send/recvs to limit max single message size.
-! split a single request into two or more broadcasts.  i know 2G is really
-! 2 * 1024 * 1024 * 1024, but err on the conservative side here.
+! for send/receive make sure message size is not too large.  the MPI
+! standard has a max limit on the number of items in a single message
+! (independent of item byte count).  if larger, split the request into
+! multiples, each less than the limit.  the current standard is 2G, but
+! be a little conservative and use 2 billion and not 2**31.
 integer, parameter :: SNDRCV_MAXSIZE = 2 * 1000 * 1000 * 1000
 
-! this turns on trace messages for most MPI communications
+! this turns on trace messages for most MPI communications 
 logical :: verbose        = .false.   ! very very very verbose, use with care
 logical :: async2_verbose = .false.   ! messages only for system() in async2
 logical :: async4_verbose = .false.   ! messages only for block/restart async4
@@ -180,10 +185,18 @@ contains
 ! mpi cover routines
 !-----------------------------------------------------------------------------
 
-subroutine initialize_mpi_utilities(progname, alternatename)
- character(len=*), intent(in), optional :: progname
- character(len=*), intent(in), optional :: alternatename
+!> Initialize MPI and query it for global information.  Make a duplicate
+!> communicator so that any user code which wants to call MPI will not 
+!> interfere with any outstanding asynchronous requests, accidental tag
+!> matches, etc.  This routine must be called before any other routine in
+!> this file, and it should not be called more than once (but it does have
+!> defensive code in case that happens.)
 
+subroutine initialize_mpi_utilities(progname, alternatename, communicator)
+
+character(len=*), intent(in), optional :: progname
+character(len=*), intent(in), optional :: alternatename
+integer,          intent(in), optional :: communicator
 
 ! Initialize MPI and query it for global information.  Make a duplicate
 ! communicator so that any user code which wants to call MPI will not 
@@ -209,28 +222,33 @@ endif
 errcode = -999 
 call MPI_Initialized(already, errcode)
 if (errcode /= MPI_SUCCESS) then
-   write(*, *) 'MPI_Initialized returned error code ', errcode
+   write(*, *) 'initialize_mpi_utilities: MPI_Initialized returned error code ', errcode
    call exit(-99)
 endif
 if (.not.already) then
    call MPI_Init(errcode)
    if (errcode /= MPI_SUCCESS) then
-      write(*, *) 'MPI_Init returned error code ', errcode
+      write(*, *) 'initialize_mpi_utilities: MPI_Init returned error code ', errcode
       call exit(-99)
    endif
 endif
-
-call MPI_Comm_rank(MPI_COMM_WORLD, myrank, errcode)
-if (errcode /= MPI_SUCCESS) then
-   write(*, *) 'MPI_Comm_rank returned error code ', errcode
-   call exit(-99)
+   
+if (.not. present(communicator)) then
+   ! give this a temporary initial value, in case we call the abort code.
+   ! later down, we will dup the world comm and use a private comm for
+   ! our communication.
+   my_local_comm = MPI_COMM_WORLD
+else
+   my_local_comm = communicator
+   given_communicator = .true.
 endif
 
-! give this a temporary initial value, in case we call the abort code.
-! later down, we will dup the world comm and use a private comm for
-! our communication.
-my_local_comm = MPI_COMM_WORLD
-
+call MPI_Comm_rank(my_local_comm, myrank, errcode)
+if (errcode /= MPI_SUCCESS) then
+   write(*, *) 'initialize_mpi_utilities: MPI_Comm_rank returned error code ', errcode
+   call exit(-99)
+endif
+   
 ! pass the arguments through so the utilities can log the program name
 ! only PE0 gets to output, whenever possible.
 if (myrank == 0) then
@@ -275,7 +293,7 @@ if (do_nml_term()) write(     *     , nml=mpi_utilities_nml)
 ! duplicate the world communicator to isolate us from any other user
 ! calls to MPI.  All subsequent mpi calls here will use the local communicator
 ! and not the global world comm.
-if (create_local_comm) then
+if (.not. given_communicator .and. create_local_comm) then
    call MPI_Comm_dup(MPI_COMM_WORLD, my_local_comm, errcode)
    if (errcode /= MPI_SUCCESS) then
       write(errstring, '(a,i8)') 'MPI_Comm_dup returned error code ', errcode
@@ -355,7 +373,7 @@ else
 endif
 
 ! MPI successfully initialized.  Log for the record how many tasks.
-if (verbose) write(*,*) "PE", myrank, ": MPI successfully initialized"
+if (verbose) write(*,*) "PE", myrank, ": initialize_mpi_utilities: MPI successfully initialized"
 
 if (myrank == 0) then
    write(errstring, *) 'Running with ', total_tasks, ' MPI processes.'
@@ -366,15 +384,16 @@ end subroutine initialize_mpi_utilities
 
 !-----------------------------------------------------------------------------
 
-subroutine finalize_mpi_utilities(callfinalize, async)
- logical, intent(in), optional :: callfinalize
- integer, intent(in), optional :: async
+!> Shut down MPI cleanly.  This must be done before the program exits; on
+!> some implementations of MPI the final I/O flushes are not done until this
+!> is called.  The optional argument can prevent us from calling MPI_Finalize,
+!> so that user code can continue to use MPI after this returns.  Calling other
+!> routines in this file after calling finalize will invalidate your warranty.
 
-! Shut down MPI cleanly.  This must be done before the program exits; on
-! some implementations of MPI the final I/O flushes are not done until this
-! is called.  The optional argument can prevent us from calling MPI_Finalize,
-! so that user code can continue to use MPI after this returns.  Calling other
-! routines in this file after calling finalize will invalidate your warranty.
+subroutine finalize_mpi_utilities(callfinalize, async)
+
+logical, intent(in), optional :: callfinalize
+integer, intent(in), optional :: async
 
 integer :: errcode
 logical :: dofinalize
@@ -390,6 +409,8 @@ if (present(async)) then
 endif
 
 ! close the log files and write a timestamp
+! NOTE: cannot call the normal error handler after this
+! because it is going to try to write to the closed log file.
 if (saved_progname /= '') then
    call finalize_utilities(saved_progname)
 else
@@ -402,23 +423,27 @@ endif
 ! close down at the same time.
 call task_sync()
 
-! Release the private communicator we created at init time.
-if (my_local_comm /= MPI_COMM_WORLD) then
-   call MPI_Comm_free(my_local_comm, errcode)
-   if (errcode /= MPI_SUCCESS) then
-      write(errstring, '(a,i8)') 'MPI_Comm_free returned error code ', errcode
-      call error_handler(E_ERR,'finalize_mpi_utilities', errstring, source, revision, revdate)
-   endif
-   my_local_comm = MPI_COMM_WORLD
-endif
+if (.not. given_communicator) then
 
-! If the optional argument is not given, or is given and is true, 
-! shut down mpi.  Only if the argument is specified and is false do we
-! skip the finalization.
-if (.not.present(callfinalize)) then
-   dofinalize = .TRUE.
+   ! Release the private communicator we created at init time.
+   if (my_local_comm /= MPI_COMM_WORLD) then
+      call MPI_Comm_free(my_local_comm, errcode)
+      if (errcode /= MPI_SUCCESS) then
+         write(*, '(a,i8)') 'finalize_mpi_utilities: MPI_Comm_free returned error code ', errcode
+         call exit(-99)
+      endif
+   endif
+
+   ! If the optional argument is not given, or is given and is true, 
+   ! shut down mpi.  Only if the argument is specified and is false do we
+   ! skip the finalization.
+   if (.not.present(callfinalize)) then
+      dofinalize = .true.
+   else
+      dofinalize = callfinalize
+   endif
 else
-   dofinalize = callfinalize
+   dofinalize = .false.
 endif
 
 ! Normally we shut down MPI here.  If the user tells us not to shut down MPI
@@ -427,9 +452,11 @@ if (dofinalize) then
    if (verbose) write(*,*) "PE", myrank, ": MPI finalize being called now"
    call MPI_Finalize(errcode)
    if (errcode /= MPI_SUCCESS) then
-      write(errstring, '(a,i8)') 'MPI_Finalize returned error code ', errcode
-      call error_handler(E_ERR,'finalize_mpi_utilities', errstring, source, revision, revdate)
+      write(*, '(a,i8)') 'finalize_mpi_utilities: MPI_Finalize returned error code ', errcode
+      call exit(-99)
    endif
+else
+   if (verbose) write(*,*) "PE", myrank, ": finalize_mpi_utilities called without shutting down MPI"
 endif
 
 ! NO I/O after calling MPI_Finalize.  on some MPI implementations
@@ -440,10 +467,10 @@ end subroutine finalize_mpi_utilities
 
 !-----------------------------------------------------------------------------
 
-function task_count()
+!> Return the total number of MPI tasks.  e.g. if the number of tasks is 4,
+!> it returns 4.  (The actual task numbers are 0-3.)
 
-! Return the total number of MPI tasks.  e.g. if the number of tasks is 4,
-! it returns 4.  (The actual task numbers are 0-3.)
+function task_count()
 
 integer :: task_count
 
@@ -459,10 +486,10 @@ end function task_count
 
 !-----------------------------------------------------------------------------
 
-function my_task_id()
+!> Return my unique task id.  Values run from 0 to N-1 (where N is the
+!> total number of MPI tasks.
 
-! Return my unique task id.  Values run from 0 to N-1 (where N is the
-! total number of MPI tasks.
+function my_task_id()
 
 integer :: my_task_id
 
@@ -478,10 +505,10 @@ end function my_task_id
 
 !-----------------------------------------------------------------------------
 
-subroutine task_sync()
+!> Synchronize all tasks.  This subroutine does not return until all tasks
+!> execute this line of code.
 
-! Synchronize all tasks.  This subroutine does not return until all tasks
-! execute this line of code.
+subroutine task_sync()
 
 integer :: errcode
 
@@ -504,19 +531,20 @@ end subroutine task_sync
 
 !-----------------------------------------------------------------------------
 
+!> Send the srcarray to the destination id.
+!> If time is specified, it is also sent in a separate communications call.  
+!> This is a synchronous call; it will not return until the destination has 
+!> called receive to accept the data.  If the send_to/receive_from calls are 
+!> not paired correctly the code will hang.
+
 subroutine send_to(dest_id, srcarray, time, label)
- integer, intent(in) :: dest_id
- real(r8), intent(in) :: srcarray(:)
- type(time_type), intent(in), optional :: time
- character(len=*), intent(in), optional :: label
 
-! Send the srcarray to the destination id.
-! If time is specified, it is also sent in a separate communications call.  
-! This is a synchronous call; it will not return until the destination has 
-! called receive to accept the data.  If the send_to/receive_from calls are 
-! not paired correctly the code will hang.
+integer,          intent(in)           :: dest_id
+real(r8),         intent(in)           :: srcarray(:)
+type(time_type),  intent(in), optional :: time
+character(len=*), intent(in), optional :: label
 
-integer :: tag, errcode
+integer :: i, tag, errcode
 integer :: itime(2)
 integer :: itemcount, offset, nextsize
 real(r8), allocatable :: tmpdata(:)
@@ -557,9 +585,9 @@ if (itemcount <= SNDRCV_MAXSIZE) then
       call MPI_Ssend(srcarray, itemcount, datasize, dest_id, tag, &
                     my_local_comm, errcode)
    else
-      ! this copy should be unneeded, but on the intel fortran 9.0 compiler and mpich
+   ! this copy should be unneeded, but on the intel fortran 9.0 compiler and mpich
       ! on one platform, calling this subroutine with an array section resulted in some
-      ! apparently random memory corruption.  making a copy of the data into a local,
+   ! apparently random memory corruption.  making a copy of the data into a local,
       ! contiguous buffer before send and receive fixed the corruption.  this shouldn't
       ! have been needed, and is a performance/memory sink.
 
@@ -571,32 +599,33 @@ else
    ! there are a few places in the code where we send/receive a full state vector.
    ! as these get really large, they may exceed the limits of the MPI library.
    ! break large messages up into smaller chunks if needed.  
-   offset = 1
-   do while (offset <= itemcount)
-      if (itemcount-offset >= SNDRCV_MAXSIZE) then
-         nextsize = SNDRCV_MAXSIZE 
-      else if (itemcount-offset == 0) then
-         nextsize = 1
-      else
-         nextsize = itemcount - offset
-      endif
+      offset = 1
+      do while (offset <= itemcount)
+         if (itemcount-offset >= SNDRCV_MAXSIZE) then
+            nextsize = SNDRCV_MAXSIZE 
+         else if (itemcount-offset == 0) then
+            nextsize = 1
+         else
+            nextsize = itemcount - offset
+         endif
 
-      if (verbose) write(*,*) 'sending array items ', offset, ' thru ' , offset + nextsize - 1
-
+         if (verbose) write(*,*) 'sending array items ', offset, ' thru ' , offset + nextsize - 1
+   
       if (.not. make_copy_before_sendrecv) then
          call MPI_Ssend(srcarray(offset:offset+nextsize-1), nextsize, datasize, dest_id, tag, &
-                        my_local_comm, errcode)
+              my_local_comm, errcode)
       else
          tmpdata = srcarray(offset:offset+nextsize-1)
          call MPI_Ssend(tmpdata, nextsize, datasize, dest_id, tag, &
                         my_local_comm, errcode)
       endif
-      if (errcode /= MPI_SUCCESS) then
-         write(errstring, '(a,i8)') 'MPI_Ssend returned error code ', errcode
-         call error_handler(E_ERR,'send_to', errstring, source, revision, revdate)
-      endif
-      offset = offset + nextsize
-   enddo
+         if (errcode /= MPI_SUCCESS) then
+            write(errstring, '(a,i8)') 'MPI_Ssend returned error code ', errcode
+            call error_handler(E_ERR,'send_to', errstring, source, revision, revdate)
+         endif
+
+         offset = offset + nextsize
+      end do 
 endif
 
 if (errcode /= MPI_SUCCESS) then
@@ -626,19 +655,20 @@ end subroutine send_to
 
 !-----------------------------------------------------------------------------
 
+!> Receive data into the destination array from the src task.
+!> If time is specified, it is received in a separate communications call.  
+!> This is a synchronous call; it will not return until the source has 
+!> sent the data.  If the send_to/receive_from calls are not paired correctly 
+!> the code will hang.
+
 subroutine receive_from(src_id, destarray, time, label)
- integer, intent(in) :: src_id
- real(r8), intent(inout) :: destarray(:)
- type(time_type), intent(out), optional :: time
- character(len=*), intent(in), optional :: label
 
-! Receive data into the destination array from the src task.
-! If time is specified, it is received in a separate communications call.  
-! This is a synchronous call; it will not return until the source has 
-! sent the data.  If the send_to/receive_from calls are not paired correctly 
-! the code will hang.
+integer,          intent(in)            :: src_id
+real(r8),         intent(inout)         :: destarray(:)
+type(time_type),  intent(out), optional :: time
+character(len=*), intent(in),  optional :: label
 
-integer :: tag, errcode
+integer :: i, tag, errcode
 integer :: itime(2)
 integer :: status(MPI_STATUS_SIZE)
 integer :: itemcount, offset, nextsize
@@ -685,40 +715,41 @@ if (itemcount <= SNDRCV_MAXSIZE) then
       ! contiguous buffer before send and receive fixed the corruption.  this shouldn't
       ! have been needed, and is a performance/memory sink.
 
-      call MPI_Recv(tmpdata, itemcount, datasize, src_id, MPI_ANY_TAG, &
-                    my_local_comm, status, errcode)
+   call MPI_Recv(tmpdata, itemcount, datasize, src_id, MPI_ANY_TAG, &
+                 my_local_comm, status, errcode)
       destarray = tmpdata
    endif
 else
    ! there are a few places in the code where we send/receive a full state vector.
    ! as these get really large, they may exceed the limits of the MPI library.
    ! break large messages up into smaller chunks if needed.  
-   offset = 1
-   do while (offset <= itemcount)
-      if (itemcount-offset >= SNDRCV_MAXSIZE) then
-         nextsize = SNDRCV_MAXSIZE 
-      else if (itemcount-offset == 0) then
-         nextsize = 1
-      else
-         nextsize = itemcount - offset
-      endif
-
-      if (verbose) write(*,*) 'recving array items ', offset, ' thru ' , offset + nextsize - 1
-
+      offset = 1
+      do while (offset <= itemcount)
+         if (itemcount-offset >= SNDRCV_MAXSIZE) then
+            nextsize = SNDRCV_MAXSIZE 
+         else if (itemcount-offset == 0) then
+            nextsize = 1
+         else
+            nextsize = itemcount - offset
+         endif
+   
+         if (verbose) write(*,*) 'recving array items ', offset, ' thru ' , offset + nextsize - 1
+   
       if (.not. make_copy_before_sendrecv) then
          call MPI_Recv(destarray(offset:offset+nextsize-1), nextsize, datasize, src_id, MPI_ANY_TAG, &
-                       my_local_comm, status, errcode)
+              my_local_comm, status, errcode)
       else
          call MPI_Recv(tmpdata, itemcount, datasize, src_id, MPI_ANY_TAG, &
                        my_local_comm, status, errcode)
          destarray(offset:offset+nextsize-1) = tmpdata
       endif
-      if (errcode /= MPI_SUCCESS) then
-         write(errstring, '(a,i8)') 'MPI_Recv returned error code ', errcode
-         call error_handler(E_ERR,'receive_from', errstring, source, revision, revdate)
-      endif
-      offset = offset + nextsize
-   end do
+         if (errcode /= MPI_SUCCESS) then
+            write(errstring, '(a,i8)') 'MPI_Recv returned error code ', errcode
+            call error_handler(E_ERR,'receive_from', errstring, source, revision, revdate)
+         endif
+
+         offset = offset + nextsize
+      end do
 endif
 
 if (errcode /= MPI_SUCCESS) then
@@ -757,36 +788,18 @@ end subroutine receive_from
 
 
 !-----------------------------------------------------------------------------
-! TODO: do i need to overload this for both integer and real?
-!       do i need to handle 1D, 2D, 3D inputs?
+! NOTE: so far we only seem to be sending real data, not integer, and 1D arrays.
+!       this could be overloaded to send 2D arrays, and ints if needed.
 
-subroutine transpose_array
-
-! not implemented here yet.  will have arguments -- several of them.
-
-if ( .not. module_initialized ) then
-   write(errstring, *) 'initialize_mpi_utilities() must be called first'
-   call error_handler(E_ERR,'transpose_array', errstring, source, revision, revdate)
-endif
-
-write(errstring, *) 'not implemented yet'
-call error_handler(E_ERR,'transpose_array', errstring, source, revision, revdate)
-
-end subroutine transpose_array
-
-
-!-----------------------------------------------------------------------------
-! TODO: do i need to overload this for both integer and real?
-!       do i need to handle 2D inputs?
+!> The data array values on the root task will be broadcast to every other
+!> task.  When this routine returns, all tasks will have the contents of the
+!> root array in their own arrays.  Thus 'array' is intent(in) on root, and
+!> intent(out) on all other tasks.
 
 subroutine array_broadcast(array, root)
- real(r8), intent(inout) :: array(:)
- integer, intent(in) :: root
 
-! The data array values on the root task will be broadcast to every other
-! task.  When this routine returns, all tasks will have the contents of the
-! root array in their own arrays.  Thus 'array' is intent(in) on root, and
-! intent(out) on all other tasks.
+real(r8), intent(inout) :: array(:)
+integer,  intent(in)    :: root
 
 integer :: itemcount, errcode, offset, nextsize
 real(r8), allocatable :: tmpdata(:)
@@ -839,7 +852,7 @@ else
 
       ! test this - are array sections going to cause array temps to be created?
       if (.not. make_copy_before_broadcast) then
-         call MPI_Bcast(array(offset:offset+nextsize-1), nextsize, datasize, root, my_local_comm, errcode)
+      call MPI_Bcast(array(offset:offset+nextsize-1), nextsize, datasize, root, my_local_comm, errcode)
       else
          if (my_task_id() == root) tmpdata = array(offset:offset+nextsize-1)
          call MPI_Bcast(tmpdata, nextsize, datasize, root, my_local_comm, errcode)
@@ -849,145 +862,28 @@ else
          write(errstring, '(a,i8)') 'MPI_Bcast returned error code ', errcode
          call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
       endif
+
       offset = offset + nextsize
    end do
 endif
 
-if (errcode /= MPI_SUCCESS) then
-   write(errstring, '(a,i8)') 'MPI_Bcast returned error code ', errcode
-   call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-endif
+   if (errcode /= MPI_SUCCESS) then
+      write(errstring, '(a,i8)') 'MPI_Bcast returned error code ', errcode
+      call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
+   endif
 
 if (make_copy_before_broadcast) deallocate(tmpdata)
-
+   
 end subroutine array_broadcast
-
-
-!-----------------------------------------------------------------------------
-! TODO: do i need to overload this for both integer and real?
-!       do i need to handle 2D inputs?
-
-subroutine array_distribute(srcarray, root, dstarray, dstcount, how, which)
- real(r8), intent(in) :: srcarray(:)
- integer, intent(in) :: root
- real(r8), intent(out) :: dstarray(:)
- integer, intent(out) :: dstcount
- integer, intent(in) :: how
- integer, intent(out) :: which(:)
-
-! 'srcarray' on the root task will be distributed across all the tasks
-! into 'dstarray'.  dstarray must be large enough to hold each task's share
-! of the data.  The actual number of values returned on each task will be
-! passed back in the 'count' argument.  'how' is a flag to select how to
-! distribute the data (round-robin, contiguous chunks, etc).  'which' is an
-! integer index array which lists which of the original values were selected
-! and put into 'dstarray'.
-
-real(r8), allocatable :: localchunk(:)
-integer :: srccount, leftover
-integer :: i, tag, errcode
-logical :: iamroot
-integer :: status(MPI_STATUS_SIZE)
-
-if ( .not. module_initialized ) then
-   write(errstring, *) 'initialize_mpi_utilities() must be called first'
-   call error_handler(E_ERR,'array_distribute', errstring, source, revision, revdate)
-endif
-
-! simple idiotproofing
-if ((root < 0) .or. (root >= total_tasks)) then
-   write(errstring, '(a,i8,a,i8)') "root task id ", root, &
-                                   "must be >= 0 and < ", total_tasks
-   call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-endif
-
-iamroot = (root == myrank)
-tag = 1
-
-srccount = size(srcarray)
-
-! TODO: right now this code does contig chunks only
-! TODO: it should select on the 'how' argument
-dstcount = srccount / total_tasks
-leftover = srccount - (dstcount * total_tasks)
-if (myrank == total_tasks-1) dstcount = dstcount + leftover
-
-
-! idiotproofing, continued...
-if (size(dstarray) < dstcount) then
-   write(errstring, '(a,i8,a,i8)') "size of dstarray is", size(dstarray), & 
-                      " but must be >= ", dstcount
-   call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-endif
-if (size(which) < dstcount) then
-   write(errstring, '(a,i8,a,i8)') "size of which is", size(which), & 
-                      " but must be >= ", dstcount
-   call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-endif
-
-! TODO: this code is separate from the 'dstcount' computation because we
-! need to test to be sure the user has passed us in arrays large enough to
-! hold the data, but then this section needs to have a select (how) and set
-! the corresponding index numbers accordingly.
-which(1:dstcount) = (/ (i, i= myrank *dstcount, (myrank+1)*dstcount - 1) /)
-if (size(which) > dstcount) which(dstcount+1:) = -1
-   
-
-if (.not.iamroot) then
-
-   ! my task is receiving data.
-   call MPI_Recv(dstarray, dstcount, datasize, root, MPI_ANY_TAG, &
-                 my_local_comm, status, errcode)
-   if (errcode /= MPI_SUCCESS) then
-      write(errstring, '(a,i8)') 'MPI_Recv returned error code ', errcode
-      call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-   endif
-
-else
-   ! my task must send to everyone else and copy to myself.
-   allocate(localchunk(dstcount), stat=errcode)  
-   if (errcode /= 0) then
-      write(errstring, *) 'allocation error of allocatable array'
-      call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-   endif
-
-   do i=0, total_tasks-1
-      ! copy correct data from srcarray to localchunk for each destination
-      if (i == myrank) then
-         ! this is my task, so do a copy from localchunk to dstarray
-         dstarray(1:dstcount) = localchunk(1:dstcount)
-      else
-         ! call MPI to send the data to the remote task
-         call MPI_Ssend(localchunk, dstcount, datasize, i, tag, &
-                        my_local_comm, errcode)
-         if (errcode /= MPI_SUCCESS) then
-            write(errstring, '(a,i8)') 'MPI_Ssend returned error code ', errcode
-            call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-         endif
-      endif
-      tag = tag + 1
-   enddo
-
-   deallocate(localchunk, stat=errcode)  
-   if (errcode /= 0) then
-      write(errstring, *) 'deallocation error of allocatable array'
-      call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-   endif
-endif
-   
-! set any additional space which wasn't filled with zeros.
-if (size(dstarray) > dstcount) dstarray(dstcount+1:) = 0.0
-
-end subroutine array_distribute
 
 !-----------------------------------------------------------------------------
 ! DART-specific cover utilities
 !-----------------------------------------------------------------------------
 
-function iam_task0()
+!> Return .TRUE. if my local task id is 0, .FALSE. otherwise.
+!> (Task numbers in MPI start at 0, contrary to the rules of polite fortran.)
 
-! Return .TRUE. if my local task id is 0, .FALSE. otherwise.
-! (Task numbers in MPI start at 0, contrary to the rules of polite fortran.)
+function iam_task0()
 
 logical :: iam_task0
 
@@ -1001,23 +897,24 @@ iam_task0 = (myrank == 0)
 end function iam_task0
 
 !-----------------------------------------------------------------------------
+!> cover routine for array broadcast.  one additional sanity check -- make 
+!> sure the 'from' matches my local task id.  also, these arrays are
+!> intent(in) here, but they call a routine which is intent(inout) so they
+!> must be the same here.
+!>
+!> this must be paired with the same number of broadcast_recv()s on all 
+!> other tasks.  it will not return until all tasks in the communications 
+!> group have made the call.
+
 subroutine broadcast_send(from, array1, array2, array3, array4, array5, &
                           scalar1, scalar2, scalar3, scalar4, scalar5)
- integer, intent(in) :: from
- ! really only intent(in) here, but must match array_broadcast() call.
- real(r8), intent(inout) :: array1(:)
- real(r8), intent(inout), optional :: array2(:), array3(:), array4(:), array5(:)
- real(r8), intent(inout), optional :: scalar1, scalar2, scalar3, scalar4, scalar5
 
-! this must be paired with the same number of broadcast_recv()s on all 
-! other tasks.  it will not return until all tasks in the communications 
-! group have made the call.
+integer,  intent(in)              :: from
+! arrays are really only intent(in) here, but must match array_broadcast() call.
+real(r8), intent(inout)           :: array1(:)
+real(r8), intent(inout), optional :: array2(:), array3(:), array4(:), array5(:)
+real(r8), intent(inout), optional :: scalar1, scalar2, scalar3, scalar4, scalar5
 
-! cover routine for array broadcast.  one additional sanity check -- make 
-! sure the 'from' matches my local task id.  also, these arrays are
-! intent(in) here, but they call a routine which is intent(inout) so they
-! must be the same here.
- 
 real(r8) :: packbuf1(PACKLIMIT1), packbuf2(PACKLIMIT2)
 real(r8) :: local(5)
 logical  :: doscalar, morethanone
@@ -1077,23 +974,26 @@ endif
 end subroutine broadcast_send
 
 !-----------------------------------------------------------------------------
+!> cover routine for array broadcast.  one additional sanity check -- make 
+!> sure the 'from' is not the same as my local task id.  these arrays are
+!> intent(out) here, but they call a routine which is intent(inout) so they
+!> must be the same here.
+!>
+!> this must be paired with a single broadcast_send() on one other task, and
+!> broadcast_recv() on all other tasks, and it must match exactly the number 
+!> of args in the sending call.
+!> it will not return until all tasks in the communications group have
+!> made the call.
+
+
 subroutine broadcast_recv(from, array1, array2, array3, array4, array5, &
                           scalar1, scalar2, scalar3, scalar4, scalar5)
- integer, intent(in) :: from
- ! really only intent(out) here, but must match array_broadcast() call.
- real(r8), intent(inout) :: array1(:)
- real(r8), intent(inout), optional :: array2(:), array3(:), array4(:), array5(:)
- real(r8), intent(inout), optional :: scalar1, scalar2, scalar3, scalar4, scalar5
 
-! this must be paired with broadcast_send() on all other tasks, and it must 
-! match exactly the number of args in the sending call.
-! it will not return until all tasks in the communications group have
-! made the call.
-
-! cover routine for array broadcast.  one additional sanity check -- make 
-! sure the 'from' is not the same as my local task id.  these arrays are
-! intent(out) here, but they call a routine which is intent(inout) so they
-! must be the same here.
+integer,  intent(in)              :: from
+! arrays are really only intent(out) here, but must match array_broadcast() call.
+real(r8), intent(inout)           :: array1(:)
+real(r8), intent(inout), optional :: array2(:), array3(:), array4(:), array5(:)
+real(r8), intent(inout), optional :: scalar1, scalar2, scalar3, scalar4, scalar5
 
 real(r8) :: packbuf1(PACKLIMIT1), packbuf2(PACKLIMIT2)
 real(r8) :: local(5)
@@ -1154,18 +1054,19 @@ endif
 end subroutine broadcast_recv
 
 !-----------------------------------------------------------------------------
+!> figure out how many items are in the specified arrays, total.
+!> also note if there's more than a single array (array1) to send,
+!> and if there are any scalars specified.
+
 subroutine countup(array1, array2, array3, array4, array5, &
                    scalar1, scalar2, scalar3, scalar4, scalar5, &
                    numitems, morethanone, doscalar)
- real(r8), intent(in)           :: array1(:)
- real(r8), intent(in), optional :: array2(:), array3(:), array4(:), array5(:)
- real(r8), intent(in), optional :: scalar1, scalar2, scalar3, scalar4, scalar5
- integer,  intent(out)          :: numitems
- logical,  intent(out)          :: morethanone, doscalar
 
-! figure out how many items are in the specified arrays, total.
-! also note if there's more than a single array (array1) to send,
-! and if there are any scalars specified.
+real(r8), intent(in)           :: array1(:)
+real(r8), intent(in), optional :: array2(:), array3(:), array4(:), array5(:)
+real(r8), intent(in), optional :: scalar1, scalar2, scalar3, scalar4, scalar5
+integer,  intent(out)          :: numitems
+logical,  intent(out)          :: morethanone, doscalar
 
 morethanone = .false.
 numitems = size(array1)
@@ -1215,13 +1116,17 @@ endif
 end subroutine countup
 
 !-----------------------------------------------------------------------------
+
+!> pack multiple small arrays into a single buffer before sending.
+
 subroutine packit(buf, array1, array2, array3, array4, array5, doscalar, &
                        scalar1, scalar2, scalar3, scalar4, scalar5)
- real(r8), intent(out)          :: buf(:)
- real(r8), intent(in)           :: array1(:)
- real(r8), intent(in), optional :: array2(:), array3(:), array4(:), array5(:)
- logical,  intent(in)           :: doscalar
- real(r8), intent(in), optional :: scalar1, scalar2, scalar3, scalar4, scalar5
+
+real(r8), intent(out)          :: buf(:)
+real(r8), intent(in)           :: array1(:)
+real(r8), intent(in), optional :: array2(:), array3(:), array4(:), array5(:)
+logical,  intent(in)           :: doscalar
+real(r8), intent(in), optional :: scalar1, scalar2, scalar3, scalar4, scalar5
 
 integer :: sindex, eindex
 
@@ -1284,13 +1189,17 @@ endif
 end subroutine packit
 
 !-----------------------------------------------------------------------------
+
+!> unpack multiple small arrays from a single buffer after receiving.
+
 subroutine unpackit(buf, array1, array2, array3, array4, array5, doscalar, &
                          scalar1, scalar2, scalar3, scalar4, scalar5)
- real(r8), intent(in)            :: buf(:)
- real(r8), intent(out)           :: array1(:)
- real(r8), intent(out), optional :: array2(:), array3(:), array4(:), array5(:)
- logical,  intent(in)            :: doscalar
- real(r8), intent(out), optional :: scalar1, scalar2, scalar3, scalar4, scalar5
+
+real(r8), intent(in)            :: buf(:)
+real(r8), intent(out)           :: array1(:)
+real(r8), intent(out), optional :: array2(:), array3(:), array4(:), array5(:)
+logical,  intent(in)            :: doscalar
+real(r8), intent(out), optional :: scalar1, scalar2, scalar3, scalar4, scalar5
 
 integer :: sindex, eindex
 
@@ -1353,9 +1262,13 @@ endif
 end subroutine unpackit
 
 !-----------------------------------------------------------------------------
+
+!> for any values specified, pack into a single array
+
 subroutine packscalar(local, scalar1, scalar2, scalar3, scalar4, scalar5)
- real(r8), intent(out)          :: local(5) 
- real(r8), intent(in), optional :: scalar1, scalar2, scalar3, scalar4, scalar5
+
+real(r8), intent(out)          :: local(5) 
+real(r8), intent(in), optional :: scalar1, scalar2, scalar3, scalar4, scalar5
 
 local = 0.0_r8
       
@@ -1368,9 +1281,13 @@ if (present(scalar5)) local(5) = scalar5
 end subroutine packscalar
    
 !-----------------------------------------------------------------------------
+
+!> for any values specified, unpack from a single array
+
 subroutine unpackscalar(local, scalar1, scalar2, scalar3, scalar4, scalar5)
- real(r8), intent(in)            :: local(5) 
- real(r8), intent(out), optional :: scalar1, scalar2, scalar3, scalar4, scalar5
+
+real(r8), intent(in)            :: local(5) 
+real(r8), intent(out), optional :: scalar1, scalar2, scalar3, scalar4, scalar5
 
 if (present(scalar1)) scalar1 = local(1)
 if (present(scalar2)) scalar2 = local(2)
@@ -1405,11 +1322,11 @@ end subroutine unpackscalar
 !
 !-----------------------------------------------------------------------------
 subroutine sum_across_tasks_int4(addend, sum)
- integer, intent(in) :: addend
- integer, intent(out) :: sum
+integer, intent(in) :: addend
+integer, intent(out) :: sum
 
- integer :: errcode
- integer :: localaddend(1), localsum(1)
+integer :: errcode
+integer :: localaddend(1), localsum(1)
 
 ! cover routine for MPI all-reduce
 
@@ -1494,22 +1411,24 @@ end subroutine sum_across_tasks_real
 
 
 !-----------------------------------------------------------------------------
-! pipe-related utilities
+! pipe-related utilities - used in 'async4' handshakes between mpi jobs
+! and scripting to allow filter and an mpi model to alternate execution.
 !-----------------------------------------------------------------------------
 
 !-----------------------------------------------------------------------------
+
+!> block by reading a named pipe file until some other task
+!> writes a string into it.  this ensures the task is not
+!> spinning and using CPU cycles, but is asleep waiting in
+!> the kernel.   one subtlety with this approach is that even
+!> though named pipes are created in the filesystem, they are
+!> implemented in the kernel, so on a multiprocessor machine
+!> the write into the pipe file must occur on the same PE as
+!> the reader is waiting.  see the 'wakeup_filter' program for
+!> the MPI job which spreads out on all the PEs for this job
+!> and writes into the file from the correct PE.
+
 subroutine block_task()
-
-! block by reading a named pipe file until some other task
-! writes a string into it.  this ensures the task is not
-! spinning and using CPU cycles, but is asleep waiting in
-! the kernel.   one subtlety with this approach is that even
-! though named pipes are created in the filesystem, they are
-! implemented in the kernel, so on a multiprocessor machine
-! the write into the pipe file must occur on the same PE as
-! the reader is waiting.  see the 'wakeup_filter' program for
-! the MPI job which spreads out on all the PEs for this job
-! and writes into the file from the correct PE.
 
 character(len = 32) :: fifo_name, filter_to_model, model_to_filter, non_pipe
 integer :: rc
@@ -1539,12 +1458,12 @@ if ((myrank == head_task) .and. separate_node_sync) then
 
    if (async4_verbose) then
       write(*,*)  'checking master task host'
-      rc = system('echo master task running on host `hostname`'//' '//char(0))
+      rc = shell_execute('echo master task running on host `hostname`')
       if (rc /= 0) write(*, *) 'system command returned nonzero rc, ', rc
    endif
 
    if (async4_verbose .or. print4status) write(*,*) 'MPI job telling script to advance model'
-   rc = system('echo advance > '//trim(non_pipe)//' '//char(0))
+   rc = shell_execute('echo advance > '//trim(non_pipe))
    if (async4_verbose .and. rc /= 0) write(*, *) 'system command returned nonzero rc, ', rc
 
 endif
@@ -1553,16 +1472,16 @@ if ((myrank == head_task) .and. .not. separate_node_sync) then
 
    if (async4_verbose) then
       write(*,*)  'checking master task host'
-      rc = system('echo master task running on host `hostname`'//' '//char(0))
+      rc = shell_execute('echo master task running on host `hostname`')
       if (rc /= 0) write(*, *) 'system command returned nonzero rc, ', rc
    endif
 
    if (async4_verbose .or. print4status) write(*,*) 'MPI job telling script to advance model'
-   rc = system('echo advance > '//trim(filter_to_model)//' '//char(0))
+   rc = shell_execute('echo advance > '//trim(filter_to_model))
    if (async4_verbose .and. rc /= 0) write(*, *) 'system command returned nonzero rc, ', rc
 
    if (async4_verbose) write(*,*) 'MPI job now waiting to read from lock file'
-   rc = system('cat < '//trim(model_to_filter)//'> /dev/null '//char(0))
+   rc = shell_execute('cat < '//trim(model_to_filter)//'> /dev/null')
    if (async4_verbose .and. rc /= 0) write(*, *) 'system command returned nonzero rc, ', rc
 
 else
@@ -1574,24 +1493,24 @@ else
    
    if (async4_verbose) then
       write(*,*)  'checking slave task host'
-      rc = system('echo '//trim(fifo_name)//' accessed from host `hostname`'//' '//char(0))
+      rc = shell_execute('echo '//trim(fifo_name)//' accessed from host `hostname`')
       if (rc /= 0) write(*, *) 'system command returned nonzero rc, ', rc
    endif
 
    if (async4_verbose) write(*,*) 'removing any previous lock file: '//trim(fifo_name)
-   rc = system('rm -f '//trim(fifo_name)//' '//char(0))
+   rc = shell_execute('rm -f '//trim(fifo_name))
    if (async4_verbose .and. rc /= 0) write(*, *) 'system command returned nonzero rc, ', rc
 
    if (async4_verbose) write(*,*) 'made fifo, named: '//trim(fifo_name)
-   rc = system('mkfifo '//trim(fifo_name)//' '//char(0))
+   rc = shell_execute('mkfifo '//trim(fifo_name))
    if (async4_verbose .and. rc /= 0) write(*, *) 'system command returned nonzero rc, ', rc
 
    if (async4_verbose) write(*,*) 'ready to read from lock file: '//trim(fifo_name)
-   rc = system('cat < '//trim(fifo_name)//'> /dev/null '//char(0))
+   rc = shell_execute('cat < '//trim(fifo_name)//'> /dev/null')
    if (async4_verbose .and. rc /= 0) write(*, *) 'system command returned nonzero rc, ', rc
 
    if (async4_verbose) write(*,*) 'got response, removing lock file: '//trim(fifo_name)
-   rc = system('rm -f '//trim(fifo_name)//' '//char(0))
+   rc = shell_execute('rm -f '//trim(fifo_name))
    if (async4_verbose .and. rc /= 0) write(*, *) 'system command returned nonzero rc, ', rc
 
 endif
@@ -1609,10 +1528,11 @@ call task_sync()
 end subroutine block_task
 
 !-----------------------------------------------------------------------------
-subroutine restart_task()
 
-! companion to block_task.  must be called by a different executable
-! and it writes into the named pipes to restart the waiting task.
+!> companion to block_task.  must be called by a different executable
+!> and it writes into the named pipes to restart the waiting task.
+
+subroutine restart_task()
 
 character(len = 32) :: fifo_name, model_to_filter
 integer :: rc
@@ -1639,12 +1559,12 @@ if (verbose) async4_verbose = .TRUE.
 if ((myrank == head_task) .and. .not. separate_node_sync) then
 
    if (async4_verbose) then
-      rc = system('echo master task running on host `hostname`'//' '//char(0))
+      rc = shell_execute('echo master task running on host `hostname`')
       if (rc /= 0) write(*, *) 'system command returned nonzero rc, ', rc
    endif
 
    if (async4_verbose .or. print4status) write(*,*) 'script telling MPI job ok to restart'
-   rc = system('echo restart > '//trim(model_to_filter)//' '//char(0))
+   rc = shell_execute('echo restart > '//trim(model_to_filter))
    if (async4_verbose .and. rc /= 0) write(*, *) 'system command returned nonzero rc, ', rc
 
 else
@@ -1655,12 +1575,12 @@ else
    write(fifo_name,"(a,i5.5)") "filter_lock", myrank
 
    if (async4_verbose) then
-      rc = system('echo '//trim(fifo_name)//' accessed from host `hostname`'//' '//char(0))
+      rc = shell_execute('echo '//trim(fifo_name)//' accessed from host `hostname`')
       if (rc /= 0) write(*, *) 'system command returned nonzero rc, ', rc
    endif
 
    if (async4_verbose) write(*,*) 'ready to write to lock file: '//trim(fifo_name)
-   rc = system('echo restart > '//trim(fifo_name)//' '//char(0))
+   rc = shell_execute('echo restart > '//trim(fifo_name))
    if (async4_verbose .and. rc /= 0) write(*, *) 'system command returned nonzero rc, ', rc
 
 endif
@@ -1668,10 +1588,14 @@ endif
 end subroutine restart_task
 
 !-----------------------------------------------------------------------------
-subroutine finished_task(async)
- integer, intent(in) :: async
 
-character(len = 32) :: filter_to_model, non_pipe
+!> must be called when filter is exiting so calling script knows the job is over.
+
+subroutine finished_task(async)
+
+integer, intent(in) :: async
+
+character(len = 32) :: fifo_name, filter_to_model, non_pipe
 integer :: rc
 
 if ( .not. module_initialized ) then
@@ -1692,9 +1616,9 @@ if (myrank == head_task) then
 
    if (print4status .or. verbose) write(*,*) 'MPI task telling script we are done'
    if (separate_node_sync) then
-      rc = system('echo finished > '//trim(non_pipe)//' '//char(0))
+      rc = shell_execute('echo finished > '//trim(non_pipe))
    else
-      rc = system('echo finished > '//trim(filter_to_model)//' '//char(0))
+      rc = shell_execute('echo finished > '//trim(filter_to_model))
    endif
 
    
@@ -1702,131 +1626,153 @@ endif
 
 end subroutine finished_task
 
+
 !-----------------------------------------------------------------------------
 ! general system util wrappers.
 !-----------------------------------------------------------------------------
+
+!> Use the system() command to execute a command string.
+!> Will wait for the command to complete and returns an
+!> error code unless you end the command with & to put
+!> it into background.   Function which returns the rc
+!> of the command, 0 being all is ok.
+!>
+!> allow code to test the theory that maybe the system call is
+!> not reentrant on some platforms.  if serialize is set and
+!> is true, do each call serially.
+
 function shell_execute(execute_string, serialize)
- character(len=*), intent(in) :: execute_string
- logical, intent(in), optional :: serialize
- integer :: shell_execute
 
-! Use the system() command to execute a command string.
-! Will wait for the command to complete and returns an
-! error code unless you end the command with & to put
-! it into background.   Function which returns the rc
-! of the command, 0 being all is ok.
-
-! allow code to test the theory that maybe the system call is
-! not reentrant on some platforms.  if serialize is set and
-! is true, do each call serially.
+character(len=*), intent(in)           :: execute_string
+logical,          intent(in), optional :: serialize
+integer                                :: shell_execute
 
 logical :: all_at_once
 integer :: errcode, dummy(1)
 integer :: status(MPI_STATUS_SIZE)
 
-   if (verbose) async2_verbose = .true.
+if (verbose) async2_verbose = .true.
 
-   ! default to everyone running concurrently, but if set and not true,
-   ! serialize the calls to system() so they do not step on each other.
-   if (present(serialize)) then
-      all_at_once = .not. serialize
-   else
-      all_at_once = .TRUE.
-   endif
+! default to everyone running concurrently, but if set and not true,
+! serialize the calls to system() so they do not step on each other.
+if (present(serialize)) then
+   all_at_once = .not. serialize
+else
+   all_at_once = .TRUE.
+endif
 
-   if (async2_verbose) write(*,*) "PE", myrank, ": system string is: ", trim(execute_string)
-   shell_execute = -1
+if (async2_verbose) write(*,*) "PE", myrank, ": system string is: ", trim(execute_string)
+shell_execute = -1
 
-   ! this is the normal (default) case
-   if (all_at_once) then
+! this is the normal (default) case
+if (all_at_once) then
 
-      ! all tasks call system at the same time
-      !shell_execute = system(trim(execute_string)//' '//char(0))
-      shell_execute = system(trim(shell_name)//' '//trim(execute_string)//' '//char(0))
-      if (async2_verbose) write(*,*) "PE", myrank, ": execution returns, rc = ", shell_execute
+   ! all tasks call system at the same time
+   call do_system(shell_name, execute_string, shell_execute)
+   if (async2_verbose) write(*,*) "PE", myrank, ": execution returns, rc = ", shell_execute
 
-      return
-   endif
+   return
+endif
 
-   ! only one task at a time calls system, and all wait their turn by
-   ! making each task wait for a message from the (N-1)th task.
-   
-   ! this is used only to signal; the value it contains is unused.
-   dummy = 0
+! only one task at a time calls system, and all wait their turn by
+! making each task wait for a message from the (N-1)th task.
 
-   if (myrank == 0) then
+! this is used only to signal; the value it contains is unused.
+dummy = 0
 
-      ! my turn to execute
-      shell_execute = system(trim(shell_name)//' '//trim(execute_string)//' '//char(0))
-      if (async2_verbose) write(*,*) "PE", myrank, ": execution returns, rc = ", shell_execute
+if (myrank == 0) then
 
-      if (total_tasks > 1) then
-         ! tell next task it can continue
-         call MPI_Send(dummy, 1, MPI_INTEGER, 1, 1, my_local_comm, errcode)
-         if (errcode /= MPI_SUCCESS) then
-            write(errstring, '(a,i8)') 'MPI_Send returned error code ', &
-                                        errcode
-            call error_handler(E_ERR,'shell_execute', errstring, source, &
-                               revision, revdate)
-         endif
-      endif
+   ! my turn to execute
+   call do_system(shell_name, execute_string, shell_execute)
+   if (async2_verbose) write(*,*) "PE", myrank, ": execution returns, rc = ", shell_execute
 
-   else if (myrank /= (total_tasks-1)) then
-      ! wait for (me-1) to tell me it is my turn
-      call MPI_Recv(dummy, 1, MPI_INTEGER, myrank-1, myrank, &
-                    my_local_comm, status, errcode)
-      if (errcode /= MPI_SUCCESS) then
-         write(errstring, '(a,i8)') 'MPI_Recv returned error code ', errcode
-         call error_handler(E_ERR,'shell_execute', errstring, source, &
-                            revision, revdate)
-      endif
-
-      ! my turn to execute
-      shell_execute = system(trim(shell_name)//' '//trim(execute_string)//' '//char(0))
-      if (async2_verbose) write(*,*) "PE", myrank, ": execution returns, rc = ", shell_execute
-
-      ! and now tell (me+1) to go
-      call MPI_Send(dummy, 1, MPI_INTEGER, myrank+1, myrank+1, my_local_comm, errcode)
+   if (total_tasks > 1) then
+      ! tell next task it can continue
+      call MPI_Send(dummy, 1, MPI_INTEGER, 1, 1, my_local_comm, errcode)
       if (errcode /= MPI_SUCCESS) then
          write(errstring, '(a,i8)') 'MPI_Send returned error code ', &
                                      errcode
          call error_handler(E_ERR,'shell_execute', errstring, source, &
                             revision, revdate)
       endif
-   else
-      ! last task, no one else to send to.
-      call MPI_Recv(dummy, 1, MPI_INTEGER, myrank-1, myrank, &
-                    my_local_comm, status, errcode)
-      if (errcode /= MPI_SUCCESS) then
-         write(errstring, '(a,i8)') 'MPI_Recv returned error code ', errcode
-         call error_handler(E_ERR,'shell_execute', errstring, source, &
-                            revision, revdate)
-      endif
-
-      ! my turn to execute
-      shell_execute = system(trim(shell_name)//' '//trim(execute_string)//' '//char(0))
-      if (async2_verbose) write(*,*) "PE", myrank, ": execution returns, rc = ", shell_execute
-
    endif
+
+else if (myrank /= (total_tasks-1)) then
+   ! wait for (me-1) to tell me it is my turn
+   call MPI_Recv(dummy, 1, MPI_INTEGER, myrank-1, myrank, &
+                 my_local_comm, status, errcode)
+   if (errcode /= MPI_SUCCESS) then
+      write(errstring, '(a,i8)') 'MPI_Recv returned error code ', errcode
+      call error_handler(E_ERR,'shell_execute', errstring, source, &
+                         revision, revdate)
+   endif
+
+   ! my turn to execute
+   call do_system(shell_name, execute_string, shell_execute)
+   if (async2_verbose) write(*,*) "PE", myrank, ": execution returns, rc = ", shell_execute
+
+   ! and now tell (me+1) to go
+   call MPI_Send(dummy, 1, MPI_INTEGER, myrank+1, myrank+1, my_local_comm, errcode)
+   if (errcode /= MPI_SUCCESS) then
+      write(errstring, '(a,i8)') 'MPI_Send returned error code ', &
+                                  errcode
+      call error_handler(E_ERR,'shell_execute', errstring, source, &
+                         revision, revdate)
+   endif
+else
+   ! last task, no one else to send to.
+   call MPI_Recv(dummy, 1, MPI_INTEGER, myrank-1, myrank, &
+                 my_local_comm, status, errcode)
+   if (errcode /= MPI_SUCCESS) then
+      write(errstring, '(a,i8)') 'MPI_Recv returned error code ', errcode
+      call error_handler(E_ERR,'shell_execute', errstring, source, &
+                         revision, revdate)
+   endif
+
+   ! my turn to execute
+   call do_system(shell_name, execute_string, shell_execute)
+   if (async2_verbose) write(*,*) "PE", myrank, ": execution returns, rc = ", shell_execute
+
+endif
        
 
 end function shell_execute
 
 !-----------------------------------------------------------------------------
+
+!> wrapper so you only have to make this work in a single place
+
+subroutine do_system(shell, execute, rc)
+
+character(len=*), intent(in)  :: shell
+character(len=*), intent(in)  :: execute
+integer,          intent(out) :: rc
+
+!#ifdef __NAG__
+!  call system(trim(shell)//' '//trim(execute)//' '//char(0), errno=rc)
+!#else
+   rc = system(trim(shell)//' '//trim(execute)//' '//char(0))
+!#endif
+
+end subroutine do_system
+
+!-----------------------------------------------------------------------------
+
+!> Wrapper for the sleep command.  Argument is a real
+!> in seconds.  Different systems have different lower
+!> resolutions for the minimum time it will sleep.
+!> Subroutine, no return value.
+
 subroutine sleep_seconds(naplength)
- real(r8), intent(in) :: naplength
 
-! Wrapper for the sleep command.  Argument is a real
-! in seconds.  Different systems have different lower
-! resolutions for the minimum time it will sleep.
-! Subroutine, no return value.
+real(r8), intent(in) :: naplength
 
- integer :: sleeptime
+integer :: sleeptime
 
- sleeptime = floor(naplength)
- if (sleeptime <= 0) sleeptime = 1
+sleeptime = floor(naplength)
+if (sleeptime <= 0) sleeptime = 1
 
- call sleep(sleeptime)
+call sleep(sleeptime)
 
 end subroutine sleep_seconds
 
@@ -1855,7 +1801,7 @@ base = mpi_wtime()
 end subroutine start_mpi_timer
 
 !-----------------------------------------------------------------------------
-
+!>
 !> return the time since the last call to start_timer().
 !> can call multiple times to get running times.
 !> call with a different base for nested timers.
@@ -1873,13 +1819,15 @@ read_mpi_timer = now - base
 
 end function read_mpi_timer
 
-
 !-----------------------------------------------------------------------------
-function get_dart_mpi_comm()
- integer :: get_dart_mpi_comm
 
-! return our private communicator (or world, if no private created)
- get_dart_mpi_comm = my_local_comm
+!> return our private communicator (or world, if no private created)
+
+function get_dart_mpi_comm()
+
+integer :: get_dart_mpi_comm
+
+get_dart_mpi_comm = my_local_comm
 
 end function get_dart_mpi_comm
 
@@ -2031,19 +1979,18 @@ end module mpi_utilities_mod
 
 !-----------------------------------------------------------------------------
 !-----------------------------------------------------------------------------
-! NOTE -- non-module code, so this subroutine can be called from the
-!  utilities module, which this module uses (and cannot have circular refs)
+!> NOTE: non-module code, so this subroutine can be called from the
+!>  utilities module, which this module uses (and cannot have circular refs)
 !-----------------------------------------------------------------------------
 !-----------------------------------------------------------------------------
+
+!> In case of error, call this instead of the fortran intrinsic exit().
+!> It will signal the other MPI tasks that something bad happened and they
+!> should also exit.
 
 subroutine exit_all(exit_code)
- use mpi_utilities_mod, only : get_dart_mpi_comm
-
- integer, intent(in) :: exit_code
-
-! In case of error, call this instead of the fortran intrinsic exit().
-! It will signal the other MPI tasks that something bad happened and they
-! should also exit.
+use mpi_utilities_mod, only : get_dart_mpi_comm
+integer, intent(in) :: exit_code
 
 integer :: ierror
 
@@ -2054,8 +2001,11 @@ integer :: ierror
 call MPI_Abort(get_dart_mpi_comm(),  exit_code, ierror)
 
 ! execution should never get here
+stop
 
 end subroutine exit_all
+
+!-----------------------------------------------------------------------------
 
 ! <next few lines under version control, do not edit>
 ! $URL$
