@@ -13,19 +13,18 @@ use         utilities_mod, only : register_module, error_handler, E_MSG, E_ERR, 
                                   find_namelist_in_file, check_namelist_read,   &
                                   nc_check, E_MSG, open_file, close_file, do_output
 
-use     mpi_utilities_mod, only : initialize_mpi_utilities, finalize_mpi_utilities
-
-use       assim_model_mod, only : static_init_assim_model
+use     mpi_utilities_mod, only : initialize_mpi_utilities, finalize_mpi_utilities, &
+                                  task_count, my_task_id, task_sync
 
 use      time_manager_mod, only : time_type, set_time, print_date, operator(-), &
                                   NO_CALENDAR
 
-use  ensemble_manager_mod, only : init_ensemble_manager, ensemble_type
+use  ensemble_manager_mod, only : init_ensemble_manager, ensemble_type, print_ens_handle
 
 use   state_vector_io_mod, only : state_vector_io_init, read_state, write_state
 
 use   state_structure_mod, only : get_num_domains, get_model_variable_indices, &
-                                  state_structure_info
+                                  state_structure_info, add_domain
 
 use      io_filenames_mod, only : io_filenames_init, file_info_type,       &
                                   stage_metadata_type, get_stage_metadata, &
@@ -62,10 +61,15 @@ integer, parameter :: MAX_FILES = 1000
 
 logical                       :: single_file = .false.
 integer                       :: num_ens = 1
+integer                       :: dtype = 1
+integer                       :: ltype = 1
+integer                       :: ttype = 1
 character(len=256)            :: input_state_files(MAX_FILES)  = 'null'
 character(len=256)            :: output_state_files(MAX_FILES) = 'null'
 
-namelist /test_group_mean_nml/ num_ens, single_file, input_state_files, output_state_files
+
+namelist /test_group_mean_nml/ num_ens, single_file, input_state_files, output_state_files, &
+                               dtype, ltype, ttype
 
 ! io variables
 integer                   :: iunit, io
@@ -80,13 +84,14 @@ type(time_type)       :: model_time
 integer(i8)           :: model_size
 
 ! misc. variables
-integer :: idom, imem, num_domains
+integer :: i, idom, imem, domid, num_domains
 
 ! message strings
 character(len=512) :: my_base, my_desc
-character(len=512) :: string1, string2, string3
+character(len=512) :: string1
 
 character(len=256), allocatable :: file_array_input(:,:)
+character(len=256), dimension(1) :: var_names = (/'temp'/)
 
 !======================================================================
 ! start of executable code
@@ -99,29 +104,30 @@ read(iunit, nml = test_group_mean_nml, iostat = io)
 call check_namelist_read(iunit, io, "test_group_mean_nml")
 
 !----------------------------------------------------------------------
-! Calling static_init_assim_model() is required for all tests.
-! It also calls static_init_model(), so there is no need to explicitly call
-! that. Furthermore, the low-order models have no check in them to prevent
-! static_init_model() from being called twice, so it BOMBS if you call both.
-!----------------------------------------------------------------------
-
-call static_init_assim_model()
-
-!----------------------------------------------------------------------
 ! read/write restart files
 !----------------------------------------------------------------------
 
+model_size = 60
+
 ! Set up the ensemble storage and read in the restart file
-call init_ensemble_manager(ens_handle, num_ens+1, model_size)
+call init_ensemble_manager(ens_handle,                &
+                           num_copies           = 1,  &
+                           num_vars             = model_size, &
+                           distribution_type_in = dtype, & ! round robin, pair round robin, block
+                           layout_type          = ltype, & ! no vars, transposable, transpose and duplicate
+                           transpose_type_in    = ttype, & ! no vars, transposable, transpose and duplicate
+                           group_size           = task_count())! for transpose type 3, PE count
 
 ! Allocate space for file arrays.  contains a matrix of files (num_ens x num_domains)
 ! If perturbing from a single instance the number of input files does not have to
 ! be ens_size but rather a single file (or multiple files if more than one domain)
 
-num_domains = get_num_domains()
+num_domains = 1
 
 allocate(file_array_input( num_ens, num_domains))
 file_array_input  = RESHAPE(input_state_files,  (/num_ens,  num_domains/))
+
+domid = add_domain('simple1.nc', 1, var_names)
 
 ! Test the read portion.
 call io_filenames_init(file_info_input,              &
@@ -156,6 +162,15 @@ call read_state(ens_handle, file_info_input, read_time_from_file, model_time)
 
 deallocate(file_array_input)
 
+do i = 0, task_count()-1
+   call task_sync()
+   if(my_task_id() == i) then 
+      call print_ens_handle(ens_handle)
+   endif
+enddo
+
+call task_sync()
+
 !----------------------------------------------------------------------
 ! Check window
 !----------------------------------------------------------------------
@@ -173,6 +188,7 @@ call finalize_modules_used()
 !======================================================================
 contains
 !======================================================================
+
 
 !> initialize modules that need it
 
@@ -196,6 +212,22 @@ subroutine finalize_modules_used()
 call finalize_mpi_utilities()
 
 end subroutine finalize_modules_used
+
+!----------------------------------------------------------------------
+!> print the vars array
+
+subroutine print_ens(ens_handle, lim, rank)
+type(ensemble_type), intent(in) :: ens_handle
+integer,             intent(in) :: rank
+integer i, iend, lim
+
+print*, 'rank :: ', rank
+do i = 1, ens_handle%my_num_vars
+   write(*,'(A,I3,A,i4)'), 'my_vars(', i,') = ', ens_handle%my_vars(i)
+enddo
+write(*,*) ''
+
+end subroutine print_ens
 
 end program test_group_mean
 

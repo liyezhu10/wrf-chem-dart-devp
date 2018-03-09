@@ -106,7 +106,7 @@ public :: initialize_mpi_utilities, finalize_mpi_utilities,                  &
           broadcast_send, broadcast_recv, shell_execute, sleep_seconds,      &
           sum_across_tasks, get_dart_mpi_comm, datasize, send_minmax_to,     &
           get_from_fwd, get_from_mean, broadcast_minmax, broadcast_flag,     &
-          start_mpi_timer, read_mpi_timer, &
+          start_mpi_timer, read_mpi_timer, create_groups, &
           all_reduce_min_max  ! deprecated, replace by broadcast_minmax
 
 ! version controlled file description for error handling, do not edit
@@ -123,6 +123,13 @@ integer :: head_task = 0         ! def 0, but N-1 if reverse_task_layout true
 logical :: print4status = .true. ! minimal messages for async4 handshake
 
 logical :: given_communicator = .false.   ! if communicator passed in, use it
+
+! group variables
+integer, allocatable :: group_members(:)
+integer :: group_all
+integer :: mpi_group_comm
+integer :: subgroup   !< subgroup for the grid
+integer :: group_rank !< rank within group
 
 character(len = 256) :: errstring, errstring1
 
@@ -169,15 +176,18 @@ logical :: all_tasks_print      = .false.   ! by default only msgs from 0 print
 logical :: make_copy_before_sendrecv  = .false.   ! should not be needed; .true. is very slow
 logical :: make_copy_before_broadcast = .false.   ! should not be needed; .true. is very slow
 
+integer :: group_size = 1
+
 ! NAMELIST: change the following from .false. to .true. to enable
 ! the reading of this namelist.  This is the only place you need
 ! to make this change.
-logical :: use_namelist = .false.
+logical :: use_namelist = .true.
 
 namelist /mpi_utilities_nml/ reverse_task_layout, all_tasks_print, &
                              verbose, async2_verbose, async4_verbose, &
                              shell_name, separate_node_sync, create_local_comm, &
-                             make_copy_before_sendrecv, make_copy_before_broadcast 
+                             make_copy_before_sendrecv, make_copy_before_broadcast, &
+                             group_size
 
 contains
 
@@ -316,6 +326,10 @@ if (errcode /= MPI_SUCCESS) then
    call error_handler(E_ERR,'initialize_mpi_utilities', errstring, source, revision, revdate)
 endif
 
+if (myrank == 0) then
+   print*, 'GROUP SIZE ', group_size
+endif
+
 ! tell the utilities module what task number we are.
 call set_tasknum(myrank)
 
@@ -446,6 +460,8 @@ else
    dofinalize = .false.
 endif
 
+deallocate(group_members)! this is module global
+
 ! Normally we shut down MPI here.  If the user tells us not to shut down MPI
 ! they must call this routine from their own code before exiting.
 if (dofinalize) then
@@ -458,6 +474,7 @@ if (dofinalize) then
 else
    if (verbose) write(*,*) "PE", myrank, ": finalize_mpi_utilities called without shutting down MPI"
 endif
+
 
 ! NO I/O after calling MPI_Finalize.  on some MPI implementations
 ! this can hang the job.
@@ -1974,6 +1991,63 @@ call MPI_Bcast(flag, 1, MPI_LOGICAL, root, my_local_comm, errcode)
 end subroutine broadcast_flag
 
 !-----------------------------------------------------------------------------
+
+subroutine create_groups
+
+integer i, ierr ! all MPI errors are fatal anyway
+
+allocate(group_members(group_size)) ! this is module global
+
+call mpi_comm_group(mpi_comm_world, group_all, ierr)  ! get the word group from mpi_comm_world
+call build_my_group(group_size, group_members) ! create a list of processors in the grid group
+call mpi_group_incl(group_all, group_size, group_members, subgroup, ierr)
+call mpi_comm_create(mpi_comm_world, subgroup, mpi_group_comm, ierr)
+call mpi_comm_rank(mpi_group_comm, group_rank, ierr) ! rank within group
+
+call mpi_group_size(subgroup, group_size, ierr)
+call mpi_group_rank(subgroup, group_rank, ierr)
+
+call MPI_Barrier(MPI_COMM_WORLD, ierr)
+do i = 0, (task_count()-1)
+   call MPI_Barrier(MPI_COMM_WORLD, ierr)
+   if(my_task_id() == i) then
+      write(*,'(''WORLD RANK/SIZE:'',I2,''/'',I2,'' GROUP RANK/SIZE:'',I2,''/'',I2)') my_task_id(), task_count(), group_rank, group_size
+   endif
+enddo
+
+end subroutine create_groups
+
+!-----------------------------------------------------------
+
+!> Build the group to store the grid
+subroutine build_my_group(group_size, group_members)
+integer, intent(inout)  :: group_size ! need to modify this if your #tasks does not divide by group size
+integer, intent(out)    :: group_members(group_size)
+
+integer bottom, top !< start and end members of the group
+integer i
+
+! integer arithmatic. rouding down to the lowest group size
+bottom = (myrank / group_size ) * group_size
+top = bottom + group_size - 1
+if (top >= task_count()) then
+   top = task_count() - 1
+   group_size = top - bottom + 1
+   do i = 0, task_count()-1
+      if (myrank == i) then 
+         print*, 'rank', myrank, 'bottom top', bottom, top, 'group_size', group_size
+      endif 
+   enddo
+endif
+
+
+! fill up group members
+group_members(1) = bottom
+do i = 2, group_size
+   group_members(i) = group_members(i-1) + 1
+enddo
+
+end subroutine build_my_group
 
 end module mpi_utilities_mod
 

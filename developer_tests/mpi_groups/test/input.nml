@@ -1,6 +1,14 @@
+&mpi_utilities_nml
+   group_size = 3
+/
+
 &test_group_mean_nml
-   input_state_files = 'simple1.nc', 'simple2.nc'
+   num_ens            = 1
+   input_state_files  = 'simple1.nc', 'simple2.nc'
    output_state_files = ''
+   dtype = 1 
+   ltype = 1 
+   ttype = 1 
    /
 
 &utilities_nml
@@ -41,9 +49,6 @@
                               '../../../observations/forward_operators/obs_def_vortex_mod.f90',
                               '../../../observations/forward_operators/obs_def_wind_speed_mod.f90'
   /
-
-&mpi_utilities_nml
-/
 
 &obs_kind_nml
 /
