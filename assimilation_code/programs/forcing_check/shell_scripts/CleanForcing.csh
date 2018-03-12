@@ -8,7 +8,7 @@
 #
 # qsub -I -l select=1:ncpus=1:mpiprocs=1 -l walltime=04:00:00 -q economy -A P86850054
 #
-# qcmd -q share -l select=1 -l walltime=06:00:00 -- ./CleanForcing.csh
+# qcmd -q share -l select=1,walltime=06:00:00 -- ./CleanForcing.csh |& tee my_log.txt
  
 #===========================================================================
 # Process the DS199.1 files to remove negative values 
@@ -64,7 +64,7 @@ EOF
 # set DSSBASE = /glade/p/rda/data/ds199.1/CAM_DATM.cpl
 set OURBASE = /glade/p/image/thoar/CAM_DATM/4xdaily/CAM_DATM.cpl
 
-@ YEAR = 1997
+@ YEAR = 2006
 while ($YEAR <= 2010)
 
    @ MEMBER = 1

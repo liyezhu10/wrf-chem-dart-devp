@@ -406,8 +406,8 @@ if (present(var_type)) then
 
    FINDTYPE : do n = 1,nfields
       varstring = progvar(n)%varname
-      if((indx >= get_index_start(progvar(n)%domain, varstring)).and. &
-         (indx <= get_index_end(progvar(n)%domain, varstring)) ) then
+      if((indx >= get_index_start(progvar(n)%domain, varstring)) .and. &
+         (indx <= get_index_end(  progvar(n)%domain, varstring))) then
          var_type = progvar(n)%dart_kind
          exit FINDTYPE
       endif
@@ -1404,30 +1404,27 @@ end subroutine nc_write_model_atts
 
 
 !------------------------------------------------------------------
+!> Perturbs a single model state for generating initial ensembles.
+!> This (required interface) is unsupported in CLM and any attempt
+!> to use it will cause DART to terminate.
+!>
+!> So far, we have generated intial ensembles by taking a single
+!> instance and replicating it N times - and pairing each of the
+!> instances with a unique atmospheric forcing file and integrating
+!> for some period of time till the ensemble demonstrates sufficient
+!> spread. This is an area of active research.
+!>
+!> The naive approach does not work -- it generates negative
+!> snow cover fractions, for example.  Must check for out-of-range
+!> values specific to each type.
+!> The WRF model mod has something that might be useful.
 
 subroutine pert_model_copies(ens_handle, ens_size, pert_amp, interf_provided)
-
-!
-! Perturbs a single model state for generating initial ensembles.
-! This (required interface) is unsupported in CLM and any attempt
-! to use it will cause DART to terminate.
-!
-! So far, we have generated intial ensembles by taking a single
-! instance and replicating it N times - and pairing each of the
-! instances with a unique atmospheric forcing file and integrating
-! for some period of time till the ensemble demonstrates sufficient
-! spread. This is an area of active research.
-!
-! The naieve approach does not work -- it generates negative
-! snow cover fractions, for example.  Must check for out-of-range
-! values specific to each type.
-! The WRF model mod has something that might be useful.
 
 type(ensemble_type), intent(inout) :: ens_handle
 integer,             intent(in)    :: ens_size
 real(r8),            intent(in)    :: pert_amp
 logical,             intent(out)   :: interf_provided
-
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1500,6 +1497,7 @@ end subroutine get_gridsize
 !> Reads the current time and state variables from a clm restart
 !> file and packs them into a dart state vector. This better happen
 !> in the same fashion as the metadata arrays are built.
+!>@todo CHECKME ... this may not be needed for CLM4.5, CLM5 (CESM2.0)
 
 subroutine mark_missing_r8_values(clm_file, restart_time)
 
@@ -1524,6 +1522,7 @@ if ( .not. module_initialized ) call static_init_model()
 ! Must check anything with a dimension of 'levtot' or 'levsno' and manually
 ! set the values to DART missing. If only it were that easy ...
 !
+!>@todo check if this relationship is still true ... snow can exist even if there is no snow layer
 ! The treatment of snow-related variables is complicated.
 ! The SNLSNO variable defines the number of snow layers with valid values.
 ! HOWEVER, if the snow depth is < 0.01 m, the snow is not represented by a layer,
@@ -1534,6 +1533,8 @@ if ( .not. module_initialized ) call static_init_model()
 ! The SNLSNO(i) is always zero, even though there is snow.
 ! The snow over lakes is wholly contained in the bulk formulation variables
 ! as opposed to the snow layer variables.
+!>@todo what happens over ilun_deep_lake, ilun_wetland
+!>@todo what happens over icol_deep_lake, icol_wetland
 
 ! Some things must be gotten explicitly from the restart file - ONCE.
 ! number of snow layers
@@ -1653,11 +1654,12 @@ do ivar=1, numvars
       ! even over lakes. Lakes use a 'bulk' formula, so all the pertinent
       ! values are in the 1D variables, SNOWDP and frac_sno.
 
-      ! FIXME: Question, what happens to unused levels below ground? Are those
+      !>@todo FIXME: Question, what happens to unused levels below ground? Are those
       ! values 'special'?
 
-      if     ( (trim(progvar(ivar)%dimnames(1)) == 'levsno')   .and. &
-               (trim(progvar(ivar)%dimnames(2)) == 'column') ) then
+      if ((trim(progvar(ivar)%dimnames(1)) == 'levsno') .or. &
+          (trim(progvar(ivar)%dimnames(1)) == 'levtot') .and. &
+          (trim(progvar(ivar)%dimnames(2)) == 'column') ) then
 
          do j = 1, nj  ! loop over columns
             numsnowlevels = abs(snlsno(j))
@@ -1665,23 +1667,13 @@ do ivar=1, numvars
                data_2d_array(i,j) = MISSING_R8
             enddo
          enddo
-
-      elseif ( (trim(progvar(ivar)%dimnames(1)) == 'levtot') .and. &
-               (trim(progvar(ivar)%dimnames(2)) == 'column') ) then
-
-         do j = 1, nj  ! loop over columns
-            numsnowlevels = abs(snlsno(j))
-            do i = 1, nlevsno - numsnowlevels  ! loop over layers
-               data_2d_array(i,j) = MISSING_R8
-            enddo
-         enddo
-
       endif
 
       ! Block of checks that will hopefully be corrected in the
       ! core CLM code. There are some indeterminate values being
       ! used instead of the missing_value code - and even then,
       ! the missing_value code is not reliably implemented.
+      !>@todo CHECKME ... missing value implementation
 
       if (progvar(ivar)%varname == 'T_SOISNO') then
          where(data_2d_array < 1.0_r8) data_2d_array = MISSING_R8
@@ -1882,6 +1874,8 @@ UPDATE : do ivar=1, numvars
    ! When called with a 4th argument, fill_missing_r8_with_original() replaces the DART
    ! missing code with the value in the corresponding variable in the netCDF file.
    ! Any clamping to physically meaningful values occurrs in fill_missing_r8_with_original.
+
+   !>@todo CHECK the replacement algorithm/logic
    
   if (do_io_update(dom_restart, ivar)) then
       if (progvar(ivar)%numdims == 1) then
@@ -1906,7 +1900,7 @@ call nc_check(nf90_close(ncid_dart), 'fill_missing_r8_with_orig','close '//trim(
 end subroutine fill_missing_r8_with_orig
 
 !==================================================================
-! The remaining interfaces come last
+! The remaining required interfaces
 !==================================================================
 
 !-----------------------------------------------------------------------
@@ -1955,7 +1949,7 @@ if ( .not. module_initialized ) call static_init_model
 ! good value, and the last line here sets istatus to 0.
 ! make any error codes set here be in the 10s
 
-expected_obs = MISSING_R8   ! the DART bad value flag
+expected_obs   = MISSING_R8 ! the DART bad value flag
 interp_val_liq = MISSING_R8 ! the DART bad value flag
 interp_val_ice = MISSING_R8 ! the DART bad value flag
 istatus     = 0             ! will be updated with failed values
@@ -2143,7 +2137,7 @@ ELEMENTS : do indexi = index1, indexN
          total(imem)      = total(imem)      + state(imem)*landarea(indexi)
          total_area(imem) = total_area(imem) +       landarea(indexi)
       else
-         istatus(imem) = 31
+         istatus(imem)    = 31
          total(imem)      = MISSING_R8
          total_area(imem) = MISSING_R8
       endif
@@ -4224,8 +4218,8 @@ enddo
 
 ! Create storage for the list of column,pft indices
 
-do ilon = 1,nlon
 do ilat = 1,nlat
+do ilon = 1,nlon
    if ( gridCellInfo(ilon,ilat)%ncols > 0 ) then
       allocate( gridCellInfo(ilon,ilat)%columnids( gridCellInfo(ilon,ilat)%ncols ))
    endif

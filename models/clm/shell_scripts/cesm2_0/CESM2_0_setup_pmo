@@ -347,6 +347,7 @@ endif
 # a whole number of nodes which is the recommended configuration.
 # This is a decent layout for a single instance, but should be explored.
 # Presently, all components run 'serially' - one after another.
+# CIME interprets a negative task count as representing the number of nodes.
 
 @ nthreads = 1
 @ nodes_per_instance = 4

@@ -398,8 +398,7 @@ enddo
 if (debug .and. do_output()) write(*,*)'obs_def_tower      lon',lon
 if (debug .and. do_output()) write(*,*)'obs_def_tower      lat',lat
 
-! FIXME
-! check all other ensemble member history files to make sure metadata is the same.
+!>@todo FIXME check all other ensemble member history files to make sure metadata is the same.
 
 deallocate(yyyymmdd, sssss)
 

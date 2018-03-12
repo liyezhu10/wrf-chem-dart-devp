@@ -1,92 +1,93 @@
 &perfect_model_obs_nml
-   start_from_restart    = .true.,
-   output_restart        = .false.,
-   async                 = 0,
-   init_time_days        = -1,
-   init_time_seconds     = -1,
-   first_obs_days        = -1,
-   first_obs_seconds     = -1,
-   last_obs_days         = -1,
-   last_obs_seconds      = -1,
-   output_interval       = 1,
-   trace_execution       = .false.,
-   restart_in_file_name  = "perfect_ics",
-   restart_out_file_name = "perfect_restart",
-   obs_seq_in_file_name  = "obs_seq.in",
-   obs_seq_out_file_name = "obs_seq.perfect",
-   adv_ens_command       = "no_advance_script"
-   output_timestamps     = .false.,
-   trace_execution       = .false.,
-   output_forward_op_errors = .false.,
-   print_every_nth_obs   = -1,
-   silence               = .false.,
+   read_input_state_from_file = .true.
+   write_output_state_to_file = .false.
+   async                      = 0
+   init_time_days             = -1
+   init_time_seconds          = -1
+   first_obs_days             = -1
+   first_obs_seconds          = -1
+   last_obs_days              = -1
+   last_obs_seconds           = -1
+   output_interval            = 1
+   single_file_in             = .false.
+   single_file_out            = .false.
+   input_state_files          = 'clm_restart.nc', 'clm_history.nc', 'clm_vector_history.nc'
+   output_state_files         = 'restart_out.nc', 'history_out.nc', 'vector_history_out.nc'
+   obs_seq_in_file_name       = "obs_seq.in"
+   obs_seq_out_file_name      = "obs_seq.out"
+   adv_ens_command            = "no_advance_script"
+   output_timestamps          = .false.
+   trace_execution            = .true.
+   output_forward_op_errors   = .false.
+   print_every_nth_obs        = -1
+   silence                    = .false.
    /
 
 &filter_nml
-   async                    = 0,
-   adv_ens_command          = "no_advance_script",
-   ens_size                 =  80,
-   start_from_restart       = .true.,
-   output_restart           = .true.,
-   obs_sequence_in_name     = "obs_seq.out",
-   obs_sequence_out_name    = "obs_seq.final",
-   restart_in_file_name     = "filter_ics",
-   restart_out_file_name    = "filter_restart",
-   init_time_days           = -1,
-   init_time_seconds        = -1,
-   first_obs_days           = -1,
-   first_obs_seconds        = -1,
-   last_obs_days            = -1,
-   last_obs_seconds         = -1,
-   num_output_state_members = 20,
-   num_output_obs_members   = 20,
-   output_interval          = 1,
-   num_groups               = 1,
-   input_qc_threshold       = 1.0,
-   outlier_threshold        = 3.0,
-   output_forward_op_errors = .false.,
-   output_timestamps        = .false.,
-   output_inflation         = .true.,
-   trace_execution          = .true.,
-   silence                  = .false.,
+   async                    = 0
+   adv_ens_command          = "no_advance_script"
+   ens_size                 =  80
+   start_from_restart       = .true.
+   output_restart           = .true.
+   obs_sequence_in_name     = "obs_seq.out"
+   obs_sequence_out_name    = "obs_seq.final"
+   restart_in_file_name     = "filter_ics"
+   restart_out_file_name    = "filter_restart"
+   init_time_days           = -1
+   init_time_seconds        = -1
+   first_obs_days           = -1
+   first_obs_seconds        = -1
+   last_obs_days            = -1
+   last_obs_seconds         = -1
+   num_output_state_members = 20
+   num_output_obs_members   = 20
+   output_interval          = 1
+   num_groups               = 1
+   input_qc_threshold       = 1.0
+   outlier_threshold        = 3.0
+   output_forward_op_errors = .false.
+   output_timestamps        = .false.
+   output_inflation         = .true.
+   trace_execution          = .true.
+   silence                  = .false.
 
-   inf_flavor                  = 0,                       0,
-   inf_initial_from_restart    = .false.,                 .false.,
-   inf_sd_initial_from_restart = .false.,                 .false.,
-   inf_output_restart          = .true.,                  .true.,
-   inf_deterministic           = .true.,                  .true.,
-   inf_in_file_name            = 'prior_inflate_ics',     'post_inflate_ics',
-   inf_out_file_name           = 'prior_inflate_restart', 'post_inflate_restart',
-   inf_diag_file_name          = 'prior_inflate_diag',    'post_inflate_diag',
-   inf_initial                 = 1.0,                     1.0,
-   inf_sd_initial              = 0.6,                     0.6,
-   inf_damping                 = 0.9,                     0.9,
-   inf_lower_bound             = 1.0,                     1.0,
-   inf_upper_bound             = 1000.0,               1000.0,
+   inf_flavor                  = 0,                       0
+   inf_initial_from_restart    = .false.,                 .false.
+   inf_sd_initial_from_restart = .false.,                 .false.
+   inf_output_restart          = .true.,                  .true.
+   inf_deterministic           = .true.,                  .true.
+   inf_in_file_name            = 'prior_inflate_ics',     'post_inflate_ics'
+   inf_out_file_name           = 'prior_inflate_restart', 'post_inflate_restart'
+   inf_diag_file_name          = 'prior_inflate_diag',    'post_inflate_diag'
+   inf_initial                 = 1.0,                     1.0
+   inf_sd_initial              = 0.6,                     0.6
+   inf_damping                 = 0.9,                     0.9
+   inf_lower_bound             = 1.0,                     1.0
+   inf_upper_bound             = 1000.0,               1000.0
    inf_sd_lower_bound          = 0.6,                     0.6
    /
 
 
 &smoother_nml
-   num_lags              = 0,
-   start_from_restart    = .false.,
-   output_restart        = .false.,
-   restart_in_file_name  = 'smoother_ics',
+   num_lags              = 0
+   start_from_restart    = .false.
+   output_restart        = .false.
+   restart_in_file_name  = 'smoother_ics'
    restart_out_file_name = 'smoother_restart'
    /
 
 
 # cutoff of 0.03 (radians) is about 200km
 &assim_tools_nml
-   filter_kind                     = 1,
-   cutoff                          = 0.05,
-   allow_missing_in_clm            = .true.,
-   sort_obs_inc                    = .false.,
-   spread_restoration              = .false.,
-   sampling_error_correction       = .false.,
-   adaptive_localization_threshold = -1,
-   output_localization_diagnostics = .false.,
-   localization_diagnostics_file   = 'localization_diagnostics',
+   filter_kind                     = 1
+   cutoff                          = 0.05
+   allow_missing_in_clm            = .true.
+   sort_obs_inc                    = .false.
+   spread_restoration              = .false.
+   sampling_error_correction       = .false.
+   adaptive_localization_threshold = -1
+   output_localization_diagnostics = .false.
+   localization_diagnostics_file   = 'localization_diagnostics'
    print_every_nth_obs             = 0
    /
 
@@ -106,9 +107,9 @@
 
 
 &reg_factor_nml
-   select_regression    = 1,
-   input_reg_file       = "time_mean_reg",
-   save_reg_diagnostics = .false.,
+   select_regression    = 1
+   input_reg_file       = "time_mean_reg"
+   save_reg_diagnostics = .false.
    reg_diagnostics_file = "reg_diagnostics"
    /
 
@@ -119,10 +120,10 @@
 
 
 &preprocess_nml
-    input_obs_kind_mod_file = '../../../assimilation_code/modules/observations/DEFAULT_obs_kind_mod.F90',
-   output_obs_kind_mod_file = '../../../assimilation_code/modules/observations/obs_kind_mod.f90',
-     input_obs_def_mod_file = '../../../observations/forward_operators/DEFAULT_obs_def_mod.F90',
-    output_obs_def_mod_file = '../../../observations/forward_operators/obs_def_mod.f90',
+    input_obs_kind_mod_file = '../../../assimilation_code/modules/observations/DEFAULT_obs_kind_mod.F90'
+   output_obs_kind_mod_file = '../../../assimilation_code/modules/observations/obs_kind_mod.f90'
+     input_obs_def_mod_file = '../../../observations/forward_operators/DEFAULT_obs_def_mod.F90'
+    output_obs_def_mod_file = '../../../observations/forward_operators/obs_def_mod.f90'
    input_files              = '../../../observations/forward_operators/obs_def_tower_mod.f90',
                               '../../../observations/forward_operators/obs_def_COSMOS_mod.f90'
    /
@@ -132,8 +133,8 @@
 # hist_nhtfrq should be negative (hours) ... same context as in
 # the CLM namelist for the .h1. files.
 &obs_def_tower_nml
-   casename    = '../clm_dart',
-   hist_nhtfrq = -24,
+   casename    = '../clm_dart'
+   hist_nhtfrq = -24
    debug       = .false.
    /
 
@@ -143,13 +144,13 @@
                                 'TOWER_LATENT_HEAT_FLUX',
                                 'TOWER_SENSIBLE_HEAT_FLUX',
                                 'MODIS_SNOWCOVER_FRAC',
-                                'COSMOS_NEUTRON_INTENSITY',
+                                'COSMOS_NEUTRON_INTENSITY'
    evaluate_these_obs_types   = 'null'
    /
 
 
 &assim_model_nml
-   write_binary_restart_files = .true.,
+   write_binary_restart_files = .true.
    netCDF_large_file_support  = .true.
    /
 
@@ -160,14 +161,14 @@
 # The definitions for most of the DART kinds are in obs_def_tower_mod.f90
 
 &model_nml
-   clm_restart_filename         = 'clm_restart.nc',
-   clm_history_filename         = 'clm_history.nc',
-   assimilation_period_days     = 1,
-   assimilation_period_seconds  = 0,
-   model_perturbation_amplitude = 0.2,
-   output_state_vector          = .false.,
-   calendar                     = 'Gregorian',
-   debug                        = 0,
+   clm_restart_filename         = 'clm_restart.nc'
+   clm_history_filename         = 'clm_history.nc'
+   assimilation_period_days     = 1
+   assimilation_period_seconds  = 0
+   model_perturbation_amplitude = 0.2
+   output_state_vector          = .false.
+   calendar                     = 'Gregorian'
+   debug                        = 0
    clm_state_variables          = 'frac_sno',    'KIND_SNOWCOVER_FRAC',
                                   'H2OSNO',      'KIND_SNOW_WATER',
                                   'H2OSOI_LIQ',  'KIND_SOIL_MOISTURE',
@@ -312,7 +313,7 @@
    loc_of_interest       = 254.727854, 39.9768545, 0.35
    quantity_of_interest  = 'QTY_LEAF_CARBON'
    interp_test_vertcoord = 'VERTISHEIGHT'
-   interp_test_lonrange  = 320.0, 90.0 
+   interp_test_lonrange  = 320.0, 90.0
    interp_test_dlon      = 1.0
    interp_test_latrange  = 0.0, 75.0
    interp_test_dlat      = 1.0

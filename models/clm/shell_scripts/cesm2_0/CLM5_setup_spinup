@@ -4,7 +4,7 @@
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id: CESM2_0_setup_spinup 12397 2018-02-05 22:45:10Z thoar@ucar.edu $
+# DART $Id$
 
 #-----------------------------------------------------------------------
 # Purpose, describe things here, etc.
@@ -27,12 +27,12 @@
 # num_instances The number of ensemble members.
 # ==============================================================================
 
-setenv CASE           clm5_f09_spinup_e4_n4
+setenv CASE           clm5_f09_spinup_e40
 setenv resolution     f09_g16
 setenv resolution     f09_f09
 setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
 setenv cesmtag        clm_dev_branch
-setenv num_instances  4
+setenv num_instances  40
 
 setenv RUN_TYPE       startup
 setenv RUN_STARTDATE  1998-01-01
@@ -79,8 +79,8 @@ setenv dartroot     /glade/p/work/thoar/DART/cesm_clm
 # queue      can be changed during a series by changing the case.run
 # timewall   can be changed during a series by changing the case.run
 #
-# TJH: Advancing 30 instances for 6 hours and assimilating took
-#      less than 10 minutes on yellowstone using 1800 pes (120 nodes)
+# TJH: Advancing 80 instances for 1 month using 4 nodes per instance took
+#      less than xx minutes on cheyenne using 36 tasks and 1 thread per node
 # ==============================================================================
 
 setenv queue               regular
@@ -89,7 +89,7 @@ setenv short_term_archiver off
 
 setenv stop_option         nmonths
 setenv stop_n              1
-setenv resubmit            0
+setenv resubmit            11
 
 #> @TODO stream template files & multiple years. Do we need to specify
 #> year 1 and year N (performance penalty?). Can we change years on-the-fly
@@ -363,6 +363,6 @@ cat CESM_instructions.txt
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/cesm_clm/models/clm/shell_scripts/cesm2_0/CESM2_0_setup_spinup $
-# $Revision: 12397 $
-# $Date: 2018-02-05 15:45:10 -0700 (Mon, 05 Feb 2018) $
+# $URL$
+# $Revision$
+# $Date$
