@@ -70,7 +70,8 @@ use time_manager_mod,  only : time_type, set_time
 !> additional last argument saying this is a group call and not a world one
 
 use mpi_utilities_mod, only : task_count, my_task_id, send_to, receive_from, &
-                              task_sync, broadcast_send, broadcast_recv
+                              task_sync, broadcast_send, broadcast_recv, &
+                              create_groups, set_group_size, get_group_size
 
 
 
@@ -115,7 +116,8 @@ type ensemble_type
 !> we assume that no task will have the memory to allocate a full i8 buffer,
 !> so my_num_vars will remain expressible as an i4.
   
-   integer :: num_pes
+   integer                      :: num_pes
+   integer                      :: group_size
    integer(i8)                  :: num_vars 
    integer                      :: num_copies, my_num_copies, my_num_vars
    integer,        allocatable  :: my_copies(:)
@@ -127,17 +129,15 @@ type ensemble_type
    real(r8),       allocatable  :: vars(:, :)           ! Dimensioned (num_vars, my_num_copies)
    type(time_type),         allocatable :: time(:)      ! Time is only related to var complete
    type(time_type)              :: current_time         ! The current time, constant across the ensemble
-   integer                      :: distribution_type
+   integer                      :: distribution_type = 1
    integer,private              :: valid     ! copies modified last, vars modified last, both same
    integer,private              :: id_num
    integer, allocatable,private :: task_to_pe_list(:), pe_to_task_list(:) ! List of tasks
    ! Flexible my_pe, layout_type which allows different task layouts for different ensemble handles
    integer                      :: my_pe
-   integer                      :: group_num_pes
    integer,private              :: layout_type
    integer,private              :: transpose_type
    integer                      :: num_extras   ! FIXME: this needs to be more general.
-
 end type ensemble_type
 
 ! FIXME: to separate filter use from plain storage issues,
@@ -178,10 +178,14 @@ integer  :: communication_configuration = 1
 ! task layout options:
 integer  :: layout = 1 ! default to my_pe = my_task_id(). Layout2 assumes that the user knows the correct tasks_per_node
 integer  :: tasks_per_node = 1 ! default to 1 if the user does not specify a number of tasks per node.
-logical  :: debug = .false.
+
+! integer flag to indicate if group size has been set
+integer, parameter ::   MPI_GROUPS_NOT_SET = -1
+integer :: group_size = MPI_GROUPS_NOT_SET
+logical :: debug = .false.
 
 namelist / ensemble_manager_nml / communication_configuration, &
-                                  layout, tasks_per_node,  &
+                                  layout, tasks_per_node, group_size, &
                                   debug
                                   
 !-----------------------------------------------------------------
@@ -203,7 +207,7 @@ contains
 !> of tasks.
 
 subroutine init_ensemble_manager(ens_handle, num_copies, &
-   num_vars, distribution_type_in, layout_type, transpose_type_in, group_size)
+   num_vars, distribution_type_in, layout_type, transpose_type_in)
 
 type(ensemble_type), intent(out)            :: ens_handle
 integer,             intent(in)             :: num_copies
@@ -211,10 +215,10 @@ integer(i8),         intent(in)             :: num_vars
 integer,             intent(in), optional   :: distribution_type_in ! round robin, pair round robin, block
 integer,             intent(in), optional   :: layout_type        ! 1-to-1, round robin
 integer,             intent(in), optional   :: transpose_type_in  ! no vars, transposable, transpose and duplicate
-integer,             intent(in), optional   :: group_size         ! for transpose type 3, PE count
 
 integer :: iunit, io
 integer :: transpose_type
+integer :: string1
 
 !>@todo FIXME this didn't used to be first.  why not?
 ! First call to init_ensemble_manager must initialize module and read namelist
@@ -238,6 +242,25 @@ endif
 
 ! FIXME: if we are implementing communication across a group, can we do this here?
 ! or does it need to be for a subcommunicator?
+if (group_size == MPI_GROUPS_NOT_SET) then
+   group_size = task_count()
+endif
+
+if(group_size  < 0 .or. group_size > task_count()) then
+   write(string1,'(A,I5)') 'invalid group_size ', group_size
+   call error_handler(E_ERR, 'init_ensemble_manager', &
+                      source, revision, revdate)
+endif
+
+call set_group_size(group_size)
+call create_groups(group_size)
+call task_sync()
+
+if (my_task_id() == 0) then
+   print*, 'GROUP SIZE ', get_group_size()
+endif
+
+ens_handle%group_size = group_size
 
 ! we need to know if we're using the global comm or a group comm (yet another
 ! optional subroutine argument?) for data spread across all tasks, or data spread
@@ -245,7 +268,6 @@ endif
 
 ! Get mpi information for this process; it's stored in module storage
 !>@todo FIXME this cannot be used from global storage for group operations
-
 
 ! Distribution type controls how vars data are distributed to
 ! the copies arrays. Default type is 1. 
@@ -278,8 +300,9 @@ else
 endif
 
 ! Check for error: only layout_types 1 and 2 are implemented
-if (ens_handle%layout_type /= 1 .and. ens_handle%layout_type /=2 ) then
-   call error_handler(E_ERR, 'init_ensemble_manager', 'only layout values 1 (standard), 2 (round-robin) allowed ', &
+if (ens_handle%layout_type /= 1 .and. ens_handle%layout_type /=2 .and. ens_handle%layout_type /= 3) then
+   call error_handler(E_ERR, 'init_ensemble_manager', &
+                      'only layout values 1 (standard), 2 (round-robin) allowed, and 3 (groups) ', &
                       source, revision, revdate)
 endif
 
@@ -388,7 +411,7 @@ if(ens_handle%my_pe == receiving_pe) then !HK I think only the reciever needs th
 endif
 
 ! Figure out which PE stores this copy and what its local storage index is
-call get_copy_owner_index(copy, owner, owners_index)
+call get_copy_owner_index(ens_handle, copy, owner, owners_index)
 
 !----------- Block of code that must be done by receiving pe -----------------------------
 if(ens_handle%my_pe == receiving_pe) then
@@ -450,7 +473,7 @@ if(ens_handle%num_vars < size(vars)) then
 endif
 
 ! What PE stores this copy and what is its local storage index
-call get_copy_owner_index(copy, owner, owners_index)
+call get_copy_owner_index(ens_handle, copy, owner, owners_index)
 
 ! Block of code that must be done by PE that is to send the copy
 if(ens_handle%my_pe == sending_pe) then
@@ -507,7 +530,7 @@ if(size(arraydata) < ens_handle%num_vars) then
 endif
 
 ! What PE stores this copy and what is its local storage index
-call get_copy_owner_index(copy, owner, owners_index)
+call get_copy_owner_index(ens_handle, copy, owner, owners_index)
 
 ! First block of code that must be done by PE that is to send the copy
 if(ens_handle%my_pe == owner) then
@@ -807,7 +830,7 @@ endif
 ens_handle%copies = MISSING_R8
 
 ! Fill out the number of my members
-call get_copy_list(ens_handle%num_copies, ens_handle%my_pe, ens_handle%my_copies, i)
+call get_copy_list(ens_handle, ens_handle%num_copies, ens_handle%my_pe, ens_handle%my_copies, i)
 
 ! Initialize times to missing
 ! This is only initializing times for pes that have ensemble copies
@@ -816,7 +839,7 @@ do i = 1, ens_handle%my_num_copies
 end do
 
 ! Fill out the number of my vars
-call get_var_list(ens_handle%num_vars, ens_handle%my_pe, ens_handle%my_vars, i)
+call get_var_list(ens_handle, ens_handle%num_vars, ens_handle%my_pe, ens_handle%my_vars, i)
 
 end subroutine set_up_ens_distribution
 
@@ -827,24 +850,26 @@ end subroutine set_up_ens_distribution
 !>then you have to query the ensemble handle to see what type it should
 !>use in the computation.  bother.
 
-subroutine get_copy_owner_index(copy_number, owner, owners_index)
+subroutine get_copy_owner_index(ens_handle, copy_number, owner, owners_index)
 
 ! Given the copy number, returns which PE stores it when var complete
 ! and its index in that pes local storage. Depends on distribution_type
 ! with only option 1 currently implemented.
 
-
+type (ensemble_type),  intent(in)  :: ens_handle
 integer, intent(in)  :: copy_number
 integer, intent(out) :: owner, owners_index
 
 integer :: div
+integer :: distribution_type 
+integer :: group_size
 
 !FIXME: these need to come from somewhere.  dist type and
-! num_group should both logically come from the ensemble
+! group_size should both logically come from the ensemble
 ! type but that isn't an arg to this call.  it should.
-integer :: distribution_type = 1
-integer :: num_group
-num_group = num_pes
+
+distribution_type = ens_handle%distribution_type
+group_size        = ens_handle%group_size
 
 ! Asummes distribution type 1
 if (distribution_type == 1) then
@@ -852,8 +877,8 @@ if (distribution_type == 1) then
    owner = copy_number - div * num_pes - 1
    owners_index = div + 1
 else
-   div = (copy_number - 1) / num_group
-   owner = copy_number - div * num_group - 1
+   div = (copy_number - 1) / group_size
+   owner = copy_number - div * group_size - 1
    owners_index = div + 1
 endif
 
@@ -861,8 +886,7 @@ end subroutine get_copy_owner_index
 
 !-----------------------------------------------------------------
 
-!>@todo FIXME ditto (see get_copy_owner_index comment)
-subroutine get_var_owner_index(var_number, owner, owners_index)
+subroutine get_var_owner_index(ens_handle, var_number, owner, owners_index)
 
 ! Given the var number, returns which PE stores it when copy complete
 ! and its index in that pes local storage. Depends on distribution_type
@@ -870,11 +894,17 @@ subroutine get_var_owner_index(var_number, owner, owners_index)
 
 ! Assumes that all tasks are used in the ensemble
 
+type (ensemble_type),  intent(in)  :: ens_handle
 integer(i8), intent(in)  :: var_number
 integer,     intent(out) :: owner
 integer,     intent(out) :: owners_index
 
 integer :: div
+integer :: distribution_type 
+integer :: group_size
+
+distribution_type = ens_handle%distribution_type
+group_size         = ens_handle%group_size
 
 ! Asummes distribution type 1
 div = (var_number - 1) / num_pes
@@ -885,16 +915,21 @@ end subroutine get_var_owner_index
 
 !-----------------------------------------------------------------
 
-function get_max_num_vars(num_vars)
-!!!function get_max_num_vars(num_vars, distribution_type)
+function get_max_num_vars(ens_handle, num_vars)
 
 ! Returns the largest number of vars that are on any pe when copy complete.
 ! Depends on distribution_type with only option 1 currently implemented.
 ! Used to get size for creating storage to receive a list of the vars on a pe.
 
-integer                 :: get_max_num_vars
-integer(i8), intent(in) :: num_vars
-!!!integer, intent(in) :: distribution_type
+type (ensemble_type),  intent(in)  :: ens_handle
+integer(i8),           intent(in)  :: num_vars
+integer :: get_max_num_vars
+
+integer :: distribution_type 
+integer :: group_size
+
+distribution_type = ens_handle%distribution_type
+group_size        = ens_handle%group_size
 
 get_max_num_vars = num_vars / num_pes + 1
 
@@ -902,16 +937,21 @@ end function get_max_num_vars
 
 !-----------------------------------------------------------------
 
-function get_max_num_copies(num_copies)
-!!!function get_max_num_copies(num_copies, distribution_type)
+function get_max_num_copies(ens_handle, num_copies)
 
 ! Returns the largest number of copies that are on any pe when var complete.
 ! Depends on distribution_type with only option 1 currently implemented.
 ! Used to get size for creating storage to receive a list of the copies on a pe.
 
+type (ensemble_type),  intent(in)  :: ens_handle
 integer             :: get_max_num_copies
 integer, intent(in) :: num_copies
-!!!integer, intent(in) :: distribution_type
+
+integer :: distribution_type 
+integer :: group_size
+
+distribution_type = ens_handle%distribution_type
+group_size        = ens_handle%group_size
 
 get_max_num_copies = num_copies / num_pes + 1
 
@@ -919,15 +959,14 @@ end function get_max_num_copies
 
 !-----------------------------------------------------------------
 
-!>@todo FIXME ditto (see get_copy_owner_index comment)
-subroutine get_var_list(num_vars, pe, var_list, pes_num_vars)
-!!!subroutine get_var_list(num_vars, pe, var_list, pes_num_vars, distribution_type)
+subroutine get_var_list(ens_handle, num_vars, pe, var_list, pes_num_vars)
 
 ! Returns a list of the vars stored by process pe when copy complete
 ! and the number of these vars.
 ! var_list must be dimensioned large enough to hold all vars.
 ! Depends on distribution_type with only option 1 currently implemented.
 
+type (ensemble_type),  intent(in)  :: ens_handle
 integer(i8),   intent(in)  :: num_vars
 integer,       intent(in)  :: pe
 integer(i8),   intent(out) :: var_list(:)
@@ -935,6 +974,11 @@ integer,       intent(out) :: pes_num_vars
 !!!integer, intent(in) :: distribution_type
 
 integer :: num_per_pe_below, num_left_over, i
+integer :: distribution_type 
+integer :: num_group
+
+distribution_type = ens_handle%distribution_type
+num_group         = ens_handle%group_size
 
 ! Figure out number of vars stored by pe
 num_per_pe_below = num_vars / num_pes
@@ -954,19 +998,22 @@ end subroutine get_var_list
 
 !-----------------------------------------------------------------
 
-!>@todo FIXME ditto (see get_copy_owner_index comment)
-subroutine get_copy_list(num_copies, pe, copy_list, pes_num_copies)
-!!!subroutine get_copy_list(num_copies, pe, copy_list, pes_num_copies, distribution_type)
+subroutine get_copy_list(ens_handle, num_copies, pe, copy_list, pes_num_copies)
 
 ! Returns a list of the copies stored by process pe when var complete.
 ! copy_list must be dimensioned large enough to hold all copies.
 ! Depends on distribution_type with only option 1 currently implemented.
 
+type (ensemble_type),  intent(in)  :: ens_handle
 integer,   intent(in)    :: num_copies, pe
 integer,   intent(out)   :: copy_list(:), pes_num_copies
-!!!integer, intent(in) :: distribution_type
 
 integer :: num_per_pe_below, num_left_over, i
+integer :: distribution_type 
+integer :: num_group
+
+distribution_type = ens_handle%distribution_type
+num_group         = ens_handle%group_size
 
 ! Figure out which copies stored by pe
 num_per_pe_below = num_copies / num_pes
@@ -1123,10 +1170,10 @@ my_num_copies = ens_handle%my_num_copies
 my_pe         = ens_handle%my_pe
 
 ! What is maximum number of vars stored on a copy complete pe?
-max_num_vars = get_max_num_vars(num_vars)
+max_num_vars = get_max_num_vars(ens_handle,num_vars)
 
 ! What is maximum number of copies stored on a var complete pe?
-max_num_copies = get_max_num_copies(num_copies)
+max_num_copies = get_max_num_copies(ens_handle,num_copies)
 
 allocate(var_list(max_num_vars), transfer_temp(max_num_vars), &
    copy_list(max_num_copies))
@@ -1140,7 +1187,7 @@ if ( use_var2copy_rec_loop .eqv. .true. ) then ! use updated version
 
         ! Figure out what piece to receive from each other PE and receive it
         RECEIVE_FROM_EACH: do sending_pe = 0, num_pes - 1
-           call get_copy_list(num_copies, sending_pe, copy_list, num_copies_to_receive)
+           call get_copy_list(ens_handle, num_copies, sending_pe, copy_list, num_copies_to_receive)
 
            ! Loop to receive for each copy stored on my_pe
            ALL_MY_COPIES: do k = 1, num_copies_to_receive
@@ -1165,7 +1212,7 @@ if ( use_var2copy_rec_loop .eqv. .true. ) then ! use updated version
         end do RECEIVE_FROM_EACH
      else
         ! I'm the sending PE, figure out what vars of my copies I'll send.
-        call get_var_list(num_vars, recv_pe, var_list, num_vars_to_send)
+        call get_var_list(ens_handle, num_vars, recv_pe, var_list, num_vars_to_send)
        
         do k = 1, my_num_copies
            do sv = 1, num_vars_to_send
@@ -1186,7 +1233,7 @@ else ! use older version
     if(my_pe == sending_pe) then
          ! Figure out what piece to send to each other PE and send it
          SEND_TO_EACH: do recv_pe = 0, num_pes - 1
-           call get_var_list(num_vars, recv_pe, var_list, num_vars_to_send)
+           call get_var_list(ens_handle, num_vars, recv_pe, var_list, num_vars_to_send)
 
            if (num_vars_to_send > 0) then
              ! Loop to send these vars for each copy stored on my_pe
@@ -1211,7 +1258,7 @@ else ! use older version
 
     else
        ! I'm not the sending PE, figure out what copies of my vars I'll receive from sending_pe
-        call get_copy_list(num_copies, sending_pe, copy_list, num_copies_to_receive)
+        call get_copy_list(ens_handle, num_copies, sending_pe, copy_list, num_copies_to_receive)
 
         do copy = 1, num_copies_to_receive
           if (my_num_vars > 0) then
@@ -1280,10 +1327,10 @@ my_num_copies = ens_handle%my_num_copies
 my_pe         = ens_handle%my_pe
 
 ! What is maximum number of vars stored on a copy complete pe?
-max_num_vars = get_max_num_vars(num_vars)
+max_num_vars = get_max_num_vars(ens_handle,num_vars)
 
 ! What is maximum number of copies stored on a var complete pe?
-max_num_copies = get_max_num_copies(num_copies)
+max_num_copies = get_max_num_copies(ens_handle,num_copies)
 
 allocate(var_list(max_num_vars), transfer_temp(max_num_vars), &
    copy_list(max_num_copies))
@@ -1302,7 +1349,7 @@ SENDING_PE_LOOP: do sending_pe = 0, num_pes - 1
    if (my_pe /= sending_pe ) then
 
       ! figure out what piece to recieve from each other PE and recieve it
-      call get_var_list(num_vars, sending_pe, var_list, num_vars_to_receive)
+      call get_var_list(ens_handle, num_vars, sending_pe, var_list, num_vars_to_receive)
 
       if( num_vars_to_receive > 0 ) then
          ! Loop to receive these vars for each copy stored on my_pe
@@ -1321,7 +1368,7 @@ SENDING_PE_LOOP: do sending_pe = 0, num_pes - 1
 
       do recv_pe = 0, num_pes - 1
       ! I'm the sending PE, figure out what copies of my vars I'll send
-      call get_copy_list(num_copies, recv_pe, copy_list, num_copies_to_send)
+      call get_copy_list(ens_handle, num_copies, recv_pe, copy_list, num_copies_to_send)
 
          SEND_COPIES: do copy = 1, num_copies_to_send
             if (my_pe /= recv_pe ) then
@@ -1334,7 +1381,7 @@ SENDING_PE_LOOP: do sending_pe = 0, num_pes - 1
             else
 
                ! figure out what piece to recieve from myself and recieve it
-               call get_var_list(num_vars, sending_pe, var_list, num_vars_to_receive)
+               call get_var_list(ens_handle, num_vars, sending_pe, var_list, num_vars_to_receive)
                do k = 1,  my_num_copies
                   ! sending to yourself so just copy
                   global_ens_index = ens_handle%my_copies(k)
@@ -1359,7 +1406,7 @@ RECEIVING_PE_LOOP: do recv_pe = 0, num_pes - 1
 
       ! Figure out what piece to receive from each other PE and receive it
       RECEIVE_FROM_EACH: do sending_pe = 0, num_pes - 1
-         call get_var_list(num_vars, sending_pe, var_list, num_vars_to_receive)
+         call get_var_list(ens_handle, num_vars, sending_pe, var_list, num_vars_to_receive)
 
          ! Loop to receive these vars for each copy stored on my_pe
          ALL_MY_COPIES: do k = 1, my_num_copies
@@ -1385,7 +1432,7 @@ RECEIVING_PE_LOOP: do recv_pe = 0, num_pes - 1
       end do RECEIVE_FROM_EACH
    else
       ! I'm the sending PE, figure out what copies of my vars I'll send.
-      call get_copy_list(num_copies, recv_pe, copy_list, num_copies_to_send)
+      call get_copy_list(ens_handle, num_copies, recv_pe, copy_list, num_copies_to_send)
        
       do copy = 1, num_copies_to_send
          if (my_num_vars > 0) then

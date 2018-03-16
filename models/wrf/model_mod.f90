@@ -5934,7 +5934,7 @@ counter(:) = 0
 
 do copy = 1, ens_size
 
-   call get_copy_owner_index(copy, owner, owner_index)
+   call get_copy_owner_index(ens_handle, copy, owner, owner_index)
    if (counter(owner+1)==0) counter(owner+1) = ((map_pe_to_task(ens_handle, owner)+1) * 1000)
    call init_random_seq(random_seq(copy), counter(owner+1))
    counter(owner+1) = counter(owner+1) + 1
@@ -5957,7 +5957,7 @@ do copy = 1, ens_size
 
          do j = start_ind, end_ind
 
-            call get_var_owner_index(j, owner, owner_index)
+            call get_var_owner_index(ens_handle, j, owner, owner_index)
 
                ! once you change pert_state, state is changed as well
                ! since they are the same storage as called from filter.

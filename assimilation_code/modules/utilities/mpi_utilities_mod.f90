@@ -95,6 +95,7 @@ end interface
 integer :: myrank        = -1  ! my mpi number
 integer :: total_tasks   = -1  ! total mpi tasks/procs
 integer :: my_local_comm =  0  ! duplicate communicator private to this file
+integer :: my_group_comm =  0  ! duplicate communicator private to this file
 integer :: datasize      =  0  ! which MPI type corresponds to our r8 definition
 integer :: longinttype   =  0  ! create an MPI type corresponding to our i8 definition
 
@@ -106,8 +107,8 @@ public :: initialize_mpi_utilities, finalize_mpi_utilities,                  &
           broadcast_send, broadcast_recv, shell_execute, sleep_seconds,      &
           sum_across_tasks, get_dart_mpi_comm, datasize, send_minmax_to,     &
           get_from_fwd, get_from_mean, broadcast_minmax, broadcast_flag,     &
-          start_mpi_timer, read_mpi_timer, create_groups, &
-          all_reduce_min_max  ! deprecated, replace by broadcast_minmax
+          start_mpi_timer, read_mpi_timer, create_groups, get_group_size,    &
+          set_group_size, all_reduce_min_max  ! deprecated, replace by broadcast_minmax
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -130,6 +131,7 @@ integer :: group_all
 integer :: mpi_group_comm
 integer :: subgroup   !< subgroup for the grid
 integer :: group_rank !< rank within group
+integer :: group_size
 
 character(len = 256) :: errstring, errstring1
 
@@ -176,8 +178,6 @@ logical :: all_tasks_print      = .false.   ! by default only msgs from 0 print
 logical :: make_copy_before_sendrecv  = .false.   ! should not be needed; .true. is very slow
 logical :: make_copy_before_broadcast = .false.   ! should not be needed; .true. is very slow
 
-integer :: group_size = 1
-
 ! NAMELIST: change the following from .false. to .true. to enable
 ! the reading of this namelist.  This is the only place you need
 ! to make this change.
@@ -186,8 +186,8 @@ logical :: use_namelist = .true.
 namelist /mpi_utilities_nml/ reverse_task_layout, all_tasks_print, &
                              verbose, async2_verbose, async4_verbose, &
                              shell_name, separate_node_sync, create_local_comm, &
-                             make_copy_before_sendrecv, make_copy_before_broadcast, &
-                             group_size
+                             make_copy_before_sendrecv, make_copy_before_broadcast
+                             
 
 contains
 
@@ -324,10 +324,6 @@ call MPI_Comm_size(my_local_comm, total_tasks, errcode)
 if (errcode /= MPI_SUCCESS) then
    write(errstring, '(a,i8)') 'MPI_Comm_size returned error code ', errcode
    call error_handler(E_ERR,'initialize_mpi_utilities', errstring, source, revision, revdate)
-endif
-
-if (myrank == 0) then
-   print*, 'GROUP SIZE ', group_size
 endif
 
 ! tell the utilities module what task number we are.
@@ -1992,7 +1988,8 @@ end subroutine broadcast_flag
 
 !-----------------------------------------------------------------------------
 
-subroutine create_groups
+subroutine create_groups(group_size)
+integer, intent(inout) :: group_size
 
 integer i, ierr ! all MPI errors are fatal anyway
 
@@ -2048,6 +2045,39 @@ do i = 2, group_size
 enddo
 
 end subroutine build_my_group
+
+!-----------------------------------------------------------
+
+!> get the size of the mpi group
+
+function get_group_size()
+
+integer :: get_group_size
+
+get_group_size = group_size
+
+end function get_group_size
+
+!-----------------------------------------------------------
+
+!> set the size of the mpi group
+
+subroutine set_group_size(my_group_size)
+integer, intent(in) :: my_group_size
+
+group_size = my_group_size
+
+end subroutine set_group_size
+!-----------------------------------------------------------
+
+!> get the group communicator
+
+function get_group_comm()
+integer :: get_group_comm
+
+get_group_comm = mpi_group_comm
+
+end function get_group_comm
 
 end module mpi_utilities_mod
 

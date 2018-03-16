@@ -46,9 +46,6 @@ use mpi_utilities_mod,    only : my_task_id, &
                                  broadcast_send, broadcast_recv
 
 use ensemble_manager_mod, only : ensemble_type, map_pe_to_task, &
-                                 map_task_to_pe, &
-                                 get_allow_transpose, &
-                                 all_copies_to_all_vars, all_vars_to_all_copies, &
                                  get_var_owner_index
 
 use utilities_mod,        only : error_handler, nc_check, check_namelist_read, &
@@ -391,7 +388,7 @@ allocate(inf_array(inf_count)) ! for sending and recveiving inflation values
 
 ! Find out who owns the first element of vars array
 first_element = 1
-call get_var_owner_index(first_element, owner, owners_index)
+call get_var_owner_index(ens_handle, first_element, owner, owners_index)
 
 PRIOR_INF_MEAN  = get_inflation_mean_copy(prior_inflate_handle)
 PRIOR_INF_SD    = get_inflation_sd_copy(  prior_inflate_handle)

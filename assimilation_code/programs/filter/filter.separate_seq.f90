@@ -44,16 +44,14 @@ use assim_tools_mod,      only : filter_assim, set_assim_tools_trace, get_missin
                                  test_state_copies
 use obs_model_mod,        only : move_ahead, advance_state, set_obs_model_trace
 use ensemble_manager_mod, only : init_ensemble_manager, end_ensemble_manager,                &
-                                 ensemble_type, get_copy, get_my_num_copies, put_copy,       &
+                                 ensemble_type, get_my_num_copies,       &
                                  all_vars_to_all_copies, all_copies_to_all_vars,             &
                                  read_ensemble_restart, write_ensemble_restart,              &
                                  compute_copy_mean, compute_copy_mean_sd,                    &
-                                 compute_copy_mean_var, duplicate_ens, get_copy_owner_index, &
-                                 get_ensemble_time, set_ensemble_time, broadcast_copy,       &
+                                 compute_copy_mean_var, get_copy_owner_index, &
+                                 get_ensemble_time, set_ensemble_time,       &
                                  prepare_to_read_from_vars, prepare_to_write_to_vars, prepare_to_read_from_copies,    &
-                                 prepare_to_write_to_copies, get_ensemble_time, set_ensemble_time,    &
-                                 map_task_to_pe,  map_pe_to_task, prepare_to_update_copies,  &
-                                 get_my_num_vars 
+                                 map_pe_to_task, prepare_to_update_copies
 use adaptive_inflate_mod, only : adaptive_inflate_end, do_varying_ss_inflate,                &
                                  do_single_ss_inflate, inflate_ens, adaptive_inflate_init,   &
                                  do_obs_inflate, adaptive_inflate_type,                      &

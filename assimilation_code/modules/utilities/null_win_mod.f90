@@ -72,6 +72,8 @@ call init_ensemble_manager(mean_ens_handle, 1, state_ens_handle%num_vars) ! dist
 call set_num_extra_copies(mean_ens_handle, 0)
 mean_ens_handle%copies(1,:) = state_ens_handle%copies(mean_copy, :)
 
+print*, 'my_num_vars', state_ens_handle%num_vars
+
 ! Set the current window to the state window
 current_win = MEAN_WINDOW
 

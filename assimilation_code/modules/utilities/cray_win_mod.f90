@@ -13,8 +13,7 @@ module window_mod
 !> @{
 use mpi_utilities_mod,    only : datasize, my_task_id
 use types_mod,            only : r8
-use ensemble_manager_mod, only : ensemble_type, map_pe_to_task, get_var_owner_index, &
-                                 copies_in_window, init_ensemble_manager, &
+use ensemble_manager_mod, only : ensemble_type, copies_in_window, init_ensemble_manager, &
                                  get_allow_transpose, end_ensemble_manager, &
                                  set_num_extra_copies, all_copies_to_all_vars, &
                                  all_vars_to_all_copies
@@ -74,6 +73,7 @@ integer :: my_num_vars
 data_count = copies_in_window(state_ens_handle)
 
 if (get_allow_transpose(state_ens_handle)) then
+if (my_task_id() == 0) print*, 'data count ', data_count
    call all_copies_to_all_vars(state_ens_handle)
 else
    ! find how many variables I have

@@ -48,14 +48,9 @@ use ensemble_manager_mod,  only : init_ensemble_manager, end_ensemble_manager,  
                                   compute_copy_mean, compute_copy_mean_sd,                    &
                                   compute_copy_mean_var, duplicate_ens, get_copy_owner_index, &
                                   get_ensemble_time, set_ensemble_time, broadcast_copy,       &
-                                  prepare_to_read_from_vars, prepare_to_write_to_vars,        &
-                                  prepare_to_read_from_copies,  get_my_num_vars,              &
-                                  prepare_to_write_to_copies, get_ensemble_time,              &
                                   map_task_to_pe,  map_pe_to_task, prepare_to_update_copies,  &
-                                  copies_in_window, set_num_extra_copies, get_allow_transpose, &
-                                  all_copies_to_all_vars, allocate_single_copy, allocate_vars, &
-                                  get_single_copy, put_single_copy, deallocate_single_copy,   &
-                                  print_ens_handle
+                                  set_num_extra_copies, allocate_single_copy, allocate_vars, &
+                                  deallocate_single_copy
 
 use adaptive_inflate_mod,  only : do_varying_ss_inflate, mean_from_restart, sd_from_restart,  &
                                   do_single_ss_inflate, inflate_ens, adaptive_inflate_init,   &
@@ -1708,7 +1703,7 @@ real(r8) :: rtime(4)
 integer  :: days, secs
 integer  :: copy1_owner, owner_index
 
-call get_copy_owner_index(1, copy1_owner, owner_index)
+call get_copy_owner_index(ens_handle, 1, copy1_owner, owner_index)
 
 if( ens_handle%my_pe == copy1_owner) then
    rkey_bounds = key_bounds
@@ -1753,7 +1748,7 @@ integer  :: days, secs
 integer  :: copy1_owner, owner_index
 type(time_type) :: time_from_copy1
 
-call get_copy_owner_index(1, copy1_owner, owner_index)
+call get_copy_owner_index(ens_handle, 1, copy1_owner, owner_index)
 
 if( ens_handle%my_pe == copy1_owner) then
    call get_time(ens_time, secs, days)
@@ -2033,7 +2028,7 @@ ens_size = ens_handle%num_copies - ens_handle%num_extras
 
 do copy_num = ens_size + 1, ens_handle%num_copies
    ! Set time for a given copy of an ensemble
-   call get_copy_owner_index(copy_num, owner, owners_index)
+   call get_copy_owner_index(ens_handle, copy_num, owner, owners_index)
    if(ens_handle%my_pe == owner) then
       call set_ensemble_time(ens_handle, owners_index, ens_handle%current_time)
    endif

@@ -60,7 +60,7 @@ use types_mod,            only : r4, r8, i4, i8, MISSING_R8, MISSING_R4, MISSING
 use options_mod,          only : get_missing_ok_status
 
 use ensemble_manager_mod, only : ensemble_type, map_pe_to_task, map_task_to_pe, &
-                                 all_copies_to_all_vars, all_vars_to_all_copies, &
+                                 all_copies_to_all_vars, &
                                  get_copy_owner_index, get_copy, get_ensemble_time, &
                                  allocate_vars
 
@@ -982,7 +982,7 @@ COPIES: do copy = 1, state_ens_handle%my_num_copies
          call nc_write_global_att_clamping(ncfile_out, copy, domain)
 
          if (overwrite_time_in_output_file) then
-            call get_copy_owner_index(copy, time_owner, time_owner_index)
+            call get_copy_owner_index(state_ens_handle, copy, time_owner, time_owner_index)
             call get_ensemble_time(state_ens_handle, time_owner_index, dart_time)
             call write_model_time(ncfile_out, dart_time)
          endif
@@ -990,7 +990,7 @@ COPIES: do copy = 1, state_ens_handle%my_num_copies
       else ! create and open file
          !>@todo This is grabbing the time assuming the ensemble is var complete.
          !> Should we instead have all copies time in the ensemble handle?
-         call get_copy_owner_index(copy, time_owner, time_owner_index)
+         call get_copy_owner_index(state_ens_handle, copy, time_owner, time_owner_index)
          call get_ensemble_time(state_ens_handle, time_owner_index, dart_time)
          ncfile_out = create_and_open_state_output(name_handle, domain, copy, &
                                                    dart_time, write_single_precision)
@@ -1299,7 +1299,7 @@ COPIES : do c = 1, ens_size
             call nc_write_global_att_clamping(ncfile_out, my_copy, domain)
 
             if (overwrite_time_in_output_file) then
-               call get_copy_owner_index(my_copy, time_owner, time_owner_index)
+               call get_copy_owner_index(state_ens_handle, my_copy, time_owner, time_owner_index)
                call get_ensemble_time(state_ens_handle, time_owner_index, dart_time)
                call write_model_time(ncfile_out, dart_time)
             endif
@@ -1308,7 +1308,7 @@ COPIES : do c = 1, ens_size
 
             !>@todo This is grabbing the time assuming the ensemble is var complete.
             !> Should we instead have all copies time in the ensemble handle?
-            call get_copy_owner_index(my_copy, time_owner, time_owner_index)
+            call get_copy_owner_index(state_ens_handle, my_copy, time_owner, time_owner_index)
             call get_ensemble_time(state_ens_handle, time_owner_index, dart_time)
 
             ncfile_out = create_and_open_state_output(name_handle, domain, my_copy, &

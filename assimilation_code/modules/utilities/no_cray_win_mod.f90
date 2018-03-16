@@ -15,7 +15,7 @@ use ensemble_manager_mod, only : ensemble_type, map_pe_to_task, get_var_owner_in
                                  copies_in_window, init_ensemble_manager, &
                                  get_allow_transpose, end_ensemble_manager, &
                                  set_num_extra_copies, all_copies_to_all_vars, &
-                                 all_vars_to_all_copies
+                                 all_vars_to_all_copies, get_group_comm
 
 use mpi
 
@@ -125,16 +125,18 @@ if (use_distributed_mean) then
    my_num_vars = mean_ens_handle%my_num_vars
    call mpi_type_size(datasize, bytesize, ierr)
    window_size = my_num_vars*bytesize
-
    ! Need a simply contiguous piece of memory to pass to mpi_win_create
    ! Expose local memory to RMA operation by other processes in a communicator.
-   call mpi_win_create(mean_1d, window_size, bytesize, MPI_INFO_NULL, get_dart_mpi_comm(), mean_win, ierr)
+   call mpi_win_create(mean_1d, window_size, bytesize, MPI_INFO_NULL, get_group_comm(), mean_win, ierr)
 else
+   ! transpose_type_in always distributed group
    call init_ensemble_manager(mean_ens_handle, 1, state_ens_handle%num_vars, transpose_type_in = 3)
    call set_num_extra_copies(mean_ens_handle, 0)
    mean_ens_handle%copies(1,:) = state_ens_handle%copies(mean_copy, :)
    call all_copies_to_all_vars(mean_ens_handle) ! this is a transpose-duplicate
 endif
+
+   print*, 'my_num_vars', my_task_id(), mean_ens_handle%my_num_vars
    
 ! grabbing mean directly, no windows are being used
 current_win = MEAN_WINDOW

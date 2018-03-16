@@ -1814,7 +1814,7 @@ counter(:) = 1
 
 do copy = 1, ens_size
 
-   call get_copy_owner_index(copy, owner, owner_index)
+   call get_copy_owner_index(ens_handle, copy, owner, owner_index)
 
    if (counter(owner+1)==1) counter(owner+1) = counter(owner+1) + ((map_pe_to_task(ens_handle, owner)) * 1000)
 
@@ -1830,7 +1830,7 @@ do copy = 1, ens_size
       end_ind = get_index_end(domid, i)
       do j = start_ind, end_ind
 
-         call get_var_owner_index(j, owner, owner_index)
+         call get_var_owner_index(ens_handle, j, owner, owner_index)
 
          ! pert_ampl is only important on the task that uses it, but need to keep
          ! the random number sequence in the same order on each task (call the same amount of times)

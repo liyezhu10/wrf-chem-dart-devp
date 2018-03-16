@@ -14,7 +14,8 @@ use         utilities_mod, only : register_module, error_handler, E_MSG, E_ERR, 
                                   nc_check, E_MSG, open_file, close_file, do_output
 
 use     mpi_utilities_mod, only : initialize_mpi_utilities, finalize_mpi_utilities, &
-                                  task_count, my_task_id, task_sync
+                                  task_count, my_task_id, task_sync, set_group_size,&
+                                  get_group_size
 
 use      time_manager_mod, only : time_type, set_time, print_date, operator(-), &
                                   NO_CALENDAR
@@ -31,7 +32,8 @@ use      io_filenames_mod, only : io_filenames_init, file_info_type,       &
                                   get_restart_filename, set_file_metadata, &
                                   set_io_copy_flag, READ_COPY, WRITE_COPY
 
-use distributed_state_mod, only : create_state_window, free_state_window
+use distributed_state_mod, only : create_state_window, free_state_window, &
+                                  create_mean_window, free_mean_window
 
 use             model_mod, only : static_init_model
 
@@ -64,12 +66,13 @@ integer                       :: num_ens = 1
 integer                       :: dtype = 1
 integer                       :: ltype = 1
 integer                       :: ttype = 1
+integer                       :: group_size
 character(len=256)            :: input_state_files(MAX_FILES)  = 'null'
 character(len=256)            :: output_state_files(MAX_FILES) = 'null'
 
 
 namelist /test_group_mean_nml/ num_ens, single_file, input_state_files, output_state_files, &
-                               dtype, ltype, ttype
+                               dtype, ltype, ttype, group_size
 
 ! io variables
 integer                   :: iunit, io
@@ -92,6 +95,7 @@ character(len=512) :: string1
 
 character(len=256), allocatable :: file_array_input(:,:)
 character(len=256), dimension(1) :: var_names = (/'temp'/)
+integer,parameter :: one_domain = 1
 
 !======================================================================
 ! start of executable code
@@ -109,14 +113,19 @@ call check_namelist_read(iunit, io, "test_group_mean_nml")
 
 model_size = 60
 
+if(my_task_id()==0) then
+   print*, 'dtype ', dtype
+   print*, 'ltype ', ltype
+   print*, 'ttype ', ttype
+endif
+
 ! Set up the ensemble storage and read in the restart file
 call init_ensemble_manager(ens_handle,                &
                            num_copies           = 1,  &
                            num_vars             = model_size, &
                            distribution_type_in = dtype, & ! round robin, pair round robin, block
                            layout_type          = ltype, & ! no vars, transposable, transpose and duplicate
-                           transpose_type_in    = ttype, & ! no vars, transposable, transpose and duplicate
-                           group_size           = task_count())! for transpose type 3, PE count
+                           transpose_type_in    = ttype)   ! no vars, transposable, transpose and duplicate
 
 ! Allocate space for file arrays.  contains a matrix of files (num_ens x num_domains)
 ! If perturbing from a single instance the number of input files does not have to
@@ -152,22 +161,22 @@ enddo
 
 input_restart_files = get_stage_metadata(file_info_input)
 
-do idom = 1, num_domains
-   do imem = 1, num_ens
-      write(string1, *) '- Reading File : ', trim(get_restart_filename(input_restart_files, imem, domain=idom))
-   enddo
+do imem = 1, num_ens
+   write(string1, *) '- Reading File : ', trim(get_restart_filename(input_restart_files, imem, domain=one_domain))
 enddo
 
 call read_state(ens_handle, file_info_input, read_time_from_file, model_time)
 
+call print_ens_handle(ens_handle, force=.true., label='test_mean', contents=.false., limit=5)
+
 deallocate(file_array_input)
 
-do i = 0, task_count()-1
-   call task_sync()
-   if(my_task_id() == i) then 
-      call print_ens_handle(ens_handle)
-   endif
-enddo
+! do i = 0, task_count()-1
+!    call task_sync()
+!    if(my_task_id() == i) then 
+!       call print_ens_handle(ens_handle)
+!    endif
+! enddo
 
 call task_sync()
 
@@ -175,9 +184,9 @@ call task_sync()
 ! Check window
 !----------------------------------------------------------------------
 
-call create_state_window(ens_handle)
+call create_mean_window(ens_handle, mean_copy=1, distribute_mean=.true.)
 
-call free_state_window(ens_handle)
+call free_mean_window()
 
 !----------------------------------------------------------------------
 ! finalize test_group_mean
@@ -219,7 +228,8 @@ end subroutine finalize_modules_used
 subroutine print_ens(ens_handle, lim, rank)
 type(ensemble_type), intent(in) :: ens_handle
 integer,             intent(in) :: rank
-integer i, iend, lim
+integer,             intent(in) :: lim
+integer :: i
 
 print*, 'rank :: ', rank
 do i = 1, ens_handle%my_num_vars

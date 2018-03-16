@@ -16,12 +16,9 @@ use time_manager_mod,     only : time_type, get_time
 use utilities_mod,        only : register_module, open_file, close_file, &
                                  error_handler, E_ERR, E_MSG
 use random_seq_mod,       only : random_seq_type, random_gaussian, init_random_seq
-use ensemble_manager_mod, only : ensemble_type,   &
-                                 get_copy_owner_index, prepare_to_write_to_vars,                &
-                                 prepare_to_read_from_vars, prepare_to_update_vars, &
-                                 map_pe_to_task
+use ensemble_manager_mod, only : ensemble_type,  map_pe_to_task
 
-use mpi_utilities_mod,    only : my_task_id, send_to, receive_from, send_minmax_to
+use mpi_utilities_mod,    only : my_task_id, send_minmax_to
 
 implicit none
 private

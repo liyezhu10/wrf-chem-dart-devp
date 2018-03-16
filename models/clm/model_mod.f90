@@ -72,11 +72,8 @@ use     obs_kind_mod, only : QTY_SOIL_TEMPERATURE,       &
                              get_index_for_quantity,      &
                              get_name_for_quantity
 
- use ensemble_manager_mod, only : ensemble_type, &
-                                  map_pe_to_task, &
-                                  get_var_owner_index, &
-                                  all_copies_to_all_vars, &
-                                  all_vars_to_all_copies
+ use ensemble_manager_mod, only : ensemble_type
+                                  
 
 use distributed_state_mod, only : get_state
 
