@@ -27,12 +27,12 @@
 # num_instances The number of ensemble members.
 # ==============================================================================
 
-setenv CASE           clm5_f09_spinup_e40
+setenv CASE           clm5_f09_spinup80
 setenv resolution     f09_g16
 setenv resolution     f09_f09
 setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
-setenv cesmtag        clm_dev_branch
-setenv num_instances  40
+setenv cesmtag        clm_dev
+setenv num_instances  80
 
 setenv RUN_TYPE       startup
 setenv RUN_STARTDATE  1998-01-01
@@ -79,11 +79,12 @@ setenv dartroot     /glade/p/work/thoar/DART/cesm_clm
 # queue      can be changed during a series by changing the case.run
 # timewall   can be changed during a series by changing the case.run
 #
-# TJH: Advancing 80 instances for 1 month using 4 nodes per instance took
-#      less than xx minutes on cheyenne using 36 tasks and 1 thread per node
+# TJH: Advancing 80 instances for 1 month using 4 nodes per instance averaged
+#      about 2000 core hours on cheyenne using 36 tasks and 1 thread per node.
+#      About 625 seconds of wall-clock per month. 2000*60*60/(80*4*36) = 625
 # ==============================================================================
 
-setenv queue               regular
+setenv queue               economy
 setenv timewall            01:00
 setenv short_term_archiver off
 
@@ -217,7 +218,7 @@ endif
 ./xmlchange DATM_CPLHIST_YR_ALIGN=$stream_year_align
 
 # pnetcdf is default
-./xmlchange PIO_TYPENAME=pnetcdf
+./xmlchange PIO_TYPENAME=netcdf
 
 # Task layout:
 # Set the nodes_per_instance below to match your case.
@@ -256,7 +257,7 @@ echo "case setup finished"
 
 ./xmlchange --subgroup case.run        --id JOB_QUEUE          --val ${queue}
 ./xmlchange --subgroup case.run        --id JOB_WALLCLOCK_TIME --val ${timewall}
-./xmlchange --subgroup case.st_archive --id JOB_WALLCLOCK_TIME --val 1:00
+./xmlchange --subgroup case.st_archive --id JOB_WALLCLOCK_TIME --val 8:00
 
 # These are archiving options that may be used.
 # You can turn the short/long term archivers on or off ({short,long}_term_archiver),
