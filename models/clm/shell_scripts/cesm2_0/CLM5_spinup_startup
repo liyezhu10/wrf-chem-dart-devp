@@ -28,7 +28,6 @@
 # ==============================================================================
 
 setenv CASE           clm5_f09_spinup80
-setenv resolution     f09_g16
 setenv resolution     f09_f09
 setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
 setenv cesmtag        clm_dev
@@ -85,7 +84,7 @@ setenv dartroot     /glade/p/work/thoar/DART/cesm_clm
 # ==============================================================================
 
 setenv queue               economy
-setenv timewall            01:00
+setenv timewall            01:00:00
 setenv short_term_archiver off
 
 setenv stop_option         nmonths
@@ -218,13 +217,14 @@ endif
 ./xmlchange DATM_CPLHIST_YR_ALIGN=$stream_year_align
 
 # pnetcdf is default
-./xmlchange PIO_TYPENAME=netcdf
+./xmlchange PIO_TYPENAME=pnetcdf
 
 # Task layout:
 # Set the nodes_per_instance below to match your case.
 # By computing task counts like we do below, we guarantee each instance uses
 # a whole number of nodes which is the recommended configuration.
 # CIME interprets a negative task count as representing the number of nodes.
+# On Cheyenne (at least) using multiple threads is not recommended.
 
 @ nodes_per_instance = 4
 @ nthreads = 1
@@ -325,7 +325,29 @@ while ( $inst <= $num_instances )
    set fname = "user_nl_clm${inst_string}"
    # ===========================================================================
 
-   echo "hist_empty_htapes = .true."                                    >> ${fname}
+   # The code that spun up 1998, 1999, and 2000 used a certain SGLC that was 
+   # changed is r270 resulting in a different number of landunits.
+   # Excerpt from that changeLog entry:
+   # 
+   #    Caveats for users (e.g., need to interpolate initial conditions):
+   #    - If you use an finidat file from an old run that used SGLC, you'll need
+   #      to run init_interp and will need to set
+   #      init_interp_fill_missing_with_natveg = .true. in user_nl_clm. Note
+   #      that this will initialize glacier_mec landunits with information from
+   #      vegetated landunits, which is not a very good initialization, so
+   #      you'll want to spin up for a while to spin up the new glacier_mec
+   #      landunits.
+   #
+   # Additionally, the finidat interpolation is known to have a multi-instance
+   # filename problem preventing the use of pnetcdf unless the filename is
+   # explicitly specified.
+
+   set finidat_name = "finidat${inst_string}_interp_dest.nc"
+
+   echo "hist_empty_htapes = .true."                      >! ${fname}
+   echo "finidat_interp_dest = '"$finidat_name"'"         >> ${fname}
+   echo "use_init_interp = .true."                        >> ${fname}
+   echo "init_interp_fill_missing_with_natveg = .true."   >> ${fname}
 
    @ inst ++
 end

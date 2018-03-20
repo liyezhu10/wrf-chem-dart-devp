@@ -55,10 +55,6 @@ setenv num_instances  80
 #              invoked to move these files to permanent storage.
 #
 # dartroot     Location of the root of _your_ DART installation
-# baseobsdir   Part of the directory name containing the observation sequence 
-#              files to be used in the assimilation. The observations are presumed
-#              to be stored in sub-directories with names built from the year and
-#              month. 'baseobsdir' will be inserted into the appropriate scripts.
 # ==============================================================================
 
 setenv project      P86850054
@@ -71,7 +67,6 @@ setenv exeroot      /glade/scratch/${USER}/$cesmtag/${CASE}/bld
 setenv archdir      /glade/scratch/${USER}/$cesmtag/${CASE}/archive
 
 setenv dartroot     /glade/p/work/thoar/DART/cesm_clm
-setenv baseobsdir   /glade/p/image/Observations/land
 
 # ==============================================================================
 # configure settings:
@@ -105,8 +100,8 @@ setenv startdate    2000-01-01
 # _start_ of the forecast - not the restart time. The obs_def_tower_mod.f90 requires
 # the stop_option to be 'nhours', and the stop_n to be accurate.
 
-setenv stop_option  nhours
-setenv stop_n       24
+setenv stop_option  nmonths
+setenv stop_n       1
 setenv resubmit     0
 
 @ clm_dtime = 1800
@@ -198,26 +193,10 @@ ${cesmroot}/cime/scripts/create_newcase  --res  ${resolution} \
 
 # ==============================================================================
 # Preserve a copy of this script as it was run.
-# Copy the DART setup script (CESM_DART_config) to CASEROOT.
-# Since we know the DARTROOT and BASEOBSDIR now, record them into
-# CASEROOT/CESM_DART_config now.
 # ==============================================================================
 
 set ThisFileName = $0:t
 ${COPY} $ThisFileName ${caseroot}/${ThisFileName}.original
-
-if (   -e ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config.template) then
-   sed -e "s#BOGUS_DART_ROOT_STRING#${dartroot}#" \
-       -e "s#BOGUS_DART_OBS_STRING#${baseobsdir}#" \
-       -e "s#BOGUS_CASEROOT_STRING#${caseroot}#" \
-          ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config.template \
-           >! ${caseroot}/CESM_DART_config  || exit 3
-   chmod 755  ${caseroot}/CESM_DART_config
-else
-   echo "ERROR: the script to configure for data assimilation is not available."
-   echo "       ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config.template MUST exist."
-   exit 4
-endif
 
 # ==============================================================================
 cd ${caseroot}
@@ -254,8 +233,8 @@ endif
 ./xmlchange STOP_OPTION=$stop_option
 ./xmlchange STOP_N=$stop_n
 ./xmlchange RESUBMIT=$resubmit
-./xmlchange REST_OPTION=ndays
-./xmlchange REST_N=1
+./xmlchange REST_OPTION=$stop_option
+./xmlchange REST_N=$stop_n
 
 ./xmlchange CALENDAR=GREGORIAN
 ./xmlchange EXEROOT=${exeroot}
@@ -396,16 +375,29 @@ while ( $inst <= $num_instances )
    set fname = "user_nl_clm${inst_string}"
    # ===========================================================================
 
+   # The code that spun up 1998, 1999, and 2000 used a certain SGLC that was 
+   # changed is r270 resulting in a different number of landunits.
+   # Excerpt from that changeLog entry:
+   # 
+   #    Caveats for users (e.g., need to interpolate initial conditions):
+   #    - If you use an finidat file from an old run that used SGLC, you'll need
+   #      to run init_interp and will need to set
+   #      init_interp_fill_missing_with_natveg = .true. in user_nl_clm. Note
+   #      that this will initialize glacier_mec landunits with information from
+   #      vegetated landunits, which is not a very good initialization, so
+   #      you'll want to spin up for a while to spin up the new glacier_mec
+   #      landunits.
+   #
+   # Additionally, the finidat interpolation is known to have a multi-instance
+   # filename problem preventing the use of pnetcdf unless the filename is
+   # explicitly specified.
+
+   set finidat_name = "finidat${inst_string}_interp_dest.nc"
+
    echo "hist_empty_htapes = .true."                                      >> ${fname}
-   echo "hist_fincl1 = 'NEP','TOTECOSYSC','TOTVEGC','TLAI'"               >> ${fname}
-   echo "hist_fincl2 = 'NEP','FSH','EFLX_LH_TOT_R'"                       >> ${fname}
-   echo "hist_fincl3 = 'TV','TLAI','PBOT','TBOT','TSA','RH2M_R','SNOWDP'" >> ${fname}
-   echo "hist_nhtfrq = -$stop_n,1,-$stop_n"                               >> ${fname}
-   echo "hist_mfilt  = 1,$h1nsteps,1"                                     >> ${fname}
-   echo "hist_avgflag_pertape = 'A','A','I'"                              >> ${fname}
-   echo "hist_dov2xy = .true.,.true.,.false."                             >> ${fname}
-   echo "hist_type1d_pertape = ' ',' ',' '"                               >> ${fname}
-   echo "dtime = $clm_dtime"                                              >> ${fname}
+   echo "finidat_interp_dest = '"$finidat_name"'"                         >> ${fname}
+   echo "use_init_interp = .true."                                        >> ${fname}
+   echo "init_interp_fill_missing_with_natveg = .true."                   >> ${fname}
 
    @ inst ++
 end
@@ -556,68 +548,8 @@ chmod 0755 stage_cesm_files
 ./stage_cesm_files || exit 2
 
 #===============================================================================
-# Copy modified CLM codes into SourceMods
-# src.clm
-# |-- clm4_0
-# |   |-- biogeochem
-# |   |   `-- CNBalanceCheckMod.F90
-# |   `-- biogeophys
-# |       |-- BalanceCheckMod.F90
-# |       |-- SnowHydrologyMod.F90
-# |       `-- UrbanMod.F90
-# `-- clm4_5
-#     |-- biogeochem
-#     |   `-- CNBalanceCheckMod.F90
-#     `-- biogeophys
-#         `-- BalanceCheckMod.F90
-# ==============================================================================
-
-if (    -d     ~/${cesmtag}/SourceMods ) then
-
-#  ${COPY} -r ~/${cesmtag}/SourceMods/src.clm ${caseroot}/SourceMods/
-
-   set clm_opts = `echo $CLM_CONFIG_OPTS | sed -e "s/-//"`
-
-   @ iarg = 1
-   while ($iarg <= $#clm_opts)
-
-      @ iargp1 = $iarg + 1
-      set option = $clm_opts[$iarg]
-      set  value = $clm_opts[$iargp1]
-
-      switch ( ${option} )
-         case "phys":
-            if ( -e    SourceMods/src.clm/${value} ) then
-               cd      SourceMods/src.clm
-               ${LINK} ${value}/*/*F90 .
-               cd      ../..
-            else
-               echo "No SourceMods for CLM <${value}>."
-               echo "Got the version from CLM_CONFIG_OPTS ...  <${CLM_CONFIG_OPTS}>"
-            endif
-         breaksw
-      #  case "bgc":  no special action needed here at this time
-      #  breaksw
-
-         default:
-         breaksw
-      endsw
-
-      @ iarg = $iarg + 2
-   end
-
-else
-
-   echo "MESSAGE - No SourceMods for this case."
-   echo "MESSAGE - No SourceMods for this case."
-
-endif
 
 ./case.build || exit 7
-
-# ==============================================================================
-# What to do next
-# ==============================================================================
 
 cat << EndOfText >! CESM_instructions.txt
 
@@ -632,26 +564,12 @@ Time to check the case.
 
 3) check things
 
-4) run a single day, verify that it works without assimilation
-   ./case.submit
-
-5) IF NEEDED, compile all the DART executables by
-   cd  ${dartroot}/models/clm/work
-   ./quickbuild.csh -mpi
-
-5) Modify the case to enable data assimilation and
-   run DART by executing
-   cd ${caseroot}
-   ./CESM_DART_config
-
-6) Make sure the DART-related parts are appropriate.
-   Check the input.nml
-   Check the assimilate.csh or perfect_model.csh - as appropriate
+4) run a single job, verify that it works 
    ./case.submit
 
 7) If that works
    ./xmlchange CONTINUE_RUN=TRUE
-   that sort of thing
+   ./xmlchange RESUBMIT=11
 -------------------------------------------------------------------------
 
 EndOfText
