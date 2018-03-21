@@ -70,8 +70,9 @@ use time_manager_mod,  only : time_type, set_time
 !> additional last argument saying this is a group call and not a world one
 
 use mpi_utilities_mod, only : task_count, my_task_id, send_to, receive_from, &
-                              task_sync, broadcast_send, broadcast_recv, &
-                              create_groups, set_group_size, get_group_size
+                              task_sync, broadcast_send, broadcast_recv,     &
+                              create_groups, set_group_size, get_group_size, &
+                              get_group_id, get_group_comm
 
 
 
@@ -93,7 +94,7 @@ public :: init_ensemble_manager,      end_ensemble_manager,     get_ensemble_tim
           prepare_to_update_copies,   print_ens_handle,         set_current_time,           &
           map_task_to_pe,             map_pe_to_task,           get_current_time,           &
           allocate_single_copy,       put_single_copy,          get_single_copy,            &
-          deallocate_single_copy
+          deallocate_single_copy,     all_copies_to_all_copies
 
 ! version controlled file description for error handling, do not edit
 character(len=*), parameter :: source   = &
@@ -220,7 +221,6 @@ integer :: iunit, io
 integer :: transpose_type
 integer :: string1
 
-!>@todo FIXME this didn't used to be first.  why not?
 ! First call to init_ensemble_manager must initialize module and read namelist
 if ( .not. module_initialized ) then
    ! Initialize the module with utilities 
@@ -240,18 +240,19 @@ if ( .not. module_initialized ) then
 
 endif
 
-! FIXME: if we are implementing communication across a group, can we do this here?
-! or does it need to be for a subcommunicator?
-if (group_size == MPI_GROUPS_NOT_SET) then
-   group_size = task_count()
-endif
-
 if(group_size  < 0 .or. group_size > task_count()) then
    write(string1,'(A,I5)') 'invalid group_size ', group_size
    call error_handler(E_ERR, 'init_ensemble_manager', &
                       source, revision, revdate)
 endif
 
+! FIXME: if we are implementing communication across a group, can we do this here?
+! or does it need to be for a subcommunicator?
+if (group_size == MPI_GROUPS_NOT_SET) then
+   group_size = task_count()
+endif
+
+! FIXME: does this go in set_up_ens_distribution()
 call set_group_size(group_size)
 call create_groups(group_size)
 call task_sync()
@@ -424,7 +425,7 @@ if(ens_handle%my_pe == receiving_pe) then
    endif
  
    ! Otherwise, must wait to receive vars and time from storing pe
-      call receive_from(map_pe_to_task(ens_handle, owner), vars, mtime)
+      call receive_from(map_pe_to_task(ens_handle, owner), vars, time = mtime)
 endif
 
 !----- Block of code that must be done by PE that stores the copy IF it is NOT receiver -----
@@ -432,7 +433,9 @@ if(ens_handle%my_pe == owner) then
    ! Send copy to receiving pe
 
    if(present(mtime)) then
-      call send_to(map_pe_to_task(ens_handle, receiving_pe), ens_handle%vars(:, owners_index), ens_handle%time(owners_index))
+      call send_to(map_pe_to_task(ens_handle, receiving_pe), &
+                   ens_handle%vars(:, owners_index), &
+                   time = ens_handle%time(owners_index))
    else
       call send_to(map_pe_to_task(ens_handle, receiving_pe), ens_handle%vars(:, owners_index))
    endif
@@ -486,7 +489,7 @@ if(ens_handle%my_pe == sending_pe) then
    endif
  
    ! Otherwise, must send vars and possibly time to storing pe
-   call send_to(map_pe_to_task(ens_handle, owner), vars, mtime)
+   call send_to(map_pe_to_task(ens_handle, owner), vars, time = mtime)
 
 endif
 
@@ -494,7 +497,9 @@ endif
 if(ens_handle%my_pe == owner) then
    ! Need to receive copy from sending_pe
    if(present(mtime)) then
-      call receive_from(map_pe_to_task(ens_handle, sending_pe), ens_handle%vars(:, owners_index), ens_handle%time(owners_index))
+      call receive_from(map_pe_to_task(ens_handle, sending_pe), &
+                        ens_handle%vars(:, owners_index), &
+                        time = ens_handle%time(owners_index))
    else
       call receive_from(map_pe_to_task(ens_handle, sending_pe), ens_handle%vars(:, owners_index))
    endif
@@ -788,6 +793,7 @@ integer :: num_per_pe_below, num_left_over, i
 
 ! used to keep track of number of members within group
 ens_handle%num_pes = task_count()
+group_size         = get_group_size()
 
 ! local to module
 num_pes = task_count()
@@ -904,7 +910,8 @@ integer :: distribution_type
 integer :: group_size
 
 distribution_type = ens_handle%distribution_type
-group_size         = ens_handle%group_size
+group_size        = ens_handle%group_size
+num_pes           = ens_handle%group_size
 
 ! Asummes distribution type 1
 div = (var_number - 1) / num_pes
@@ -959,7 +966,7 @@ end function get_max_num_copies
 
 !-----------------------------------------------------------------
 
-subroutine get_var_list(ens_handle, num_vars, pe, var_list, pes_num_vars)
+subroutine get_var_list(ens_handle, num_vars, pe, var_list, pes_num_vars, npes)
 
 ! Returns a list of the vars stored by process pe when copy complete
 ! and the number of these vars.
@@ -967,22 +974,29 @@ subroutine get_var_list(ens_handle, num_vars, pe, var_list, pes_num_vars)
 ! Depends on distribution_type with only option 1 currently implemented.
 
 type (ensemble_type),  intent(in)  :: ens_handle
-integer(i8),   intent(in)  :: num_vars
-integer,       intent(in)  :: pe
-integer(i8),   intent(out) :: var_list(:)
-integer,       intent(out) :: pes_num_vars
+integer(i8),           intent(in)  :: num_vars
+integer,               intent(in)  :: pe
+integer(i8),           intent(out) :: var_list(:)
+integer,               intent(out) :: pes_num_vars
+integer, optional,     intent(out) :: npes
 !!!integer, intent(in) :: distribution_type
 
 integer :: num_per_pe_below, num_left_over, i
 integer :: distribution_type 
-integer :: num_group
+integer :: group_size, my_num_vars, my_num_pes
 
 distribution_type = ens_handle%distribution_type
-num_group         = ens_handle%group_size
+group_size        = ens_handle%group_size
+
+if (present(npes)) then
+   my_num_pes = npes
+else
+   my_num_pes = num_pes
+endif
 
 ! Figure out number of vars stored by pe
-num_per_pe_below = num_vars / num_pes
-num_left_over = num_vars - num_per_pe_below * num_pes
+num_per_pe_below = num_vars / my_num_pes
+num_left_over = num_vars - num_per_pe_below * my_num_pes
 if(num_left_over >= (pe + 1)) then
    pes_num_vars = num_per_pe_below + 1
 else
@@ -991,33 +1005,40 @@ endif
 
 ! Fill out the pe's vars
 do i = 1, pes_num_vars
-   var_list(i) = (pe + 1) + (i - 1) * num_pes
+   var_list(i) = (pe + 1) + (i - 1) * my_num_pes
 end do
 
 end subroutine get_var_list
 
 !-----------------------------------------------------------------
 
-subroutine get_copy_list(ens_handle, num_copies, pe, copy_list, pes_num_copies)
+subroutine get_copy_list(ens_handle, num_copies, pe, copy_list, pes_num_copies, npes)
 
 ! Returns a list of the copies stored by process pe when var complete.
 ! copy_list must be dimensioned large enough to hold all copies.
 ! Depends on distribution_type with only option 1 currently implemented.
 
 type (ensemble_type),  intent(in)  :: ens_handle
-integer,   intent(in)    :: num_copies, pe
-integer,   intent(out)   :: copy_list(:), pes_num_copies
+integer,               intent(in)  :: num_copies, pe
+integer,               intent(out) :: copy_list(:), pes_num_copies
+integer, optional,     intent(out) :: npes
 
-integer :: num_per_pe_below, num_left_over, i
+integer :: num_per_pe_below, num_left_over, i, my_num_pes
 integer :: distribution_type 
-integer :: num_group
+integer :: group_size
 
 distribution_type = ens_handle%distribution_type
-num_group         = ens_handle%group_size
+group_size        = ens_handle%group_size
+
+if (present(npes)) then
+   my_num_pes = npes
+else
+   my_num_pes = num_pes
+endif
 
 ! Figure out which copies stored by pe
-num_per_pe_below = num_copies / num_pes
-num_left_over = num_copies - num_per_pe_below * num_pes
+num_per_pe_below = num_copies / my_num_pes
+num_left_over = num_copies - num_per_pe_below * my_num_pes
 if(num_left_over >= (pe + 1)) then
    pes_num_copies = num_per_pe_below + 1
 else
@@ -1026,7 +1047,7 @@ endif
 
 ! Fill out the pe's copies
 do i = 1, pes_num_copies
-   copy_list(i) = (pe + 1) + (i - 1) * num_pes
+   copy_list(i) = (pe + 1) + (i - 1) * my_num_pes
 end do
 
 end subroutine get_copy_list
@@ -1465,6 +1486,196 @@ endif
 
 end subroutine all_copies_to_all_vars
 
+!-----------------------------------------------------------------
+
+subroutine all_copies_to_all_copies(ens_handle, label)
+
+! Converts from having subset of copies of all variables to having
+! all copies of a subset of variables on a given PE.
+
+type (ensemble_type), intent(inout) :: ens_handle
+!integer,              intent(in)    :: copy
+character (len=*),    intent(in), optional :: label
+
+integer(i8),  allocatable :: var_list(:)
+integer,      allocatable :: copy_list(:)
+real(r8),     allocatable :: transfer_temp(:)
+
+integer(i8) :: num_vars
+integer     :: num_copies, my_num_vars, my_num_copies, my_pe
+integer     :: max_num_vars, max_num_copies, num_vars_to_receive
+integer     :: sending_pe, recv_pe, k, sv, num_copies_to_send
+integer     :: global_ens_index, copy
+integer     :: group_pe, group_size
+
+! only output if there is a label
+if (present(label)) then
+   call timestamp_message('copies_to_copies start: '//label, alltasks=.true.)
+endif
+
+! Accelerated version for single process
+if(num_pes == 1) then
+   ens_handle%vars = transpose(ens_handle%copies)
+   return
+end if
+
+! Short var definitions
+num_copies    = ens_handle%num_copies
+num_vars      = ens_handle%num_vars
+my_num_vars   = ens_handle%my_num_vars
+my_num_copies = ens_handle%my_num_copies
+my_pe         = ens_handle%my_pe
+
+group_pe      = get_group_id()
+group_size    = get_group_size()
+
+num_copies    = num_copies*group_size
+num_vars      = num_copies*group_size
+my_num_vars   = num_copies*group_size
+my_num_copies = num_copies*group_size
+
+! What is maximum number of vars stored on a copy complete pe?
+max_num_vars = get_max_num_vars(ens_handle,num_vars)*group_size
+
+! What is maximum number of copies stored on a var complete pe?
+max_num_copies = get_max_num_copies(ens_handle,num_copies)*group_size
+
+allocate(var_list(max_num_vars), transfer_temp(max_num_vars), &
+   copy_list(max_num_copies))
+
+
+! if (use_copy2var_send_loop .eqv. .true. ) then
+! Switched loop index from receiving_pe to sending_pe
+! Aim: to make the communication scale better on Yellowstone, as num_pes >> ens_size
+! For small numbers of tasks (32 or less) the receiving_pe loop may be faster.
+! Namelist option use_copy2var_send_loop can be used to select which
+! communication pattern to use
+!    Default: use sending_pe loop (use_copy2var_send_loop = .true.)
+
+SENDING_PE_LOOP: do sending_pe = 0,  num_pes- 1
+ 
+   if (my_pe /= sending_pe ) then
+
+      ! figure out what piece to recieve from each other PE and recieve it
+      call get_var_list(ens_handle, num_vars, sending_pe, var_list, num_vars_to_receive)
+      print*, 'SEND LOOP, nvars, sendPE, numRecv : ', num_vars, sending_pe, num_vars_to_receive
+      print*, ''
+      print*, 'SEND LOOP, var_list(:) : ', var_list(:)
+      if( num_vars_to_receive > 0 ) then
+         ! Loop to receive these vars for each copy stored on my_pe
+         ALL_MY_COPIES_RECV_LOOP: do k = 1, my_num_copies
+
+           call receive_from(map_pe_to_task(ens_handle, sending_pe), &
+                             transfer_temp(1:num_vars_to_receive), get_group_comm())
+           ! Copy the transfer array to my local storage
+           do sv = 1, num_vars_to_receive
+              ens_handle%vars(var_list(sv), k) = transfer_temp(sv)
+           enddo
+
+         enddo ALL_MY_COPIES_RECV_LOOP
+      endif
+
+   else
+
+      do recv_pe = 0, group_size - 1
+      ! I'm the sending PE, figure out what copies of my vars I'll send
+      call get_copy_list(ens_handle, num_copies, recv_pe, copy_list, num_copies_to_send)
+
+         SEND_COPIES: do copy = 1, num_copies_to_send
+            if (my_pe /= recv_pe ) then
+               if (my_num_vars > 0) then
+                  transfer_temp(1:my_num_vars) = ens_handle%copies(copy_list(copy), :)
+                  ! Have to  use temp because %copies section is not contiguous storage
+                  call send_to(map_pe_to_task(ens_handle, recv_pe), &
+                               transfer_temp(1:my_num_vars), get_group_comm())
+               endif
+
+            else
+
+               ! figure out what piece to recieve from myself and recieve it
+               call get_var_list(ens_handle, num_vars, sending_pe, var_list, num_vars_to_receive, group_size)
+               do k = 1,  my_num_copies
+                  ! sending to yourself so just copy
+                  global_ens_index = ens_handle%my_copies(k)
+                  do sv = 1, num_vars_to_receive
+                     ens_handle%vars(var_list(sv), k) = ens_handle%copies(global_ens_index, sv)
+                  end do
+               enddo
+            endif
+         enddo SEND_COPIES
+      enddo
+
+   endif
+
+enddo SENDING_PE_LOOP
+
+! else ! use old communication pattern
+! 
+! ! Loop to give each pe a turn to receive its vars
+! RECEIVING_PE_LOOP: do recv_pe = 0, num_pes - 1
+!    ! If I'm the receiving pe, do this block
+!    if(my_pe == recv_pe) then
+! 
+!       ! Figure out what piece to receive from each other PE and receive it
+!       RECEIVE_FROM_EACH: do sending_pe = 0, num_pes - 1
+!          call get_var_list(ens_handle, num_vars, sending_pe, var_list, num_vars_to_receive)
+! 
+!          ! Loop to receive these vars for each copy stored on my_pe
+!          ALL_MY_COPIES: do k = 1, my_num_copies
+! 
+!             ! If sending_pe is receiving_pe, just copy
+!             if(sending_pe == recv_pe) then
+!                global_ens_index = ens_handle%my_copies(k)
+!                do sv = 1, num_vars_to_receive
+!                   ens_handle%vars(var_list(sv), k) = ens_handle%copies(global_ens_index, sv)
+!                end do
+!             else
+!                if (num_vars_to_receive > 0) then
+!                   ! Otherwise, receive this part from the sending pe
+!                   call receive_from(map_pe_to_task(ens_handle, sending_pe), transfer_temp(1:num_vars_to_receive))
+!    
+!                   ! Copy the transfer array to my local storage
+!                   do sv = 1, num_vars_to_receive
+!                      ens_handle%vars(var_list(sv), k) = transfer_temp(sv)
+!                   end do
+!                endif
+!             endif
+!          end do ALL_MY_COPIES
+!       end do RECEIVE_FROM_EACH
+!    else
+!       ! I'm the sending PE, figure out what copies of my vars I'll send.
+!       call get_copy_list(ens_handle, num_copies, recv_pe, copy_list, num_copies_to_send)
+!        
+!       do copy = 1, num_copies_to_send
+!          if (my_num_vars > 0) then
+!             transfer_temp(1:my_num_vars) = ens_handle%copies(copy_list(copy), :)
+!             ! Have to  use temp because %copies section is not contiguous storage
+!             call send_to(map_pe_to_task(ens_handle, recv_pe), transfer_temp(1:my_num_vars))
+!          endif
+!       end do
+!       
+!    endif
+! end do RECEIVING_PE_LOOP
+! 
+! endif
+! 
+! 
+! ! Free up the temporary storage
+! deallocate(var_list, transfer_temp, copy_list)
+
+!FIXME: this is where if NTASKS/GROUP is < TOTAL_TASKS
+!we broadcast only to our own group members.
+if (ens_handle%transpose_type == 3) then
+   ! duplicate a single ensemble member on all tasks
+   call broadcast_copy(ens_handle, 1, ens_handle%vars(:, 1))   ! broadcast to group only GROUP
+endif
+
+! only output if there is a label
+if (present(label)) then
+   call timestamp_message('copies_to_vars   end: '//label, alltasks=.true.)
+endif
+
+end subroutine all_copies_to_all_copies
 !-----------------------------------------------------------------
 
 subroutine compute_copy_mean(ens_handle, start_copy, end_copy, mean_copy)

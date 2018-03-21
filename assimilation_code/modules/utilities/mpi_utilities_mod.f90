@@ -16,12 +16,12 @@
 
 module mpi_utilities_mod
 
-use types_mod, only :  i8, r8, digits12
-use utilities_mod, only : register_module, error_handler, & 
-                          E_ERR, E_WARN, E_MSG, E_DBG, get_unit, close_file, &
-                          set_output, set_tasknum, initialize_utilities,     &
-                          finalize_utilities,                                &
-                          nmlfileunit, do_output, do_nml_file, do_nml_term,  &
+use types_mod,        only : i8, r8, digits12
+use utilities_mod,    only : register_module, error_handler, & 
+                             E_ERR, E_WARN, E_MSG, E_DBG, get_unit, close_file, &
+                             set_output, set_tasknum, initialize_utilities,     &
+                             finalize_utilities,                                &
+                             nmlfileunit, do_output, do_nml_file, do_nml_term,  &
                              find_namelist_in_file, check_namelist_read
 use time_manager_mod, only : time_type, get_time, set_time
 
@@ -108,7 +108,8 @@ public :: initialize_mpi_utilities, finalize_mpi_utilities,                  &
           sum_across_tasks, get_dart_mpi_comm, datasize, send_minmax_to,     &
           get_from_fwd, get_from_mean, broadcast_minmax, broadcast_flag,     &
           start_mpi_timer, read_mpi_timer, create_groups, get_group_size,    &
-          set_group_size, all_reduce_min_max  ! deprecated, replace by broadcast_minmax
+          set_group_size, group_task_id, get_group_comm, get_group_id,       &
+          all_reduce_min_max  ! deprecated, replace by broadcast_minmax
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -126,7 +127,6 @@ logical :: print4status = .true. ! minimal messages for async4 handshake
 logical :: given_communicator = .false.   ! if communicator passed in, use it
 
 ! group variables
-integer, allocatable :: group_members(:)
 integer :: group_all
 integer :: mpi_group_comm
 integer :: subgroup   !< subgroup for the grid
@@ -433,6 +433,12 @@ endif
 ! close down at the same time.
 call task_sync()
 
+call MPI_Comm_free(mpi_group_comm, errcode)
+if (errcode /= MPI_SUCCESS) then
+   write(*, '(a,i8)') 'finalize_mpi_utilities: MPI_Comm_free groups returned error code ', errcode
+   call exit(-99)
+endif
+
 if (.not. given_communicator) then
 
    ! Release the private communicator we created at init time.
@@ -455,8 +461,6 @@ if (.not. given_communicator) then
 else
    dofinalize = .false.
 endif
-
-deallocate(group_members)! this is module global
 
 ! Normally we shut down MPI here.  If the user tells us not to shut down MPI
 ! they must call this routine from their own code before exiting.
@@ -483,6 +487,23 @@ end subroutine finalize_mpi_utilities
 !> Return the total number of MPI tasks.  e.g. if the number of tasks is 4,
 !> it returns 4.  (The actual task numbers are 0-3.)
 
+function group_count()
+
+integer :: group_count
+
+if ( .not. module_initialized ) then
+   write(errstring, *) 'initialize_mpi_utilities() must be called first'
+   call error_handler(E_ERR,'group_count', errstring, source, revision, revdate)
+endif
+
+group_count = group_size
+
+end function group_count
+!-----------------------------------------------------------------------------
+
+!> Return the total number of MPI tasks.  e.g. if the number of tasks is 4,
+!> it returns 4.  (The actual task numbers are 0-3.)
+
 function task_count()
 
 integer :: task_count
@@ -497,6 +518,23 @@ task_count = total_tasks
 end function task_count
 
 
+!-----------------------------------------------------------------------------
+
+!> Return my unique task id.  Values run from 0 to N-1 (where N is the
+!> total number of MPI tasks.
+
+function group_task_id()
+
+integer :: group_task_id
+
+if ( .not. module_initialized ) then
+   write(errstring, *) 'initialize_mpi_utilities() must be called first'
+   call error_handler(E_ERR,'group_task_id', errstring, source, revision, revdate)
+endif
+
+group_task_id = group_rank
+
+end function group_task_id
 !-----------------------------------------------------------------------------
 
 !> Return my unique task id.  Values run from 0 to N-1 (where N is the
@@ -550,16 +588,18 @@ end subroutine task_sync
 !> called receive to accept the data.  If the send_to/receive_from calls are 
 !> not paired correctly the code will hang.
 
-subroutine send_to(dest_id, srcarray, time, label)
+subroutine send_to(dest_id, srcarray, mpi_group_comm, time, label)
 
 integer,          intent(in)           :: dest_id
 real(r8),         intent(in)           :: srcarray(:)
+integer,          intent(in), optional :: mpi_group_comm
 type(time_type),  intent(in), optional :: time
 character(len=*), intent(in), optional :: label
 
 integer :: i, tag, errcode
 integer :: itime(2)
 integer :: itemcount, offset, nextsize
+integer :: mpi_send_comm
 real(r8), allocatable :: tmpdata(:)
 
 if (verbose) write(*,*) "PE", myrank, ": start of send_to "
@@ -574,6 +614,12 @@ if ((dest_id < 0) .or. (dest_id >= total_tasks)) then
    write(errstring, '(a,i8,a,i8)') "destination task id ", dest_id, &
                                    "must be >= 0 and < ", total_tasks
    call error_handler(E_ERR,'send_to', errstring, source, revision, revdate)
+endif
+
+if (present(mpi_group_comm)) then
+   mpi_send_comm = mpi_group_comm
+else
+   mpi_send_comm = my_local_comm
 endif
 
 itemcount = size(srcarray)
@@ -596,7 +642,7 @@ if (itemcount <= SNDRCV_MAXSIZE) then
 
    if (.not. make_copy_before_sendrecv) then
       call MPI_Ssend(srcarray, itemcount, datasize, dest_id, tag, &
-                    my_local_comm, errcode)
+                     mpi_send_comm, errcode)
    else
    ! this copy should be unneeded, but on the intel fortran 9.0 compiler and mpich
       ! on one platform, calling this subroutine with an array section resulted in some
@@ -606,7 +652,7 @@ if (itemcount <= SNDRCV_MAXSIZE) then
 
       tmpdata = srcarray
       call MPI_Ssend(tmpdata, itemcount, datasize, dest_id, tag, &
-                    my_local_comm, errcode)
+                     mpi_send_comm, errcode)
    endif
 else
    ! there are a few places in the code where we send/receive a full state vector.
@@ -626,11 +672,11 @@ else
    
       if (.not. make_copy_before_sendrecv) then
          call MPI_Ssend(srcarray(offset:offset+nextsize-1), nextsize, datasize, dest_id, tag, &
-              my_local_comm, errcode)
+              mpi_send_comm, errcode)
       else
          tmpdata = srcarray(offset:offset+nextsize-1)
          call MPI_Ssend(tmpdata, nextsize, datasize, dest_id, tag, &
-                        my_local_comm, errcode)
+                        mpi_send_comm, errcode)
       endif
          if (errcode /= MPI_SUCCESS) then
             write(errstring, '(a,i8)') 'MPI_Ssend returned error code ', errcode
@@ -650,7 +696,7 @@ endif
 if (present(time)) then
    if (verbose) write(*,*) "PE", myrank, ": time present"
    call get_time(time, itime(1), itime(2))
-   call MPI_Ssend(itime, 2, MPI_INTEGER, dest_id, tag*2, my_local_comm, errcode)
+   call MPI_Ssend(itime, 2, MPI_INTEGER, dest_id, tag*2, mpi_send_comm, errcode)
    if (errcode /= MPI_SUCCESS) then
       write(errstring, '(a,i8)') 'MPI_Ssend returned error code ', errcode
       call error_handler(E_ERR,'send_to', errstring, source, revision, revdate)
@@ -674,15 +720,17 @@ end subroutine send_to
 !> sent the data.  If the send_to/receive_from calls are not paired correctly 
 !> the code will hang.
 
-subroutine receive_from(src_id, destarray, time, label)
+subroutine receive_from(src_id, destarray, mpi_group_comm, time, label)
 
 integer,          intent(in)            :: src_id
 real(r8),         intent(inout)         :: destarray(:)
+integer,          intent(in),  optional :: mpi_group_comm
 type(time_type),  intent(out), optional :: time
 character(len=*), intent(in),  optional :: label
 
 integer :: i, tag, errcode
 integer :: itime(2)
+integer :: mpi_recv_comm
 integer :: status(MPI_STATUS_SIZE)
 integer :: itemcount, offset, nextsize
 real(r8), allocatable :: tmpdata(:)
@@ -692,6 +740,12 @@ if (verbose) write(*,*) "PE", myrank, ": start of receive_from "
 if ( .not. module_initialized ) then
    write(errstring, *) 'initialize_mpi_utilities() must be called first'
    call error_handler(E_ERR,'receive_from', errstring, source, revision, revdate)
+endif
+
+if (present(mpi_group_comm)) then
+   mpi_recv_comm = mpi_group_comm
+else
+   mpi_recv_comm = my_local_comm
 endif
 
 ! simple idiotproofing
@@ -720,7 +774,7 @@ if (make_copy_before_sendrecv) allocate(tmpdata(min(itemcount,SNDRCV_MAXSIZE)))
 if (itemcount <= SNDRCV_MAXSIZE) then
    if (.not. make_copy_before_sendrecv) then
       call MPI_Recv(destarray, itemcount, datasize, src_id, MPI_ANY_TAG, &
-                 my_local_comm, status, errcode)
+                    mpi_recv_comm, status, errcode)
    else
       ! this copy should be unneeded, but on the intel fortran 9.0 compiler and mpich
       ! on one platform, calling this subroutine with an array section resulted in some
@@ -729,7 +783,7 @@ if (itemcount <= SNDRCV_MAXSIZE) then
       ! have been needed, and is a performance/memory sink.
 
    call MPI_Recv(tmpdata, itemcount, datasize, src_id, MPI_ANY_TAG, &
-                 my_local_comm, status, errcode)
+                 mpi_recv_comm, status, errcode)
       destarray = tmpdata
    endif
 else
@@ -750,10 +804,10 @@ else
    
       if (.not. make_copy_before_sendrecv) then
          call MPI_Recv(destarray(offset:offset+nextsize-1), nextsize, datasize, src_id, MPI_ANY_TAG, &
-              my_local_comm, status, errcode)
+                       mpi_recv_comm, status, errcode)
       else
          call MPI_Recv(tmpdata, itemcount, datasize, src_id, MPI_ANY_TAG, &
-                       my_local_comm, status, errcode)
+                       mpi_recv_comm, status, errcode)
          destarray(offset:offset+nextsize-1) = tmpdata
       endif
          if (errcode /= MPI_SUCCESS) then
@@ -776,7 +830,7 @@ if (verbose) write(*,*) "PE", myrank, ": received from ", src_id
 if (present(time)) then
    if (verbose) write(*,*) "PE", myrank, ": time present"
    call MPI_Recv(itime, 2, MPI_INTEGER, src_id, tag*2, &
-                 my_local_comm, status, errcode)
+                 mpi_recv_comm, status, errcode)
    if (errcode /= MPI_SUCCESS) then
       write(errstring, '(a,i8)') 'MPI_Recv returned error code ', errcode
       call error_handler(E_ERR,'receive_from', errstring, source, revision, revdate)
@@ -1934,6 +1988,7 @@ integer :: errcode
 ! Note to programmer: openmpi 1.10.0 does not
 ! allow scalars in mpi calls. openmpi 1.10.1 fixes
 ! this.
+print*, 'mpi_utilities window ', window
 target_disp = (mindex - 1)
 call mpi_win_lock(MPI_LOCK_SHARED, owner, 0, window, errcode)
 call mpi_get(x, 1, datasize, owner, target_disp, 1, datasize, window, errcode)
@@ -1992,25 +2047,29 @@ subroutine create_groups(group_size)
 integer, intent(inout) :: group_size
 
 integer i, ierr ! all MPI errors are fatal anyway
-
+integer, allocatable :: group_members(:)
+integer :: local_group_rank
 allocate(group_members(group_size)) ! this is module global
 
-call mpi_comm_group(mpi_comm_world, group_all, ierr)  ! get the word group from mpi_comm_world
+call mpi_comm_group(my_local_comm, group_all, ierr)  ! get the word group from mpi_comm_world
 call build_my_group(group_size, group_members) ! create a list of processors in the grid group
 call mpi_group_incl(group_all, group_size, group_members, subgroup, ierr)
-call mpi_comm_create(mpi_comm_world, subgroup, mpi_group_comm, ierr)
-call mpi_comm_rank(mpi_group_comm, group_rank, ierr) ! rank within group
-
+call mpi_comm_create(my_local_comm, subgroup, mpi_group_comm, ierr)
 call mpi_group_size(subgroup, group_size, ierr)
 call mpi_group_rank(subgroup, group_rank, ierr)
+print*, 'group_rank ', local_group_rank, group_rank, group_size
 
-call MPI_Barrier(MPI_COMM_WORLD, ierr)
-do i = 0, (task_count()-1)
-   call MPI_Barrier(MPI_COMM_WORLD, ierr)
-   if(my_task_id() == i) then
-      write(*,'(''WORLD RANK/SIZE:'',I2,''/'',I2,'' GROUP RANK/SIZE:'',I2,''/'',I2)') my_task_id(), task_count(), group_rank, group_size
-   endif
-enddo
+if (verbose) then
+call MPI_Barrier(my_local_comm, ierr)
+   do i = 0, (task_count()-1)
+      call MPI_Barrier(my_local_comm, ierr)
+      if(my_task_id() == i) then
+         write(*,'(''WORLD RANK/SIZE:'',I2,''/'',I2,'' GROUP RANK/SIZE:'',I2,''/'',I2,'' SUBGROUP '',I10)') &
+                                    my_task_id(), task_count()           ,group_rank, group_size, subgroup
+      endif
+   enddo
+endif
+deallocate(group_members)! this is module global
 
 end subroutine create_groups
 
@@ -2057,6 +2116,18 @@ integer :: get_group_size
 get_group_size = group_size
 
 end function get_group_size
+
+!-----------------------------------------------------------
+
+!> get group_id
+
+function get_group_id()
+
+integer :: get_group_id
+
+get_group_id = group_rank
+
+end function get_group_id
 
 !-----------------------------------------------------------
 

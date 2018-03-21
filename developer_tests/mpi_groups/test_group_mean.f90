@@ -33,7 +33,8 @@ use      io_filenames_mod, only : io_filenames_init, file_info_type,       &
                                   set_io_copy_flag, READ_COPY, WRITE_COPY
 
 use distributed_state_mod, only : create_state_window, free_state_window, &
-                                  create_mean_window, free_mean_window
+                                  create_mean_window, free_mean_window,   &
+                                  get_state
 
 use             model_mod, only : static_init_model
 
@@ -66,13 +67,12 @@ integer                       :: num_ens = 1
 integer                       :: dtype = 1
 integer                       :: ltype = 1
 integer                       :: ttype = 1
-integer                       :: group_size
 character(len=256)            :: input_state_files(MAX_FILES)  = 'null'
 character(len=256)            :: output_state_files(MAX_FILES) = 'null'
 
 
 namelist /test_group_mean_nml/ num_ens, single_file, input_state_files, output_state_files, &
-                               dtype, ltype, ttype, group_size
+                               dtype, ltype, ttype
 
 ! io variables
 integer                   :: iunit, io
@@ -84,7 +84,7 @@ logical :: read_time_from_file = .true.
 type(ensemble_type)   :: ens_handle
 
 type(time_type)       :: model_time
-integer(i8)           :: model_size
+integer(i8)           :: model_size, my_index
 
 ! misc. variables
 integer :: i, idom, imem, domid, num_domains
@@ -111,7 +111,7 @@ call check_namelist_read(iunit, io, "test_group_mean_nml")
 ! read/write restart files
 !----------------------------------------------------------------------
 
-model_size = 60
+model_size = 8
 
 if(my_task_id()==0) then
    print*, 'dtype ', dtype
@@ -167,16 +167,7 @@ enddo
 
 call read_state(ens_handle, file_info_input, read_time_from_file, model_time)
 
-call print_ens_handle(ens_handle, force=.true., label='test_mean', contents=.false., limit=5)
-
 deallocate(file_array_input)
-
-! do i = 0, task_count()-1
-!    call task_sync()
-!    if(my_task_id() == i) then 
-!       call print_ens_handle(ens_handle)
-!    endif
-! enddo
 
 call task_sync()
 
@@ -184,20 +175,40 @@ call task_sync()
 ! Check window
 !----------------------------------------------------------------------
 
-call create_mean_window(ens_handle, mean_copy=1, distribute_mean=.true.)
+! call create_mean_window(ens_handle, mean_copy=1, distribute_mean=.true.)
 
-call free_mean_window()
+! do my_index = 1, ens_handle%my_num_vars
+!    print*, 'rank, my_index, get_state(my_index) ', my_task_id(), my_index, get_state(my_index, ens_handle)
+! enddo
+! 
+! print*, 'finished rank', my_task_id()
+
+
+
+! call free_mean_window()
 
 !----------------------------------------------------------------------
 ! finalize test_group_mean
 !----------------------------------------------------------------------
 
+print*, my_task_id(), get_group_number(my_task_id())
 call finalize_modules_used()
 
 !======================================================================
 contains
 !======================================================================
 
+function get_group_number(pe)
+integer, intent(in) :: pe
+integer :: get_group_number
+
+integer :: group_size = 2
+integer :: num_groups
+
+num_groups   = task_count() / group_size
+get_group_number =  mod(pe,num_groups)
+
+end function get_group_number
 
 !> initialize modules that need it
 

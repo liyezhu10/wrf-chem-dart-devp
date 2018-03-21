@@ -9,13 +9,13 @@ module window_mod
 
 !> \defgroup window window_mod
 !> @{
-use mpi_utilities_mod,    only : datasize, my_task_id, get_dart_mpi_comm
+use mpi_utilities_mod,    only : datasize, my_task_id, get_dart_mpi_comm, get_group_comm, task_sync
 use types_mod,            only : r8, i8
 use ensemble_manager_mod, only : ensemble_type, map_pe_to_task, get_var_owner_index, &
                                  copies_in_window, init_ensemble_manager, &
                                  get_allow_transpose, end_ensemble_manager, &
                                  set_num_extra_copies, all_copies_to_all_vars, &
-                                 all_vars_to_all_copies, get_group_comm
+                                 all_vars_to_all_copies, all_copies_to_all_copies
 
 use mpi
 
@@ -118,8 +118,11 @@ if (use_distributed_mean) then
    call init_ensemble_manager(mean_ens_handle, 1, state_ens_handle%num_vars) ! distributed ensemble
    call set_num_extra_copies(mean_ens_handle, 0)
    mean_ens_handle%copies(1,:) = state_ens_handle%copies(mean_copy, :)
+   !JPH : need to have the right number of my_num_vars.  This is set in ensemble_manager
    allocate(mean_1d(state_ens_handle%my_num_vars))
-   mean_1d(:) = mean_ens_handle%copies(1,:)
+   ! mean_1d(:) = mean_ens_handle%copies(1,:)
+   call all_copies_to_all_copies(mean_ens_handle,'window_mod') ! this is a transpose-duplicate
+    
 
    ! find out how many variables I have
    my_num_vars = mean_ens_handle%my_num_vars
@@ -127,6 +130,12 @@ if (use_distributed_mean) then
    window_size = my_num_vars*bytesize
    ! Need a simply contiguous piece of memory to pass to mpi_win_create
    ! Expose local memory to RMA operation by other processes in a communicator.
+   ! call mpi_win_create(mean_1d, window_size, bytesize, MPI_INFO_NULL, get_dart_mpi_comm(), mean_win, ierr)
+   if (my_task_id() == 0) then 
+      print*, 'window_size', window_size
+      print*, 'mean_1d    ', mean_1d
+      print*, 'my_num_vars', state_ens_handle%my_num_vars !hacked in ens_manager
+   endif
    call mpi_win_create(mean_1d, window_size, bytesize, MPI_INFO_NULL, get_group_comm(), mean_win, ierr)
 else
    ! transpose_type_in always distributed group
@@ -136,7 +145,8 @@ else
    call all_copies_to_all_vars(mean_ens_handle) ! this is a transpose-duplicate
 endif
 
-   print*, 'my_num_vars', my_task_id(), mean_ens_handle%my_num_vars
+call task_sync()
+print*, 'rank, my_num_vars', my_task_id(), mean_ens_handle%my_num_vars, get_dart_mpi_comm(), get_group_comm()
    
 ! grabbing mean directly, no windows are being used
 current_win = MEAN_WINDOW
