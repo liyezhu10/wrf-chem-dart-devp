@@ -115,14 +115,14 @@ integer               :: my_num_vars !< number of elements a task owns
 use_distributed_mean = distribute_mean
 
 if (use_distributed_mean) then
-   call init_ensemble_manager(mean_ens_handle, 1, state_ens_handle%num_vars) ! distributed ensemble
+   ! group_size defaults to task_count, so always say we're using groups here.
+   call init_ensemble_manager(mean_ens_handle, 1, state_ens_handle%num_vars, use_groups = .true.) ! distributed ensemble
    call set_num_extra_copies(mean_ens_handle, 0)
-   mean_ens_handle%copies(1,:) = state_ens_handle%copies(mean_copy, :)
-   !JPH : need to have the right number of my_num_vars.  This is set in ensemble_manager
-   allocate(mean_1d(state_ens_handle%my_num_vars))
-   ! mean_1d(:) = mean_ens_handle%copies(1,:)
-   call all_copies_to_all_copies(mean_ens_handle,'window_mod') ! this is a transpose-duplicate
-    
+
+   ! this is what all_copies_to_all_copies does if group_size = task_count
+   ! otherwise, we do lots of ugly looping.
+   !mean_ens_handle%copies(1,:) = state_ens_handle%copies(mean_copy, :)
+   call all_copies_to_all_copies(state_ens_handle, mean_copy, mean_ens_handle, 1)
 
    ! find out how many variables I have
    my_num_vars = mean_ens_handle%my_num_vars

@@ -44,12 +44,12 @@ use obs_model_mod,         only : move_ahead, advance_state, set_obs_model_trace
 
 use ensemble_manager_mod,  only : init_ensemble_manager, end_ensemble_manager,                &
                                   ensemble_type, get_copy, get_my_num_copies,                 &
-                                  compute_copy_mean, compute_copy_mean_sd,                    &
+                                  compute_copy_mean, compute_copy_mean_sd, get_my_vars,       &
                                   get_copy_owner_index, get_ensemble_time, set_ensemble_time, &
                                   map_task_to_pe,  map_pe_to_task, prepare_to_update_copies,  &
                                   copies_in_window, set_num_extra_copies, get_allow_transpose, &
                                   allocate_single_copy, allocate_vars, deallocate_single_copy, &
-                                  all_copies_to_all_vars, all_vars_to_all_copies
+                                  all_copies_to_all_vars, all_vars_to_all_copies, get_my_num_vars
                                   
 
 use adaptive_inflate_mod,  only : do_varying_ss_inflate, mean_from_restart, sd_from_restart,  &
@@ -1888,23 +1888,35 @@ integer,             intent(in)    :: keys(:) ! I think this is still var size
 
 character*12 :: task
 integer :: j, i
-integer :: forward_unit
+integer :: forward_unit, nvars
+integer(i8), allocatable :: my_global_varnums(:)
+
+
+nvars = get_my_num_vars(qc_ens_handle)
+if (nvars <= 0) return
 
 write(task, '(i6.6)') my_task_id()
 
-! all tasks open file?
+! all tasks open their own files?
 if(prior_post == PRIOR_DIAG) then
    forward_unit = open_file('prior_forward_ope_errors' // task, 'formatted', 'append')
 else
    forward_unit = open_file('post_forward_ope_errors' // task, 'formatted', 'append')
 endif
 
+! get the global obs numbers, not the local ones
+allocate(my_global_varnums(nvars))
+call get_my_vars(qc_ens_handle, my_global_varnums)
+
 ! qc_ens_handle is a real representing an integer; values /= 0 get written out
+!write(forward_unit, *) 'ensemble #, obs #, global #, istatus'
 do i = 1, ens_size
-   do j = 1, qc_ens_handle%my_num_vars
-      if(nint(qc_ens_handle%copies(i, j)) /= 0) write(forward_unit, *) i, keys(j), nint(qc_ens_handle%copies(i, j))
+   do j = 1, nvars
+      if(nint(qc_ens_handle%copies(i, j)) /= 0) write(forward_unit, *) i, keys(j), my_global_varnums(j), nint(qc_ens_handle%copies(i, j))
    end do
 end do
+
+deallocate(my_global_varnums)
 
 call close_file(forward_unit)
 
