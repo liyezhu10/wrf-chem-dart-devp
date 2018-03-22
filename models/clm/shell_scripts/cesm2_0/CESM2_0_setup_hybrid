@@ -27,11 +27,11 @@
 # incorporate any needed changes into this script.
 # ==============================================================================
 
-setenv CASE           clm5_f09_spinup80
+setenv CASE           clm5_f09_e5
 setenv resolution     f09_f09
 setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
 setenv cesmtag        ctsm
-setenv num_instances  80
+setenv num_instances  5
 
 # ==============================================================================
 # Directories:
@@ -90,19 +90,19 @@ setenv baseobsdir   /glade/p/image/Observations/land
 
 setenv refcase      clm5_f09_spinup80
 setenv refyear      2001
-setenv refmon       01
+setenv refmon       07
 setenv refday       01
 setenv reftod       00000
 setenv refdate      $refyear-$refmon-$refday
 setenv reftimestamp $refyear-$refmon-$refday-$reftod
 
-setenv stagedir /glade/p/image/RDA_strawman/CESM_ensembles/CLM/CLM5BGC-Crop/${reftimestamp}
+setenv stagedir /glade/p/image/RDA_strawman/CESM_ensembles/CLM/CLM5BGC-Crop/ctsm_${reftimestamp}
 
-setenv startdate    2000-01-01
+setenv startdate    2001-07-01
 
-# The forward operators for the flux tower obs _require_ that we predict the name of
+# The forward operators for the flux tower obs REQUIRE that we predict the name of
 # of the history file. The history file names of interest are time-tagged with the
-# _start_ of the forecast - not the restart time. The obs_def_tower_mod.f90 requires
+# START of the forecast - not the restart time. The obs_def_tower_mod.f90 requires
 # the stop_option to be 'nhours', and the stop_n to be accurate.
 
 setenv stop_option  nhours
@@ -206,16 +206,16 @@ ${cesmroot}/cime/scripts/create_newcase  --res  ${resolution} \
 set ThisFileName = $0:t
 ${COPY} $ThisFileName ${caseroot}/${ThisFileName}.original
 
-if (   -e ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config.template) then
+set TEMPLATE = ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config.template
+if ( -e ${TEMPLATE} ) then
    sed -e "s#BOGUS_DART_ROOT_STRING#${dartroot}#" \
        -e "s#BOGUS_DART_OBS_STRING#${baseobsdir}#" \
-       -e "s#BOGUS_CASEROOT_STRING#${caseroot}#" \
-          ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config.template \
+       -e "s#BOGUS_CASEROOT_STRING#${caseroot}#" ${TEMPLATE} \
            >! ${caseroot}/CESM_DART_config  || exit 3
    chmod 755  ${caseroot}/CESM_DART_config
 else
    echo "ERROR: the script to configure for data assimilation is not available."
-   echo "       ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config.template MUST exist."
+   echo "       ${TEMPLATE} MUST exist."
    exit 4
 endif
 
@@ -254,8 +254,8 @@ endif
 ./xmlchange STOP_OPTION=$stop_option
 ./xmlchange STOP_N=$stop_n
 ./xmlchange RESUBMIT=$resubmit
-./xmlchange REST_OPTION=ndays
-./xmlchange REST_N=1
+./xmlchange REST_OPTION=$stop_option
+./xmlchange REST_N=$stop_n
 
 ./xmlchange CALENDAR=GREGORIAN
 ./xmlchange EXEROOT=${exeroot}
@@ -328,7 +328,7 @@ echo "case setup finished"
 
 ./xmlchange --subgroup case.run        --id JOB_QUEUE          --val ${queue}
 ./xmlchange --subgroup case.run        --id JOB_WALLCLOCK_TIME --val ${timewall}
-./xmlchange --subgroup case.st_archive --id JOB_WALLCLOCK_TIME --val 1:00
+./xmlchange --subgroup case.st_archive --id JOB_WALLCLOCK_TIME --val 6:00
 
 # These are archiving options that may be used.
 # You can turn the short/long term archivers on or off ({short,long}_term_archiver),
@@ -565,7 +565,7 @@ chmod 0755 stage_cesm_files
 # |       |-- BalanceCheckMod.F90
 # |       |-- SnowHydrologyMod.F90
 # |       `-- UrbanMod.F90
-# `-- clm4_5
+# `-- clm5_0
 #     |-- biogeochem
 #     |   `-- CNBalanceCheckMod.F90
 #     `-- biogeophys
@@ -574,7 +574,7 @@ chmod 0755 stage_cesm_files
 
 if (    -d     ~/${cesmtag}/SourceMods ) then
 
-#  ${COPY} -r ~/${cesmtag}/SourceMods/src.clm ${caseroot}/SourceMods/
+   ${COPY} -r ~/${cesmtag}/SourceMods/src.clm ${caseroot}/SourceMods/
 
    set clm_opts = `echo $CLM_CONFIG_OPTS | sed -e "s/-//"`
 
