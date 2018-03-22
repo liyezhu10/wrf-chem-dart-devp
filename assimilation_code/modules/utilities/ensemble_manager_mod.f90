@@ -1201,10 +1201,10 @@ my_num_copies = ens_handle%my_num_copies
 my_pe         = ens_handle%my_pe
 
 ! What is maximum number of vars stored on a copy complete pe?
-max_num_vars = get_max_num_vars(ens_handle,num_vars)
+max_num_vars = get_max_num_vars(ens_handle)
 
 ! What is maximum number of copies stored on a var complete pe?
-max_num_copies = get_max_num_copies(ens_handle,num_copies)
+max_num_copies = get_max_num_copies(ens_handle)
 
 allocate(var_list(max_num_vars), transfer_temp(max_num_vars), &
    copy_list(max_num_copies))
@@ -1358,10 +1358,10 @@ my_num_copies = ens_handle%my_num_copies
 my_pe         = ens_handle%my_pe
 
 ! What is maximum number of vars stored on a copy complete pe?
-max_num_vars = get_max_num_vars(ens_handle,num_vars)
+max_num_vars = get_max_num_vars(ens_handle)
 
 ! What is maximum number of copies stored on a var complete pe?
-max_num_copies = get_max_num_copies(ens_handle,num_copies)
+max_num_copies = get_max_num_copies(ens_handle)
 
 allocate(var_list(max_num_vars), transfer_temp(max_num_vars), &
    copy_list(max_num_copies))
@@ -1511,9 +1511,11 @@ character (len=*),    intent(in), optional :: label
 integer,      allocatable :: var_list1(:), var_list2(:)
 real(r8),     allocatable :: transfer_temp(:)  ! might need 2?
 
-integer(i8) :: num_vars
-integer     :: num_copies, my_num_vars, my_num_copies, my_pe
-integer     :: max_num_vars, max_num_copies, num_vars_to_receive
+integer(i8) :: num_vars1, num_vars2        
+integer     :: num_copies1, my_num_vars1, my_num_copies1, my_pe1
+integer     :: num_copies2, my_num_vars2, my_num_copies2, my_pe2
+integer     :: max_num_vars1, max_num_copies1, max_num_vars2, max_num_copies2 
+integer     :: num_vars_to_receive
 integer     :: sending_pe, recv_pe, k, sv, num_copies_to_send
 integer     :: global_ens_index, copy
 integer     :: group_pe, group_size
@@ -1524,8 +1526,8 @@ if (present(label)) then
 endif
 
 ! Accelerated version for single process
-if(handle1%num_pes == 1 .and. handle2%num_pes == 1) then
-   ens_handle2%copies(copy2,:) = ens_handle1%copies(copy1, :)
+if(ens_handle1%num_pes == 1 .and. ens_handle2%num_pes == 1) then
+   ens_handle2%copies(copy2,:) =  ens_handle1%copies(copy1, :)
    return
 end if
 
@@ -1551,29 +1553,36 @@ end if
 ! 
 !mean_ens_handle%copies(1,:) = state_ens_handle%copies(mean_copy, :)
 
-! Short var definitions
-num_copies    = ens_handle%num_copies
-num_vars      = ens_handle%num_vars
-my_num_vars   = ens_handle%my_num_vars
-my_num_copies = ens_handle%my_num_copies
-my_pe         = ens_handle%my_pe
+! Short var definitions ens 1
+num_copies1    = ens_handle1%num_copies
+num_vars1      = ens_handle1%num_vars
+my_num_vars1   = ens_handle1%my_num_vars
+my_num_copies1 = ens_handle1%my_num_copies
+my_pe1         = ens_handle1%my_pe
+
+! Short var definitions ens 2
+num_copies2    = ens_handle2%num_copies
+num_vars2      = ens_handle2%num_vars
+my_num_vars2   = ens_handle2%my_num_vars
+my_num_copies2 = ens_handle2%my_num_copies
+my_pe2         = ens_handle2%my_pe
 
 group_pe      = get_group_id()
 group_size    = get_group_size()
 
-num_copies    = num_copies*group_size
-num_vars      = num_copies*group_size
-my_num_vars   = num_copies*group_size
-my_num_copies = num_copies*group_size
+num_copies1    = num_copies1*group_size
+num_vars1      = num_copies1*group_size
+my_num_vars1   = num_copies1*group_size
+my_num_copies1 = num_copies1*group_size
 
 ! What is maximum number of copies stored for ens_handle1
-max_num_copies = get_max_num_copies(ens_handle,num_copies1)
+max_num_copies1 = get_max_num_copies(ens_handle1)
 
 ! What is maximum number of copies stored for ens_handle2
-max_num_copies = get_max_num_copies(ens_handle,num_copies)
+max_num_copies2 = get_max_num_copies(ens_handle2)
 
-allocate(var_list(max_num_vars), transfer_temp(max_num_vars), &
-   copy_list(max_num_copies))
+allocate(var_list1(max_num_vars1), var_list2(max_num_vars2), transfer_temp(max_num_vars1))
+   
 
 
 ! if (use_copy2var_send_loop .eqv. .true. ) then
@@ -1584,62 +1593,62 @@ allocate(var_list(max_num_vars), transfer_temp(max_num_vars), &
 ! communication pattern to use
 !    Default: use sending_pe loop (use_copy2var_send_loop = .true.)
 
-SENDING_PE_LOOP: do sending_pe = 0,  ens_handle%num_pes- 1
- 
-   if (my_pe /= sending_pe ) then
-
-      ! figure out what piece to receive from each other PE and receive it
-      call get_var_list(ens_handle, num_vars, sending_pe, var_list, num_vars_to_receive)
-      print*, 'SEND LOOP, nvars, sendPE, numRecv : ', num_vars, sending_pe, num_vars_to_receive
-      print*, ''
-      print*, 'SEND LOOP, var_list(:) : ', var_list(:)
-      if( num_vars_to_receive > 0 ) then
-         ! Loop to receive these vars for each copy stored on my_pe
-         ALL_MY_COPIES_RECV_LOOP: do k = 1, my_num_copies
-
-           call receive_from(map_pe_to_task(ens_handle, sending_pe), &
-                             transfer_temp(1:num_vars_to_receive), get_group_comm())
-           ! Copy the transfer array to my local storage
-           do sv = 1, num_vars_to_receive
-              ens_handle%vars(var_list(sv), k) = transfer_temp(sv)
-           enddo
-
-         enddo ALL_MY_COPIES_RECV_LOOP
-      endif
-
-   else
-
-      do recv_pe = 0, group_size - 1
-      ! I'm the sending PE, figure out what copies of my vars I'll send
-      call get_copy_list(ens_handle, num_copies, recv_pe, copy_list, num_copies_to_send)
-
-         SEND_COPIES: do copy = 1, num_copies_to_send
-            if (my_pe /= recv_pe ) then
-               if (my_num_vars > 0) then
-                  transfer_temp(1:my_num_vars) = ens_handle%copies(copy_list(copy), :)
-                  ! Have to  use temp because %copies section is not contiguous storage
-                  call send_to(map_pe_to_task(ens_handle, recv_pe), &
-                               transfer_temp(1:my_num_vars), get_group_comm())
-               endif
-
-            else
-
-               ! figure out what piece to recieve from myself and recieve it
-               call get_var_list(ens_handle, num_vars, sending_pe, var_list, num_vars_to_receive, group_size)
-               do k = 1,  my_num_copies
-                  ! sending to yourself so just copy
-                  global_ens_index = ens_handle%my_copies(k)
-                  do sv = 1, num_vars_to_receive
-                     ens_handle%vars(var_list(sv), k) = ens_handle%copies(global_ens_index, sv)
-                  end do
-               enddo
-            endif
-         enddo SEND_COPIES
-      enddo
-
-   endif
-
-enddo SENDING_PE_LOOP
+! SENDING_PE_LOOP: do sending_pe = 0,  ens_handle%num_pes- 1
+!  
+!    if (my_pe /= sending_pe ) then
+! 
+!       ! figure out what piece to receive from each other PE and receive it
+!       call get_var_list(ens_handle, num_vars, sending_pe, var_list, num_vars_to_receive)
+!       print*, 'SEND LOOP, nvars, sendPE, numRecv : ', num_vars, sending_pe, num_vars_to_receive
+!       print*, ''
+!       print*, 'SEND LOOP, var_list(:) : ', var_list(:)
+!       if( num_vars_to_receive > 0 ) then
+!          ! Loop to receive these vars for each copy stored on my_pe
+!          ALL_MY_COPIES_RECV_LOOP: do k = 1, my_num_copies
+! 
+!            call receive_from(map_pe_to_task(ens_handle, sending_pe), &
+!                              transfer_temp(1:num_vars_to_receive), get_group_comm())
+!            ! Copy the transfer array to my local storage
+!            do sv = 1, num_vars_to_receive
+!               ens_handle%vars(var_list(sv), k) = transfer_temp(sv)
+!            enddo
+! 
+!          enddo ALL_MY_COPIES_RECV_LOOP
+!       endif
+! 
+!    else
+! 
+!       do recv_pe = 0, group_size - 1
+!       ! I'm the sending PE, figure out what copies of my vars I'll send
+!       call get_copy_list(ens_handle, num_copies, recv_pe, copy_list, num_copies_to_send)
+! 
+!          SEND_COPIES: do copy = 1, num_copies_to_send
+!             if (my_pe /= recv_pe ) then
+!                if (my_num_vars > 0) then
+!                   transfer_temp(1:my_num_vars) = ens_handle%copies(copy_list(copy), :)
+!                   ! Have to  use temp because %copies section is not contiguous storage
+!                   call send_to(map_pe_to_task(ens_handle, recv_pe), &
+!                                transfer_temp(1:my_num_vars), get_group_comm())
+!                endif
+! 
+!             else
+! 
+!                ! figure out what piece to recieve from myself and recieve it
+!                call get_var_list(ens_handle, num_vars, sending_pe, var_list, num_vars_to_receive, group_size)
+!                do k = 1,  my_num_copies
+!                   ! sending to yourself so just copy
+!                   global_ens_index = ens_handle%my_copies(k)
+!                   do sv = 1, num_vars_to_receive
+!                      ens_handle%vars(var_list(sv), k) = ens_handle%copies(global_ens_index, sv)
+!                   end do
+!                enddo
+!             endif
+!          enddo SEND_COPIES
+!       enddo
+! 
+!    endif
+! 
+! enddo SENDING_PE_LOOP
 
 ! else ! use old communication pattern
 ! 
@@ -1697,10 +1706,10 @@ enddo SENDING_PE_LOOP
 
 !FIXME: this is where if NTASKS/GROUP is < TOTAL_TASKS
 !we broadcast only to our own group members.
-if (ens_handle%transpose_type == 3) then
-   ! duplicate a single ensemble member on all tasks
-   call broadcast_copy(ens_handle, 1, ens_handle%vars(:, 1))   ! broadcast to group only GROUP
-endif
+! if (ens_handle1%transpose_type == 3) then
+!    ! duplicate a single ensemble member on all tasks
+!    call broadcast_copy(ens_handle1, 1, ens_handle1%vars(:, 1))   ! broadcast to group only GROUP
+! endif
 
 ! only output if there is a label
 if (present(label)) then
