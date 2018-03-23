@@ -504,8 +504,8 @@ end function group_count
 !> Return the total number of MPI tasks.  e.g. if the number of tasks is 4,
 !> it returns 4.  (The actual task numbers are 0-3.)
 
-function task_count()
-
+function task_count(mpi_comm)
+integer, optional, intent(in) :: mpi_comm
 integer :: task_count
 
 if ( .not. module_initialized ) then
@@ -513,7 +513,14 @@ if ( .not. module_initialized ) then
    call error_handler(E_ERR,'task_count', errstring, source, revision, revdate)
 endif
 
-task_count = total_tasks
+if (present(mpi_comm)) then
+   call MPI_Comm_size(mpi_comm, total_tasks, errcode)
+   if (errcode /= MPI_SUCCESS) then
+      write(errstring, '(a,i8)') 'MPI_Comm_rank returned error code ', errcode
+      call error_handler(E_ERR,'mpi_task_id', errstring, source, revision, revdate)
+   endif
+   task_count = total_tasks
+endif
 
 end function task_count
 
@@ -2059,7 +2066,6 @@ call mpi_group_incl(group_all, group_size, group_members, subgroup, ierr)
 call mpi_comm_create(my_local_comm, subgroup, mpi_group_comm, ierr)
 call mpi_group_size(subgroup, group_size, ierr)
 call mpi_group_rank(subgroup, group_rank, ierr)
-print*, 'group_rank ', local_group_rank, group_rank, group_size
 
 !if (verbose) then
 if (.true.) then

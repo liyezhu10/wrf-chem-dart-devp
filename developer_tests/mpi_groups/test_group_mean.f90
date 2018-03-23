@@ -16,7 +16,7 @@ use         utilities_mod, only : register_module, error_handler, E_MSG, E_ERR, 
 use     mpi_utilities_mod, only : initialize_mpi_utilities, finalize_mpi_utilities, &
                                   task_count, my_task_id, task_sync, set_group_size,&
                                   get_group_size, create_groups, set_group_size,    &
-                                  group_task_id, get_group_comm, get_group_id
+                                  group_task_id, get_dart_mpi_comm, get_group_comm, get_group_id
 
 use      time_manager_mod, only : time_type, set_time, print_date, operator(-), &
                                   NO_CALENDAR
@@ -190,6 +190,25 @@ call task_sync()
 
 ! call create_mean_window(ens_handle, mean_copy=1, distribute_mean=.true.)
 
+do my_rank = 0, task_count() - 1
+   if (my_rank == my_task_id()) then
+      do my_index = 1, ens_handle%my_num_vars
+         print*, 'rank, my_index, ens_handle%copies(i) ', my_task_id(), my_index, ens_handle%copies(1,my_index)
+      enddo
+   else
+      call task_sync()
+   endif
+enddo
+
+do my_rank = 0, task_count(get_group_comm()) - 1
+   if (my_rank == my_task_id()) then
+      do my_index = 1, ens_handle%my_num_vars
+         print*, 'rank, my_index, ens_handle%copies(i) ', my_task_id(), my_index, ens_handle%copies(1,my_index)
+      enddo
+   else
+      call task_sync()
+   endif
+enddo
 do my_rank = 0, task_count() - 1
    if (my_rank == my_task_id()) then
       do my_index = 1, ens_handle%my_num_vars
