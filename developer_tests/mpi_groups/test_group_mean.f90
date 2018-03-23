@@ -15,7 +15,8 @@ use         utilities_mod, only : register_module, error_handler, E_MSG, E_ERR, 
 
 use     mpi_utilities_mod, only : initialize_mpi_utilities, finalize_mpi_utilities, &
                                   task_count, my_task_id, task_sync, set_group_size,&
-                                  get_group_size
+                                  get_group_size, create_groups, set_group_size,    &
+                                  group_task_id, get_group_comm, get_group_id
 
 use      time_manager_mod, only : time_type, set_time, print_date, operator(-), &
                                   NO_CALENDAR
@@ -82,6 +83,7 @@ logical :: read_time_from_file = .true.
 
 ! model state variables
 type(ensemble_type)   :: ens_handle
+type(ensemble_type)   :: mean_handle
 
 type(time_type)       :: model_time
 integer(i8)           :: model_size, my_index
@@ -96,6 +98,8 @@ character(len=512) :: string1
 character(len=256), allocatable :: file_array_input(:,:)
 character(len=256), dimension(1) :: var_names = (/'temp'/)
 integer,parameter :: one_domain = 1
+
+integer :: my_rank
 
 !======================================================================
 ! start of executable code
@@ -126,6 +130,15 @@ call init_ensemble_manager(ens_handle,                &
                            distribution_type_in = dtype, & ! round robin, pair round robin, block
                            layout_type          = ltype, & ! no vars, transposable, transpose and duplicate
                            transpose_type_in    = ttype)   ! no vars, transposable, transpose and duplicate
+
+! Set up the ensemble storage for mean
+call init_ensemble_manager(mean_handle,               &
+                           num_copies           = 1,  &
+                           num_vars             = model_size, &
+                           distribution_type_in = dtype, & ! round robin, pair round robin, block
+                           layout_type          = 3,     & ! distribute mean in groups
+                           transpose_type_in    = ttype, & ! no vars, transposable, transpose and duplicate
+                           use_groups           = .true.)
 
 ! Allocate space for file arrays.  contains a matrix of files (num_ens x num_domains)
 ! If perturbing from a single instance the number of input files does not have to
@@ -177,13 +190,21 @@ call task_sync()
 
 ! call create_mean_window(ens_handle, mean_copy=1, distribute_mean=.true.)
 
-! do my_index = 1, ens_handle%my_num_vars
-!    print*, 'rank, my_index, get_state(my_index) ', my_task_id(), my_index, get_state(my_index, ens_handle)
+do my_rank = 0, task_count() - 1
+   if (my_rank == my_task_id()) then
+      do my_index = 1, ens_handle%my_num_vars
+         print*, 'rank, my_index, ens_handle%copies(i) ', my_task_id(), my_index, ens_handle%copies(1,my_index)
+      enddo
+   else
+      call task_sync()
+   endif
+enddo
+
+! do my_rank = 0, task_count() - 1
 ! enddo
+
 ! 
 ! print*, 'finished rank', my_task_id()
-
-
 
 ! call free_mean_window()
 
@@ -191,7 +212,6 @@ call task_sync()
 ! finalize test_group_mean
 !----------------------------------------------------------------------
 
-print*, my_task_id(), get_group_number(my_task_id())
 call finalize_modules_used()
 
 !======================================================================

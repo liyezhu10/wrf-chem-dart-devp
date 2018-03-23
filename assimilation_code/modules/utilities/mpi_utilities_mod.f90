@@ -118,6 +118,7 @@ character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
 logical :: module_initialized = .false.
+integer :: errcode
 
 character(len = 256) :: saved_progname = ''
 character(len = 256) :: shell_name = ''   ! if needed, add ksh, tcsh, bash, etc
@@ -405,7 +406,6 @@ subroutine finalize_mpi_utilities(callfinalize, async)
 logical, intent(in), optional :: callfinalize
 integer, intent(in), optional :: async
 
-integer :: errcode
 logical :: dofinalize
 
 if ( .not. module_initialized ) then
@@ -540,9 +540,12 @@ end function group_task_id
 !> Return my unique task id.  Values run from 0 to N-1 (where N is the
 !> total number of MPI tasks.
 
-function my_task_id()
+function my_task_id(mpi_comm)
+integer, optional, intent(in) :: mpi_comm
 
 integer :: my_task_id
+
+integer :: local_rank
 
 if ( .not. module_initialized ) then
    write(errstring, *) 'initialize_mpi_utilities() must be called first'
@@ -550,6 +553,15 @@ if ( .not. module_initialized ) then
 endif
 
 my_task_id = myrank
+
+if (present(mpi_comm)) then
+   call MPI_Comm_rank(mpi_comm, local_rank, errcode)
+   if (errcode /= MPI_SUCCESS) then
+      write(errstring, '(a,i8)') 'MPI_Comm_rank returned error code ', errcode
+      call error_handler(E_ERR,'mpi_task_id', errstring, source, revision, revdate)
+   endif
+   my_task_id = local_rank
+endif
 
 end function my_task_id
 
@@ -596,7 +608,7 @@ integer,          intent(in), optional :: mpi_group_comm
 type(time_type),  intent(in), optional :: time
 character(len=*), intent(in), optional :: label
 
-integer :: i, tag, errcode
+integer :: i, tag
 integer :: itime(2)
 integer :: itemcount, offset, nextsize
 integer :: mpi_send_comm
@@ -728,7 +740,7 @@ integer,          intent(in),  optional :: mpi_group_comm
 type(time_type),  intent(out), optional :: time
 character(len=*), intent(in),  optional :: label
 
-integer :: i, tag, errcode
+integer :: i, tag
 integer :: itime(2)
 integer :: mpi_recv_comm
 integer :: status(MPI_STATUS_SIZE)
@@ -868,7 +880,7 @@ subroutine array_broadcast(array, root)
 real(r8), intent(inout) :: array(:)
 integer,  intent(in)    :: root
 
-integer :: itemcount, errcode, offset, nextsize
+integer :: itemcount, offset, nextsize
 real(r8), allocatable :: tmpdata(:)
 
 if ( .not. module_initialized ) then
@@ -1392,7 +1404,6 @@ subroutine sum_across_tasks_int4(addend, sum)
 integer, intent(in) :: addend
 integer, intent(out) :: sum
 
-integer :: errcode
 integer :: localaddend(1), localsum(1)
 
 ! cover routine for MPI all-reduce
@@ -1422,7 +1433,6 @@ subroutine sum_across_tasks_int8(addend, sum)
  integer(i8), intent(in)  :: addend
  integer(i8), intent(out) :: sum
 
- integer :: errcode
  integer(i8) :: localaddend(1), localsum(1)
 
 ! cover routine for MPI all-reduce
@@ -1451,7 +1461,6 @@ subroutine sum_across_tasks_real(addend, sum)
  real(r8), intent(in) :: addend
  real(r8), intent(out) :: sum
 
- integer :: errcode
  real(r8) :: localaddend(1), localsum(1)
 
 ! cover routine for MPI all-reduce
@@ -1715,7 +1724,7 @@ logical,          intent(in), optional :: serialize
 integer                                :: shell_execute
 
 logical :: all_at_once
-integer :: errcode, dummy(1)
+integer :: dummy(1)
 integer :: status(MPI_STATUS_SIZE)
 
 if (verbose) async2_verbose = .true.
@@ -1907,8 +1916,6 @@ real(r8), intent(in)  :: minmax(2) !> min max on each task
 integer,  intent(in)  :: task !> task to collect on
 real(r8), intent(out) :: global_val(2) !> only concerned with this on task collecting result
 
-integer :: errcode
-
 if ( .not. module_initialized ) then
    write(errstring, *) 'initialize_mpi_utilities() must be called first'
    call error_handler(E_ERR,'send_minmax_to', errstring, source, revision, revdate)
@@ -1943,7 +1950,6 @@ integer,  intent(in)    :: num_elements
 real(r8), intent(inout) :: min_var(num_elements)
 real(r8), intent(inout) :: max_var(num_elements)
 
-integer :: errcode
 
 if ( .not. module_initialized ) then
    write(errstring, *) 'initialize_mpi_utilities() must be called first'
@@ -1979,7 +1985,6 @@ integer,  intent(in)  :: mindex ! index in the tasks memory
 real(r8), intent(out) :: x      ! result
 
 integer(KIND=MPI_ADDRESS_KIND) :: target_disp
-integer :: errcode
 
 ! Note to programmer: The data transfer is not guaranteed
 ! to have occured until the call to mpi_win_unlock. 
@@ -2007,7 +2012,6 @@ integer,  intent(in)  :: num_rows ! number of rows in the window
 real(r8), intent(out) :: x(:)     ! result
 
 integer(KIND=MPI_ADDRESS_KIND) :: target_disp
-integer :: errcode
 
 ! Note to programmer: The data transfer is not guaranteed
 ! to have occured until the call to mpi_win_unlock. 
@@ -2029,8 +2033,6 @@ subroutine broadcast_flag(flag, root)
 
 logical, intent(inout) :: flag
 integer, intent(in)    :: root !> relative to get_dart_mpi_comm()
-
-integer :: errcode
 
 if ( .not. module_initialized ) then
    write(errstring, *) 'initialize_mpi_utilities() must be called first'
@@ -2059,7 +2061,8 @@ call mpi_group_size(subgroup, group_size, ierr)
 call mpi_group_rank(subgroup, group_rank, ierr)
 print*, 'group_rank ', local_group_rank, group_rank, group_size
 
-if (verbose) then
+!if (verbose) then
+if (.true.) then
 call MPI_Barrier(my_local_comm, ierr)
    do i = 0, (task_count()-1)
       call MPI_Barrier(my_local_comm, ierr)

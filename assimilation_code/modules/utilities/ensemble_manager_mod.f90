@@ -313,7 +313,7 @@ allocate(ens_handle%task_to_pe_list(ens_handle%num_pes))
 allocate(ens_handle%pe_to_task_list(ens_handle%num_pes))
 
 call assign_tasks_to_pes(ens_handle, num_copies, ens_handle%layout_type)
-ens_handle%my_pe = map_task_to_pe(ens_handle, my_task_id())
+ens_handle%my_pe = map_task_to_pe(ens_handle, my_task_id(ens_handle%my_communicator))
 
 ! Set the global storage bounds for the number of copies and variables
 ens_handle%num_copies = num_copies
@@ -1570,21 +1570,30 @@ my_pe2         = ens_handle2%my_pe
 group_pe      = get_group_id()
 group_size    = get_group_size()
 
-num_copies1    = num_copies1*group_size
-num_vars1      = num_copies1*group_size
-my_num_vars1   = num_copies1*group_size
-my_num_copies1 = num_copies1*group_size
-
 ! What is maximum number of copies stored for ens_handle1
 max_num_copies1 = get_max_num_copies(ens_handle1)
 
 ! What is maximum number of copies stored for ens_handle2
 max_num_copies2 = get_max_num_copies(ens_handle2)
 
+print*, 'num_copies1    ', my_task_id(), num_copies1    
+print*, 'num_vars1      ', my_task_id(), num_vars1      
+print*, 'my_num_vars1   ', my_task_id(), my_num_vars1   
+print*, 'my_num_copies1 ', my_task_id(), my_num_copies1 
+print*, 'my_pe1         ', my_task_id(), my_pe1         
+
+print*, ''
+print*, 'num_copies2    ', my_task_id(), num_copies2    
+print*, 'num_vars2      ', my_task_id(), num_vars2      
+print*, 'my_num_vars2   ', my_task_id(), my_num_vars2   
+print*, 'my_num_copies2 ', my_task_id(), my_num_copies2 
+print*, 'my_pe2         ', my_task_id(), my_pe2         
+
+
+
+
 allocate(var_list1(max_num_vars1), var_list2(max_num_vars2), transfer_temp(max_num_vars1))
    
-
-
 ! if (use_copy2var_send_loop .eqv. .true. ) then
 ! Switched loop index from receiving_pe to sending_pe
 ! Aim: to make the communication scale better on Yellowstone, as num_pes >> ens_size
@@ -1961,8 +1970,8 @@ type(ensemble_type), intent(inout)    :: ens_handle
 integer,             intent(in)       :: nEns_members
 integer,             intent(inout)    :: layout_type
 
-if (layout_type /= 1 .and. layout_type /=2) call error_handler(E_ERR,'assign_tasks_to_pes', &
-    'not a valid layout_type, must be 1 (standard) or 2 (round-robin)',source,revision,revdate)
+if (layout_type /= 1 .and. layout_type /=2 .and. layout_type /=3 ) call error_handler(E_ERR,'assign_tasks_to_pes', &
+    'not a valid layout_type, must be 1 (standard), 2 (round-robin) or 3 (groups)',source,revision,revdate)
 
 if (tasks_per_node >= ens_handle%num_pes) then ! all tasks are on one node, don't try to spread them out
    call simple_layout(ens_handle, ens_handle%num_pes)
@@ -1971,11 +1980,71 @@ endif
 
 if (layout_type == 1) then 
    call simple_layout(ens_handle, ens_handle%num_pes)
-else
+else if (layout_type == 2) then 
    call round_robin(ens_handle)
+else
+   call group_task_to_dart_task(ens_handle)
 endif
 
 end subroutine assign_tasks_to_pes
+
+!------------------------------------------------------------------------------
+
+subroutine group_task_to_dart_task(ens_handle)
+
+! Group MPI task layout starting at the first node.  
+! Starting on the first node forces pe 0 = task 0. 
+! The smoother code assumes task 0 has an ensemble member.
+! If you want to break the assumption that pe 0 = task 0, this routine is a good 
+! place to start. Test with the smoother. 
+
+type(ensemble_type), intent(inout) :: ens_handle
+
+integer                              :: last_node_task_number, num_nodes
+integer                              :: i, j
+integer, allocatable                 :: mycount(:)
+integer :: group_size
+
+integer :: dart_task
+integer :: group_task
+
+
+print*, 'group_task_to_dart_task'
+group_size = ens_handle%group_size
+
+! Find number of nodes and find number of tasks on last node
+call calc_tasks_on_each_node(ens_handle, num_nodes, last_node_task_number)
+
+allocate(mycount(num_nodes))
+
+mycount(:) = 1  ! keep track of the pes assigned to each node
+i = 0         ! keep track of the # of pes assigned
+
+do while (i < ens_handle%num_pes)   ! until you run out of processors
+   do j = 1, num_nodes   ! loop around the nodes
+
+      if(j == num_nodes) then  ! special case for the last node - it could have fewer tasks than the other nodes
+         if(mycount(j) <= last_node_task_number) then
+            ens_handle%task_to_pe_list(tasks_per_node*(j-1) + mycount(j)) = i
+            mycount(j) = mycount(j) + 1
+            i = i + 1
+         endif
+      else
+         if(mycount(j) <= tasks_per_node) then
+            ens_handle%task_to_pe_list(tasks_per_node*(j-1) + mycount(j)) = i
+            mycount(j) = mycount(j) + 1
+            i = i + 1
+         endif
+      endif
+
+   enddo
+enddo
+
+deallocate(mycount)
+
+call create_pe_to_task_list(ens_handle)
+
+end subroutine group_task_to_dart_task
 
 !------------------------------------------------------------------------------
 

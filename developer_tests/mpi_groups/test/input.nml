@@ -3,13 +3,13 @@
 /
 
 &mpi_utilities_nml
-   verbose = .true.
+   verbose = .false.
 /
 
 &ensemble_manager_nml
-   layout = 2
-   tasks_per_node = 4
-   group_size = 2
+   layout = 3
+   tasks_per_node  = 4
+   tasks_per_group = 2
    debug = .true.
 /
 

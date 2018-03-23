@@ -121,7 +121,7 @@ if (use_distributed_mean) then
 
    ! this is what all_copies_to_all_copies does if group_size = task_count
    ! otherwise, we do lots of ugly looping.
-   !mean_ens_handle%copies(1,:) = state_ens_handle%copies(mean_copy, :)
+   ! mean_ens_handle%copies(1,:) = state_ens_handle%copies(mean_copy, :)
    call all_copies_to_all_copies(state_ens_handle, mean_copy, mean_ens_handle, 1)
 
    ! find out how many variables I have
@@ -134,7 +134,7 @@ if (use_distributed_mean) then
    if (my_task_id() == 0) then 
       print*, 'window_size', window_size
       print*, 'mean_1d    ', mean_1d
-      print*, 'my_num_vars', state_ens_handle%my_num_vars !hacked in ens_manager
+      print*, 'my_num_vars', state_ens_handle%my_num_vars
    endif
    call mpi_win_create(mean_1d, window_size, bytesize, MPI_INFO_NULL, get_group_comm(), mean_win, ierr)
 else
