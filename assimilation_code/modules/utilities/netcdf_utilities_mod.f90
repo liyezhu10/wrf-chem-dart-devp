@@ -1357,7 +1357,9 @@ character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
 
 character(len=*), parameter :: routine = 'nc_get_real_3d'
-integer :: ret, varid
+
+integer  :: ret, varid, xtype
+real(r8) :: FillValue, missing_value, valid_range(2)
 
 ret = nf90_inq_varid(ncid, varname, varid)
 call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
@@ -1367,6 +1369,32 @@ if (has_scale_off(ncid, varid)) call no_scale_off(ncid, routine, varname, contex
 
 ret = nf90_get_var(ncid, varid, varvals)
 call nc_check(ret, routine, 'get values for '//trim(varname), context, filename, ncid)
+
+ret = nf90_inquire_variable(ncid, varid, xtype=xtype)
+call nc_check(ret, routine, 'inquire for xtype for '//trim(varname), context, filename)
+
+!>@todo check the xtype  ... does it make a diff for _FillValue etc.
+
+ret = nf90_inquire_attribute(ncid, varid, '_FillValue')
+if (ret == NF90_NOERR) then
+   ret = nf90_get_att(ncid, varid, '_FillValue', FillValue)
+   call nc_check(ret, routine, 'reading "_FillValue" attribute on '//trim(varname), &
+                 context, filename)
+endif
+
+ret = nf90_inquire_attribute(ncid, varid, 'missing_value')
+if (ret == NF90_NOERR) then
+   ret = nf90_get_att(ncid, varid, 'missing_value',missing_value)
+   call nc_check(ret, routine, 'reading "missing_value" attribute on '//trim(varname), &
+                 context, filename)
+endif
+
+ret = nf90_inquire_attribute(ncid, varid, 'valid_range')
+if (ret == NF90_NOERR) then
+   ret = nf90_get_att(ncid, varid, 'valid_range', valid_range)
+   call nc_check(ret, routine, 'reading "valid_range" attribute on '//trim(varname), &
+                 context, filename)
+endif
 
 end subroutine nc_get_real_3d
 

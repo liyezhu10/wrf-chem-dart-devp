@@ -70,7 +70,7 @@ use time_manager_mod,     only : time_type, get_time, get_calendar_type, &
                                  operator(-), operator(/), operator(*), &
                                  operator(==), operator(/=)
 
-use utilities_mod,        only : error_handler, nc_check, file_to_text, &
+use utilities_mod,        only : error_handler, file_to_text, &
                                  find_textfile_dims, file_exist, &
                                  E_MSG, E_ALLMSG, E_ERR, E_DBG, E_WARN
 
@@ -99,6 +99,8 @@ use io_filenames_mod,     only : get_restart_filename, inherit_copy_units, &
                                  query_write_copy, force_copy_back, file_info_type, &
                                  netcdf_file_type, READ_COPY, WRITE_COPY, &
                                  noutput_state_variables
+
+use netcdf_utilities_mod, only : nc_check
 
 use assim_model_mod,      only : get_model_size, read_model_time, write_model_time
 
@@ -288,22 +290,22 @@ if (my_task_id() == 0) then
    fname          = get_restart_filename(file_handle%stage_metadata, 1, 1)
    ncFileID%fname = fname
    call nc_check(nf90_create(path=fname, cmode=createmode, ncid=ncFileID%ncid), &
-                 'initialize_single_file_io', 'create '//trim(fname))
+                 'initialize_single_file_io', 'create',fname)
 
    ncFileID%ncid = ncFileID%ncid
    
    ! Define the dimensions
    call nc_check(nf90_def_dim(ncid=ncFileID%ncid, &
                  name="metadatalength", len=metadata_length, dimid=MetaDataDimID), &
-                 'initialize_single_file_io', 'def_dim metadatalength '//trim(fname))
+                 'initialize_single_file_io', 'def_dim metadatalength', fname)
    
    call nc_check(nf90_def_dim(ncid=ncFileID%ncid, &
                  name="member", len=num_output_ens, dimid=MemberDimID), &
-                 'initialize_single_file_io', 'def_dim member '//trim(fname))
+                 'initialize_single_file_io', 'def_dim member', fname)
    
    call nc_check(nf90_def_dim(ncid=ncFileID%ncid, name="time", &
                  len=nf90_unlimited, dimid=TimeDimID), &
-                 'initialize_single_file_io', 'def_dim time '//trim(fname))
+                 'initialize_single_file_io', 'def_dim time ',fname)
 
    !----------------------------------------------------------------------------
    ! Find dimensions of namelist file ... will save it as a variable.
@@ -323,7 +325,7 @@ if (my_task_id() == 0) then
    
    call nc_check(nf90_def_dim(ncid=ncFileID%ncid, &
                  name="NMLlinelen", len=LEN(textblock(1)), dimid=linelenDimID), &
-                 'initialize_single_file_io', 'def_dim NMLlinelen '//trim(fname))
+                 'initialize_single_file_io', 'def_dim NMLlinelen',fname)
    
    call nc_check(nf90_def_dim(ncid=ncFileID%ncid, &
                  name="NMLnlines", len=nlines, dimid=nlinesDimID), &
@@ -839,11 +841,18 @@ integer,  intent(in)    :: start_var
 integer,  intent(in)    :: end_var
 integer,  intent(in)    :: domain
 
+character(len=*), parameter :: routine = 'read_variables'
+
 integer :: i
 integer :: istart, iend
 integer :: var_size
 integer, allocatable :: dims(:)
-integer :: ret, var_id
+integer :: ret, var_id, xtype
+
+integer  :: spvalINT
+real(r4) :: spvalR4
+real(r8) :: spvalR8
+real(r8) :: missing, special
 
 istart = 1
 
@@ -862,6 +871,44 @@ do i = start_var, end_var
 
    ret = nf90_get_var(ncfile_in, var_id, var_block(istart:iend), count=dims)
    call nc_check(ret, 'read_variables: nf90_get_var',trim(get_variable_name(domain,i)) )
+
+   !>@todo replace the native missing_value or _FillValue atts with the DART missing
+
+   ret = nf90_inquire_variable(ncfile_in, var_id, xtype=xtype)
+   call nc_check(ret, 'read_variables: nf90_get_var',trim(get_variable_name(domain,i)) )
+
+   special = MISSING_R8
+   missing = MISSING_R8
+
+   if (xtype == NF90_INT) then
+       if (nf90_get_att(ncfile_in, var_id, '_FillValue'    , spvalINT) == NF90_NOERR) then
+          special = real(spvalINT,r8)
+       endif
+       if (nf90_get_att(ncfile_in, var_id, 'missing_value' , spvalINT) == NF90_NOERR) then
+          missing = real(spvalINT,r8)
+       endif
+
+   elseif (xtype == NF90_FLOAT) then
+       if (nf90_get_att(ncfile_in, var_id, '_FillValue'    , spvalR4) == NF90_NOERR) then
+          special = real(spvalR4,r8)
+       endif
+       if (nf90_get_att(ncfile_in, var_id, 'missing_value' , spvalR4) == NF90_NOERR) then
+          missing = real(spvalR4,r8)
+       endif
+
+   elseif (xtype == NF90_DOUBLE) then
+       if (nf90_get_att(ncfile_in, var_id, '_FillValue'    , spvalR8) == NF90_NOERR) then
+          special = real(spvalR8,r8)
+       endif
+       if (nf90_get_att(ncfile_in, var_id, 'missing_value' , spvalR8) == NF90_NOERR) then
+          missing = real(spvalR8,r8)
+       endif
+   endif
+
+   where(var_block(istart:iend) == special) var_block(istart:iend) = MISSING_R8 
+   where(var_block(istart:iend) == missing) var_block(istart:iend) = MISSING_R8 
+
+   ! update pointer for next hyperslab
 
    istart = istart + var_size
 

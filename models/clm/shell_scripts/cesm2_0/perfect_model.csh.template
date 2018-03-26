@@ -155,6 +155,33 @@ else
    exit -1
 endif
 
+#=========================================================================
+# Block 3: Populate a run-time directory with the input needed to run DART.
+#=========================================================================
+
+echo "`date` -- BEGIN COPY BLOCK"
+
+if (  -e   ${CASEROOT}/input.nml ) then
+   ${COPY} ${CASEROOT}/input.nml .
+else
+   echo "ERROR ... DART required file ${CASEROOT}/input.nml not found ... ERROR"
+   echo "ERROR ... DART required file ${CASEROOT}/input.nml not found ... ERROR"
+   exit -2
+endif
+
+echo "`date` -- END COPY BLOCK"
+
+# If possible, use the round-robin approach to deal out the tasks.
+
+if ($?TASKS_PER_NODE) then
+   if ($#TASKS_PER_NODE > 0) then
+      ${COPY} input.nml input.nml.$$
+      sed -e "s#layout.*#layout = 2#" \
+          -e "s#tasks_per_node.*#tasks_per_node = $TASKS_PER_NODE#" input.nml.$$ >! input.nml
+      ${REMOVE} input.nml.$$
+   endif
+endif
+
 # Enforce the namelist assumptions used in this script.
 
 ex input.nml <<ex_end
@@ -192,12 +219,11 @@ if (  -e   $LND_VEC_HISTORY_FILENAME) then
 endif
 
 #=========================================================================
-# Block 3: Advance the model and harvest the synthetic observations.
+# Block 4: Advance the model and harvest the synthetic observations.
 # output files are:
 # True_state.nc   ...... the DART state
 # obs_seq.perfect ...... the synthetic observations
 # dart_log.out    ...... run-time output of all DART routines
-# perfect_restart ...... which we don't need
 #=========================================================================
 
 echo "`date` -- BEGIN CLM PERFECT_MODEL_OBS"

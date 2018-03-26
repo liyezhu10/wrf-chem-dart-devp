@@ -42,7 +42,7 @@ use time_manager_mod, only : time_type, set_time, get_time, set_date,          &
                              operator(/=), operator(<=), operator(==)
 
 use     location_mod, only : location_type, set_location, get_location,       &
-                             is_vertical, VERTISLEVEL,                        &
+                             write_location, is_vertical, VERTISLEVEL,        &
                              VERTISHEIGHT, LocationDims, get_close_obs,       &
                              get_close_state, convert_vertical_obs,           &
                              convert_vertical_state
@@ -153,7 +153,9 @@ character(len=512) :: string1, string2, string3
 logical, save :: module_initialized = .false.
 
 ! 'Handles' for the different domains.
-integer :: dom_restart, dom_history, dom_vector_history
+integer :: dom_restart        = -1
+integer :: dom_history        = -1
+integer :: dom_vector_history = -1
 
 !------------------------------------------------------------------
 !
@@ -231,7 +233,7 @@ type progvartype
    integer(i8)  :: varsize     ! prod(dimlens(1:numdims))
    integer(i8)  :: index1      ! location in dart state vector of first occurrence
    integer(i8)  :: indexN      ! location in dart state vector of last  occurrence
-   integer  :: dart_kind
+   integer  :: dart_qty
    integer  :: rangeRestricted
    real(r8) :: minvalue
    real(r8) :: maxvalue
@@ -271,7 +273,7 @@ integer :: nlon     = -1
 integer :: nlat     = -1
 integer :: nlevgrnd = -1 ! Number of soil levels
 
-real(r8), allocatable :: LEVGRND(:)
+real(r8), allocatable :: LEVGRND(:)  ! in meters
 real(r8), allocatable ::     LON(:)
 real(r8), allocatable ::     LAT(:)
 real(r8), allocatable ::  AREA1D(:),   LANDFRAC1D(:)   ! unstructured grid
@@ -409,7 +411,7 @@ if (present(var_type)) then
       varstring = progvar(n)%varname
       if((indx >= get_index_start(progvar(n)%domain, varstring)) .and. &
          (indx <= get_index_end(  progvar(n)%domain, varstring))) then
-         var_type = progvar(n)%dart_kind
+         var_type = progvar(n)%dart_qty
          exit FINDTYPE
       endif
    enddo FINDTYPE
@@ -681,18 +683,18 @@ endif
 !> - or be insensitive to - the add_domain() calls below (if nvars == 0) ...
 
 call cluster_variables(clm_restart_filename, nvars, var_names, var_qtys, var_ranges, var_update)
-dom_restart = add_domain(clm_restart_filename, nvars, var_names,  &
-                         kind_list=var_qtys, clamp_vals=var_ranges, update_list=var_update )
+if (nvars > 0) dom_restart = add_domain(clm_restart_filename, nvars, var_names,  &
+                   kind_list=var_qtys, clamp_vals=var_ranges, update_list=var_update )
 ! call state_structure_info(dom_restart)
 
 call cluster_variables(clm_history_filename, nvars, var_names, var_qtys, var_ranges, var_update)
-dom_history = add_domain(clm_history_filename, nvars, var_names, &
-                         kind_list=var_qtys, clamp_vals=var_ranges, update_list=var_update)
+if (nvars > 0) dom_history = add_domain(clm_history_filename, nvars, var_names, &
+                   kind_list=var_qtys, clamp_vals=var_ranges, update_list=var_update)
 ! call state_structure_info(dom_history)
 
 call cluster_variables(clm_vector_history_filename, nvars, var_names, var_qtys, var_ranges, var_update)
-dom_vector_history = add_domain(clm_vector_history_filename, nvars, var_names, &
-                         kind_list=var_qtys, clamp_vals=var_ranges, update_list=var_update)
+if (nvars > 0) dom_vector_history = add_domain(clm_vector_history_filename, nvars, var_names, &
+                   kind_list=var_qtys, clamp_vals=var_ranges, update_list=var_update)
 ! call state_structure_info(dom_vector_history)
 
 !---------------------------------------------------------------
@@ -1911,7 +1913,8 @@ end subroutine fill_missing_r8_with_orig
 !> Interpolate any QUANTITY of the model state to any arbitrary location.
 !> A status of 0 indicates a successful interpolation.
 
-subroutine model_interpolate(state_handle, ens_size, location, obs_kind, expected_obs, istatus)
+subroutine model_interpolate(state_handle, ens_size, location, obs_kind, &
+                             expected_obs, istatus)
 
 ! Reconstructing the vertical profile of the gridcell is complicated.
 ! Each land unit/column can have a different number of vertical levels.
@@ -1933,18 +1936,17 @@ integer,                intent(in)  :: obs_kind
 real(r8),               intent(out) :: expected_obs(ens_size)
 integer,                intent(out) :: istatus(ens_size)
 
+character(len=*), parameter  :: routine = 'model_interpolate'
+
 ! Local storage
+character(len=obstypelength) :: qty_string
+logical  :: return_now
+real(r8) :: loc_array(LocationDims)
 
-character(len=*), parameter :: routine = 'model_interpolate'
-real(r8), dimension(LocationDims) :: loc_array
 real(r8) :: llon, llat, lheight
-
 integer  ::    istatus_liq(ens_size),    istatus_ice(ens_size)
 real(r8) :: interp_val_liq(ens_size), interp_val_ice(ens_size)
-
-character(len=obstypelength) :: qty_string
-
-logical  :: return_now
+integer  :: i
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -1968,7 +1970,12 @@ llon      = loc_array(1)
 llat      = loc_array(2)
 lheight   = loc_array(3)
 
-if ((debug > 6) .and. do_output()) print *, 'requesting interpolation at ', llon, llat, lheight
+call write_location(0,location,string2)
+if ((debug > 6) .and. do_output()) then
+   write (string3,*) llon, llat, lheight
+   call error_handler(E_MSG, routine, 'requesting interpolation at ', &
+                      text2=string2, text3=string3)
+endif
 
 ! Some applications just need to know the number of vertical levels.
 ! This is done by trying to 'interpolate' height on a large number of levels.
@@ -2030,7 +2037,12 @@ select case( obs_kind )
 
 end select
 
-if ((debug > 6) .and. do_output()) write(*,*)'expected_obs ',expected_obs
+if ((debug > 6) .and. do_output()) then
+   do i = 1,ens_size
+      write(     *     ,*)'ensemble member ',i,'; expected_obs value =',expected_obs(i)
+      write(logfileunit,*)'ensemble member ',i,'; expected_obs value =',expected_obs(i)
+   enddo
+endif
 
 ! istatus is set by the calls to get_grid_vertval() or compute_gridcell_value() above.
 ! leave it with the value it has - don't override it here.
@@ -2041,7 +2053,7 @@ end subroutine model_interpolate
 !------------------------------------------------------------------
 
 
-subroutine compute_gridcell_value(state_handle, ens_size, location, kind_index, interp_val, istatus)
+subroutine compute_gridcell_value(state_handle, ens_size, location, qty_index, interp_val, istatus)
 !
 ! Each gridcell may contain values for several land units, each land unit may contain
 ! several columns, each column may contain several pft's. BUT this routine never
@@ -2053,13 +2065,13 @@ subroutine compute_gridcell_value(state_handle, ens_size, location, kind_index, 
 type(ensemble_type), intent(in)  :: state_handle
 integer,             intent(in)  :: ens_size
 type(location_type), intent(in)  :: location     ! location somewhere in a grid cell
-integer,             intent(in)  :: kind_index   ! KIND in DART state needed for interpolation 
+integer,             intent(in)  :: qty_index    ! QTY in DART state needed for interpolation 
 real(r8),            intent(out) :: interp_val(ens_size)   ! area-weighted result
 integer,             intent(out) :: istatus(ens_size)      ! error code (0 == good)
 
-! Local storage
-
 character(len=*), parameter :: routine = 'compute_gridcell_value'
+
+! Local storage
 integer  :: ivar, index1, indexN, counter(ens_size)
 integer(i8) :: indexi
 integer  :: gridloni,gridlatj
@@ -2088,16 +2100,15 @@ loc_lon    = loc(1)
 loc_lat    = loc(2)
 
 ! determine the portion of interest of the state vector
-ivar   = findKindIndex(kind_index, routine)
+ivar   = findKindIndex(qty_index, routine)
 if (ivar < 1) then
    istatus = 11
    return
 endif
 
-index1 = get_index_start(progvar(ivar)%domain, progvar(ivar)%varname) ! in the DART state vector, start looking here
-indexN = get_index_end(progvar(ivar)%domain, progvar(ivar)%varname) ! in the DART state vector, stop  looking here
-
 varstring = progvar(ivar)%varname ! used in error messages
+index1    = get_index_start(progvar(ivar)%domain, progvar(ivar)%varname)
+indexN    = get_index_end(  progvar(ivar)%domain, progvar(ivar)%varname)
 
 ! BOMBPROOFING - check for a vertical dimension for this variable
 if (progvar(ivar)%maxlevels > 1) then
@@ -2113,7 +2124,7 @@ loninds  = minloc(abs(LON - loc_lon))   ! these return 'arrays' ...
 gridlatj = latinds(1)
 gridloni = loninds(1)
 
-if ((debug > 5) .and. do_output()) then
+if ((debug > 0) .and. do_output()) then
    write(*,*)'compute_gridcell_value:targetlon, lon, lon index is ',&
                   loc_lon,LON(gridloni),gridloni
    write(*,*)'compute_gridcell_value:targetlat, lat, lat index is ',&
@@ -2122,7 +2133,7 @@ endif
 
 ! If there is no vertical component, the problem is greatly simplified.
 ! Simply area-weight an average of all pieces in the grid cell.
-! FIXME ... this is the loop that can exploit the knowledge of what 
+!>@todo  FIXME ... this is the loop that can exploit the knowledge of what 
 ! columnids or pftids are needed for any particular gridcell.
 ! gridCellInfo%pftids, gridCellInfo%columnids
 
@@ -2137,39 +2148,41 @@ ELEMENTS : do indexi = index1, indexN
 
    state = get_state(indexi, state_handle)
 
-   do imem = 1, ens_size
-      if(state(imem) /= MISSING_R8) then
-         counter(imem)    = counter(imem)    + 1
-         total(imem)      = total(imem)      + state(imem)*landarea(indexi)
-         total_area(imem) = total_area(imem) +       landarea(indexi)
-      else
-         istatus(imem)    = 31
-         total(imem)      = MISSING_R8
-         total_area(imem) = MISSING_R8
-      endif
-   enddo
+   MEMBERS: do imem = 1, ens_size
 
-   if ((debug > 5) .and. do_output()) then
-      write(*,*)
-      write(*,*)'gridcell location match',counter(1),'at statevector index',indexi
-  !    write(*,*)'statevector value is (',state(indexi),')'
-      write(*,*)'area is              (',landarea(indexi),')'
-      write(*,*)'LON index is         (',lonixy(indexi),')'
-      write(*,*)'LAT index is         (',latjxy(indexi),')'
-      write(*,*)'closest LON is       (',LON(gridloni),')'
-      write(*,*)'closest LAT is       (',LAT(gridlatj),')'
-      write(*,*)'closest lev is       (',levels(indexi),')'
-   endif
+      if(state(imem) == MISSING_R8) cycle MEMBERS
 
+      counter(imem)    = counter(imem)    + 1
+      total(imem)      = total(imem)      + state(imem)*landarea(indexi)
+      total_area(imem) = total_area(imem) +             landarea(indexi)
+
+!#    if ((debug > 99) .and. do_output()) then
+!#       write(*,*)
+!#       write(*,*)'gridcell location match',counter(1),'at statevector index',indexi
+!#       write(*,*)'area is              (',landarea(indexi),')'
+!#       write(*,*)'LON index is         (',lonixy(indexi),')'
+!#       write(*,*)'LAT index is         (',latjxy(indexi),')'
+!#       write(*,*)'closest LON is       (',LON(gridloni),')'
+!#       write(*,*)'closest LAT is       (',LAT(gridlatj),')'
+!#       write(*,*)'closest lev is       (',levels(indexi),')'
+!#       write(*,*)'counter     value is (',counter(imem),')'
+!#       write(*,*)'total_area  value is (',total_area(imem),')'
+!#       write(*,*)'statevector value is (',state(imem),')'
+!#       write(*,*)'wgtd partial  sum is (',total(imem),')'
+!#    endif
+
+   enddo MEMBERS
 enddo ELEMENTS
 
-
-where (total_area /= 0.0_r8 .and. istatus == 0) ! All good.
-   interp_val = total/total_area
-elsewhere
-   interp_val = MISSING_R8
-   where (istatus == 0) istatus = 32
-endwhere
+do imem = 1,ens_size
+   write(*,*)'imem, total_area(imem), istatus(imem)', imem, total_area(imem), istatus(imem)
+   if (total_area(imem) > 0.0_r8 .and. istatus(imem) == 0) then
+      interp_val(imem) = total(imem) / total_area(imem)
+   else
+      interp_val(imem) = MISSING_R8
+      istatus(imem)    = 32
+   endif
+enddo
 
 !# if( any(istatus == 32) ) then
 !#    if ((debug > 4) .and. do_output()) then
@@ -2183,12 +2196,11 @@ endwhere
 
 !>@todo FIXME Need to print debugging info for any task, not just task 0
 ! Print more information for the really curious
-if ((debug > 5)) then
-   ! write(string1,*)'counter, total, total_area', counter, total, total_area
-   write(string1,*)'counter, total_area', counter(1), total_area(1)
-   write(string2,*)'interp_val, istatus', interp_val(1), istatus(1)
-   call error_handler(E_MSG,routine, string1, text2=string2)
-endif
+!# if ((debug > 99)) then
+!#    write(string1,*)'counter, total_area', counter(1), total_area(1)
+!#    write(string2,*)'interp_val, istatus', interp_val(1), istatus(1)
+!#    call error_handler(E_MSG,routine, string1, text2=string2)
+!# endif
 
 end subroutine compute_gridcell_value
 
@@ -2198,19 +2210,18 @@ end subroutine compute_gridcell_value
 !> Each gridcell value is an area-weighted value of an unknown number of
 !> column-based quantities.
 
-subroutine get_grid_vertval(state_handle, ens_size, location, kind_index, interp_val, istatus)
+subroutine get_grid_vertval(state_handle, ens_size, location, qty_index, interp_val, istatus)
 
 type(ensemble_type), intent(in)  :: state_handle ! state vector
 integer,             intent(in)  :: ens_size
 type(location_type), intent(in)  :: location     ! location somewhere in a grid cell
-integer,             intent(in)  :: kind_index   ! KIND in DART state needed for interpolation
+integer,             intent(in)  :: qty_index    ! QTY in DART state needed for interpolation
 real(r8),            intent(out) :: interp_val(ens_size)   ! area-weighted result
 integer,             intent(out) :: istatus(ens_size)      ! error code (0 == good)
 
 character(len=*), parameter :: routine = 'get_grid_vertval'
 
 ! Local storage
-
 integer  :: ivar, index1, indexN, counter1, counter2
 integer(i8) :: indexi
 integer  :: gridloni,gridlatj
@@ -2229,7 +2240,7 @@ integer :: imem
 real(r8) :: state(ens_size)
 character(len=obstypelength) :: varstring
 
-call error_handler(E_ERR,routine,'currently unsupported - needs to be tested.', &
+call error_handler(E_MSG,routine,'currently being tested ...', &
                     source, revision, revdate)
 
 if ( .not. module_initialized ) call static_init_model
@@ -2257,16 +2268,15 @@ if ( loc_lev < 0.0_r8 ) then
 endif
 
 ! determine the portion of interest of the state vector
-ivar   = findKindIndex(kind_index, routine)
+ivar   = findKindIndex(qty_index, routine)
 if (ivar < 1) then
    istatus = 20
    return
 endif
 
-index1 = get_index_start(progvar(ivar)%domain, progvar(ivar)%varname) ! in the DART state vector, start looking here
-indexN = get_index_end(  progvar(ivar)%domain, progvar(ivar)%varname) ! in the DART state vector, stop  looking here
-
-varstring = progvar(ivar)%varname ! used in a lot of error messages
+varstring = progvar(ivar)%varname ! used in error messages
+index1    = get_index_start(progvar(ivar)%domain, progvar(ivar)%varname)
+indexN    = get_index_end(  progvar(ivar)%domain, progvar(ivar)%varname)
 
 ! BOMBPROOFING - check for a vertical dimension for this variable
 if (progvar(ivar)%maxlevels < 2) then
@@ -2323,6 +2333,7 @@ endif
 ! separate area-based weight. There are multiple levels.
 ! I believe I have to keep track of all of them to sort out how to
 ! calculate the gridcell value at a particular depth.
+!>@todo Tb has a faster way to do this
 
 ! These are just to get the max size
 counter1 = 0
@@ -2355,13 +2366,11 @@ if ( counter == 0 ) then
    return
 endif
 
-allocate(above(ens_size, counter),&
-         below(ens_size, counter),&
-         area_below(ens_size, counter), &
-         area_above(ens_size, counter))
+allocate(above(ens_size,counter), area_above(ens_size,counter), &
+         below(ens_size,counter), area_below(ens_size,counter))
 
-above(:, :)  = 0.0_r8
-below(:, :)  = 0.0_r8
+above(:, :)      = 0.0_r8
+below(:, :)      = 0.0_r8
 area_below(:, :) = 0.0_r8
 area_above(:, :) = 0.0_r8
 
@@ -3582,7 +3591,7 @@ real(r4), allocatable, dimension(:) :: r4array
 if ( .not. module_initialized ) call static_init_model
 
 ! a little whitespace makes this a lot more readable
-if (do_output() .and. (debug > 1)) then
+if (do_output() .and. (debug > 2)) then
    write(*,*)
    write(logfileunit,*)
 endif
@@ -3612,7 +3621,7 @@ if (dimIDs(1) == TimeDimID) then
    nccount(1) = 1
 endif
 
-if (do_output() .and. (debug > 1)) then
+if (do_output() .and. (debug > 2)) then
    write(*,*)'get_var_1d: variable ['//trim(varname)//']'
    write(*,*)'get_var_1d: start ',ncstart(1:numdims)
    write(*,*)'get_var_1d: count ',nccount(1:numdims)
@@ -3772,7 +3781,7 @@ real(r4), allocatable, dimension(:,:) :: r4array
 if ( .not. module_initialized ) call static_init_model
 
 ! a little whitespace makes this a lot more readable
-if (do_output() .and. (debug > 1)) then
+if (do_output() .and. (debug > 2)) then
    write(*,*)
    write(logfileunit,*)
 endif
@@ -3818,7 +3827,7 @@ DimCheck : do i = 1,numdims
 
 enddo DimCheck
 
-if (do_output() .and. (debug > 1)) then
+if (do_output() .and. (debug > 2)) then
    write(*,*)'get_var_2d: variable ['//trim(varname)//']'
    write(*,*)'get_var_2d: start ',ncstart(1:numdims)
    write(*,*)'get_var_2d: count ',nccount(1:numdims)
@@ -3978,7 +3987,7 @@ real(r4), allocatable, dimension(:,:,:) :: r4array
 if ( .not. module_initialized ) call static_init_model
 
 ! a little whitespace makes this a lot more readable
-if (do_output() .and. (debug > 1)) then
+if (do_output() .and. (debug > 2)) then
    write(*,*)
    write(logfileunit,*)
 endif
@@ -4027,7 +4036,7 @@ DimCheck : do i = 1,numdims
 
 enddo DimCheck
 
-if (do_output() .and. (debug > 1)) then
+if (do_output() .and. (debug > 2)) then
    write(*,*)'get_var_3d: variable ['//trim(varname)//']'
    write(*,*)'get_var_3d: start ',ncstart(1:numdims)
    write(*,*)'get_var_3d: count ',nccount(1:numdims)
@@ -4154,8 +4163,8 @@ end function get_model_time
 
 
 
-function findKindIndex(kind_index, caller)
-integer,          intent(in) :: kind_index
+function findKindIndex(qty_index, caller)
+integer,          intent(in) :: qty_index
 character(len=*), intent(in) :: caller
 integer                      :: findKindIndex
 
@@ -4165,16 +4174,16 @@ findKindIndex = -1
 
 ! Skip to the right variable
 VARTYPES : do i = 1,nfields
-    if (progvar(i)%dart_kind == kind_index) then
+    if (progvar(i)%dart_qty == qty_index) then
        findKindIndex = i
        exit VARTYPES
     endif
 enddo VARTYPES
 
 if (findKindIndex < 1 .and. debug > 0) then
-   kind_string = get_name_for_quantity( kind_index )
+   kind_string = get_name_for_quantity( qty_index )
    write(string1,*) trim(caller)//' cannot find "'//trim(kind_string)//'" in list of DART state variables.'
-   write(string2,*) trim(caller)//' looking for DART KIND (index) ', kind_index
+   write(string2,*) trim(caller)//' looking for DART KIND (index) ', qty_index
    call error_handler(E_WARN,'findKindIndex',string1,source,revision,revdate, text2=string2)
 endif
 
@@ -4273,7 +4282,7 @@ enddo
 
 ! Check block
 
-if ((debug > 99) .and. do_output()) then
+if ((debug > 0) .and. do_output()) then
 
    iunit = open_file('gridcell_column_table.txt',form='formatted',action='write')
 
@@ -4322,7 +4331,7 @@ real(r8) :: minvalue, maxvalue
 
 progvar(ivar)%varname     = trim(variable_table(ivar,VT_VARNAMEINDX))
 progvar(ivar)%kind_string = trim(variable_table(ivar,VT_KINDINDX))
-progvar(ivar)%dart_kind   = get_index_for_quantity( progvar(ivar)%kind_string )
+progvar(ivar)%dart_qty    = get_index_for_quantity( progvar(ivar)%kind_string )
 progvar(ivar)%maxlevels   = 0
 progvar(ivar)%dimlens     = 0
 progvar(ivar)%dimnames    = ' '
@@ -4500,6 +4509,7 @@ real(r8),         intent(out) :: var_ranges(:,:)
 logical,          intent(out) :: var_update(:)
 
 character(len=*), parameter :: routine = 'cluster_variables'
+
 integer :: ivar
 
 nvars      = 0
@@ -4515,7 +4525,7 @@ VARLOOP : do ivar = 1,nfields
 
    nvars = nvars + 1
    var_names( nvars)    = progvar(ivar)%varname
-   var_qtys(  nvars)    = progvar(ivar)%dart_kind
+   var_qtys(  nvars)    = progvar(ivar)%dart_qty
    var_ranges(nvars,1)  = progvar(ivar)%minvalue
    var_ranges(nvars,2)  = progvar(ivar)%maxvalue
    var_update(nvars)    = progvar(ivar)%update
@@ -4523,7 +4533,7 @@ VARLOOP : do ivar = 1,nfields
 
    if (do_output() .and. debug > 99) then
       write(string1,*)trim(filename),' defines domain ',progvar(ivar)%domain,' var "',trim(var_names(ivar)),'"'
-      write(string2,*)'variable has dynamic range ',var_ranges(ivar,1),var_ranges(ivar,2)
+      write(string2,*)'variable has declared range ',var_ranges(ivar,1),var_ranges(ivar,2)
       write(string3,*)'and quantity index ',var_qtys(ivar), '. Is var on update list:',var_update(ivar)
       call error_handler(E_MSG,routine,string1,text2=string2,text3=string3)
    endif
@@ -4563,7 +4573,7 @@ write(logfileunit,*) '  numdims     ',progvar(ivar)%numdims
 write(logfileunit,*) '  varsize     ',progvar(ivar)%varsize
 write(logfileunit,*) '  index1      ',progvar(ivar)%index1
 write(logfileunit,*) '  indexN      ',progvar(ivar)%indexN
-write(logfileunit,*) '  dart_kind   ',progvar(ivar)%dart_kind
+write(logfileunit,*) '  dart_qty    ',progvar(ivar)%dart_qty
 write(logfileunit,*) '  kind_string ',progvar(ivar)%kind_string
 write(logfileunit,*) '  spvalINT    ',progvar(ivar)%spvalINT
 write(logfileunit,*) '  spvalR4     ',progvar(ivar)%spvalR4
@@ -4589,7 +4599,7 @@ write(     *     ,*) '  numdims     ',progvar(ivar)%numdims
 write(     *     ,*) '  varsize     ',progvar(ivar)%varsize
 write(     *     ,*) '  index1      ',progvar(ivar)%index1
 write(     *     ,*) '  indexN      ',progvar(ivar)%indexN
-write(     *     ,*) '  dart_kind   ',progvar(ivar)%dart_kind
+write(     *     ,*) '  dart_qty    ',progvar(ivar)%dart_qty
 write(     *     ,*) '  kind_string ',progvar(ivar)%kind_string
 write(     *     ,*) '  spvalINT    ',progvar(ivar)%spvalINT
 write(     *     ,*) '  spvalR4     ',progvar(ivar)%spvalR4

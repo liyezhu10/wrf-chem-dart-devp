@@ -21,7 +21,8 @@ use         utilities_mod, only : register_module, error_handler, E_MSG, E_ERR, 
 
 use     mpi_utilities_mod, only : initialize_mpi_utilities, finalize_mpi_utilities
 
-use          location_mod, only : location_type, set_location, write_location
+use          location_mod, only : location_type, set_location, write_location, &
+                                  VERTISHEIGHT
 
 use          obs_kind_mod, only : get_index_for_quantity, get_name_for_quantity
 
@@ -50,6 +51,9 @@ use distributed_state_mod, only : create_state_window, free_state_window
 use             model_mod, only : static_init_model, get_model_size,       &
                                   get_state_meta_data, model_interpolate
 
+use             model_mod, only : compute_gridcell_value, gridcell_components, &
+                                  get_grid_vertval
+
 use  test_interpolate_mod, only : test_interpolate_single, &
                                   test_interpolate_range, &
                                   find_closest_gridpoint
@@ -64,7 +68,7 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-integer, parameter :: MAX_TESTS = 7
+integer, parameter :: MAX_TESTS = 10
 
 ! this is max number of domains times number of ensemble members
 ! if you have more than one domain and your ensemble members are
@@ -132,7 +136,9 @@ real(r8), allocatable :: interp_vals(:)
 
 ! misc. variables
 integer :: idom, imem, num_passed, num_failed, num_domains, idomain
+integer :: dart_qty
 logical :: cartesian = .false.
+type(location_type) :: loc
 
 ! message strings
 character(len=512) :: my_base, my_desc
@@ -360,7 +366,8 @@ if (tests_to_run(4)) then
 
    call print_test_message('TEST 4', ending=.true.)
 
-    deallocate(interp_vals, ios_out)
+   deallocate(interp_vals, ios_out)
+
 endif
 
 !----------------------------------------------------------------------
@@ -430,6 +437,77 @@ if (tests_to_run(7)) then
 endif
 
 !----------------------------------------------------------------------
+! Find the index closest to a location
+!----------------------------------------------------------------------
+
+if (tests_to_run(8)) then
+
+   write(string1,*)'Finding interesting gridcells for the desired quantity.'
+   call print_test_message('TEST 8', string1, starting=.true.)
+
+   call gridcell_components(quantity_of_interest)
+
+   call print_test_message('TEST 8', ending=.true.)
+endif
+
+!----------------------------------------------------------------------
+! testing the compute_gridcell_value 
+!----------------------------------------------------------------------
+
+if (tests_to_run(9)) then
+
+   write(string1,*)'Testing compute_gridcell_value() with QTY_WATER_TABLE_DEPTH ...'
+   call print_test_message('TEST 9', string1, starting=.true.)
+
+   call create_state_window(ens_handle)
+
+   loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), VERTISHEIGHT)
+
+   allocate(interp_vals(num_ens), ios_out(num_ens))
+   dart_qty = get_index_for_quantity('QTY_WATER_TABLE_DEPTH')
+   call compute_gridcell_value(ens_handle, num_ens, loc, dart_qty, interp_vals, ios_out)
+
+      write(*,*)'compute_gridcell_values : values are ',interp_vals
+   if (any(ios_out /= 0)) &
+      write(*,*)'compute_gridcell_values : codes  are ',ios_out
+
+   call free_state_window(ens_handle)
+
+   call print_test_message('TEST 9', ending=.true.)
+
+   deallocate(interp_vals, ios_out)
+
+endif
+
+!----------------------------------------------------------------------
+! testing the vertical interpolation
+!----------------------------------------------------------------------
+
+if (tests_to_run(10)) then
+
+   write(string1,*)'Testing get_grid_vertval() with QTY_SOIL_MOISTURE ...'
+   call print_test_message('TEST 10', string1, starting=.true.)
+
+   call create_state_window(ens_handle)
+   loc = set_location(loc_of_interest(1), loc_of_interest(2), loc_of_interest(3), VERTISHEIGHT)
+
+   allocate(interp_vals(num_ens), ios_out(num_ens))
+   dart_qty = get_index_for_quantity('QTY_SOIL_MOISTURE')
+   call get_grid_vertval(ens_handle, num_ens, loc, dart_qty, interp_vals, ios_out)
+
+      write(*,*)'get_grid_vertval : values are ',interp_vals
+   if (any(ios_out /= 0)) &
+      write(*,*)'get_grid_vertval : codes are ',ios_out
+
+   call free_state_window(ens_handle)
+
+   call print_test_message('TEST 10', ending=.true.)
+
+   deallocate(interp_vals, ios_out)
+
+endif
+
+!----------------------------------------------------------------------
 ! add more tests here
 !----------------------------------------------------------------------
 
@@ -480,7 +558,6 @@ subroutine check_meta_data( iloc )
 
 integer(i8), intent(in) :: iloc
 
-type(location_type) :: loc
 integer             :: ix, iy, iz, dom_id, qty_index, var_type
 character(len=256)  :: qty_string
 
@@ -490,7 +567,7 @@ call get_model_variable_indices(iloc, ix, iy, iz, &
                                    kind_index=qty_index, &
                                    kind_string=qty_string)
 
-write(string1,'("index ",i11," is i,j,k",3(1x,i4)," and is in domain ",i2)') &
+write(string1,'("index ",i11," is i,j,k",3(1x,i6)," and is in domain ",i2)') &
                   iloc, ix, iy, iz, dom_id
 write(string2,'("is quantity ", I4,", ",A)') var_type, trim(qty_string)//' at location'
 call write_location(0,loc,charstring=string3)
@@ -732,7 +809,6 @@ end function set_logical_flag
 subroutine check_all_meta_data()
 
 integer(i8)         :: iloc
-type(location_type) :: loc
 integer             :: ix, iy, iz, dom_id, qty_index, var_type, fid
 character(len=256)  :: qty_string, metadata_qty_string
 

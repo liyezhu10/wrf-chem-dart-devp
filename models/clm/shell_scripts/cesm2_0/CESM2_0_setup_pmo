@@ -35,10 +35,10 @@
 # the supported compset does not work because CISM only uses a no_leap calendar
 # 2000_DATM%GSWP3v1_CLM45%BGC-CROP_SICE_SOCN_RTM_CISM2%NOEVOLVE_SWAV (I2000Clm45BgcCrop)
 
-setenv CASE           clm45_pmo
-setenv resolution     f09_g16
-setenv compset        2000_DATM%GSWP3v1_CLM45%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
-setenv cesmtag        clm_dev_branch
+setenv CASE           clm5bgc-crop_pmo
+setenv resolution     f09_f09
+setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
+setenv cesmtag        ctsm
 setenv num_instances  1
 
 # ==============================================================================
@@ -78,7 +78,7 @@ setenv exeroot      /glade/scratch/${USER}/$cesmtag/${CASE}/bld
 setenv archdir      /glade/scratch/${USER}/$cesmtag/${CASE}/archive
 
 setenv dartroot     /glade/p/work/thoar/DART/cesm_clm
-setenv baseobsdir   /glade/p/image/Observations/land
+setenv baseobsdir   /glade/p/image/Observations/land/SMAP
 
 # ==============================================================================
 # configure settings:
@@ -106,16 +106,15 @@ setenv baseobsdir   /glade/p/image/Observations/land
 # stagedir   The directory location of the reference case files.
 #            This will surely change based on the compset and machine.
 
-setenv refcase     80_member_freerun_one_degree
-setenv refyear     2004
-setenv refmon      01
-setenv refday      01
-setenv reftod      00000
-
+setenv refcase      clm5_f09_spinup80
+setenv refyear      2001
+setenv refmon       07
+setenv refday       01
+setenv reftod       00000
 setenv refdate      $refyear-$refmon-$refday
 setenv reftimestamp $refyear-$refmon-$refday-$reftod
 
-setenv stagedir /glade/p/image/RDA_strawman/CESM_ensembles/CLM/CLM4/I_2000_CN_f09_f09/rest/${reftimestamp}
+setenv stagedir /glade/p/image/RDA_strawman/CESM_ensembles/CLM/CLM5BGC-Crop/ctsm_${reftimestamp}
 
 setenv SingleInstanceRefcase 0
 setenv TRUTHinstance 3
@@ -140,10 +139,30 @@ setenv TRUTHinstance 3
 # they get moved to long-term storage. You can always submit $CASE.l_archive
 # whenever you want to free up space in the short-term archive directory.
 
-setenv start_year    2004
-setenv start_month   01
+setenv start_year    2001
+setenv start_month   07
 setenv start_day     01
 setenv start_tod     00000
+
+# The forward operators for the flux tower obs _require_ that we predict the name of
+# of the history file. The history file names of interest are time-tagged with the
+# _start_ of the forecast - not the restart time. The obs_def_tower_mod.f90 requires
+# the stop_option to be 'nhours', and the stop_n to be accurate.
+
+setenv resubmit            0
+setenv stop_option         nhours
+setenv stop_n              24
+
+@ clm_dtime = 1800
+@ h1nsteps = $stop_n * 3600 / $clm_dtime
+
+# stream_year_first  settings for the stream files for the Data Atmosphere (DATM).
+# stream_year_last
+# stream_year_align
+
+set stream_year_align = 1998
+set stream_year_first = 1998
+set stream_year_last  = 2010
 
 # ==============================================================================
 # job settings:
@@ -151,11 +170,11 @@ setenv start_tod     00000
 # queue      can be changed during a series by changing the case.run
 # timewall   can be changed during a series by changing the case.run
 #
-# TJH: Advancing 1 instance for 72 hours with 60 pes (4 nodes)
-#      took less than 2 minutes on yellowstone.
+# TJH: Advancing 1 instance for 24 hours with 4 nodes
+#      took less than XX minutes on cheyenne.
 # ==============================================================================
 
-setenv               queue premium
+setenv               queue regular
 setenv            timewall 0:10
 setenv short_term_archiver off
 
@@ -227,16 +246,16 @@ ${cesmroot}/cime/scripts/create_newcase  --res  ${resolution} \
 set ThisFileName = $0:t
 ${COPY} $ThisFileName ${caseroot}/${ThisFileName}.original
 
-if (   -e ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config.template) then
+set TEMPLATE = ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config.template
+if ( -e ${TEMPLATE} ) then
    sed -e "s#BOGUS_DART_ROOT_STRING#${dartroot}#" \
        -e "s#BOGUS_DART_OBS_STRING#${baseobsdir}#" \
-       -e "s#BOGUS_CASEROOT_STRING#${caseroot}#" \
-          ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config.template \
+       -e "s#BOGUS_CASEROOT_STRING#${caseroot}#" ${TEMPLATE} \
            >! ${caseroot}/CESM_DART_config  || exit 3
    chmod 755  ${caseroot}/CESM_DART_config
 else
    echo "ERROR: the script to configure for data assimilation is not available."
-   echo "       ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config.template MUST exist."
+   echo "       ${TEMPLATE} MUST exist."
    exit 4
 endif
 
@@ -272,25 +291,6 @@ if ( (${COMP_OCN} != socn) || (${COMP_ATM} != datm) ) then
    exit 5
 endif
 
-# The forward operators for the flux tower obs _require_ that we predict the name of
-# of the history file. The history file names of interest are time-tagged with the
-# _start_ of the forecast - not the restart time. The obs_def_tower_mod.f90 requires
-# the stop_option to be 'nhours', and the stop_n to be accurate.
-
-setenv resubmit            0
-setenv stop_option         nhours
-setenv stop_n              24
-
-@ clm_dtime = 1800
-@ h1nsteps = $stop_n * 3600 / $clm_dtime
-
-# stream_year_first  settings for the stream files for the Data Atmosphere (DATM).
-# stream_year_last
-# stream_year_align
-
-set stream_year_align = 1998
-set stream_year_first = 1998
-set stream_year_last  = 2010
 
 ./xmlchange CALENDAR=GREGORIAN
 ./xmlchange EXEROOT=${exeroot}
@@ -308,21 +308,21 @@ set stream_year_last  = 2010
 ./xmlchange DATM_CPLHIST_YR_START=$stream_year_first
 ./xmlchange DATM_CPLHIST_YR_END=$stream_year_last
 
-#      --- In a hybrid run the model is initialized as a startup, BUT uses
-#      initialization datasets FROM A PREVIOUS case.  This
-#      is somewhat analogous to a branch run with relaxed restart
-#      constraints.  A hybrid run allows users to bring together combinations
-#      of initial/restart files from a previous case (specified by
-#      RUN_REFCASE) at a given model output date (specified by
-#      RUN_REFDATE). Unlike a branch run, the starting date of a hybrid run
-#      (specified by RUN_STARTDATE) can be modified relative to the reference
-#      case. In a hybrid run, the model does not continue in a bit-for-bit
-#      fashion with respect to the reference case. The resulting climate,
-#      however, should be continuous provided that no model source code or
-#      namelists are changed in the hybrid run.  In a hybrid initialization,
-#      the ocean model does not start until the second ocean coupling
-#      (normally the second day), and the coupler does a cold start without
-#      a restart file.</desc>
+# --- In a hybrid run the model is initialized as a startup, BUT uses
+# initialization datasets FROM A PREVIOUS case.  This
+# is somewhat analogous to a branch run with relaxed restart
+# constraints.  A hybrid run allows users to bring together combinations
+# of initial/restart files from a previous case (specified by
+# RUN_REFCASE) at a given model output date (specified by
+# RUN_REFDATE). Unlike a branch run, the starting date of a hybrid run
+# (specified by RUN_STARTDATE) can be modified relative to the reference
+# case. In a hybrid run, the model does not continue in a bit-for-bit
+# fashion with respect to the reference case. The resulting climate,
+# however, should be continuous provided that no model source code or
+# namelists are changed in the hybrid run.  In a hybrid initialization,
+# the ocean model does not start until the second ocean coupling
+# (normally the second day), and the coupler does a cold start without
+# a restart file.</desc>
 
 ./xmlchange RUN_TYPE=hybrid
 ./xmlchange RUN_REFCASE=${refcase}
@@ -338,7 +338,7 @@ set stream_year_last  = 2010
 
 set TEST_MPI = `./xmlquery --value MPI_RUN_COMMAND'`
 if (${TEST_MPI} == 'UNSET') then
-   ./xmlchange MPI_RUN_COMMAND=mpirun.lsf
+   ./xmlchange MPI_RUN_COMMAND=mpiexec_mpt
 endif
 
 # Task layout:
@@ -348,20 +348,20 @@ endif
 # This is a decent layout for a single instance, but should be explored.
 # Presently, all components run 'serially' - one after another.
 # CIME interprets a negative task count as representing the number of nodes.
+# On Cheyenne (at least) using multiple threads is not recommended.
 
-@ nthreads = 1
 @ nodes_per_instance = 4
-@ ptile = -1
+@ nthreads = 1
 
-@ atm_tasks = $ptile * $nodes_per_instance
-@ cpl_tasks = $ptile * $nodes_per_instance
-@ ocn_tasks = $ptile * $nodes_per_instance
-@ wav_tasks = $ptile * $nodes_per_instance
-@ glc_tasks = $ptile * $nodes_per_instance
-@ ice_tasks = $ptile * $nodes_per_instance
-@ rof_tasks = $ptile * $nodes_per_instance
-@ lnd_tasks = $ptile * $nodes_per_instance
-@ esp_tasks = $ptile * $nodes_per_instance
+@ atm_tasks = -1 * $nodes_per_instance
+@ cpl_tasks = -1 * $nodes_per_instance
+@ ocn_tasks = -1 * $nodes_per_instance
+@ wav_tasks = -1 * $nodes_per_instance
+@ glc_tasks = -1 * $nodes_per_instance
+@ ice_tasks = -1 * $nodes_per_instance
+@ rof_tasks = -1 * $nodes_per_instance
+@ lnd_tasks = -1 * $nodes_per_instance
+@ esp_tasks = -1 * $nodes_per_instance
 
 ./xmlchange ROOTPE_ATM=0,NTHRDS_ATM=$nthreads,NTASKS_ATM=$atm_tasks
 ./xmlchange ROOTPE_CPL=0,NTHRDS_CPL=$nthreads,NTASKS_CPL=$cpl_tasks
@@ -381,7 +381,7 @@ echo "case setup finished"
 
 ./xmlchange --subgroup case.run        --id JOB_QUEUE          --val ${queue}
 ./xmlchange --subgroup case.run        --id JOB_WALLCLOCK_TIME --val ${timewall}
-./xmlchange --subgroup case.st_archive --id JOB_WALLCLOCK_TIME --val 1:00
+./xmlchange --subgroup case.st_archive --id JOB_WALLCLOCK_TIME --val 6:00
 
 if ($short_term_archiver == 'off') then
    ./xmlchange DOUT_S=FALSE
@@ -391,8 +391,8 @@ endif
 
 # DEBUG = TRUE implies turning on run and compile time debugging.
 # INFO_DBUG level of debug output, 0=minimum, 1=normal, 2=more, 3=too much.
-./xmlchange DEBUG=TRUE
-./xmlchange INFO_DBUG=2
+./xmlchange DEBUG=FALSE
+./xmlchange INFO_DBUG=0
 
 # ==============================================================================
 # Modify namelist templates for each instance.
@@ -456,15 +456,16 @@ while ( $inst <= $num_instances )
    set fname = "user_nl_clm${inst_string}"
    # ===========================================================================
 
-   echo "hist_empty_htapes = .true."                                    >> ${fname}
-   echo "hist_fincl1 = 'NEP','TOTECOSYSC','TOTVEGC','TLAI'"             >> ${fname}
-   echo "hist_fincl2 = 'NEP','FSH','EFLX_LH_TOT_R'"                     >> ${fname}
+   echo "hist_empty_htapes = .true."                                      >> ${fname}
+   echo "hist_fincl1 = 'NEP','TOTECOSYSC','TOTVEGC','TLAI','H2OSOI_LIQ','T_SOISNO'" >> ${fname}
+   echo "hist_fincl2 = 'NEP','FSH','EFLX_LH_TOT_R'"                       >> ${fname}
    echo "hist_fincl3 = 'TV','TLAI','PBOT','TBOT','TSA','RH2M_R','SNOWDP'" >> ${fname}
-   echo "hist_nhtfrq = -$stop_n,1,-$stop_n"     >> ${fname}
-   echo "hist_mfilt  = 1,$h1nsteps,1"           >> ${fname}
-   echo "hist_avgflag_pertape = 'A','A','I'"    >> ${fname}
-   echo "hist_dov2xy = .true.,.true.,.false."   >> ${fname}
-   echo "hist_type1d_pertape = ' ',' ',' '"     >> ${fname}
+   echo "hist_nhtfrq = -$stop_n,1,-$stop_n"                               >> ${fname}
+   echo "hist_mfilt  = 1,$h1nsteps,1"                                     >> ${fname}
+   echo "hist_avgflag_pertape = 'A','A','I'"                              >> ${fname}
+   echo "hist_dov2xy = .true.,.true.,.false."                             >> ${fname}
+   echo "hist_type1d_pertape = ' ',' ',' '"                               >> ${fname}
+   echo "dtime = $clm_dtime"                                              >> ${fname}
 
    @ inst ++
 end
@@ -606,7 +607,8 @@ else     # CONTINUE_RUN == FALSE
 
       ${LINK} ${stagedir}/${refcase}.clm2\${true_string}.r.${init_time}.nc \
                           ${refcase}.clm2\${inst_string}.r.${init_time}.nc
-
+      ${LINK} ${stagedir}/${refcase}.mosart\${true_string}.r.${init_time}.nc \
+                          ${refcase}.mosart\${inst_string}.r.${init_time}.nc
       @ inst ++
    end
 
@@ -630,7 +632,7 @@ chmod 0755 stage_cesm_files
 # |       |-- BalanceCheckMod.F90
 # |       |-- SnowHydrologyMod.F90
 # |       `-- UrbanMod.F90
-# `-- clm4_5
+# `-- clm5_0
 #     |-- biogeochem
 #     |   `-- CNBalanceCheckMod.F90
 #     `-- biogeophys
@@ -639,7 +641,7 @@ chmod 0755 stage_cesm_files
 
 if (    -d     ~/${cesmtag}/SourceMods ) then
 
-#  ${COPY} -r ~/${cesmtag}/SourceMods/src.clm ${caseroot}/SourceMods/
+   ${COPY} -r ~/${cesmtag}/SourceMods/src.clm ${caseroot}/SourceMods/
 
    set clm_opts = `echo $CLM_CONFIG_OPTS | sed -e "s/-//"`
 
