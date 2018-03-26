@@ -47,7 +47,7 @@ use     location_mod, only : location_type, set_location, get_location,       &
                              get_close_state, convert_vertical_obs,           &
                              convert_vertical_state
 
-use    utilities_mod, only : register_module, error_handler,                   &
+use    utilities_mod, only : register_module, error_handler, E_ALLMSG,         &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
                              do_output, to_upper,                              &
                              find_namelist_in_file, check_namelist_read,       &
@@ -1970,10 +1970,10 @@ llon      = loc_array(1)
 llat      = loc_array(2)
 lheight   = loc_array(3)
 
-call write_location(0,location,string2)
+call write_location(0,location,charstring=string2)
 if ((debug > 6) .and. do_output()) then
-   write (string3,*) llon, llat, lheight
-   call error_handler(E_MSG, routine, 'requesting interpolation at ', &
+   write (string3,'(3(2x,f18.12))') llon, llat, lheight
+   call error_handler(E_MSG, routine, 'requesting interpolation at', &
                       text2=string2, text3=string3)
 endif
 
@@ -2207,8 +2207,8 @@ end subroutine compute_gridcell_value
 
 !------------------------------------------------------------------
 !> Calculate the expected vertical value for the gridcell.
-!> Each gridcell value is an area-weighted value of an unknown number of
-!> column-based quantities.
+!> Each gridcell value is an area-weighted value of an unknown number
+!> of column-based quantities.
 
 subroutine get_grid_vertval(state_handle, ens_size, location, qty_index, interp_val, istatus)
 
@@ -2232,16 +2232,15 @@ real(r8) :: depthbelow, depthabove
 real(r8) :: topwght, botwght
 real(r8), dimension(1) :: loninds,latinds
 
-real(r8), allocatable, dimension(:, :) :: above, below
-real(r8), allocatable, dimension(:, :) :: area_above
-real(r8), allocatable, dimension(:, :) :: area_below
-integer :: counter, counter_above, counter_below
+real(r8), allocatable :: above(:,:), area_above(:,:)
+real(r8), allocatable :: below(:,:), area_below(:,:)
+integer,  allocatable :: counter_above(:), counter_below(:)
+integer :: counter
+integer :: levelabove, levelbelow
 integer :: imem
 real(r8) :: state(ens_size)
 character(len=obstypelength) :: varstring
-
-call error_handler(E_MSG,routine,'currently being tested ...', &
-                    source, revision, revdate)
+logical :: matched
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -2252,13 +2251,15 @@ if ( .not. module_initialized ) call static_init_model
 ! make any error codes set here be in the 20s
 
 interp_val = MISSING_R8  ! the DART bad value flag
-istatus    = 99          ! unknown error
+istatus    = 0           ! presume that it will work
 
 loc        = get_location(location)  ! loc is in DEGREES
 loc_lon    = loc(1)
 loc_lat    = loc(2)
 loc_lev    = loc(3)
 
+!>@todo might need to relax this if we get observations IN the snow layers.
+!> what happens with canopy?
 if ( loc_lev < 0.0_r8 ) then
    write(string1,*)'Cannot support above-ground vertical interpolation.'
    write(string2,*)'requested a value at a depth of ',loc_lev
@@ -2303,29 +2304,35 @@ endif
 ! The above-ground 'depths' are calculated from ZISNO and are negative.
 ! The 'depths' are all positive numbers, increasingly positive is deeper.
 ! The variables currently supported use the subsurface definitions in
-! the module variable LEVNGRND.
+! the module variable LEVNGRND -- number of layers is nlevgrnd
 
 if (loc_lev  <= LEVGRND(1)) then  ! the top level is so close to the surface
    depthabove = LEVGRND(1)        ! just use the top level
    depthbelow = LEVGRND(1)
+   levelabove = 1
+   levelbelow = 1
 elseif (loc_lev >= maxval(LEVGRND)) then  ! at depth, however ... do we
    depthabove    = maxval(LEVGRND)        ! fail or just use the deepest
    depthbelow    = maxval(LEVGRND)        ! I am using the deepest.
+   levelabove    = nlevgrnd
+   levelbelow    = nlevgrnd
 else
-
-   LAYERS : do indexi = 2,size(LEVGRND)
-      if (loc_lev < LEVGRND(indexi)) then
-         depthabove = LEVGRND(indexi-1)
-         depthbelow = LEVGRND(indexi  )
+   LAYERS : do indexi = 2,nlevgrnd
+      if (loc_lev   < LEVGRND(indexi)) then
+         levelabove = indexi-1
+         levelbelow = indexi
+         depthabove = LEVGRND(levelabove)
+         depthbelow = LEVGRND(levelbelow)
          exit LAYERS
       endif
    enddo LAYERS
-
 endif
 
 if ((debug > 4) .and. do_output()) then
-   write(*,*)'get_grid_vertval:depthbelow ',depthbelow,'>= loc_lev', &
-                   loc_lev,'>= depthabove',depthabove
+   write(*,'(3(A,1x,f18.12,1x))')'get_grid_vertval:depthbelow', depthbelow, &
+                              '>= loc_lev', loc_lev, &
+                              '>= depthabove', depthabove
+   write(*,*)'get_grid_vertval:level below ', levelbelow, 'level above', levelabove
 endif
 
 ! Determine how many elements can contribute to the gridcell value.
@@ -2352,87 +2359,86 @@ counter = max(counter1, counter2)
 
 if ( counter == 0 ) then
    if ((debug > 0) .and. do_output()) then
-
-      !>@todo use write_location(location) ... will report units 
-      !> E_ALLMSG for each task ...
-
       write(string1, *)'statevector variable '//trim(varstring)//' had no viable data'
       write(string2, *)'at gridcell lon/lat = (',gridloni,',',gridlatj,')'
-      write(string3, *)'obs lon/lat/lev (',loc_lon,',',loc_lat,',',loc_lev,')'
-      call error_handler(E_MSG,routine, string1, &
+      call write_location(0,location,charstring=string3)
+      call error_handler(E_ALLMSG,routine, string1, &
                      text2=string2,text3=string3)
    endif
    istatus = 21
    return
 endif
 
-allocate(above(ens_size,counter), area_above(ens_size,counter), &
-         below(ens_size,counter), area_below(ens_size,counter))
-
-above(:, :)      = 0.0_r8
-below(:, :)      = 0.0_r8
-area_below(:, :) = 0.0_r8
-area_above(:, :) = 0.0_r8
+allocate(counter_above(ens_size), above(ens_size,counter), area_above(ens_size,counter), &
+         counter_below(ens_size), below(ens_size,counter), area_below(ens_size,counter))
 
 counter_above = 0
 counter_below = 0
+above         = 0.0_r8
+below         = 0.0_r8
+area_below    = 0.0_r8
+area_above    = 0.0_r8
+
 ELEMENTS : do indexi = index1, indexN
 
    if ( lonixy(indexi) /=  gridloni )  cycle ELEMENTS
    if ( latjxy(indexi) /=  gridlatj )  cycle ELEMENTS
+   if ( levels(indexi) /=  depthabove .and. &
+        levels(indexi) /=  depthbelow) cycle ELEMENTS
 
    state = get_state(indexi, state_handle)
 
-   if (levels(indexi) == depthabove) then
-      counter_above           = counter_above + 1
-      where(state /= MISSING_R8) 
-         above(     :, counter_above) = state
-         area_above(:, counter_above) = landarea(indexi)
-      elsewhere
-         istatus = 22
-      endwhere
-   endif
+   matched = .false.
 
-   if(levels(indexi) == depthbelow) then
-      counter_below            = counter_below + 1
-      where(state /= MISSING_R8) 
-         below(     :, counter_below) = state
-         area_below(:, counter_below) = landarea(indexi)
-      elsewhere
-         istatus = 23
-      endwhere
+   MEMBERS : do imem = 1,ens_size
 
-   endif
+      if (state(imem) == MISSING_R8) cycle MEMBERS
 
-   if ((debug > 4) .and. do_output()) then
-      write(*,*)
-      write(*,*)'gridcell location match at statevector index',indexi
-      !write(*,*)'statevector value is (',state,')'
-      write(*,*)'area is          (',landarea(indexi),')'
-      write(*,*)'LON index is     (',lonixy(indexi),')'
-      write(*,*)'LAT index is     (',latjxy(indexi),')'
-      write(*,*)'gridcell LON is  (',LON(gridloni),')'
-      write(*,*)'gridcell LAT is  (',LAT(gridlatj),')'
-      write(*,*)'depth        is  (',levels(indexi),')'
-   endif
+      ! sometimes it could be right ON a level, so it could 
+      ! match both depths
+
+      if (levels(indexi) == depthabove) then
+         counter_above(imem)             = counter_above(imem) + 1
+         above(     imem, counter_above) = state(imem)
+         area_above(imem, counter_above) = landarea(indexi)
+         matched = .true.
+      endif
+
+      if(levels(indexi) == depthbelow) then
+         counter_below(imem)             = counter_below(imem) + 1
+         below(     imem, counter_below) = state(imem)
+         area_below(imem, counter_below) = landarea(indexi)
+         matched = .true.
+      endif
+
+      if ((debug > 99) .and. do_output() .and. matched) then
+         write(*,*)
+         write(*,*)'gridcell location match at statevector index',indexi
+         write(*,*)'area is ',landarea(indexi), ' depth is  ',levels(indexi)
+         write(*,*)'LON index is     ',lonixy(indexi),' LON is ',LON(gridloni)
+         write(*,*)'LAT index is     ',latjxy(indexi),' LAT is ',LAT(gridlatj)
+         write(*,*)'statevector value is (',state(imem),')'
+      endif
+
+   enddo MEMBERS
 
 enddo ELEMENTS
 
 ! could arise if the above or below was 'missing' ... but the mate was not.
 
-if ( counter_above /= counter_below ) then
+if ( any(counter_above /= counter_below) ) then
    write(string1, *)'Variable '//trim(varstring)//' has peculiar interpolation problems.'
    write(string2, *)'uneven number of values "above" and "below"'
    write(string3, *)'counter_above == ',counter_above,' /= ',counter_below,' == counter_below'
    call error_handler(E_MSG,routine, string1, &
                   text2=string2,text3=string3)
+   istatus = 22
    return
 endif
 
 do imem = 1, ens_size
 
-   ! Determine the value for the level above the depth of interest.
-   !>@todo FIXME : is the area the same across all ensemble members ?
+   ! Determine the area using the level above the depth of interest.
    total_area(imem) = sum(area_above(imem, :))
 
    if ( total_area(imem) /= 0.0_r8 .and. istatus(imem) == 0) then
@@ -2441,8 +2447,8 @@ do imem = 1, ens_size
       value_above(imem) = sum(above(imem, :) * area_above(imem, :))
    else
       write(string1, *)'Variable '//trim(varstring)//' had no viable data above'
-      write(string2, *)'at gridcell lon/lat/lev = (',gridloni,',',gridlatj,',',depthabove,')'
-      write(string3, *)'obs lon/lat/lev (',loc_lon,',',loc_lat,',',loc_lev,')'
+      write(string2, *)'at gridcell lon/lat/level = (',gridloni,',',gridlatj,',',levelabove,')'
+      call write_location(0,location,charstring=string3)
       call error_handler(E_ERR,routine, string1, &
                   source, revision, revdate, text2=string2,text3=string3)
    endif
@@ -2456,8 +2462,8 @@ do imem = 1, ens_size
       value_below(imem) = sum(below(imem, :) * area_below(imem, :))
    else
       write(string1, *)'Variable '//trim(varstring)//' had no viable data below'
-      write(string2, *)'at gridcell lon/lat/lev = (',gridloni,',',gridlatj,',',depthbelow,')'
-      write(string3, *)'obs lon/lat/lev (',loc_lon,',',loc_lat,',',loc_lev,')'
+      write(string2, *)'at gridcell lon/lat/lev = (',gridloni,',',gridlatj,',',levelbelow,')'
+      call write_location(0,location,charstring=string3)
       call error_handler(E_ERR,routine, string1, &
                   source, revision, revdate, text2=string2,text3=string3)
    endif
@@ -2478,7 +2484,7 @@ elsewhere
    interp_val = MISSING_R8
 endwhere
 
-deallocate(above, below, area_above, area_below)
+deallocate(counter_above, counter_below, above, below, area_above, area_below)
 
 end subroutine get_grid_vertval
 
