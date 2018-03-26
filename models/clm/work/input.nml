@@ -182,11 +182,11 @@
    assimilation_period_days     = 2
    assimilation_period_seconds  = 3600
    calendar                     = 'Gregorian'
-   debug                        = 7
+   debug                        = 0
    clm_variables  = 'H2OSOI_LIQ',  'QTY_LIQUID_WATER',           '0.0', 'NA', 'restart' , 'UPDATE',
-                    'ZWT',    'QTY_WATER_TABLE_DEPTH',           'NA' , 'NA', 'restart' , 'NO_COPY_BACK',
-   /
                     'H2OSOI_ICE',  'QTY_ICE',                    '0.0', 'NA', 'restart' , 'UPDATE',
+                    'EFLX_LH_TOT', 'QTY_LATENT_HEAT_FLUX',       'NA',  'NA', 'history' , 'NO_COPY_BACK'
+   /
 
 #   clm_variables  = 'frootc',      'QTY_ROOT_CARBON',            '0.0', 'NA', 'restart' , 'UPDATE',
 #                    'leafc',       'QTY_LEAF_CARBON',            '0.0', 'NA', 'restart' , 'UPDATE',
@@ -214,6 +214,7 @@
 #                    'H2OSNO',      'QTY_SNOW_WATER',             '0.0', 'NA', 'restart' , 'UPDATE',
 #                    'H2OSOI_ICE',  'QTY_ICE',                    '0.0', 'NA', 'restart' , 'UPDATE',
 #                    'SNOW_DEPTH',  'QTY_SNOW_THICKNESS',         'NA' , 'NA', 'restart' , 'UPDATE',
+#                    'ZWT',         'QTY_WATER_TABLE_DEPTH',      'NA' , 'NA', 'restart' , 'NO_COPY_BACK',
 #                    'NEP',         'QTY_NET_CARBON_PRODUCTION',  'NA' , 'NA', 'history' , 'NO_COPY_BACK',
 #                    'TV',          'QTY_VEGETATION_TEMPERATURE', 'NA' , 'NA', 'vector'  , 'NO_COPY_BACK',
 #                    'RH2M_R',      'QTY_SPECIFIC_HUMIDITY',      'NA' , 'NA', 'vector'  , 'NO_COPY_BACK',
@@ -304,7 +305,7 @@
 
 
 &obs_seq_to_netcdf_nml
-   obs_sequence_name = 'obs_seq.final'
+   obs_sequence_name = '/glade2/scratch2/thoar/ctsm/clm5bgc-crop_pmo/run/obs_seq.out'
    obs_sequence_list = ''
    append_to_netcdf  = .false.
    lonlim1    =    0.0
@@ -325,12 +326,13 @@
    loc_of_interest       = 255.0, -88.11518, 0.035  is 205,3 has 2 columns
 
 &model_mod_check_nml
-   input_state_files     = 'clm_restart.nc', 'clm_history.nc', 'clm_vector_history.nc'
+   num_ens               = 3
+   input_state_files     = 'clm_restart1.nc', 'clm_restart2.nc', 'clm_restart3.nc'
    output_state_files    = 'mmc_output1.nc', 'mmc_output2.nc', 'mmc_output3.nc'
    test1thru             = 0
-   run_tests             = 1,2,3,9
+   run_tests             = 1,2,3,4 
    x_ind                 = 6691574
-   loc_of_interest       = 254.724947, 39.978080, 0.035
+   loc_of_interest       = 254.724947, 39.978080, 0.039
    quantity_of_interest  = 'QTY_SOIL_MOISTURE'
    interp_test_vertcoord = 'VERTISHEIGHT'
    interp_test_lonrange  = 320.0, 321.0

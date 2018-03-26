@@ -2399,15 +2399,15 @@ ELEMENTS : do indexi = index1, indexN
 
       if (levels(indexi) == depthabove) then
          counter_above(imem)             = counter_above(imem) + 1
-         above(     imem, counter_above) = state(imem)
-         area_above(imem, counter_above) = landarea(indexi)
+         above(     imem, counter_above(imem)) = state(imem)
+         area_above(imem, counter_above(imem)) = landarea(indexi)
          matched = .true.
       endif
 
       if(levels(indexi) == depthbelow) then
          counter_below(imem)             = counter_below(imem) + 1
-         below(     imem, counter_below) = state(imem)
-         area_below(imem, counter_below) = landarea(indexi)
+         below(     imem, counter_below(imem)) = state(imem)
+         area_below(imem, counter_below(imem)) = landarea(indexi)
          matched = .true.
       endif
 
@@ -2432,6 +2432,7 @@ if ( any(counter_above /= counter_below) ) then
    write(string3, *)'counter_above == ',counter_above,' /= ',counter_below,' == counter_below'
    call error_handler(E_MSG,routine, string1, &
                   text2=string2,text3=string3)
+   deallocate(counter_above, counter_below, above, below, area_above, area_below)
    istatus = 22
    return
 endif
