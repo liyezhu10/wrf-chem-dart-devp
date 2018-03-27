@@ -209,8 +209,7 @@ endif
 
 ! this does not return 
 call error_handler(E_ERR, subr_name, msgstring1, source, revision, revdate, &
-                   text2=context2, text3=saved_filename)
-  
+                   text2=context2, text3='"'//trim(saved_filename)//'"')
 
 end subroutine nc_check
 

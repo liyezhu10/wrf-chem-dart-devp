@@ -572,8 +572,7 @@ do ivar = 1, nfields
 
    ! Open the file for each variable and get dimensions, etc.
 
-   call nc_check(nf90_open(trim(progvar(ivar)%origin), NF90_NOWRITE, ncid), &
-              routine,'open '//trim(progvar(ivar)%origin))
+   ncid = nc_open_file_readonly(progvar(ivar)%origin, routine)
 
    ! File is not required to have a time dimension
    io = nf90_inq_dimid(ncid, 'time', TimeDimID)
@@ -662,7 +661,7 @@ do ivar = 1, nfields
    progvar(ivar)%indexN      = index1 + varsize - 1
    index1                    = index1 + varsize      ! sets up for next variable
 
-   call nc_check(nf90_close(ncid),routine,'close '//trim(string2))
+   call nc_close_file(ncid, routine, progvar(ivar)%origin)
    ncid = 0
 
    if (debug > 0 .and. do_output()) call dump_progvar(ivar)
@@ -1461,12 +1460,11 @@ if ( .not. file_exist(filename) ) then
    call error_handler(E_ERR,'read_model_time',string1,source,revision,revdate)
 endif
 
-call nc_check( nf90_open(trim(filename), NF90_NOWRITE, ncid), &
-                  'read_model_time', 'open '//trim(filename))
+ncid = nc_open_file_readonly(filename,'read_model_time')
 
 read_model_time = get_state_time_ncid(ncid)
 
-call nc_check(nf90_close(ncid),'read_model_time', 'close '//trim(filename))
+call nc_close_file(ncid, 'read_model_time', filename)
 
 end function read_model_time
 
@@ -1815,7 +1813,7 @@ enddo
 
 deallocate(snlsno)
 
-call nc_close_file(ncid_clm, 'close', clm_restart_filename)
+call nc_close_file(ncid_clm, routine, clm_file)
 
 end subroutine mark_missing_r8_values
 
@@ -2636,10 +2634,7 @@ integer :: dimid
 
 ! get the ball rolling ...
 
-if (ncid == 0) then ! we need to open it
-   call nc_check(nf90_open(trim(fname), nf90_nowrite, ncid), &
-       routine,'open '//trim(fname))
-endif
+if (ncid == 0) ncid = nc_open_file_readonly(fname, routine)
 
 ! The new SingleColumn (and unstructured grid) configurations
 ! do not have a 'lon' and 'lat' dimension. There is only 'lndgrid'
@@ -2722,7 +2717,7 @@ if ((debug > 8) .and. do_output()) then
 endif
 
 if (cstat == 'close') then
-   call nc_check(nf90_close(ncid),routine,'close '//trim(fname) )
+   call nc_close_file(ncid, routine, fname)
    ncid = 0
 endif
 
@@ -2743,10 +2738,7 @@ character(len=*), parameter :: routine = 'get_full_grid'
 ! Make sure the variables are the right size ...
 ! at some point in the future ...
 
-if (ncid == 0) then ! we need to open it
-   call nc_check(nf90_open(trim(fname), nf90_nowrite, ncid), &
-       routine,'open '//trim(fname))
-endif
+if (ncid == 0) ncid = nc_open_file_readonly(fname, routine)
 
 ! The lat/lon matrices in the history file have been masked by
 ! the land values such that the wet cells are 'missing' values.
@@ -2782,7 +2774,7 @@ where (LAT < -90.0_r8) LAT = -90.0_r8
 where (LAT >  90.0_r8) LAT =  90.0_r8
 
 if (cstat == 'close') then
-   call nc_check(nf90_close(ncid),routine,'close '//trim(fname) )
+   call nc_close_file(ncid, routine, fname)
    ncid = 0
 endif
 
@@ -2835,10 +2827,7 @@ character(len=*), parameter :: routine = 'get_sparse_dims'
 
 integer :: dimid, istatus, mylevgrnd
 
-if (ncid == 0) then
-   call nc_check(nf90_open(trim(fname), nf90_nowrite, ncid), &
-               routine,'open '//trim(fname))
-endif
+if (ncid == 0) ncid = nc_open_file_readonly(fname, routine)
 
 ! get dimid for 'gridcell' and then get value ...
 
@@ -2927,7 +2916,7 @@ if (istatus == nf90_noerr) then
 endif
 
 if (cstat == 'close') then
-   call nc_check(nf90_close(ncid),routine,'close '//trim(fname) )
+   call nc_close_file(ncid, routine, fname)
    ncid = 0
 endif
 
@@ -2985,10 +2974,7 @@ character(len=*), parameter :: routine = 'get_sparse_geog'
 
 integer  :: VarID
 
-if (ncid == 0) then
-   call nc_check(nf90_open(trim(fname), nf90_nowrite, ncid), &
-               routine,'open '//trim(fname))
-endif
+if (ncid == 0) ncid = nc_open_file_readonly(fname, routine)
 
 ! Make sure the variables are the right size ...
 ! by comparing agains the size of the variable ...
@@ -3090,7 +3076,7 @@ else
 endif
 
 if (cstat == 'close') then
-   call nc_check(nf90_close(ncid),routine,'close '//trim(fname) )
+   call nc_close_file(ncid, routine, fname)
    ncid = 0
 endif
 
@@ -3150,21 +3136,24 @@ function get_state_time_ncid( ncid )
 type(time_type) :: get_state_time_ncid
 integer, intent(in) :: ncid
 
-integer :: VarID
+character(len=*), parameter :: routine = 'get_state_time_ncid'
+integer :: io, VarID
 integer :: rst_curr_ymd, rst_curr_tod, leftover
 integer :: year, month, day, hour, minute, second
 
 if ( .not. module_initialized ) call static_init_model
 
-call nc_check(nf90_inq_varid(ncid, 'timemgr_rst_curr_ymd', VarID), 'get_state_time_ncid', &
-                      &  'inq_varid timemgr_rst_curr_ymd '//trim(clm_restart_filename))
-call nc_check(nf90_get_var(  ncid, VarID,   rst_curr_ymd), 'get_state_time_ncid', &
-                      &            'get_var rst_curr_ymd '//trim(clm_restart_filename))
+io = nf90_inq_varid(ncid, 'timemgr_rst_curr_ymd', VarID)
+call nc_check(io, routine, 'inq_varid timemgr_rst_curr_ymd', ncid=ncid)
 
-call nc_check(nf90_inq_varid(ncid, 'timemgr_rst_curr_tod', VarID), 'get_state_time_ncid', &
-                      &  'inq_varid timemgr_rst_curr_tod '//trim(clm_restart_filename))
-call nc_check(nf90_get_var(  ncid, VarID,   rst_curr_tod), 'get_state_time_ncid', &
-                      &            'get_var rst_curr_tod '//trim(clm_restart_filename))
+io = nf90_get_var(ncid, VarID, rst_curr_ymd)
+call nc_check(io, routine, 'get_var rst_curr_ymd', ncid=ncid)
+
+io = nf90_inq_varid(ncid, 'timemgr_rst_curr_tod', VarID)
+call nc_check(io, routine, 'inq_varid timemgr_rst_curr_tod', ncid=ncid)
+
+io = nf90_get_var(ncid, VarID, rst_curr_tod)
+call nc_check(io, routine, 'get_var rst_curr_tod', ncid=ncid)
 
 year     = rst_curr_ymd/10000
 leftover = rst_curr_ymd - year*10000
