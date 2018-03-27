@@ -51,8 +51,8 @@ call find_namelist_in_file("input.nml", "dart_to_clm_nml", iunit)
 read(iunit, nml = dart_to_clm_nml, iostat = io)
 call check_namelist_read(iunit, io, "dart_to_clm_nml")
 
-write(string1,'("converting DART file "",A,""")') trim(input_dart_file)
-write(string2,'("to clm restart file "",A,""")') trim(clm_file_to_update)
+write(string1,*)'converting DART file "'//trim(input_dart_file)//'"'
+write(string2,*)'to clm restart file "'//trim(clm_file_to_update)//'"'
 call error_handler(E_MSG,'dart_to_clm',string1,text2=string2)
 
 call fill_missing_r8_with_orig(input_dart_file, clm_file_to_update)

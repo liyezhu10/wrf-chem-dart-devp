@@ -35,7 +35,7 @@ module model_mod
 use        types_mod, only : r4, r8, i8, MISSING_R8, MISSING_I, MISSING_R4,    &
                              obstypelength
 
-use time_manager_mod, only : time_type, set_time, get_time, set_date,          &
+use time_manager_mod, only : time_type, set_time, get_time, set_date, get_date,&
                              print_time, print_date, set_calendar_type,        &
                              operator(*),  operator(+),  operator(-),          &
                              operator(>),  operator(<),  operator(/),          &
@@ -59,7 +59,7 @@ use netcdf_utilities_mod, only : nc_add_global_attribute, nc_synchronize_file, &
                                  nc_check, nc_add_global_creation_time,        &
                                  nc_begin_define_mode, nc_end_define_mode,     &
                                  nc_open_file_readonly, nc_open_file_readwrite, &
-                                 nc_close_file
+                                 nc_close_file, nc_add_attribute_to_variable
 
 use     obs_kind_mod, only : QTY_SOIL_TEMPERATURE,       &
                              QTY_SOIL_MOISTURE,          &
@@ -1473,13 +1473,75 @@ end function read_model_time
 !-----------------------------------------------------------------------
 !>@todo this routine should write the model time when 
 !>      creating files from scratch
+!>
+!>	int timemgr_rst_start_ymd ;
+!>		timemgr_rst_start_ymd:long_name = "start date" ;
+!>		timemgr_rst_start_ymd:units = "YYYYMMDD" ;
+!>		timemgr_rst_start_ymd:interpinic_flag = 3 ;
+!>		timemgr_rst_start_ymd:interpinic_flag_meanings = "1=nearest neighbor, 2=copy directly, 3=skip" ;
+!>		timemgr_rst_start_ymd:varnames_on_old_files = "timemgr_rst_start_ymd" ;
+!>		timemgr_rst_start_ymd:_FillValue = -999999999 ;
+!>		timemgr_rst_start_ymd:missing_value = -9999 ;
+!>	int timemgr_rst_start_tod ;
+!>		timemgr_rst_start_tod:long_name = "start time of day" ;
+!>		timemgr_rst_start_tod:units = "sec" ;
+!>		timemgr_rst_start_tod:interpinic_flag = 3 ;
+!>		timemgr_rst_start_tod:interpinic_flag_meanings = "1=nearest neighbor, 2=copy directly, 3=skip" ;
+!>		timemgr_rst_start_tod:varnames_on_old_files = "timemgr_rst_start_tod" ;
+!>		timemgr_rst_start_tod:_FillValue = -999999999 ;
+!>		timemgr_rst_start_tod:missing_value = -9999 ;
 
 subroutine write_model_time(ncid, dart_time)
 
 integer,             intent(in) :: ncid !< netcdf file handle
 type(time_type),     intent(in) :: dart_time
 
-call error_handler(E_MSG, 'write_model_time', 'no routine for clm write model time')
+character(len=*), parameter :: routine = 'write_model_time'
+integer :: iyear, imonth, iday, ihour, imin, isec
+integer :: rst_curr_ymd, rst_curr_tod
+integer :: ymdVarID, todVarID
+integer :: io, io1, io2
+logical :: defining
+
+call get_date(dart_time, iyear, imonth, iday, ihour, imin, isec)
+
+rst_curr_ymd = iyear*10000 + imonth*100 + iday
+rst_curr_tod = ihour*3600  + imin*60    + isec
+
+io1 = nf90_inq_varid(ncid, 'timemgr_rst_curr_ymd', ymdVarID)
+io2 = nf90_inq_varid(ncid, 'timemgr_rst_curr_tod', todVarID)
+
+defining = .false.
+
+if (io1 /= NF90_NOERR .or. io2 /= NF90_NOERR) defining = .true.
+
+if ( defining ) call nc_check(nf90_redef(ncid), routine, 'redef')
+
+if ( io1 /= NF90_NOERR ) then
+   io = nf90_def_var(ncid,'timemgr_rst_curr_ymd',NF90_INT,ymdVarID)
+   call nc_check(io, routine, 'defining timemgr_rst_curr_ymd')
+   call nc_add_attribute_to_variable(ncid,'timemgr_rst_curr_ymd','long_name','start date',routine)
+   call nc_add_attribute_to_variable(ncid,'timemgr_rst_curr_ymd','units','YYYYMMDD',routine)
+endif
+
+if ( io2 /= NF90_NOERR ) then
+   io = nf90_def_var(ncid,'timemgr_rst_curr_tod',NF90_INT,todVarID)
+   call nc_check(io, routine, 'defining timemgr_rst_curr_tod')
+   call nc_add_attribute_to_variable(ncid,'timemgr_rst_curr_tod','long_name','start time of day',routine)
+   call nc_add_attribute_to_variable(ncid,'timemgr_rst_curr_tod','units','sec',routine)
+endif
+
+if ( defining ) call nc_check(nf90_enddef(ncid), routine, 'enddef')
+
+io = nf90_put_var(ncid, ymdVarID, rst_curr_ymd)
+! call nc_check(io, routine, ncid=ncid)  ! would like to use this if ncid is in the table
+call nc_check(io, routine, 'put_var timemgr_rst_curr_ymd')
+
+io = nf90_put_var(ncid, todVarID, rst_curr_tod)
+! call nc_check(io, routine, ncid=ncid)  ! would like to use this if ncid is in the table
+call nc_check(io, routine, 'put_var timemgr_rst_curr_tod')
+
+!>@todo maybe we also want to write the time in a DART-like way.
 
 end subroutine write_model_time
 
@@ -1795,7 +1857,7 @@ if ( .not. file_exist(file_clm) ) then
 endif
 
 ncid_dart = nc_open_file_readonly(file_dart, 'opening to replace MISSING_R8')
-ncid_clm  = nc_open_file_readonly(file_clm,  'opening to replace MISSING_R8')
+ncid_clm  = nc_open_file_readwrite(file_clm, 'opening to replace MISSING_R8')
 
 ! make sure the time in the file is the same as the time on the data
 ! we are trying to insert.  we are only updating part of the contents
