@@ -152,7 +152,7 @@ if (  -e   ${OBS_FILE} ) then
 else
    echo "ERROR ... no observation file $OBS_FILE"
    echo "ERROR ... no observation file $OBS_FILE"
-   exit -1
+   exit 2
 endif
 
 #=========================================================================
@@ -166,7 +166,7 @@ if (  -e   ${CASEROOT}/input.nml ) then
 else
    echo "ERROR ... DART required file ${CASEROOT}/input.nml not found ... ERROR"
    echo "ERROR ... DART required file ${CASEROOT}/input.nml not found ... ERROR"
-   exit -2
+   exit 3
 endif
 
 echo "`date` -- END COPY BLOCK"
@@ -183,12 +183,7 @@ if ($?TASKS_PER_NODE) then
 endif
 
 #=========================================================================
-# Block 4: the lookup table for SAMPLING ERROR CORRECTION was put in the
-# RUNDIR by the DART_config script - nothing to do now.
-#=========================================================================
-
-#=========================================================================
-# Block 5: DART INFLATION
+# Block 4: DART INFLATION
 # This stages the files that contain the inflation values.
 # The inflation values change through time and should be archived.
 #
@@ -283,7 +278,7 @@ ex_end
       else
          echo "ERROR: Requested PRIOR inflation but specified no incoming inflation file."
          echo "ERROR: expected something like clm_output_priorinf_mean.YYYY-MM-DD-SSSSS.nc"
-         exit -4
+         exit 4
       endif
 
       # Checking for a prior inflation sd file from the previous assimilation.
@@ -297,7 +292,7 @@ ex_end
       else
          echo "ERROR: Requested PRIOR inflation but specified no incoming inflation SD file."
          echo "ERROR: expected something like clm_output_priorinf_sd.YYYY-MM-DD-SSSSS.nc"
-         exit 2
+         exit 4
       endif
 
    endif
@@ -309,36 +304,37 @@ endif
 ${REMOVE} clm_inflation_cookie
 
 #=========================================================================
-# Block 6: Convert N CLM restart files to DART initial condition files.
-# clm_to_dart is serial code, we can do all of these at the same time
-# as long as we can have unique namelists for each of them.
-#
-# At the end of the block, we have DART initial condition files  filter_ics.[1-N]
-# that came from pointer files ../rpointer.lnd_[1-N]
+# Block 5:
 #
 # REQUIRED DART namelist settings:
 # &filter_nml:           restart_in_file_name    = 'filter_ics'
 #                        restart_out_file_name   = 'filter_restart'
 # &ensemble_manager_nml: single_restart_file_in  = '.false.'
-# &clm_to_dart_nml:      clm_to_dart_output_file = 'dart_ics',
 # &dart_to_clm_nml:      dart_to_clm_input_file  = 'dart_restart',
-#                        advance_time_present    = .false.
 # &model_nml:            clm_restart_filename        = 'clm_restart.nc'
 # &model_nml:            clm_history_filename        = 'clm_history.nc'
 # &model_nml:            clm_vector_history_filename = 'clm_vector_history.nc'
 #
 #=========================================================================
 
-echo "`date` -- BEGIN CLM-TO-DART"
-
 ls -1 ${CASE}.clm2_*.r.${LND_DATE_EXT}.nc  >! restart_files.txt
 ls -1 ${CASE}.clm2_*.h0.${LND_DATE_EXT}.nc >! history_files.txt
 ls -1 ${CASE}.clm2_*.h2.${LND_DATE_EXT}.nc >! history_vector_files.txt
 
-echo "`date` -- END CLM-TO-DART for all ${ENSEMBLE_SIZE} members."
+# must rename the output files to something
+
+if ( -e restart_files.txt ) then
+   sed -e "s#${LND_DATE_EXT}#${LND_DATE_EXT}.out#" restart_files.txt >! restart_output_files.txt
+endif
+if ( -e history_files.txt ) then
+   sed -e "s#${LND_DATE_EXT}#${LND_DATE_EXT}.out#" history_files.txt >! history_output_files.txt
+endif
+if ( -e history_vector_files.txt ) then
+   sed -e "s#${LND_DATE_EXT}#${LND_DATE_EXT}.out#" history_vector_files.txt >! history_vector_output_files.txt
+endif
 
 #=========================================================================
-# Block 7: Actually run the assimilation.
+# Block 6: Actually run the assimilation.
 # Will result in a set of files : 'filter_restart.xxxx'
 #
 # DART namelist settings required:
@@ -375,7 +371,7 @@ if (  -e   ${LND_VEC_HISTORY_FILENAME} ) then
 endif
 
 echo "`date` -- BEGIN FILTER"
-${LAUNCHCMD} ${EXEROOT}/filter || exit -7
+${LAUNCHCMD} ${EXEROOT}/filter || exit 6
 echo "`date` -- END FILTER"
 
 # ${MOVE} preassim.nc      clm_preassim.${LND_DATE_EXT}.nc
@@ -395,6 +391,25 @@ foreach FILE ( output_priorinf_mean.* output_priorinf_sd.* )
    else
       echo "No ${FILE} for ${LND_DATE_EXT}"
    endif
+end
+
+#=========================================================================
+# Block 7: Update the CLM restart files - 
+# required because of the special missing value flags and 
+# possible snow recompaction, etc.
+#=========================================================================
+
+@ instance = 0
+foreach MEMBER ( ${CASE}.clm2_*.r.${LND_DATE_EXT}.nc )
+
+   @ instance ++ 
+   set DARTFILE = `head -n $instance restart_output_files.txt | tail -n 1`
+
+   ln -sf $MEMBER clm_restart_file.nc
+   ln -sf $DARTFILE dart_posterior.nc
+
+   ../bld/dart_to_clm || exit 7
+
 end
 
 #-------------------------------------------------------------------------

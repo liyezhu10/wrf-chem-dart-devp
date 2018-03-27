@@ -2,7 +2,7 @@
 ! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! $Id$
+! DART $Id$
 
 module model_mod
 
@@ -32,8 +32,8 @@ module model_mod
 ! This means we cannot use the snow layers in any of the forward operators ... 
 
 ! Modules that are absolutely required for use are listed
-use        types_mod, only : r4, r8, MISSING_R8, MISSING_I, MISSING_R4, &
-                             obstypelength, i8
+use        types_mod, only : r4, r8, i8, MISSING_R8, MISSING_I, MISSING_R4,    &
+                             obstypelength
 
 use time_manager_mod, only : time_type, set_time, get_time, set_date,          &
                              print_time, print_date, set_calendar_type,        &
@@ -41,10 +41,10 @@ use time_manager_mod, only : time_type, set_time, get_time, set_date,          &
                              operator(>),  operator(<),  operator(/),          &
                              operator(/=), operator(<=), operator(==)
 
-use     location_mod, only : location_type, set_location, get_location,       &
-                             write_location, is_vertical, VERTISLEVEL,        &
-                             VERTISHEIGHT, LocationDims, get_close_obs,       &
-                             get_close_state, convert_vertical_obs,           &
+use     location_mod, only : location_type, set_location, get_location,        &
+                             write_location, is_vertical, VERTISLEVEL,         &
+                             VERTISHEIGHT, LocationDims, get_close_obs,        &
+                             get_close_state, convert_vertical_obs,            &
                              convert_vertical_state
 
 use    utilities_mod, only : register_module, error_handler, E_ALLMSG,         &
@@ -56,8 +56,10 @@ use    utilities_mod, only : register_module, error_handler, E_ALLMSG,         &
                              nmlfileunit
 
 use netcdf_utilities_mod, only : nc_add_global_attribute, nc_synchronize_file, &
-                                 nc_check, nc_add_global_creation_time, &
-                                 nc_begin_define_mode, nc_end_define_mode
+                                 nc_check, nc_add_global_creation_time,        &
+                                 nc_begin_define_mode, nc_end_define_mode,     &
+                                 nc_open_file_readonly, nc_open_file_readwrite, &
+                                 nc_close_file
 
 use     obs_kind_mod, only : QTY_SOIL_TEMPERATURE,       &
                              QTY_SOIL_MOISTURE,          &
@@ -119,9 +121,7 @@ public :: get_model_size,         &
           pert_model_copies,      &
           write_model_time,       &
           read_model_time,        &
-          end_model,              &
-          fill_missing_r8_with_orig,     &
-          mark_missing_r8_values
+          end_model
 
 ! the code for these routines are in other modules
 public::  init_time,              &
@@ -140,7 +140,9 @@ public :: get_gridsize,                 &
           get_grid_vertval,             &
           compute_gridcell_value,       &
           gridcell_components,          &
-          DART_get_var
+          DART_get_var,                 &
+          fill_missing_r8_with_orig,    &
+          mark_missing_r8_values
 
 ! version controlled file description for error handling, do not edit
 character(len=*), parameter :: source   = &
@@ -1501,9 +1503,8 @@ end subroutine get_gridsize
 
 !------------------------------------------------------------------
 !> Reads the current time and state variables from a clm restart
-!> file and packs them into a dart state vector. This better happen
-!> in the same fashion as the metadata arrays are built.
-!>@todo CHECKME ... this may not be needed for CLM4.5, CLM5 (CESM2.0)
+!> file and packs them into a dart state vector. Except none of
+!> that is true for the rma version.
 
 subroutine mark_missing_r8_values(clm_file, restart_time)
 
@@ -1519,11 +1520,14 @@ real(r8), allocatable, dimension(:)         :: data_1d_array
 real(r8), allocatable, dimension(:,:)       :: data_2d_array
 real(r8), allocatable, dimension(:,:,:)     :: data_3d_array
 
-integer :: io, ncid_clm, ncid_dart, var_id_out, TimeDimID, VarID, ncNdims, dimlen, numvars
+integer :: io, ncid_clm, ncid_dart, clmVarID, TimeDimID, VarID, ncNdims, dimlen, numvars
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 character     (len=NF90_MAX_NAME)     :: varname
 
 if ( .not. module_initialized ) call static_init_model()
+
+!>@todo CHECKME ... this may not be needed for CLM4.5, CLM5 (CESM2.0)
+call error_handler(E_ERR,routine,'routine not needed - maybe')
 
 ! Must check anything with a dimension of 'levtot' or 'levsno' and manually
 ! set the values to DART missing. If only it were that easy ...
@@ -1546,25 +1550,20 @@ if ( .not. module_initialized ) call static_init_model()
 ! number of snow layers
 ! time of restart file
 
+ncid_clm = nc_open_file_readwrite(clm_file, 'open for MISSING_R8 replacment')
+
+io = nf90_inq_varid(ncid_clm,'SNLSNO', clmVarID)
+call nc_check(io, routine, 'inq_varid', 'SNLSNO', clm_file)
+
 allocate(snlsno(ncolumn))
-call nc_check(nf90_open(trim(clm_restart_filename), NF90_NOWRITE, ncid_clm), &
-              routine, 'open SNLSNO'//clm_restart_filename)
-call nc_check(nf90_inq_varid(ncid_clm,'SNLSNO', VarID), &
-              routine, 'inq_varid SNLSNO'//clm_restart_filename)
-call nc_check(nf90_get_var(ncid_clm, VarID, snlsno), &
-              routine, 'get_var SNLSNO'//clm_restart_filename)
+
+io = nf90_get_var(ncid_clm, clmVarID, snlsno)
+call nc_check(io, routine, 'get_var','SNLSNO', clm_file)
 
 restart_time = get_state_time(ncid_clm)
 
 if (do_output()) call print_time(restart_time,'time in restart file '//clm_restart_filename)
 if (do_output()) call print_date(restart_time,'date in restart file '//clm_restart_filename)
-
-call nc_check(nf90_close(ncid_clm),routine,'close '//clm_restart_filename)
-
-! open an existing netcdf file that has is a copy of clm_restart_filename
-! to fill in missing_r8 values.
-call nc_check(nf90_open(trim(clm_file), NF90_WRITE, ncid_dart), &
-              routine, 'open clm_file file "'//trim(clm_file)//'"')
 
 ! Start counting and filling the state vector one item at a time,
 ! repacking the Nd arrays into a single 1d list of numbers.
@@ -1578,22 +1577,18 @@ do ivar=1, numvars
 
    varname = trim(progvar(ivar)%varname)
    string3 = trim(progvar(ivar)%origin)//' '//trim(progvar(ivar)%varname)
-   call nc_check(nf90_open(trim(clm_restart_filename), NF90_NOWRITE, ncid_clm), &
-              routine,'open '//trim(string3))
 
-   ! File is not required to have a time dimension
-   io = nf90_inq_dimid(ncid_clm, 'time', TimeDimID)
-   if (io /= NF90_NOERR) TimeDimID = MISSING_I
+   io = nf90_inq_varid(ncid_dart, varname, VarID)
+   call nc_check(io, routine, 'inq_varid', 'input', string3)
 
-   call nc_check(nf90_inq_varid(ncid_clm,   varname, VarID), &
-            routine, 'inq_varid input '//trim(string3))
-   call nc_check(nf90_inquire_variable( ncid_clm, VarID, dimids=dimIDs, ndims=ncNdims), &
-                 routine, 'inquire_variable '//trim(string3))
+   io = nf90_inquire_variable(ncid_dart, VarID)
+   call nc_check(io, routine, 'inquire_variable', 'input', string3)
 
-   call nc_check(nf90_inq_varid(ncid_dart,   varname, var_id_out), &
-            routine, 'inq_varid output '//trim(string3))
-   call nc_check(nf90_inquire_variable( ncid_dart, var_id_out), &
-                 routine, 'inquire_variable '//trim(string3))
+   io = nf90_inq_varid(ncid_clm, varname, clmVarID)
+   call nc_check(io, routine, 'inq_varid', 'output', string3)
+
+   io = nf90_inquire_variable(ncid_clm, clmVarID, dimids=dimIDs, ndims=ncNdims)
+   call nc_check(io, routine, 'inquire_variable', 'output', string3)
 
    ! Check the rank of the variable
 
@@ -1609,15 +1604,9 @@ do ivar=1, numvars
    do i = 1,progvar(ivar)%numdims
 
       write(string1,'(''inquire dimension'',i2,A)') i,trim(string3)
-      call nc_check(nf90_inquire_dimension(ncid_clm, dimIDs(i), len=dimlen), &
-            routine, string1)
+      io = nf90_inquire_dimension(ncid_clm, dimIDs(i), len=dimlen)
+      call nc_check(io, routine, string1)
 
-      ! Time dimension will be 1 in progvar, but not necessarily
-      ! in origin file. We only want a single matching time.
-      ! static_init_model() only reserves space for a single time.
-      
-      if ( dimIDs(i) == TimeDimID ) dimlen = 1
-          
       if ( dimlen /= progvar(ivar)%dimlens(i) ) then
          write(string1,*) trim(string3),' dim/dimlen ',i,dimlen, &
                               ' not ',progvar(ivar)%dimlens(i)
@@ -1641,8 +1630,8 @@ do ivar=1, numvars
       allocate(data_1d_array(ni))
       call DART_get_var(ncid_clm, varname, data_1d_array)
 
-      call nc_check(nf90_put_var(ncid_dart, var_id_out, data_1d_array), &
-                   routine, 'put_var '//trim(varname))
+      io = nf90_put_var(ncid_dart, clmVarID, data_1d_array)
+      call nc_check(io, routine, 'put_var', varname, ncid=ncid_clm)
 
       deallocate(data_1d_array)
 
@@ -1701,7 +1690,7 @@ do ivar=1, numvars
          enddo
       endif
 
-      call nc_check(nf90_put_var(ncid_dart, var_id_out, data_2d_array), &
+      call nc_check(nf90_put_var(ncid_dart, clmVarID, data_2d_array), &
                    'get_var_2d', 'put_var '//trim(varname))
 
       deallocate(data_2d_array)
@@ -1729,7 +1718,7 @@ do ivar=1, numvars
          ! applied correctly for PBOT, TBOT ... so there is no need for the
          ! extra processing that is present in the previous loops.
 
-         call nc_check(nf90_put_var(ncid_dart, var_id_out, data_3d_array), &
+         call nc_check(nf90_put_var(ncid_dart, clmVarID, data_3d_array), &
                       routine, 'put_var '//trim(varname))
 
          deallocate(data_3d_array)
@@ -1760,34 +1749,35 @@ do ivar=1, numvars
                         source,revision,revdate,text2=string2)
    endif
 
-   call nc_check(nf90_close(ncid_clm),routine,'close in'//progvar(ivar)%origin)
-   ncid_clm = 0
-
 enddo
 
 deallocate(snlsno)
 
-call nc_check(nf90_close(ncid_dart),routine,'close out'//progvar(ivar)%origin)
+call nc_close_file(ncid_clm, 'close', clm_restart_filename)
 
 end subroutine mark_missing_r8_values
 
 
 !------------------------------------------------------------------
-!> Writes the current time and state variables from a dart state
-!> vector (1d array) into a clm netcdf restart file.
+!> Writes the posterior dart state into a clm restart file.
 
-subroutine fill_missing_r8_with_orig(file_dart, file_clm, dart_time)
+subroutine fill_missing_r8_with_orig(file_dart, file_clm)
 
 character(len=*), intent(in) :: file_dart
 character(len=*), intent(in) :: file_clm
-type(time_type),  intent(in) :: dart_time
 
-integer :: i, ivar
+character(len=*), parameter :: routine = 'fill_missing_r8_with_orig'
 
-integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
-character(len=NF90_MAX_NAME)          :: varname
-integer         :: varid_out, VarID, ncNdims, dimlen, numvars
-integer         :: ncid_dart, ncid_clm
+integer :: i, io, ivar
+
+character(len=NF90_MAX_NAME) :: varname
+integer :: dimIDs_dart( NF90_MAX_VAR_DIMS), dimIDs_clm( NF90_MAX_VAR_DIMS)
+integer :: dimlens_dart(NF90_MAX_VAR_DIMS), dimlens_clm(NF90_MAX_VAR_DIMS)
+integer :: ncid_dart, varid_dart, numdims_dart
+integer :: ncid_clm,  varid_clm,  numdims_clm
+
+integer         :: dimlen, numvars
+type(time_type) :: dart_time
 type(time_type) :: file_time
 
 if ( .not. module_initialized ) call static_init_model
@@ -1795,27 +1785,23 @@ if ( .not. module_initialized ) call static_init_model
 ! Check that the output file exists ...
 
 if ( .not. file_exist(file_dart) ) then
-   write(string1,*) 'cannot open dart state file "', trim(file_dart),'" for reading.'
-   call error_handler(E_ERR,'fill_missing_r8_with_orig',string1,source,revision,revdate)
+   write(string1,*) 'dart file "', trim(file_dart),'" does not exist.'
+   call error_handler(E_ERR,routine,string1,source,revision,revdate)
 endif
 
 if ( .not. file_exist(file_clm) ) then
-   write(string1,*) 'cannot open clm state file "', trim(file_clm),'" for reading.'
-   call error_handler(E_ERR,'fill_missing_r8_with_orig',string1,source,revision,revdate)
+   write(string1,*) 'clm restart file "', trim(file_clm),'" does not exist.'
+   call error_handler(E_ERR,routine,string1,source,revision,revdate)
 endif
 
-call nc_check(nf90_open(trim(file_dart), NF90_WRITE, ncid_dart), &
-             'fill_missing_r8_with_orig','open original restart "'//trim(file_dart)//'"')
-
-! Open file to fill the MISSING_R8 values with the original values
-call nc_check(nf90_open(trim(file_clm), NF90_WRITE, ncid_clm), &
-             'fill_missing_r8_with_orig','open dart restart '//trim(file_clm)//'"')
+ncid_dart = nc_open_file_readonly(file_dart, 'opening to replace MISSING_R8')
+ncid_clm  = nc_open_file_readonly(file_clm,  'opening to replace MISSING_R8')
 
 ! make sure the time in the file is the same as the time on the data
 ! we are trying to insert.  we are only updating part of the contents
-! of the clm restart file, and state vector contents from a different
-! time won't be consistent with the rest of the file.
+! of the clm restart file.
 
+dart_time = get_state_time(ncid_dart)
 file_time = get_state_time(ncid_clm)
 
 if ( file_time /= dart_time ) then
@@ -1824,22 +1810,11 @@ if ( file_time /= dart_time ) then
    call print_time(dart_time,'DART current time')
    call print_time(file_time,'clm  current time')
    write(string1,*)trim(file_dart),' current time /= model time. FATAL error.'
-   call error_handler(E_ERR,'fill_missing_r8_with_orig',string1,source,revision,revdate)
+   call error_handler(E_ERR,routine,string1,source,revision,revdate)
 endif
 
 if (do_output()) call print_time(file_time,'time of restart file "'//trim(file_dart)//'"')
 if (do_output()) call print_date(file_time,'date of restart file "'//trim(file_dart)//'"')
-
-! The DART prognostic variables are only defined for a single time.
-! We already checked the assumption that variables are xy2d or xyz3d ...
-! IF the netCDF variable has a TIME dimension, it must be the last dimension,
-! and we need to read the LAST timestep and effectively squeeze out the
-! singleton dimension when we stuff it into the DART state vector.
-
-! The snow water equivalent (H2OSNO) cannot be zero since H2OSNO is used to calculate the
-! bulk snow density, which in turn is a parameter in the equation of Snow Cover Fraction.
-! In order to avoid the negative values of H2OSNO produced by DART, I added some "if" conditions
-! to set the value of H2OSNO back to the value before assimilation if negative value is found.
 
 ! get the number of variables for clm_restart_file
 numvars = get_num_variables(dom_restart)
@@ -1848,60 +1823,64 @@ UPDATE : do ivar=1, numvars
    varname = trim(progvar(ivar)%varname)
    string2 = trim(file_dart)//' '//trim(varname)
 
-   ! Ensure netCDF variable is conformable with progvar quantity.
-   ! The TIME and Copy dimensions are intentionally not queried
-   ! by looping over the dimensions stored in the progvar type.
+   ! skip any variables that are marked NO_UPDATE
+   if (.not. do_io_update(dom_restart, ivar)) cycle UPDATE 
 
-   call nc_check(nf90_inq_varid(ncid_clm, varname, VarID), &
-            'fill_missing_r8_with_orig', 'inq_varid '//trim(string2))
-   call nc_check(nf90_inquire_variable(ncid_clm,VarID,dimids=dimIDs,ndims=ncNdims), &
-            'fill_missing_r8_with_orig', 'inquire '//trim(string2))
+   ! Ensure netCDF variables are conformable
 
-   call nc_check(nf90_inq_varid(ncid_dart, varname, varid_out), &
-            'fill_missing_r8_with_orig', 'inq_varid '//trim(string2))
-   call nc_check(nf90_inquire_variable(ncid_dart,varid_out), &
-            'fill_missing_r8_with_orig', 'inquire '//trim(string2))
+   io = nf90_inq_varid(ncid_clm, varname, varid_clm)
+   call nc_check(io, routine, 'inq_varid', varname, file_clm)
 
-   DimCheck : do i = 1,progvar(ivar)%numdims
+   io = nf90_inquire_variable(ncid_clm, varid_clm, dimids=dimids_clm, ndims=numdims_clm)
+   call nc_check(io, routine, 'inquire variable', varname, file_clm )
+
+   io = nf90_inq_varid(ncid_dart, varname, varid_dart)
+   call nc_check(io, routine, 'inq_varid ', varname, file_dart)
+
+   io = nf90_inquire_variable(ncid_dart, varid_dart, dimids=dimids_dart, ndims=numdims_dart)
+   call nc_check(io, routine, 'inquire variable', varname, file_dart)
+
+   if (numdims_dart /= numdims_clm) then
+      write(string1,*)'variable "',trim(varname),'" is not conformable between the two files:' 
+      call error_handler(E_ERR, routine, string1, &
+                 source, revision, revdate, text2=file_clm, text3=file_dart)
+   endif
+
+   DimCheck : do i = 1,numdims_clm
 
       write(string1,'(''inquire dimension'',i2,A)') i,trim(string2)
-      call nc_check(nf90_inquire_dimension(ncid_clm, dimIDs(i), len=dimlen), &
-            'fill_missing_r8_with_orig', string1)
+      io = nf90_inquire_dimension(ncid_clm, dimids_clm(i), len=dimlens_clm(i))
+      call nc_check(io, routine, string1, file_clm)
 
-      if ( dimlen /= progvar(ivar)%dimlens(i) ) then
-         write(string1,*) trim(string2),' dim/dimlen ',i,dimlen,' not ',progvar(ivar)%dimlens(i)
+      io = nf90_inquire_dimension(ncid_dart, dimids_dart(i), len=dimlens_dart(i))
+      call nc_check(io, routine, string1, file_dart)
+
+      if ( dimlens_clm(i) /= dimlens_dart(i) ) then
+         write(string1,*) trim(string2),' dim/dimlen ',i,dimlens_clm(i),' not ',dimlens_dart(i)
          write(string2,*)' but it should be.'
-         call error_handler(E_ERR, 'fill_missing_r8_with_orig', string1, &
+         call error_handler(E_ERR, routine, string1, &
                          source, revision, revdate, text2=string2)
       endif
 
    enddo DimCheck
 
-   ! When called with a 4th argument, fill_missing_r8_with_original() replaces the DART
-   ! missing code with the value in the corresponding variable in the netCDF file.
-   ! Any clamping to physically meaningful values occurrs in fill_missing_r8_with_original.
+   if (numdims_clm == 1) then
 
-   !>@todo CHECK the replacement algorithm/logic
-   
-  if (do_io_update(dom_restart, ivar)) then
-      if (progvar(ivar)%numdims == 1) then
+      call fill_missing_r8_with_orig_1d(ivar, ncid_dart, varid_dart, ncid_clm, varid_clm, dimlens_clm(1))
 
-         call fill_missing_r8_with_orig_1d(ivar, ncid_dart, ncid_clm)
+   elseif (numdims_clm == 2) then
 
-      elseif (progvar(ivar)%numdims == 2) then
+      call fill_missing_r8_with_orig_2d(ivar, ncid_dart, varid_dart, ncid_clm, varid_clm, numdims_clm, dimlens_clm)
 
-         call fill_missing_r8_with_orig_2d(ivar, ncid_dart, ncid_clm)
+   else
+      write(string1, *) 'no support for data array of dimension ', numdims_clm
+      call error_handler(E_ERR,routine,string1,source,revision,revdate)
+   endif
 
-      else
-         write(string1, *) 'no support for data array of dimension ', ncNdims
-         call error_handler(E_ERR,'fill_missing_r8_with_orig', string1, &
-                           source,revision,revdate)
-      endif
-  endif
 enddo UPDATE
 
-call nc_check(nf90_close(ncid_clm),  'fill_missing_r8_with_orig','close '//trim(file_clm))
-call nc_check(nf90_close(ncid_dart), 'fill_missing_r8_with_orig','close '//trim(file_dart))
+call nc_close_file(ncid_clm,  routine, file_clm)
+call nc_close_file(ncid_dart, routine, file_dart)
 
 end subroutine fill_missing_r8_with_orig
 
@@ -2491,96 +2470,86 @@ end subroutine get_grid_vertval
 
 
 !------------------------------------------------------------------
+!> Anywhere the DART MISSING code is encountered in the input array,
+!> the corresponding (i.e. original) value from the CLM netCDF file
+!> is used.
 
+subroutine fill_missing_r8_with_orig_1d(ivar, ncid_dart, varid_dart, ncid_clm, varid_clm, dimlen)
 
-subroutine fill_missing_r8_with_orig_1d(ivar, ncid_dart, ncid_clm)
-!------------------------------------------------------------------
-! convert the values from a 1d array, starting at an offset, into a 1d array.
-!
-! If the optional argument (ncid) is specified, some additional
-! processing takes place. The variable in the netcdf is read.
-! This must be the same shape as the intended output array.
-! Anywhere the DART MISSING code is encountered in the input array,
-! the corresponding (i.e. original) value from the netCDF file is
-! used.
-
-integer,  intent(in)  :: ivar
-integer,  intent(in)  :: ncid_dart
-integer,  intent(in)  :: ncid_clm
+integer, intent(in) :: ivar
+integer, intent(in) :: ncid_dart
+integer, intent(in) :: varid_dart
+integer, intent(in) :: ncid_clm
+integer, intent(in) :: varid_clm
+integer, intent(in) :: dimlen
 
 character(len=*), parameter :: routine = 'fill_missing_r8_with_orig_1d'
 
-integer :: VarID, varid_out
-real(r8), allocatable, dimension(:) :: org_array, data_1d_array
+integer :: io
+real(r8), allocatable, dimension(:) :: clm_array, dart_array
 
-! Replace the DART fill value with the original value and apply any clamping.
+! Replace the DART fill value with the original value
 ! Get the 'original' variable from the netcdf file.
 
-call nc_check(nf90_inq_varid(ncid_clm, progvar(ivar)%varname, VarID), &
-         routine, 'inq_varid '//trim(progvar(ivar)%varname))
-call nc_check(nf90_inq_varid(ncid_dart, progvar(ivar)%varname, varid_out), &
-         routine, 'inq_varid '//trim(progvar(ivar)%varname))
+allocate(clm_array(dimlen), dart_array(dimlen))
 
-allocate(org_array(progvar(ivar)%dimlens(1)), data_1d_array(progvar(ivar)%dimlens(1)))
+io = nf90_get_var(ncid_clm, varid_clm, clm_array)
+call nc_check(io, routine, 'get_var', progvar(ivar)%varname, ncid=ncid_clm)
 
-call nc_check(nf90_get_var(ncid_clm, VarID, org_array), &
-         routine, 'get_var '//trim(progvar(ivar)%varname))
-call nc_check(nf90_get_var(ncid_dart, varid_out, data_1d_array), &
-         routine, 'get_var '//trim(progvar(ivar)%varname))
+io = nf90_get_var(ncid_dart, varid_dart, dart_array)
+call nc_check(io, routine, 'get_var', progvar(ivar)%varname, ncid=ncid_dart)
 
-! restoring the indeterminate original values
+! restoring the (potentially) indeterminate original values
 
-where(data_1d_array == MISSING_R8) data_1d_array = org_array
+where(dart_array == MISSING_R8) dart_array = clm_array
 
-call nc_check(nf90_put_var(ncid_clm, varid_out, data_1d_array), &
-      routine, 'put_var '//trim(progvar(ivar)%varname))
+io = nf90_put_var(ncid_clm, varid_clm, dart_array)
+call nc_check(io, routine, 'put_var', progvar(ivar)%varname, ncid=ncid_clm)
 
-deallocate(org_array, data_1d_array)
+deallocate(clm_array, dart_array)
 
 end subroutine fill_missing_r8_with_orig_1d
 
 
 !------------------------------------------------------------------
+!> Anywhere the DART MISSING code is encountered in the input array,
+!> the corresponding (i.e. original) value from the CLM netCDF file
+!> is used.
 
+subroutine fill_missing_r8_with_orig_2d(ivar, ncid_dart, varid_dart, ncid_clm, varid_clm, numdims, dimlens)
 
-subroutine fill_missing_r8_with_orig_2d(ivar, ncid_dart, ncid_clm)
-!------------------------------------------------------------------
-! convert the values from a 1d array, starting at an offset,
-! into a 2d array.
-
-integer, intent(in)  :: ivar
-integer, intent(in)  :: ncid_dart
-integer, intent(in)  :: ncid_clm
+integer, intent(in) :: ivar
+integer, intent(in) :: ncid_dart
+integer, intent(in) :: varid_dart
+integer, intent(in) :: ncid_clm
+integer, intent(in) :: varid_clm
+integer, intent(in) :: numdims
+integer, intent(in) :: dimlens(numdims)
 
 character(len=*), parameter :: routine = 'fill_missing_r8_with_orig_2d'
 
-integer :: VarID, varid_out
-real(r8), allocatable, dimension(:,:) :: org_array, data_2d_array
+integer :: io
+real(r8), allocatable, dimension(:,:) :: clm_array, dart_array
 
 ! Get the 'original' variable from the netcdf file if need be.
 
-allocate(org_array(progvar(ivar)%dimlens(1), progvar(ivar)%dimlens(2)), &
-     data_2d_array(progvar(ivar)%dimlens(1), progvar(ivar)%dimlens(2)))
+allocate(clm_array(dimlens(1), dimlens(2)), &
+        dart_array(dimlens(1), dimlens(2)))
 
-call nc_check(nf90_inq_varid(ncid_clm, progvar(ivar)%varname, VarID), &
-         routine, 'inq_varid '//trim(progvar(ivar)%varname))
-call nc_check(nf90_get_var(ncid_clm, VarID, org_array), &
-         routine, 'get_var '//trim(progvar(ivar)%varname))
+io = nf90_get_var(ncid_clm, varid_clm, clm_array)
+call nc_check(io, routine, 'get_var', progvar(ivar)%varname, ncid=ncid_clm)
 
-call nc_check(nf90_inq_varid(ncid_dart, progvar(ivar)%varname, varid_out), &
-         routine, 'inq_varid '//trim(progvar(ivar)%varname))
-call nc_check(nf90_get_var(ncid_dart, varid_out, data_2d_array), &
-         routine, 'get_var '//trim(progvar(ivar)%varname))
+io = nf90_get_var(ncid_dart, varid_dart, dart_array)
+call nc_check(io, routine, 'get_var ', progvar(ivar)%varname, ncid=ncid_dart)
 
 ! restoring the indeterminate original values
 
-where(data_2d_array == MISSING_R8 ) data_2d_array = org_array
+where(dart_array == MISSING_R8 ) dart_array = clm_array
 
-call nc_check(nf90_put_var(ncid_clm, VarID, data_2d_array), &
-         routine, 'put_var '//trim(progvar(ivar)%varname))
+io = nf90_put_var(ncid_clm, varid_clm, dart_array)
+call nc_check(io, routine, 'put_var', progvar(ivar)%varname, ncid=ncid_clm)
 
-deallocate(org_array, data_2d_array)
-
+deallocate(clm_array, dart_array)
 
 end subroutine fill_missing_r8_with_orig_2d
 
