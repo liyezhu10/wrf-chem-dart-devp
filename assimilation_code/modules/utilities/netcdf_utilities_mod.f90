@@ -65,8 +65,10 @@ public :: nc_check,                       &
 interface nc_add_global_attribute
    module procedure nc_add_global_char_att
    module procedure nc_add_global_int_att
-   module procedure nc_add_global_real_att
-   module procedure nc_add_global_real_array_att
+   module procedure nc_add_global_float_att
+   module procedure nc_add_global_double_att
+   module procedure nc_add_global_float_array_att
+   module procedure nc_add_global_double_array_att
 end interface
 
 interface nc_get_global_attribute
@@ -80,8 +82,10 @@ interface nc_add_attribute_to_variable
    module procedure nc_add_char_att_to_var
    module procedure nc_add_int_array_att_to_var
    module procedure nc_add_int_att_to_var
-   module procedure nc_add_real_att_to_var
-   module procedure nc_add_real_array_att_to_var
+   module procedure nc_add_float_att_to_var
+   module procedure nc_add_double_att_to_var
+   module procedure nc_add_float_array_att_to_var
+   module procedure nc_add_double_array_att_to_var
 end interface
 
 interface nc_get_attribute_from_variable
@@ -259,39 +263,75 @@ end subroutine nc_add_global_int_att
 
 !--------------------------------------------------------------------
 
-subroutine nc_add_global_real_att(ncid, attname, val, context, filename)
+subroutine nc_add_global_float_att(ncid, attname, val, context, filename)
 
 integer,          intent(in) :: ncid
 character(len=*), intent(in) :: attname
-real(r8),         intent(in) :: val
+real(r4),         intent(in) :: val
 character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
 
-character(len=*), parameter :: routine = 'nc_add_global_real_att'
+character(len=*), parameter :: routine = 'nc_add_global_float_att'
 integer :: ret
 
 ret = nf90_put_att(ncid, NF90_GLOBAL, attname, val)
 call nc_check(ret, routine, 'adding the global attribute: '//trim(attname), context, filename, ncid)
 
-end subroutine nc_add_global_real_att
+end subroutine nc_add_global_float_att
 
 !--------------------------------------------------------------------
 
-subroutine nc_add_global_real_array_att(ncid, attname, val, context, filename)
+subroutine nc_add_global_double_att(ncid, attname, val, context, filename)
 
 integer,          intent(in) :: ncid
 character(len=*), intent(in) :: attname
-real(r8),         intent(in) :: val(:)
+real(digits12),   intent(in) :: val
 character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
 
-character(len=*), parameter :: routine = 'nc_add_global_real_array_att'
+character(len=*), parameter :: routine = 'nc_add_global_double_att'
 integer :: ret
 
 ret = nf90_put_att(ncid, NF90_GLOBAL, attname, val)
 call nc_check(ret, routine, 'adding the global attribute: '//trim(attname), context, filename, ncid)
 
-end subroutine nc_add_global_real_array_att
+end subroutine nc_add_global_double_att
+
+!--------------------------------------------------------------------
+
+subroutine nc_add_global_float_array_att(ncid, attname, val, context, filename)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in) :: attname
+real(r4),         intent(in) :: val(:)
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_add_global_float_array_att'
+integer :: ret
+
+ret = nf90_put_att(ncid, NF90_GLOBAL, attname, val)
+call nc_check(ret, routine, 'adding the global attribute: '//trim(attname), context, filename, ncid)
+
+end subroutine nc_add_global_float_array_att
+
+!--------------------------------------------------------------------
+
+subroutine nc_add_global_double_array_att(ncid, attname, val, context, filename)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in) :: attname
+real(digits12),   intent(in) :: val(:)
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_add_global_double_array_att'
+integer :: ret
+
+ret = nf90_put_att(ncid, NF90_GLOBAL, attname, val)
+call nc_check(ret, routine, 'adding the global attribute: '//trim(attname), context, filename, ncid)
+
+end subroutine nc_add_global_double_array_att
 
 !------------------------------------------------------------------
 
@@ -435,16 +475,16 @@ end subroutine nc_add_int_array_att_to_var
 
 !--------------------------------------------------------------------
 
-subroutine nc_add_real_att_to_var(ncid, varname, attname, val, context, filename)
+subroutine nc_add_float_att_to_var(ncid, varname, attname, val, context, filename)
 
 integer,          intent(in) :: ncid
 character(len=*), intent(in) :: varname
 character(len=*), intent(in) :: attname
-real(r8),         intent(in) :: val
+real(r4),         intent(in) :: val
 character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
 
-character(len=*), parameter :: routine = 'nc_add_real_att_to_var'
+character(len=*), parameter :: routine = 'nc_add_float_att_to_var'
 integer :: ret, varid
 
 ret = nf90_inq_varid(ncid, varname, varid)
@@ -453,20 +493,20 @@ call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, 
 ret = nf90_put_att(ncid, varid, attname, val)
 call nc_check(ret, routine, 'adding the attribute: '//trim(attname)//' to variable: '//trim(varname), context, filename, ncid)
 
-end subroutine nc_add_real_att_to_var
+end subroutine nc_add_float_att_to_var
 
 !--------------------------------------------------------------------
 
-subroutine nc_add_real_array_att_to_var(ncid, varname, attname, val, context, filename)
+subroutine nc_add_double_att_to_var(ncid, varname, attname, val, context, filename)
 
 integer,          intent(in) :: ncid
 character(len=*), intent(in) :: varname
 character(len=*), intent(in) :: attname
-real(r8),         intent(in) :: val(:)
+real(digits12),   intent(in) :: val
 character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
 
-character(len=*), parameter :: routine = 'nc_add_real_array_att_to_var'
+character(len=*), parameter :: routine = 'nc_add_double_att_to_var'
 integer :: ret, varid
 
 ret = nf90_inq_varid(ncid, varname, varid)
@@ -475,7 +515,51 @@ call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, 
 ret = nf90_put_att(ncid, varid, attname, val)
 call nc_check(ret, routine, 'adding the attribute: '//trim(attname)//' to variable: '//trim(varname), context, filename, ncid)
 
-end subroutine nc_add_real_array_att_to_var
+end subroutine nc_add_double_att_to_var
+
+!--------------------------------------------------------------------
+
+subroutine nc_add_float_array_att_to_var(ncid, varname, attname, val, context, filename)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in) :: varname
+character(len=*), intent(in) :: attname
+real(r4),         intent(in) :: val(:)
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_add_float_array_att_to_var'
+integer :: ret, varid
+
+ret = nf90_inq_varid(ncid, varname, varid)
+call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
+
+ret = nf90_put_att(ncid, varid, attname, val)
+call nc_check(ret, routine, 'adding the attribute: '//trim(attname)//' to variable: '//trim(varname), context, filename, ncid)
+
+end subroutine nc_add_float_array_att_to_var
+
+!--------------------------------------------------------------------
+
+subroutine nc_add_double_array_att_to_var(ncid, varname, attname, val, context, filename)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in) :: varname
+character(len=*), intent(in) :: attname
+real(digits12),   intent(in) :: val(:)
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_add_double_array_att_to_var'
+integer :: ret, varid
+
+ret = nf90_inq_varid(ncid, varname, varid)
+call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
+
+ret = nf90_put_att(ncid, varid, attname, val)
+call nc_check(ret, routine, 'adding the attribute: '//trim(attname)//' to variable: '//trim(varname), context, filename, ncid)
+
+end subroutine nc_add_double_array_att_to_var
 
 !--------------------------------------------------------------------
 
