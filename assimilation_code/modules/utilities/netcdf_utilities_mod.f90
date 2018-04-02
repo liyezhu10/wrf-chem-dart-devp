@@ -37,6 +37,7 @@ public :: nc_check,                       &
           nc_add_attribute_to_variable,   &
           nc_get_attribute_from_variable, &
           nc_define_dimension,            &
+          nc_define_unlimited_dimension,  &
           nc_define_integer_variable,     &
           nc_define_real_variable,        &
           nc_define_double_variable,      &
@@ -115,6 +116,8 @@ interface nc_put_variable
    module procedure nc_put_real_2d
    module procedure nc_put_int_3d
    module procedure nc_put_real_3d
+   module procedure nc_put_int_4d
+   module procedure nc_put_real_4d
 end interface
 
 interface nc_get_variable
@@ -129,6 +132,8 @@ interface nc_get_variable
    module procedure nc_get_short_3d
    module procedure nc_get_int_3d
    module procedure nc_get_real_3d
+   module procedure nc_get_int_4d
+   module procedure nc_get_real_4d
 end interface
 
 interface nc_get_variable_size
@@ -603,6 +608,23 @@ call nc_check(ret, routine, 'define dimension '//trim(dimname), context, filenam
 end subroutine nc_define_dimension
 
 !--------------------------------------------------------------------
+
+subroutine nc_define_unlimited_dimension(ncid, dimname, context, filename)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in) :: dimname
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_define_unlimited_dimension'
+integer :: ret, dimid
+
+ret = nf90_def_dim(ncid, dimname, NF90_UNLIMITED, dimid)
+call nc_check(ret, routine, 'define unlimited_dimension '//trim(dimname), context, filename, ncid)
+
+end subroutine nc_define_unlimited_dimension
+
+!--------------------------------------------------------------------
 !--------------------------------------------------------------------
 ! defining variables section
 
@@ -659,36 +681,20 @@ character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
 
 character(len=*), parameter :: routine = 'nc_define_var_int_Nd'
-integer :: ret, dimid1, dimid2, dimid3, varid
+integer :: i, ret, ndims, varid, dimids(NF90_MAX_VAR_DIMS)
 
-if (size(dimnames) >= 1) then
-   ret = nf90_inq_dimid(ncid, dimnames(1), dimid1)
-   call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(1)), context, filename, ncid)
-endif
-
-if (size(dimnames) >= 2) then
-   ret = nf90_inq_dimid(ncid, dimnames(2), dimid2)
-   call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(2)), context, filename, ncid)
-endif
-
-if (size(dimnames) >= 3) then
-   ret = nf90_inq_dimid(ncid, dimnames(3), dimid3)
-   call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(3)), context, filename, ncid)
-endif
-
-if (size(dimnames) >= 4) then
-   call error_handler(E_ERR, routine, 'only 1d, 2d and 3d integer variables supported', &
+ndims = size(dimnames)
+if (ndims > 4) then
+   call error_handler(E_ERR, routine, 'only 1d, 2d, 3d and 4d integer variables supported', &
                       source, revision, revdate, text2='variable '//trim(varname))
 endif
 
-if (size(dimnames) == 1) then
-   ret = nf90_def_var(ncid, varname, nf90_int, dimid1, varid=varid)
-else if (size(dimnames) == 2) then
-   ret = nf90_def_var(ncid, varname, nf90_int, dimids=(/ dimid1, dimid2 /), varid=varid)
-else if (size(dimnames) == 3) then
-   ret = nf90_def_var(ncid, varname, nf90_int, dimids=(/ dimid1, dimid2, dimid3 /), varid=varid)
-endif
+do i=1, ndims
+   ret = nf90_inq_dimid(ncid, dimnames(i), dimids(i))
+   call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(i)), context, filename, ncid)
+enddo
 
+ret = nf90_def_var(ncid, varname, nf90_int, dimids(1:ndims), varid=varid)
 call nc_check(ret, routine, 'define integer variable '//trim(varname), context, filename, ncid)
 
 end subroutine nc_define_var_int_Nd
@@ -742,36 +748,20 @@ character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
 
 character(len=*), parameter :: routine = 'nc_define_var_real_Nd'
-integer :: ret, dimid1, dimid2, dimid3, varid
+integer :: i, ret, ndims, varid, dimids(NF90_MAX_VAR_DIMS)
 
-if (size(dimnames) >= 1) then
-   ret = nf90_inq_dimid(ncid, dimnames(1), dimid1)
-   call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(1)), context, filename, ncid)
-endif
-
-if (size(dimnames) >= 2) then
-   ret = nf90_inq_dimid(ncid, dimnames(2), dimid2)
-   call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(2)), context, filename, ncid)
-endif
-
-if (size(dimnames) >= 3) then
-   ret = nf90_inq_dimid(ncid, dimnames(3), dimid3)
-   call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(3)), context, filename, ncid)
-endif
-
-if (size(dimnames) >= 4) then
-   call error_handler(E_ERR, routine, 'only 1d, 2d and 3d real variables supported', &
+ndims = size(dimnames)
+if (ndims > 4) then
+   call error_handler(E_ERR, routine, 'only 1d, 2d, 3d and 4d real variables supported', &
                       source, revision, revdate, text2='variable '//trim(varname))
 endif
 
-if (size(dimnames) == 1) then
-   ret = nf90_def_var(ncid, varname, nf90_real, dimid1, varid=varid)
-else if (size(dimnames) == 2) then
-   ret = nf90_def_var(ncid, varname, nf90_real, dimids=(/ dimid1, dimid2 /), varid=varid)
-else if (size(dimnames) == 3) then
-   ret = nf90_def_var(ncid, varname, nf90_real, dimids=(/ dimid1, dimid2, dimid3 /), varid=varid)
-endif
+do i=1, ndims
+   ret = nf90_inq_dimid(ncid, dimnames(i), dimids(i))
+   call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(i)), context, filename, ncid)
+enddo
 
+ret = nf90_def_var(ncid, varname, nf90_real, dimids(1:ndims), varid=varid)
 call nc_check(ret, routine, 'define real variable '//trim(varname), context, filename, ncid)
 
 end subroutine nc_define_var_real_Nd
@@ -825,36 +815,20 @@ character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
 
 character(len=*), parameter :: routine = 'nc_define_var_double_Nd'
-integer :: ret, dimid1, dimid2, dimid3, varid
+integer :: i, ret, ndims, varid, dimids(NF90_MAX_VAR_DIMS)
 
-if (size(dimnames) >= 1) then
-   ret = nf90_inq_dimid(ncid, dimnames(1), dimid1)
-   call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(1)), context, filename, ncid)
-endif
-
-if (size(dimnames) >= 2) then
-   ret = nf90_inq_dimid(ncid, dimnames(2), dimid2)
-   call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(2)), context, filename, ncid)
-endif
-
-if (size(dimnames) >= 3) then
-   ret = nf90_inq_dimid(ncid, dimnames(3), dimid3)
-   call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(3)), context, filename, ncid)
-endif
-
-if (size(dimnames) >= 4) then
-   call error_handler(E_ERR, routine, 'only 1d, 2d and 3d double variables supported', &
+ndims = size(dimnames)
+if (ndims > 4) then
+   call error_handler(E_ERR, routine, 'only 1d, 2d, 3d and 4d double variables supported', &
                       source, revision, revdate, text2='variable '//trim(varname))
 endif
 
-if (size(dimnames) == 1) then
-   ret = nf90_def_var(ncid, varname, nf90_double, dimid1, varid=varid)
-else if (size(dimnames) == 2) then
-   ret = nf90_def_var(ncid, varname, nf90_double, dimids=(/ dimid1, dimid2 /), varid=varid)
-else if (size(dimnames) == 3) then
-   ret = nf90_def_var(ncid, varname, nf90_double, dimids=(/ dimid1, dimid2, dimid3 /), varid=varid)
-endif
+do i=1, ndims
+   ret = nf90_inq_dimid(ncid, dimnames(i), dimids(i))
+   call nc_check(ret, routine, 'inquire dimension id for dim '//trim(dimnames(i)), context, filename, ncid)
+enddo
 
+ret = nf90_def_var(ncid, varname, nf90_double, dimids(1:ndims), varid=varid)
 call nc_check(ret, routine, 'define double variable '//trim(varname), context, filename, ncid)
 
 end subroutine nc_define_var_double_Nd
@@ -1102,6 +1076,48 @@ ret = nf90_put_var(ncid, varid, varvals)
 call nc_check(ret, routine, 'put values for '//trim(varname), context, filename, ncid)
 
 end subroutine nc_put_real_3d
+
+!--------------------------------------------------------------------
+
+subroutine nc_put_int_4d(ncid, varname, varvals, context, filename)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in) :: varname
+integer,          intent(in) :: varvals(:,:,:,:)
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_put_int_4d'
+integer :: ret, varid
+
+ret = nf90_inq_varid(ncid, varname, varid)
+call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
+
+ret = nf90_put_var(ncid, varid, varvals)
+call nc_check(ret, routine, 'put values for '//trim(varname), context, filename, ncid)
+
+end subroutine nc_put_int_4d
+
+!--------------------------------------------------------------------
+
+subroutine nc_put_real_4d(ncid, varname, varvals, context, filename)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in) :: varname
+real(r8),         intent(in) :: varvals(:,:,:,:)
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_put_real_4d'
+integer :: ret, varid
+
+ret = nf90_inq_varid(ncid, varname, varid)
+call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
+
+ret = nf90_put_var(ncid, varid, varvals)
+call nc_check(ret, routine, 'put values for '//trim(varname), context, filename, ncid)
+
+end subroutine nc_put_real_4d
 
 !--------------------------------------------------------------------
 !--------------------------------------------------------------------
@@ -1370,6 +1386,54 @@ call nc_check(ret, routine, 'get values for '//trim(varname), context, filename,
 
 end subroutine nc_get_real_3d
 
+!--------------------------------------------------------------------
+
+subroutine nc_get_int_4d(ncid, varname, varvals, context, filename)
+
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: varname
+integer,          intent(out) :: varvals(:,:,:,:)
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_get_int_4d'
+integer :: ret, varid
+
+ret = nf90_inq_varid(ncid, varname, varid)
+call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
+
+! don't support variables which are supposed to have the values multiplied and shifted.
+if (has_scale_off(ncid, varid)) call no_scale_off(ncid, routine, varname, context, filename)
+
+ret = nf90_get_var(ncid, varid, varvals)
+call nc_check(ret, routine, 'get values for '//trim(varname), context, filename, ncid)
+
+end subroutine nc_get_int_4d
+
+!--------------------------------------------------------------------
+
+subroutine nc_get_real_4d(ncid, varname, varvals, context, filename)
+
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: varname
+real(r8),         intent(out) :: varvals(:,:,:,:)
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_get_real_4d'
+integer :: ret, varid
+
+ret = nf90_inq_varid(ncid, varname, varid)
+call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
+
+! don't support variables which are supposed to have the values multiplied and shifted.
+if (has_scale_off(ncid, varid)) call no_scale_off(ncid, routine, varname, context, filename)
+
+ret = nf90_get_var(ncid, varid, varvals)
+call nc_check(ret, routine, 'get values for '//trim(varname), context, filename, ncid)
+
+end subroutine nc_get_real_4d
+
 !------------------------------------------------------------------
 !--------------------------------------------------------------------
 ! inquire variable info
@@ -1422,11 +1486,6 @@ call nc_check(ret, routine, 'inquire dimensions for variable '//trim(varname), c
 if (ndims /= size(varsize)) &
    call nc_check(NF90_EDIMSIZE, routine, 'variable '//trim(varname)//' dimension mismatch', &
                  context, filename, ncid)
-
-if (size(varsize) >= 6) then
-   call error_handler(E_ERR, routine, 'only 1d to 5d variables supported', &
-                      source, revision, revdate, text2='variable '//trim(varname))
-endif
 
 do i=1, ndims
    ret = nf90_inquire_dimension(ncid, dimids(i), len=varsize(i))
