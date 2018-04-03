@@ -1469,22 +1469,29 @@ if (status1 /= 0) then
 endif
 
 if (use_variable_mean_mass) then
-  call compute_mean_mass(ens_handle, ens_size, lon_index, lat_index, nlevels, qty, mbar, status1)
+   call compute_mean_mass(ens_handle, ens_size, lon_index, lat_index, nlevels, qty, mbar, status1)
 
-  if (status1 /= 0) then
-     my_status = status1
-     return
-  endif
+   if (status1 /= 0) then
+      my_status = status1
+      return
+   endif
+   !print*, 'mbar', mbar(1,1), mbar(nlevels,1), my_status, status1
+
+   ! compute the height columns for each ensemble member - passing mbar() array in.
+   do imember = 1, ens_size
+      call build_heights(nlevels, surface_pressure(imember), surface_elevation(1), &
+                         tv(:, imember), height_array(:, imember), mbar=mbar(:, imember))
+   enddo
+
 else
-   mbar(:,:) = 1.0_r8
+   ! compute the height columns for each ensemble member - no mbar() argument here.
+   ! (you cannot just pass 1.0 in for the mbar() array; it uses a different gas constant
+   ! in the variable mean mass case.)
+   do imember = 1, ens_size
+      call build_heights(nlevels, surface_pressure(imember), surface_elevation(1), &
+                         tv(:, imember), height_array(:, imember))
+   enddo
 endif
-
-  !print*, 'mbar', mbar(1,1), mbar(nlevels,1), my_status, status1
-! compute the height columns for each ensemble member
-do imember = 1, ens_size
-   call build_heights(nlevels, surface_pressure(imember), surface_elevation(1), &
-                      tv(:, imember), height_array(:, imember), mbar=mbar(:, imember))
-enddo
 
 
 if (debug_level > 100) then
@@ -1544,7 +1551,8 @@ end subroutine build_cam_pressure_columns
 
 !-----------------------------------------------------------------------
 !> Compute column of pressures at the layer midpoints for the given 
-!> surface pressure. 
+!> surface pressure.  This routine IS being called, unlike the others
+!> below.
 !>
 !>@todo FIXME unlike some other things - you could pass in an upper and lower
 !>level number and compute the pressure only at the levels between those.
@@ -1571,7 +1579,7 @@ end subroutine cam_p_col_midpts
 
 !-----------------------------------------------------------------------
 !> Compute columns of pressures at the layer interfaces for the given number 
-!> of surface pressures. 
+!> of surface pressures.  CURRENTLY UNUSED.
 !>
 !>@todo FIXME see comment above in cam_p_col_midpts()
 
@@ -1595,7 +1603,9 @@ end subroutine cam_p_col_intfcs
 
 !-----------------------------------------------------------------------
 !> Compute columns of heights at the layer midpoints for the given number 
-!> of surface pressures and surface elevations.
+!> of surface pressures and surface elevations.  THIS ROUTINE IS CURRENTLY
+!> UNUSED, AND HAS NO PROVISION FOR PASSING DOWN THE VARIABLE MEAN MASS
+!> PARAMETER.
 
 subroutine cam_h_col_midpts(n_levels, surface_pressure, surface_elev, virtual_temp, &
                             height_array)
@@ -1621,7 +1631,8 @@ end subroutine cam_h_col_midpts
 
 !-----------------------------------------------------------------------
 !> Compute columns of heights at the layer interfaces for the given number 
-!> of surface pressures. 
+!> of surface pressures.   THIS ROUTINE IS ALSO CURRENTLY UNUSED AND
+!> IN FACT NOT WRITTEN.   FIXME: should these be removed?
 
 subroutine cam_h_col_intfcs(n_levels, surface_pressure, surface_elev, virtual_temp, &
                             height_array)
@@ -2853,6 +2864,11 @@ real(r8) :: pm_ln(nlevels+1) ! logs of midpoint pressures plus surface interface
 ! cam uses a uniform gas constant value, but high top
 ! models like waccm change the gas constant with height.
 ! allow for the calling code to pass in an array of r.
+
+! if mbar() array is present notice that the units are different
+! for the gas constants, so an mbar() array of 1.0s will NOT give
+! the same results as if it isn't present.
+
 if (present(mbar)) then
    r_g0_tv(:) = (universal_gas_constant / (mbar(:)*g0)) * virtual_temp(:)
 else
