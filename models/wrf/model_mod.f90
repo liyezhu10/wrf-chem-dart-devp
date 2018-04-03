@@ -239,6 +239,9 @@ logical :: periodic_y = .false.    ! used for single column model, wrap in y
 !JPH -- single column model flag 
 logical :: scm        = .false.    ! using the single column model
 logical :: allow_perturbed_ics = .false.  ! should spin the model up for a while after
+! i believe the new code is more correct, but make it easy to
+! compare to the original code which built pressure profiles.
+logical :: orig_pressure_profile_code  = .false.  
 
 ! obsolete items; ignored by this code. 
 ! non-backwards-compatible change. should be removed, 
@@ -261,7 +264,8 @@ namelist /model_nml/ num_moist_vars, &
                      allow_obs_below_vol, vert_localization_coord, &
                      center_search_half_length, center_spline_grid_scale, &
                      circulation_pres_level, circulation_radius, polar, &
-                     periodic_x, periodic_y, scm, allow_perturbed_ics
+                     periodic_x, periodic_y, scm, allow_perturbed_ics, &
+                     orig_pressure_profile_code
 
 ! if you need to check backwards compatibility, set this to .true.
 ! otherwise, leave it as false to use the more correct geometric height
@@ -1295,7 +1299,7 @@ else
 
    ! Set a working integer k value -- if (int(zloc) < 1), then k = 1
    k = max(1,int(zloc))  ! k is an ensemble-sized array 
-
+ 
    kcount = count_unique_vals(k)
    allocate(uniquek(kcount))
    call keep_unique_vals(k, uniquek)
@@ -2600,13 +2604,36 @@ else
          endif
          call keep_unique_vals(k, uniquek)
 
-         call simple_interp_distrib(fld, wrf, id, i, j, k, obs_kind, dxm, dx, dy, dym, uniquek, ens_size, state_handle)
-         if (all(fld == missing_r8)) goto 200
+         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_gz ) .and. &
+              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_gz ) .and. &
+              boundsCheck( k(1), .false.,             id, dim=3, type=wrf%dom(id)%type_gz ) ) then
+            
+            call getCorners(i, j, id, wrf%dom(id)%type_gz, ll, ul, lr, ur, rc )
+            if ( rc .ne. 0 ) &
+                 print*, 'model_mod.f90 :: model_interpolate :: getCorners GZ rc = ', rc
+            
+            ! Interpolation for GZ field at level k and k+1
+            call simple_interp_distrib(fld, wrf, id, i, j, k, obs_kind, dxm, dx, dy, dym, uniquek, ens_size, state_handle)
+            if (all(fld == missing_r8)) goto 200
 
-         ! divide values by gravity to get height
-         fld(:,:) = fld(:,:) / gravity
+            ! now add in phb values
+            fld(1,:) = fld(1,:) + &
+                       dym*( dxm*wrf%dom(id)%phb(ll(1), ll(2), k)   + &
+                             dx *wrf%dom(id)%phb(lr(1), lr(2), k) ) + &
+                       dy *( dxm*wrf%dom(id)%phb(ul(1), ul(2), k)   + &
+                             dx *wrf%dom(id)%phb(ur(1), ur(2), k) ) 
+            
+            fld(2, :) = fld(2, :) + &
+                       dym*( dxm*wrf%dom(id)%phb(ll(1), ll(2), k(1)+1)   + &
+                             dx *wrf%dom(id)%phb(lr(1), lr(2), k(1)+1) ) + &
+                       dy *( dxm*wrf%dom(id)%phb(ul(1), ul(2), k(1)+1)   + &
+                             dx *wrf%dom(id)%phb(ur(1), ur(2), k(1)+1) ) 
+
+            ! divide values by gravity to get height
+            fld(:,:) = fld(:,:) / gravity
    
          endif
+      endif
 
      !-----------------------------------------------------
    ! 1.x Surface Elevation (HGT)
@@ -2628,9 +2655,9 @@ else
          ! Interpolation for the HGT field -- HGT is NOT part of state vector x, but rather
          !   in the associated domain meta data
          fld(1, :) = dym*( dxm*wrf%dom(id)%hgt(ll(1), ll(2)) + &
-                         dx*wrf%dom(id)%hgt(lr(1), lr(2)) ) + &
-                   dy*( dxm*wrf%dom(id)%hgt(ul(1), ul(2)) + &
-                         dx*wrf%dom(id)%hgt(ur(1), ur(2)) )
+                            dx*wrf%dom(id)%hgt(lr(1), lr(2)) ) + &
+                      dy*( dxm*wrf%dom(id)%hgt(ul(1), ul(2)) + &
+                            dx*wrf%dom(id)%hgt(ur(1), ur(2)) )
 
       endif
 
@@ -2666,9 +2693,9 @@ else
          ! Interpolation for the XLAND field -- XLAND is NOT part of state vector x, but rather
          !   in the associated domain meta data
          fld(1, :) = dym*( dxm*real(wrf%dom(id)%land(ll(1), ll(2))) + &
-                         dx*real(wrf%dom(id)%land(lr(1), lr(2))) ) + &
-                   dy*( dxm*real(wrf%dom(id)%land(ul(1), ul(2))) + &
-                         dx*real(wrf%dom(id)%land(ur(1), ur(2))) )
+                            dx*real(wrf%dom(id)%land(lr(1), lr(2))) ) + &
+                      dy*( dxm*real(wrf%dom(id)%land(ul(1), ul(2))) + &
+                            dx*real(wrf%dom(id)%land(ur(1), ur(2))) )
 
       endif
 
@@ -4438,8 +4465,140 @@ subroutine height_to_zk(obs_v, mdl_v, n3, zk, lev0)
 end subroutine height_to_zk
 
 !#######################################################
+!#######################################################
 
 subroutine get_model_pressure_profile_distrib(i,j,dx,dy,dxm,dym,n,id,v_p, state_handle, ens_size)
+
+! Calculate the full model pressure profile on half (mass) levels,
+! horizontally interpolated at the observation location.
+
+integer,  intent(in)  :: i,j,n,id
+real(r8), intent(in)  :: dx,dy,dxm,dym
+integer, intent(in)   :: ens_size
+real(r8), intent(out) :: v_p(0:n, ens_size)
+type(ensemble_type), intent(in)  :: state_handle
+
+if (orig_pressure_profile_code) then
+   call get_model_pressure_profile_orig(i,j,dx,dy,dxm,dym,n,id,v_p, state_handle, ens_size)
+else
+   call get_model_pressure_profile_proposed(i,j,dx,dy,dxm,dym,n,id,v_p, state_handle, ens_size)
+endif
+
+end subroutine get_model_pressure_profile_distrib
+
+!#######################################################
+!#######################################################
+
+subroutine get_model_pressure_profile_orig(i,j,dx,dy,dxm,dym,n,id,v_p, state_handle, ens_size)
+
+! Calculate the full model pressure profile on half (mass) levels,
+! horizontally interpolated at the observation location.
+
+integer,  intent(in)  :: i,j,n,id
+real(r8), intent(in)  :: dx,dy,dxm,dym
+integer, intent(in)   :: ens_size
+real(r8), intent(out) :: v_p(0:n, ens_size)
+type(ensemble_type), intent(in)  :: state_handle
+integer e !< for ensemble loop
+
+integer, dimension(2) :: ll, lr, ul, ur
+integer(i8)           :: ill, ilr, iul, iur
+integer               :: k, rc
+real(r8), allocatable :: pres1(:), pres2(:), pres3(:), pres4(:)
+logical  :: debug = .false.
+
+!HK 
+real(r8), allocatable :: x_ill(:), x_ilr(:), x_iul(:), x_iur(:)
+
+allocate(pres1(ens_size), pres2(ens_size), pres3(ens_size), pres4(ens_size))
+allocate(x_ill(ens_size), x_ilr(ens_size), x_iul(ens_size), x_iur(ens_size))
+
+if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+     boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) then
+
+   call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+   if ( rc .ne. 0 ) &
+        print*, 'model_mod.f90 :: get_model_pressure_profile :: getCorners rc = ', rc
+
+
+   do k=1,n
+      pres1 = model_pressure_t_distrib(ll(1), ll(2), k,id,state_handle, ens_size)
+      pres2 = model_pressure_t_distrib(lr(1), lr(2), k,id,state_handle, ens_size)
+      pres3 = model_pressure_t_distrib(ul(1), ul(2), k,id,state_handle, ens_size)
+      pres4 = model_pressure_t_distrib(ur(1), ur(2), k,id,state_handle, ens_size)
+
+      v_p(k, :) = interp_4pressure_distrib(pres1, pres2, pres3, pres4, dx, dxm, dy, dym, ens_size)
+   enddo
+
+
+   if (debug) &
+        print*, 'model_mod.f90 :: get_model_pressure_profile :: n, v_p() ', n, v_p(1:n, :)
+
+   if ( wrf%dom(id)%type_ps >= 0 ) then
+
+      ill = get_dart_vector_index(ll(1), ll(2), 1, domain_id(id), wrf%dom(id)%type_ps)
+      ilr = get_dart_vector_index(lr(1), lr(2), 1, domain_id(id), wrf%dom(id)%type_ps)
+      iul = get_dart_vector_index(ul(1), ul(2), 1, domain_id(id), wrf%dom(id)%type_ps)
+      iur = get_dart_vector_index(ur(1), ur(2), 1, domain_id(id), wrf%dom(id)%type_ps)
+
+      x_ill = get_state(ill, state_handle)
+      x_ilr = get_state(ilr, state_handle)
+      x_iul = get_state(iul, state_handle)
+      x_iur = get_state(iur, state_handle)
+
+      ! I'm not quite sure where this comes from, but I will trust them on it....
+      ! Do you have to do this per ensemble?
+      !> @todo This is messy
+      do e = 1,ens_size
+
+         if ( x_ill(e) /= 0.0_r8 .and. x_ilr(e) /= 0.0_r8 .and. x_iul(e) /= 0.0_r8 .and. &
+              x_iur(e) /= 0.0_r8 ) then
+
+            v_p(0,e:e) = interp_4pressure_distrib(x_ill(e:e), x_ilr(e:e), x_iul(e:e), x_iur(e:e), dx, dxm, dy, dym, 1)
+
+         else
+
+            ! HK I think this is a bug, you are just  going to grab the first copy - is this fixed?
+            ! in each iteration of the loop
+            call error_handler(E_WARN, 'model_mod.f90 check for correctness', 'Helen')
+            pres1 = model_pressure_t_distrib(ll(1), ll(2), 2,id,state_handle, ens_size)
+            pres2 = model_pressure_t_distrib(lr(1), lr(2), 2,id,state_handle, ens_size)
+            pres3 = model_pressure_t_distrib(ul(1), ul(2), 2,id,state_handle, ens_size)
+            pres4 = model_pressure_t_distrib(ur(1), ur(2), 2,id,state_handle, ens_size)
+
+            v_p(0,e:e) = interp_4pressure_distrib(pres1(e:e), pres2(e:e), pres3(e:e), pres4(e:e), dx, dxm, dy, dym, 1, &
+                  extrapolate=.true., edgep=v_p(1,e))
+
+         endif
+
+      enddo
+
+   else
+
+      pres1 = model_pressure_t_distrib(ll(1), ll(2), 2,id,state_handle, ens_size)
+      pres2 = model_pressure_t_distrib(lr(1), lr(2), 2,id,state_handle, ens_size)
+      pres3 = model_pressure_t_distrib(ul(1), ul(2), 2,id,state_handle, ens_size)
+      pres4 = model_pressure_t_distrib(ur(1), ur(2), 2,id,state_handle, ens_size)
+
+      v_p(0,:) = interp_4pressure_distrib(pres1, pres2, pres3, pres4, dx, dxm, dy, dym, ens_size, &
+              extrapolate=.true., edgep=v_p(1,:))
+
+   endif
+
+   if (debug) &
+        print*, 'model_mod.f90 :: get_model_pressure_profile :: v_p(0) ', v_p(0, :)
+else
+   v_p(:,:) = missing_r8
+
+endif
+
+deallocate(pres1, pres2, pres3, pres4, x_ill, x_ilr, x_iul, x_iur)
+
+end subroutine get_model_pressure_profile_orig
+
+!#######################################################
+
+subroutine get_model_pressure_profile_proposed(i,j,dx,dy,dxm,dym,n,id,v_p, state_handle, ens_size)
 
 ! Calculate the full model pressure profile on half (mass) levels,
 ! horizontally interpolated at the observation location.
@@ -4482,13 +4641,13 @@ need_level_2 = (wrf%dom(id)%type_ps < 0)
       pres3 = model_pressure_t_distrib(ul(1), ul(2), k,id,state_handle, ens_size)
       pres4 = model_pressure_t_distrib(ur(1), ur(2), k,id,state_handle, ens_size)
 
-   ! if we need to extrapolate later, save level 2 corners since we have them now.
-   if (k==2 .and. need_level_2) then
-      lev2_ill(:) = pres1(:)
-      lev2_ilr(:) = pres2(:)
-      lev2_iul(:) = pres3(:)
-      lev2_iur(:) = pres4(:)
-   endif
+      ! if we need to extrapolate later, save level 2 corners since we have them now.
+      if (k==2 .and. need_level_2) then
+         lev2_ill(:) = pres1(:)
+         lev2_ilr(:) = pres2(:)
+         lev2_iul(:) = pres3(:)
+         lev2_iur(:) = pres4(:)
+      endif
 
       v_p(k, :) = interp_4pressure_distrib(pres1, pres2, pres3, pres4, dx, dxm, dy, dym, ens_size)
    enddo
@@ -4513,34 +4672,34 @@ need_level_2 = (wrf%dom(id)%type_ps < 0)
       x_iul = get_state(iul, state_handle)
       x_iur = get_state(iur, state_handle)
 
-   ! we could check minval at the start and if 0, die then.
-   ! this test could be expensive.
-   if ( any(x_ill(:) == 0.0_r8) .or. &
-        any(x_ilr(:) == 0.0_r8) .or. &
-        any(x_iul(:) == 0.0_r8) .or. &
-        any(x_iur(:) == 0.0_r8) ) then
+      ! we could check minval at the start and if 0, die then.
+      ! this test could be expensive.
+      if ( any(x_ill(:) == 0.0_r8) .or. &
+           any(x_ilr(:) == 0.0_r8) .or. &
+           any(x_iul(:) == 0.0_r8) .or. &
+           any(x_iur(:) == 0.0_r8) ) then
+   
+         call error_handler(E_ERR, 'get_model_pressure_profile_distrib:', &
+               "unexpectedly found 0s in the surface pressure field", &
+                source, revision, revdate)
+   
+      endif
 
-      call error_handler(E_ERR, 'get_model_pressure_profile_distrib:', &
-            "unexpectedly found 0s in the surface pressure field", &
-             source, revision, revdate)
-
-         endif
-
-   v_p(0,:) = interp_4pressure_distrib(x_ill(:), x_ilr(:), x_iul(:), x_iur(:), dx, dxm, dy, dym, 1)
+      v_p(0,:) = interp_4pressure_distrib(x_ill(:), x_ilr(:), x_iul(:), x_iur(:), dx, dxm, dy, dym, 1)
 
    else
 
-   ! surface pressure is not in the state vector.  extrapolate from levels 1 and 2 of the MU field.
+      ! surface pressure is not in the state vector.  extrapolate from levels 1 and 2 of the MU field.
 
-   v_p(0,:) = interp_4pressure_distrib(lev2_ill(:), lev2_ilr(:), lev2_iul(:), lev2_iur(:), dx, dxm, dy, dym, 1, &
-              extrapolate=.true., edgep=v_p(1,:))
+      v_p(0,:) = interp_4pressure_distrib(lev2_ill(:), lev2_ilr(:), lev2_iul(:), lev2_iur(:), dx, dxm, dy, dym, 1, &
+                                          extrapolate=.true., edgep=v_p(1,:))
 
    endif
 
    if (debug) &
         print*, 'model_mod.f90 :: get_model_pressure_profile :: v_p(0) ', v_p(0, :)
 
-end subroutine get_model_pressure_profile_distrib
+end subroutine get_model_pressure_profile_proposed
 
 !#######################################################
 !> Only for the mean value.
@@ -7457,12 +7616,13 @@ default_table(:,row) = (/ 'MU                        ', &
                           'UPDATE                    ', &
                           '999                       '  /)
 
-row = row+1
-default_table(:,row) = (/ 'PS                        ', &
-                          'QTY_SURFACE_PRESSURE      ', &
-                          'TYPE_PS                   ', &
-                          'UPDATE                    ', &
-                          '999                       '  /)
+!>@todo FIXME:  should PS be in the default state or not?
+!row = row+1
+!default_table(:,row) = (/ 'PS                        ', &
+!                          'QTY_SURFACE_PRESSURE      ', &
+!                          'TYPE_PS                   ', &
+!                          'UPDATE                    ', &
+!                          '999                       '  /)
 
 row = row+1
 default_table(:,row) = (/ 'QVAPOR                    ', &
@@ -7524,7 +7684,7 @@ do i = 1, row
       in_state_vector(QTY_SPECIFIC_HUMIDITY) = .true.
 
    ! unrecognized kind string in namelist.
-   ! 0 is actually QTY_RAW_STATE_VARIABLE and not supported here.
+   ! 0 is actually QTY_STATE_VARIABLE and not supported here.
    case (-1, 0) 
       write(errstring, *) 'unrecognized KIND string: ' // trim(wrf_state_variables(2, i))
       call error_handler(E_ERR, 'fill_dart_kinds_table', errstring, &

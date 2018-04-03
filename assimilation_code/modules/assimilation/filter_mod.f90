@@ -173,7 +173,8 @@ logical  :: output_forward_op_errors = .false.
 logical  :: output_timestamps        = .false.
 logical  :: trace_execution          = .false.
 logical  :: silence                  = .false.
-logical  :: distributed_state = .true. ! Default to do state complete forward operators.
+logical  :: distributed_state        = .true. ! Default is RMA mode: state complete FOs
+logical  :: write_partial_obs_seq_for_debug = .false.
 
 ! IO options
 ! Names of files given explicitly in namelist
@@ -249,7 +250,8 @@ namelist /filter_nml/ async, adv_ens_command, ens_size, tasks_per_model_advance,
    stages_to_write, &
    input_state_files, output_state_files, &
    output_state_file_list, input_state_file_list, &
-   output_mean, output_sd, write_all_stages_at_end
+   output_mean, output_sd, write_all_stages_at_end, &
+   write_partial_obs_seq_for_debug 
 
 
 !----------------------------------------------------------------
@@ -820,8 +822,7 @@ AdvanceTime : do
 
    call trace_message('Before observation space diagnostics')
 
-   ! This is where the mean obs
-   ! copy ( + others ) is moved to task 0 so task 0 can update seq.
+   ! This is where the mean obs copy ( + others ) is moved to task 0 so it can update seq.
    ! There is a transpose (all_copies_to_all_vars(obs_fwd_op_ens_handle)) in obs_space_diagnostics
    ! Do prior observation space diagnostics and associated quality control
    call obs_space_diagnostics(obs_fwd_op_ens_handle, qc_ens_handle, ens_size, &
@@ -966,7 +967,7 @@ AdvanceTime : do
 
    call trace_message('Before posterior obs space diagnostics')
 
-   ! Write posterior observation space diagnostics
+   ! This is where the mean obs copy ( + others ) is moved to task 0 so it can update seq.
    ! There is a transpose (all_copies_to_all_vars(obs_fwd_op_ens_handle)) in obs_space_diagnostics
    call obs_space_diagnostics(obs_fwd_op_ens_handle, qc_ens_handle, ens_size, &
       seq, keys, POSTERIOR_DIAG, num_output_obs_members, in_obs_copy+2, &
@@ -975,8 +976,18 @@ AdvanceTime : do
       OBS_MEAN_START, OBS_VAR_START, OBS_GLOBAL_QC_COPY, &
       OBS_VAL_COPY, OBS_ERR_VAR_COPY, DART_qc_index)
 
-
    call trace_message('After  posterior obs space diagnostics')
+
+   ! this costs time and only runs on task 0. it should only be set to true if
+   ! filter is crashing before execution finishes and you want to see what the
+   ! obs_seq file looks like so far.  the full file will be written at the normal
+   ! end of execution.
+   if (write_partial_obs_seq_for_debug) then
+      call trace_message('Before writing partial output sequence file for debug')
+      ! Only pe 0 outputs the observation space diagnostic file
+      if(my_task_id() == 0) call write_obs_seq(seq, obs_sequence_out_name)
+      call trace_message('After  writing partial output sequence file for debug')
+   endif
 
    ! this block computes the adaptive state space posterior inflation
    ! (it was applied earlier, this is computing the updated values for

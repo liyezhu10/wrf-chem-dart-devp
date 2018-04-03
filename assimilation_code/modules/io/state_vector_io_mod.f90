@@ -73,6 +73,8 @@ use state_structure_mod,  only : get_num_domains
 use single_file_io_mod, only : init_singlefile_output, write_singlefile, &
                                  read_singlefile
 
+!use assim_tools_mod, only : get_missing_ok_status
+
 use netcdf
 
 
@@ -288,6 +290,8 @@ integer :: dart_index ! where to start in state_ens_handle%copies
 integer :: domain     ! loop index
 type(stage_metadata_type) :: restart_files
 
+real(r8) :: clm_missing = 1e+36
+
 ! check whether file_info handle is initialized
 call assert_file_info_initialized(file_info, 'read_restart_direct')
 
@@ -310,6 +314,11 @@ enddo
 
 ! Need Temporary print of initial model time?
 
+!! a semi-hack for the CLM missing values in state mess.
+!if (get_missing_ok_status()) then
+!   where(state_ens_handle%copies == clm_missing) state_ens_handle%copies = MISSING_R8
+!endif
+
 end subroutine read_restart_direct
 
 
@@ -325,6 +334,8 @@ type(stage_metadata_type), intent(in) :: file_name_handle
 integer :: dart_index !< where to start in state_ens_handle%copies
 integer :: domain !< loop index
 
+real(r8) :: clm_missing = 1e+36
+
 if ( .not. module_initialized ) call state_vector_io_init() ! to read the namelist
 
 ! check whether file_info handle is initialized
@@ -332,6 +343,11 @@ call assert_restart_names_initialized(file_name_handle, 'write_restart_direct')
 
 ! transpose and write out the data
 dart_index = 1
+
+!! a semi-hack for the CLM missing values in state mess.
+!if (get_missing_ok_status()) then
+!   where(state_ens_handle%copies == MISSING_R8) state_ens_handle%copies = clm_missing
+!endif
 
 ! Different filenames for prior vs. posterior vs. diagnostic files
 do domain = 1, get_num_domains()
