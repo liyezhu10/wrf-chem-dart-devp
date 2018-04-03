@@ -140,6 +140,9 @@ call getvar_real(ncid, "windSpeed",       wspd, wspd_miss) ! wind speed
 if (is_variable_integer(ncid, "observationTime")) then
    call getvar_int (ncid, "observationTime", tobs           ) ! observation time as integer
 else
+   ! this is ok until 2038, at which time the number of seconds
+   ! since 1970 will overflow a 32-bit integer.  for now we're good.
+   ! (could scale it by a different and more recent reference time)
    call getvar_real(ncid, "observationTime", tobs_r         ) ! observation time as real
    tobs = nint(tobs_r)                                        ! and convert to nearest second
 endif
