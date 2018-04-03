@@ -133,8 +133,9 @@ use utilities_mod,     only : open_file, close_file, find_namelist_in_file, chec
                               logfileunit, nmlfileunit, do_output, get_unit, do_nml_file, &
                               do_nml_term
 
-use netcdf_utilities_mod, only : nc_add_global_attribute, nc_sync, nc_check, &
-                                 nc_add_global_creation_time, nc_redef, nc_enddef
+use netcdf_utilities_mod, only : nc_add_global_attribute, nc_synchronize_file, nc_check, &
+                                 nc_add_global_creation_time, nc_begin_define_mode, &
+                                 nc_end_define_mode
 
 use mpi_utilities_mod, only : my_task_id, task_count
 
@@ -2538,7 +2539,7 @@ if (.not. module_initialized) call static_init_model()
 
 ! Write Global Attributes
 
-call nc_redef(ncid)
+call nc_begin_define_mode(ncid)
 
 call nc_add_global_creation_time(ncid)
 
@@ -2673,7 +2674,7 @@ if (print_details .and. output_task0) then
 endif
 
 ! Leave define mode so we can fill variables
-call nc_enddef(ncid)
+call nc_end_define_mode(ncid)
 
 !- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ! Fill the coordinate variables
@@ -2722,7 +2723,7 @@ if (P0%label   /= ' ') &
 ! Flush the buffer and leave netCDF file open
 !- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-call nc_sync(ncid)
+call nc_synchronize_file(ncid)
 
 end subroutine nc_write_model_atts
 
@@ -2875,8 +2876,9 @@ s_type = find_name(dart_to_cam_types(obs_kind),cflds)
 
 if (s_type == MISSING_I) then
    if (obs_kind /= QTY_PRESSURE .and. obs_kind /= QTY_SURFACE_ELEVATION) then
-      write(string1,*) 'Wrong type of obs = ', obs_kind
-      call error_handler(E_WARN, 'interp_lonlat', string1,source,revision,revdate)
+      write(string1,*) 'Wrong type of obs = ', obs_kind,' "',trim(get_name_for_quantity(obs_kind)),'"'
+      write(string2,*) 'Only QTY_PRESSURE and QTY_SURFACE_ELEVATION are supported.'
+      call error_handler(E_WARN, 'interp_lonlat', string1,source,revision,revdate, text2=string2)
       return
    else
       ! CAM-chem 5))
@@ -3428,8 +3430,8 @@ ps_local(:, 1) = get_state(ind, state_handle)
 if (obs_kind == QTY_U_WIND_COMPONENT .and. find_name('US', cflds) /= 0) then
    stagr_lat = .true.
    ind = index_from_grid(1,lon_index,lat_index+1,fld_index)
-   ps_local(2, :) = get_state(ind, state_handle)
-   p_surf(:) = (ps_local(1, :) + ps_local(2, :))* 0.5_r8
+   ps_local(:,2) = get_state(ind, state_handle)
+   p_surf(:) = (ps_local(:,1) + ps_local(:,2))* 0.5_r8
 elseif (obs_kind == QTY_V_WIND_COMPONENT .and. find_name('VS', cflds) /= 0) then
    stagr_lon = .true.
    if (lon_index == slon%length) then

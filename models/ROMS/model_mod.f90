@@ -50,8 +50,8 @@ use     location_mod, only : location_type, set_location, get_location,         
                              VERTISHEIGHT, VERTISSURFACE
 
 use    utilities_mod, only : register_module, error_handler, do_nml_term,       &
-                             E_ERR, E_WARN, E_MSG, logfileunit, get_unit,       &
-                             do_output, to_upper, do_nml_file,                  &
+                             E_ERR, E_WARN, E_MSG, logfileunit, nmlfileunit,    &
+                             get_unit, do_output, to_upper, do_nml_file,        &
                              find_namelist_in_file, check_namelist_read,        &
                              open_file, file_exist, find_textfile_dims,         &
                              file_to_text, do_output, close_file,               &
@@ -86,8 +86,9 @@ use   state_structure_mod, only : add_domain, get_model_variable_indices, &
                                   get_long_name, get_xtype, get_has_missing_value, &
                                   get_dim_lengths
 
-use netcdf_utilities_mod, only : nc_add_global_attribute, nc_sync, nc_check, &
-                                 nc_add_global_creation_time, nc_redef, nc_enddef
+use netcdf_utilities_mod, only : nc_add_global_attribute, nc_synchronize_file, nc_check, &
+                                 nc_add_global_creation_time, nc_begin_define_mode, &
+                                 nc_end_define_mode
 
 use location_io_mod,      only :  nc_write_location_atts, nc_get_location_varids, &
                                   nc_write_location
@@ -383,7 +384,7 @@ read(iunit, nml = model_nml, iostat = io)
 call check_namelist_read(iunit, io, 'model_nml')
 
 ! Record the namelist values used for the run
-if (do_nml_file()) write(logfileunit, nml=model_nml)
+if (do_nml_file()) write(nmlfileunit, nml=model_nml)
 if (do_nml_term()) write(     *     , nml=model_nml)
 
 model_timestep = set_model_time_step()
@@ -489,7 +490,7 @@ write(filename,*) 'ncid', ncid
 
 ! Write Global Attributes
 
-call nc_redef(ncid)
+call nc_begin_define_mode(ncid)
 
 call nc_add_global_creation_time(ncid)
 
@@ -611,7 +612,7 @@ call nc_check(nf90_put_att(ncid,  VarID, 'units', 'm'), &
 
 ! Finished with dimension/variable definitions, must end 'define' mode to fill.
 
-call nc_enddef(ncid)
+call nc_end_define_mode(ncid)
 
 ! Fill the coordinate variable values
 
@@ -674,7 +675,7 @@ call nc_check(nf90_put_var(ncid, VarID, WDEP ), &
              'nc_write_model_atts', 'z_w put_var '//trim(filename))
 
 ! Flush the buffer and leave netCDF file open
-call nc_sync(ncid)
+call nc_synchronize_file(ncid)
 
 
 end subroutine nc_write_model_atts
