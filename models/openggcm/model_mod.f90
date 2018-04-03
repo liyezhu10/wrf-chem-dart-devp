@@ -31,9 +31,11 @@ use    utilities_mod, only : register_module, error_handler,                    
                              do_nml_file, do_nml_term, nmlfileunit, open_file,  &
                              close_file
 
-use  netcdf_utilities_mod, only : nc_add_global_attribute, nc_check, nc_sync,  &
-                                  nc_add_global_creation_time, nc_redef, nc_enddef, &
-                                  nc_get_variable
+use  netcdf_utilities_mod, only : nc_check, nc_get_variable, &
+                                  nc_add_global_attribute, &
+                                  nc_add_global_creation_time, &
+                                  nc_end_define_mode, &
+                                  nc_synchronize_file
 
 use          obs_kind_mod, only : QTY_ELECTRON_DENSITY, QTY_ELECTRIC_POTENTIAL, &
                                   get_index_for_quantity, get_name_for_quantity
@@ -1057,7 +1059,7 @@ call nc_check(NF90_put_att(ncid, geoHeightVarID, 'long_name', 'heights of geogra
 
 ! Finished with dimension/variable definitions, must end 'define' mode to fill.
 
-call nc_enddef(ncid, 'nc_write_model_atts enddef "'//trim(filename)//'"')
+call nc_end_define_mode(ncid, 'nc_write_model_atts enddef "'//trim(filename)//'"')
 
 !----------------------------------------------------------------------------
 ! Fill Geographic Grid values
@@ -1093,7 +1095,7 @@ call nc_check(NF90_put_var(ncid, geoHeightVarID, geo_grid%height ), &
 !-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
 !-------------------------------------------------------------------------------
-call nc_sync(ncid, 'nc_write_model_atts')
+call nc_synchronize_file(ncid, 'nc_write_model_atts')
 
 end subroutine nc_write_model_atts
 
