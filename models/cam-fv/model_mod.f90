@@ -8,25 +8,25 @@
 !> this is the interface between the cam-fv atmosphere model and dart.
 !> the required public interfaces and arguments cannot be changed.
 !>
+!>
+!----------------------------------------------------------------
+!>@todo FIXME: consistent directions for interpolation/fractions
+!>  still to change: we should always pass top level first, then bottom level.
+!>  fraction should be computed and interpreted as 0 = top, 1 = bottom.
+!>  in the code below, there are !x! marks on some lines.  the meanings are:
+!>   !$! - where top and bottom need to be swapped in call or subroutine
+!>         interfaces.
+!>   !*! - where fraction is used and may need the sense to be switched 
+!>         (may be using 1 = top and 0 = bottom)
+!>
 !>@todo FIXME: feedback from WACCM-X meeting
-!>  they need to build a special factor for the height conversion
-!>  it's multiplied by G, so the code in build_heights() has to
-!>  change slightly - they aren't passing in a different R array.
 !>
 !>  test if the constants can be used from types_mod.f90 instead of
-!>  having gravity and r redefined here.
-!>
-!>  not sure about generic height table for rejecting high obs - but
-!>  it's not clear model_interpolate should be rejecting high obs
-!>  at all. suggestions are we cull them from the input obs_seq before
-!>  the run.  in that case we can take it out!
-!>
-!>  going to try to move the oxygen ion density code to a forward
-!>  operator in an obs_def_xxx_mod.f90.
+!>  having gravity and r redefined here?  PROBABLY NOT - every model
+!   uses a slightly different value so what would we put in types?
 !>
 !>  test with identity obs to make sure get_close_xx() doesn't need
 !>  special code to handle them.
-!>
 !----------------------------------------------------------------
 
 module model_mod
@@ -36,7 +36,7 @@ use             types_mod,  only : MISSING_R8, MISSING_I, i8, r8, vtablenameleng
 use      time_manager_mod,  only : set_time, time_type, set_date, &
                                    set_calendar_type, get_date
 use          location_mod,  only : location_type, set_vertical, set_location, &
-                                   get_location, write_location, &
+                                   get_location, write_location, is_vertical, &
                                    VERTISUNDEF, VERTISSURFACE, VERTISLEVEL, &
                                    VERTISPRESSURE, VERTISHEIGHT, &
                                    VERTISSCALEHEIGHT, query_location, &
@@ -46,9 +46,10 @@ use          location_mod,  only : location_type, set_vertical, set_location, &
                                    vertical_localization_on, get_close_type
 use         utilities_mod,  only : find_namelist_in_file, check_namelist_read, &
                                    string_to_logical, string_to_real,& 
-                                   logfileunit, do_nml_file, do_nml_term, &
+                                   nmlfileunit, do_nml_file, do_nml_term, &
                                    register_module, error_handler, &
-                                   file_exist, to_upper, E_ERR, E_MSG, array_dump
+                                   file_exist, to_upper, E_ERR, E_MSG, array_dump, &
+                                   find_enclosing_indices
 use          obs_kind_mod,  only : QTY_SURFACE_ELEVATION, QTY_PRESSURE, &
                                    QTY_GEOMETRIC_HEIGHT, QTY_VERTLEVEL, &
                                    QTY_SURFACE_PRESSURE, &
@@ -226,21 +227,40 @@ real(r8), allocatable :: phis(:, :)
 
 ! default to localizing in pressure.  override with namelist
 integer :: vertical_localization_type = VERTISPRESSURE
+
+! commonly used numbers that we'll set in static_init_model
 real(r8) :: global_model_top 
 real(r8) :: global_ref_pressure
 integer  :: global_nlevels
+
+!>@todo FIXME ask kevin if this is small enough to handle
+! all the possible cam configurations?
+! an arbitrary value to test the model top against to see
+! if we're running cam vs waccm or waccm-x.  it changes the
+! standard atmosphere table we use to convert pressure to height, 
+! and changes the formatting of numbers in dart_log output.
+real(r8), parameter :: high_top_threshold = 0.3_r8  ! pascals
 
 ! things related to damping at the model top
 logical  :: are_damping = .false.
 real(r8) :: damp_weight = 1.0_r8
 real(r8) :: ramp_start
 type(location_type) :: ramp_start_loc 
+logical  :: discarding_high_obs = .false.
+real(r8) :: no_assim_above_height = -1.0_r8 
+real(r8) :: no_assim_above_level  = -1.0_r8 
 
-! Precompute pressure -> height map once based on 1010mb surface pressure.
+!> build a pressure/height conversion column based on a
+!> standard atmosphere.  this can only be used when we
+!> don't have a real ensemble to use, or we don't care
+!> about absolute accuracy.
+
+! Precompute pressure <-> height map once based on either a low-top or
+! high-top table depending on what the model top is.
 ! Used only to discard obs on heights above the user-defined top threshold.
-integer, parameter :: generic_nlevels = 35
-real(r8), allocatable :: generic_height_column(:)
-real(r8), allocatable :: generic_pressure_column(:)
+integer :: std_atm_table_len
+real(r8), allocatable :: std_atm_hgt_col(:)
+real(r8), allocatable :: std_atm_pres_col(:)
 
 ! Horizontal interpolation code.  Need a handle for nonstaggered, U and V.
 type(quad_interp_handle) :: interp_nonstaggered, &
@@ -285,7 +305,7 @@ read(iunit, nml = model_nml, iostat = io)
 call check_namelist_read(iunit, io, 'model_nml')
 
 ! Record the namelist values used for the run
-if (do_nml_file()) write(logfileunit, nml=model_nml)
+if (do_nml_file()) write(nmlfileunit, nml=model_nml)
 if (do_nml_term()) write(     *     , nml=model_nml)
 
 call set_calendar_type('GREGORIAN')
@@ -317,6 +337,7 @@ endif
 ! set top limit where obs are discarded.  -1 to disable.
 if (no_assim_above_pressure > 0.0_r8) then
    call init_discard_high_obs()
+   discarding_high_obs = .true.
 endif
 
 end subroutine static_init_model
@@ -541,7 +562,6 @@ integer(i8) :: state_indx
 real(r8) :: tmp(ens_size)
 
 varid = get_varid_from_kind(domain_id, qty)
-!print *, 'get_vals_single_lvl: qty, varid = ', trim(get_name_for_quantity(qty)), varid
 if (varid < 0) then
    vals(:) = MISSING_R8
    my_status = 12
@@ -551,15 +571,11 @@ endif
 state_indx = get_dart_vector_index(lon_index, lat_index, lev_index, domain_id, varid)
 if (state_indx < 1 .or. state_indx > get_domain_size(domain_id)) then
    write(string1, *) 'state_index out of range: ', state_indx, ' not between ', 1, get_domain_size(domain_id)
-   call error_handler(E_ERR,routine,string1,source,revision,revdate,text2=string2)
+   call error_handler(E_ERR,routine,string1,source,revision,revdate,text2=string2,text3='should not happen')
 endif
 vals(:) = get_state(state_indx, ens_handle)
 
 my_status = 0
-
-!state_indx = get_dart_vector_index(1,1,1,1,varid)
-!tmp(:) = get_state(state_indx, ens_handle)
-!print *, 'get_vals_single_lvl: v(1,1,1) = ', tmp
 
 end subroutine get_values_from_single_level
 
@@ -650,25 +666,18 @@ real(r8),             intent(out) :: vals(ens_size)
 integer,              intent(out) :: my_status(ens_size)
 
 integer  :: imember
-real(r8) :: vals_array(grid_data%lev%nsize,ens_size)
+real(r8) :: vals_array(global_nlevels,ens_size)
 
 character(len=*), parameter :: routine = 'get_values_from_nonstate_fields:'
 
 vals(:) = MISSING_R8
 my_status(:) = 99
 
-select case (obs_quantity)
+select case (obs_quantity) 
    case (QTY_PRESSURE)
-      if (obs_quantity == QTY_PRESSURE) then
-         call cam_pressure_levels(ens_handle, ens_size, &
-                                  lon_index, lat_index, grid_data%lev%nsize, &
-                                  obs_quantity, vals_array, my_status)
-      else
-         call cam_height_levels(ens_handle, ens_size, &
-                                lon_index, lat_index, grid_data%lev%nsize, &
-                                obs_quantity, vals_array, my_status) 
-      endif
-
+      call cam_pressure_levels(ens_handle, ens_size, &
+                               lon_index, lat_index, global_nlevels, &
+                               obs_quantity, vals_array, my_status)
       if (any(my_status /= 0)) return
 
       do imember=1,ens_size
@@ -775,10 +784,7 @@ if (status1 /= 0) then
 endif
 
 ! if we are avoiding assimilating obs above a given pressure, test here and return.
-!>@todo FIXME do we convert an entire ensemble of heights or just one and call that good?
-!> for now we are using a generic, 1000mb surface pressure for all obs, all ensembles.
-
-if (no_assim_above_pressure > 0) then
+if (discarding_high_obs) then
    call obs_too_high(lon_lat_vert(3), which_vert, status1)
    if (status1 /= 0) then
       istatus(:) = status1
@@ -788,8 +794,6 @@ endif
 
 call get_quad_vals(state_handle, ens_size, varid, obs_qty, four_lons, four_lats, &
                    lon_lat_vert, which_vert, quad_vals, status_array)
-
-!print*, 'STATUS GET QUADS', status_array
 
 !>@todo FIXME : Here we are failing if any ensemble member fails. Instead
 !>              we should be using track status...
@@ -802,31 +806,13 @@ endif
 call quad_lon_lat_evaluate(interp_handle, lon_fract, lat_fract, ens_size, &
                            quad_vals, interp_vals, status_array)
 
-!print*, 'STATUS MI EVAL', status_array(1)
-
-! print*, 'lon_ind_below    ', four_lons(1)
-! print*, 'lon_ind_above    ', four_lons(2)
-! print*, 'lat_ind_below    ', four_lats(2)
-! print*, 'lat_ind_above    ', four_lats(3)
-! print*, 'lon_fract        ', lon_fract
-! print*, 'lat_fract        ', lat_fract
-! print*, 'quad_vals(:,1)   ', quad_vals(:,1)
-! print*, 'quad_vals(:,2)   ', quad_vals(:,2)
-! print*, 'quad_vals(:,3)   ', quad_vals(:,3)
-! print*, 'interp_vals(:,1) ', interp_vals(1)
-! print*, 'interp_vals(:,2) ', interp_vals(2)
-! print*, 'interp_vals(:,3) ', interp_vals(3)
-
 if (any(status_array /= 0)) then
    istatus(:) = 8   ! cannot evaluate in the quad
    return
 endif
 
-if (using_chemistry) then
-!print *, 'chem: ', trim(get_name_for_quantity(obs_qty)), interp_vals, get_volume_mixing_ratio(obs_qty), &
-!                   interp_vals * get_volume_mixing_ratio(obs_qty)
+if (using_chemistry) &
    interp_vals = interp_vals * get_volume_mixing_ratio(obs_qty)
-endif
 
 ! all interp values should be set by now.  set istatus
 istatus(:) = 0
@@ -864,7 +850,6 @@ which_vert    = nint(query_location(location))
 
 call quad_lon_lat_locate(interp_handle, lon_lat_vert(1), lon_lat_vert(2), &
                          four_lons, four_lats, lon_fract, lat_fract, istatus(1))
-!print*, 'STATUS ARRAY IV', istatus(1)
 if (istatus(1) /= 0) then
    istatus(:) = 3  ! cannot locate enclosing horizontal quad
    return
@@ -872,12 +857,10 @@ endif
 
 call get_quad_vals(state_handle, ens_size, varid, obs_qty, four_lons, four_lats, &
                    lon_lat_vert, which_vert, quad_vals, istatus)
-!print*, 'ISTATUS VALS', istatus
 if (any(istatus /= 0)) return
 
 call quad_lon_lat_evaluate(interp_handle, lon_fract, lat_fract, ens_size, &
                            quad_vals, interp_vals, istatus)
-!print*, 'ISTATUS EVAL', istatus
 if (any(istatus /= 0)) then
    istatus(:) = 8   ! cannot evaluate in the quad
    return
@@ -886,26 +869,19 @@ endif
 end subroutine interpolate_values
 
 !-----------------------------------------------------------------------
-!> discard observations above a user-defined threshold.
-!> intended to be quick (low-cost) and not exact.
+!> return my_status /= 0 if obs is above a user-defined threshold.
+!> intended to be quick (low-cost) and not exact. 
 
 subroutine obs_too_high(vert_value, which_vert, my_status)
 real(r8), intent(in) :: vert_value
 integer,  intent(in) :: which_vert
 integer, intent(out) :: my_status
 
-integer   :: bot_lev, top_lev
-real(r8)  :: fract, this_pressure
 ! assume ok to begin with
 my_status = 0
 
-!print*, 'which_vert, vert_value', which_vert, vert_value
-
-! obs with a vertical type of pressure:
-!  lower pressures are higher; watch the less than/greater than tests
-!  note that this returns here no matter what the vert value is; 
-!  a good error code if below the threshold; with a bad error code if above.
 if (which_vert == VERTISPRESSURE) then
+   ! lower pressures are higher; watch the less than/greater than tests
    if (vert_value < no_assim_above_pressure) my_status = 14
    return
 endif
@@ -913,19 +889,18 @@ endif
 ! these are always ok
 if (which_vert == VERTISSURFACE .or. which_vert == VERTISUNDEF) return
 
-! for now we haven't run into observations where the vertical coordinate
-! (of the OBS) is in scale height.  so return ok here also.  if we have
-! obs with this vert, add code here to convert from pressure to scale height.
-if (which_vert == VERTISSCALEHEIGHT) return
-
 if (which_vert == VERTISHEIGHT) then
-
-   this_pressure = generic_height_to_pressure(vert_value, my_status)
-   if (my_status /= 0) return
-
-   if (this_pressure < no_assim_above_pressure) my_status = 14
+   if (vert_value > no_assim_above_height) my_status = 14
    return
 endif
+
+if (which_vert == VERTISLEVEL) then
+   if (vert_value > no_assim_above_level) my_status = 14
+   return
+endif
+
+! for now we haven't run into observations where the vertical coordinate
+! (of the OBS) is in scale height - but if we do it will fall into here.
 
 write(string2, *) 'vertical type: ', which_vert
 call error_handler(E_ERR, 'obs_too_high', 'unrecognized vertical type', &
@@ -972,7 +947,7 @@ if (numdims == 3) then
       call find_vertical_levels(state_handle, ens_size, &
                                 four_lons(icorner), four_lats(icorner), lon_lat_vert(3), &
                                 which_vert, obs_qty, varid, &
-                                four_bot_levs(icorner, :), four_top_levs(icorner, :), &
+                                four_bot_levs(icorner, :), four_top_levs(icorner, :), &    !$! 
                                 four_vert_fracts(icorner, :), my_status)
       if (any(my_status /= 0)) return
   
@@ -986,12 +961,12 @@ if (numdims == 3) then
    if (varid > 0) then
 
       call get_four_state_values(state_handle, ens_size, four_lons, four_lats, &
-                                four_bot_levs, four_top_levs, four_vert_fracts, &
+                                four_bot_levs, four_top_levs, four_vert_fracts, &       !$!
                                 varid, quad_vals, my_status)
 
    else ! get 3d special variables in another ways ( like QTY_PRESSURE )
       call get_four_nonstate_values(state_handle, ens_size, four_lons, four_lats, &
-                                   four_bot_levs, four_top_levs, four_vert_fracts, &
+                                   four_bot_levs, four_top_levs, four_vert_fracts, &       !$!
                                    obs_qty, quad_vals, my_status)
 
    endif
@@ -1072,7 +1047,7 @@ do icorner=1, 4
       return
    endif
 
-   call vert_interp(ens_size, botvals, topvals, four_vert_fracts(icorner, :), &
+   call vert_interp(ens_size, botvals, topvals, four_vert_fracts(icorner, :), &       !$!
                     quad_vals(icorner, :))
 
 enddo
@@ -1084,7 +1059,7 @@ end subroutine get_four_state_values
 !>
 
 subroutine get_four_nonstate_values(state_handle, ens_size, four_lons, four_lats, &
-                                 four_bot_levs, four_top_levs, four_vert_fracts, &
+                                 four_bot_levs, four_top_levs, four_vert_fracts, &       !$!
                                  obs_qty, quad_vals, my_status)
 
 type(ensemble_type), intent(in) :: state_handle
@@ -1118,7 +1093,7 @@ do icorner=1, 4
       return
    endif
 
-   call vert_interp(ens_size, botvals, topvals, four_vert_fracts(icorner, :), &
+   call vert_interp(ens_size, botvals, topvals, four_vert_fracts(icorner, :), &       !$!
                     quad_vals(icorner, :))
 
 enddo
@@ -1179,9 +1154,9 @@ endif
 ! are not in the state vector.
 select case (obs_qty)
    case (QTY_SURFACE_ELEVATION, &
-         QTY_PRESSURE, &
-         QTY_GEOMETRIC_HEIGHT, &
-         QTY_VERTLEVEL)    ! add QTY_OXYGEN_ION_DENSITY here for waccm-x
+         QTY_PRESSURE,          &
+         QTY_GEOMETRIC_HEIGHT,  &
+         QTY_VERTLEVEL) 
       my_status = 0
    case default
       my_status = 2
@@ -1249,7 +1224,12 @@ end subroutine get_quad_values
 
 
 !-----------------------------------------------------------------------
-!>  interpolate in the vertical between 2 arrays of items.
+!> interpolate in the vertical between 2 arrays of items.
+!>
+!> model level 1 is top, so the fraction is interpreted as:
+!>
+!> vert_fracts: 0 is 100% of the top level and 
+!>              1 is 100% of the bottom level
 
 subroutine vert_interp(nitems, botvals, topvals, vert_fracts, out_vals)
 integer,  intent(in)  :: nitems
@@ -1257,9 +1237,6 @@ real(r8), intent(in)  :: botvals(nitems)
 real(r8), intent(in)  :: topvals(nitems)
 real(r8), intent(in)  :: vert_fracts(nitems)
 real(r8), intent(out) :: out_vals(nitems)
-
-! vert_fracts: 1 is 100% of the bottom level and 
-!              0 is 100% of the top level
 
 out_vals(:) = (botvals(:) * vert_fracts(:)) + (topvals(:) * (1.0_r8-vert_fracts(:)))
 
@@ -1294,7 +1271,7 @@ end subroutine quad_index_neighbors
 !> 
 
 subroutine find_vertical_levels(ens_handle, ens_size, lon_index, lat_index, vert_val, &
-                                which_vert, obs_qty, var_id, bot_levs, top_levs, vert_fracts, my_status)
+                                which_vert, obs_qty, var_id, bot_levs, top_levs, vert_fracts, my_status)       !$!
 type(ensemble_type), intent(in)  :: ens_handle
 integer,             intent(in)  :: ens_size
 integer,             intent(in)  :: lon_index 
@@ -1310,11 +1287,11 @@ integer,             intent(out) :: my_status(ens_size)
 
 character(len=*), parameter :: routine = 'find_vertical_levels:'
 
-integer  :: bot1, top1, imember, nlevels, level_one, status1, k
+integer  :: bot1, top1, imember, level_one, status1, k
 real(r8) :: fract1
 real(r8) :: surf_pressure (  ens_size )
-real(r8) :: pressure_array( grid_data%lev%nsize, ens_size )
-real(r8) :: height_array  ( grid_data%lev%nsize, ens_size )
+real(r8) :: pressure_array( global_nlevels, ens_size )
+real(r8) :: height_array  ( global_nlevels, ens_size )
 
 ! assume the worst
 bot_levs(:)    = MISSING_I
@@ -1322,10 +1299,8 @@ top_levs(:)    = MISSING_I
 vert_fracts(:) = MISSING_R8
 my_status(:)   = 98
 
-!>@todo FIXME we need nlevels everywhere - should we have a global var for it?
+! global_nlevels is the number of vertical levels (midlayer points)
 
-! number of vertical levels (midlayer points)
-nlevels   = grid_data%lev%nsize
 level_one = 1
 
 select case (which_vert)
@@ -1341,11 +1316,11 @@ select case (which_vert)
          return
       endif
 
-      call build_cam_pressure_columns(ens_size, surf_pressure, nlevels, pressure_array)
+      call build_cam_pressure_columns(ens_size, surf_pressure, global_nlevels, pressure_array)
 
       do imember=1, ens_size
-         call pressure_to_level(nlevels, pressure_array(:, imember), vert_val, &
-                                bot_levs(imember), top_levs(imember), &
+         call pressure_to_level(global_nlevels, pressure_array(:, imember), vert_val, & 
+                                bot_levs(imember), top_levs(imember), &       !$!
                                 vert_fracts(imember), my_status(imember))
 
       enddo
@@ -1360,33 +1335,33 @@ select case (which_vert)
    case(VERTISHEIGHT)
       ! construct a height column here and find the model levels
       ! that enclose this value
-      call cam_height_levels(ens_handle, ens_size, lon_index, lat_index, nlevels, obs_qty, &
+      call cam_height_levels(ens_handle, ens_size, lon_index, lat_index, global_nlevels, obs_qty, &
                              height_array, my_status)
       if (any(my_status /= 0)) return   !>@todo FIXME let successful members continue?
 
       if (debug_level > 400) then
-         do k = 1,nlevels
+         do k = 1,global_nlevels
             print*, 'ISHEIGHT: ', k, height_array(k,1)
          enddo
       endif
 
       do imember=1, ens_size
-         call height_to_level(nlevels, height_array(:, imember), vert_val, &
-                              bot_levs(imember), top_levs(imember), vert_fracts(imember), &
-                              my_status(imember))
+         call height_to_level(global_nlevels, height_array(:, imember), vert_val, & 
+                             bot_levs(imember), top_levs(imember), vert_fracts(imember), &       !$!
+                             my_status(imember))
       enddo
       if (any(my_status /= 0)) return   !>@todo FIXME let successful members continue?
 
-      if (debug_level > 400) then
+      if (debug_level > 100) then
          do k = 1,ens_size
             print*, 'ISHEIGHT ens#, bot_levs(#), top_levs(#), vert_fracts(#), top/bot height(#)', &
-                     k, bot_levs(k), top_levs(k), vert_fracts(k), height_array(1,k), height_array(nlevels, k)
+                     k, bot_levs(k), top_levs(k), vert_fracts(k), height_array(top_levs(k),k), height_array(bot_levs(k), k)
          enddo
       endif
       
    case(VERTISLEVEL)
       ! this routine returns false if the level number is out of range.
-      if (range_set(vert_val, nlevels, bot1, top1, fract1)) then
+      if (check_good_levels(vert_val, global_nlevels, bot1, top1, fract1)) then      !$!
          my_status(:) = 8
          return
       endif
@@ -1407,9 +1382,9 @@ select case (which_vert)
 
    ! 2d fields
    case(VERTISUNDEF, VERTISSURFACE)
-      if (get_dims_from_qty(obs_qty, var_id) == 2) then
-         bot_levs(:) = nlevels
-         top_levs(:) = nlevels - 1
+      if (get_dims_from_qty(obs_qty, var_id) == 2) then      !$!
+         bot_levs(:) = global_nlevels
+         top_levs(:) = global_nlevels - 1
          vert_fracts(:) = 1.0_r8
          my_status(:) = 0
       else
@@ -1449,17 +1424,12 @@ real(r8) :: tv(nlevels, ens_size)  ! Virtual temperature, top to bottom
 ! this is for surface obs
 level_one = 1
 
-!@>todo make into a subroutine get_val or something similar
 ! get the surface pressure from the ens_handle
 call get_staggered_values_from_qty(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
                                    lon_index, lat_index, level_one, qty, surface_pressure, status1)
 
-
 ! get the surface elevation from the phis, including stagger if needed
 call get_quad_values(1, lon_index, lat_index, QTY_SURFACE_ELEVATION, qty, surface_elevation)
-
-! DEBUG
-!print*, 'lon lat surf elev ', lon_index, lat_index, surface_elevation
 
 call compute_virtual_temperature(ens_handle, ens_size, lon_index, lat_index, nlevels, qty, tv, status1)
 
@@ -1475,7 +1445,6 @@ if (use_variable_mean_mass) then
       my_status = status1
       return
    endif
-   !print*, 'mbar', mbar(1,1), mbar(nlevels,1), my_status, status1
 
    ! compute the height columns for each ensemble member - passing mbar() array in.
    do imember = 1, ens_size
@@ -1551,15 +1520,17 @@ end subroutine build_cam_pressure_columns
 
 !-----------------------------------------------------------------------
 !> Compute column of pressures at the layer midpoints for the given 
-!> surface pressure.  This routine IS being called, unlike the others
-!> below.
+!> surface pressure.  
 !>
 !>@todo FIXME unlike some other things - you could pass in an upper and lower
 !>level number and compute the pressure only at the levels between those.
 !>this isn't a column that has to be built from the surface up or top down.
 !>each individual pressure can be computed independently given the surface pressure.
+!>
+!> to get pressure on layer interfaces, the computation would be identical
+!> but use hyai, hybi.  (also have n_levels+1)
 
-subroutine cam_p_col_midpts(surface_pressure, n_levels, pressure_array)
+subroutine single_pressure_column(surface_pressure, n_levels, pressure_array)
 
 real(r8),           intent(in)  :: surface_pressure   ! in pascals
 integer,            intent(in)  :: n_levels
@@ -1575,89 +1546,7 @@ do k=1, n_levels
                           surface_pressure * grid_data%hybm%vals(k)
 enddo
 
-end subroutine cam_p_col_midpts
-
-!-----------------------------------------------------------------------
-!> Compute columns of pressures at the layer interfaces for the given number 
-!> of surface pressures.  CURRENTLY UNUSED.
-!>
-!>@todo FIXME see comment above in cam_p_col_midpts()
-
-subroutine cam_p_col_intfcs( surface_pressure, n_levels, pressure_array)
-
-real(r8),           intent(in)  :: surface_pressure   ! in pascals
-integer,            intent(in)  :: n_levels
-real(r8),           intent(out) :: pressure_array(n_levels)
-
-integer :: k
-
-! Set interface pressures.  This array mirrors the order of the
-! cam model levels: 1 is the model top, N is the bottom.
-
-do k=1, n_levels
-   pressure_array(k) = global_ref_pressure * grid_data%hyai%vals(k) + &
-                          surface_pressure * grid_data%hybi%vals(k)
-enddo
-
-end subroutine cam_p_col_intfcs
-
-!-----------------------------------------------------------------------
-!> Compute columns of heights at the layer midpoints for the given number 
-!> of surface pressures and surface elevations.  THIS ROUTINE IS CURRENTLY
-!> UNUSED, AND HAS NO PROVISION FOR PASSING DOWN THE VARIABLE MEAN MASS
-!> PARAMETER.
-
-subroutine cam_h_col_midpts(n_levels, surface_pressure, surface_elev, virtual_temp, &
-                            height_array)
-
-integer,  intent(in)  :: n_levels
-real(r8), intent(in)  :: surface_pressure   ! in pascals
-real(r8), intent(in)  :: surface_elev       ! in m
-real(r8), intent(in)  :: virtual_temp(n_levels) ! Virtual Temperature
-real(r8), intent(out) :: height_array(n_levels)  ! in meters
-
-! unlike pressure, we need to start at the surface and work our way up.
-! we can't compute a height in the middle of the column.
-
-height_array(:) = MISSING_R8
-
-call error_handler(E_ERR, 'cam_h_col_midpts: ', 'routine needs mbar option', &
-                   source, revision, revdate)
-
-call build_heights(n_levels, surface_pressure, surface_elev, virtual_temp, &
-                   height_array)
-
-end subroutine cam_h_col_midpts
-
-!-----------------------------------------------------------------------
-!> Compute columns of heights at the layer interfaces for the given number 
-!> of surface pressures.   THIS ROUTINE IS ALSO CURRENTLY UNUSED AND
-!> IN FACT NOT WRITTEN.   FIXME: should these be removed?
-
-subroutine cam_h_col_intfcs(n_levels, surface_pressure, surface_elev, virtual_temp, &
-                            height_array)
-
-integer,  intent(in)  :: n_levels
-real(r8), intent(in)  :: surface_pressure   ! in pascals
-real(r8), intent(in)  :: surface_elev       ! in m
-real(r8), intent(in)  :: virtual_temp(n_levels) ! Virtual Temperature
-real(r8), intent(out) :: height_array(n_levels)  ! in meters
-
-real(r8) :: dummy(n_levels)
-
-! Set interface heights.  This array mirrors the order of the
-! cam model levels: 1 is the model top, N is the bottom.
-
-height_array(:) = MISSING_R8
-
-call error_handler(E_ERR, 'cam_h_col_intfcs: ', 'routine not written', &
-                   source, revision, revdate)
-
-! it would be a variation on this if we needed this routine for some reason.
-call build_heights(n_levels, surface_pressure, surface_elev, virtual_temp, &
-                   dummy, height_array)
-
-end subroutine cam_h_col_intfcs
+end subroutine single_pressure_column
 
 !-----------------------------------------------------------------------
 !> return the level indices and fraction across the level.
@@ -1666,7 +1555,7 @@ end subroutine cam_h_col_intfcs
 !> fract = 1 is the full bot.  return non-zero if value outside the valid range.
 
 subroutine pressure_to_level(nlevels, pressures, p_val, &
-                             bot_lev, top_lev, fract, my_status)
+                              bot_lev, top_lev, fract, my_status)      !$!
 
 integer,  intent(in)  :: nlevels
 real(r8), intent(in)  :: pressures(:)
@@ -1676,59 +1565,25 @@ integer,  intent(out) :: top_lev
 real(r8), intent(out) :: fract  
 integer,  intent(out) :: my_status
 
-character(len=*), parameter :: routine = 'pressure_to_level:'
+!>@todo FIXME this routine expects the lower numbered index first, larger second.
+call find_enclosing_indices(nlevels, pressures, p_val, top_lev, bot_lev, fract, my_status, &      !$!
+                            inverted = .false., log_scale = .true.)
 
-integer :: this_lev
-
-bot_lev = MISSING_I
-top_lev = MISSING_I
-fract   = MISSING_R8
-
-if (p_val < pressures(1) .or. p_val > pressures(nlevels)) then
-   my_status = 10
-   return
-endif
-
-! search from the top down.  smaller pressures are higher
-! than larger ones.  in theory you can never fall out of
-! this loop without setting the top/bot because we've tested
-! already for p_val out of range.
-levloop: do this_lev = 2, nlevels
-   if (p_val >= pressures(this_lev)) cycle levloop
-
-   top_lev = this_lev - 1
-   bot_lev = this_lev
-   ! this is where we do the vertical fraction in either linear or log scale
-   if (use_log_vertical_scale) then
-      fract = (log(p_val) - log(pressures(top_lev))) / &
-              (log(pressures(bot_lev)) - log(pressures(top_lev)))
-   else
-      fract = (p_val - pressures(top_lev)) / (pressures(bot_lev) - pressures(top_lev))
-   endif
-
-   my_status = 0
-   return
-enddo levloop
-
-! you shouldn't get here
-if (bot_lev == MISSING_I) then
-  write(string1,*) 'should not happen - contact DART support'
-  write(string2,*) 'pressure value ', p_val, ' was not found in pressure column'
-  call error_handler(E_ERR,routine,string1,source,revision,revdate,text2=string2)
-endif
+if (my_status /= 0) my_status = 10
 
 end subroutine pressure_to_level
 
 !-----------------------------------------------------------------------
 !>
 !> return the level indices and fraction across the level.
-!> 1 is top, N is bottom, bot is the lower level, top is the upper level
-!> so top value will be larger than bot.  fract = 0 is the full top,
-!> fract = 1 is the full bot.  return non-zero if value outside the valid range.
+!> index 1 is model top, N is model bottom.  botvals will be the
+!> smaller index number, botvals will be the lower one
+!> fract = 0 is the full top, fract = 1 is the full bot.  
+!> return non-zero if value outside the valid range.
 !>
 
 subroutine height_to_level(nlevels, heights, h_val, &
-                           bot_lev, top_lev, fract, my_status)
+                            bot_lev, top_lev, fract, my_status)      !$!
 
 integer,  intent(in)  :: nlevels
 real(r8), intent(in)  :: heights(:)
@@ -1740,37 +1595,10 @@ integer,  intent(out) :: my_status
 
 character(len=*), parameter :: routine = 'height_to_level:'
 
-integer :: this_lev
+call find_enclosing_indices(nlevels, heights, h_val, bot_lev, top_lev, fract, my_status, &      !$!
+                            inverted = .true., log_scale = .false.)
 
-bot_lev = MISSING_I
-top_lev = MISSING_I
-fract   = MISSING_R8
-
-if (h_val > heights(1) .or. h_val < heights(nlevels)) then
-!print *, 'failed above/below test.  low, val, top = ', heights(nlevels), h_val, heights(1)
-   my_status = 11
-   return
-endif
-
-! search from the top down.  larger heights are higher
-! than smaller ones.  in theory you can never fall out of
-! this loop without setting the top/bot because we've tested
-! already for h_val out of range.
-levloop: do this_lev = 2, nlevels
-   if (h_val < heights(this_lev)) cycle levloop
-   top_lev = this_lev - 1
-   bot_lev = this_lev
-   fract = (h_val - heights(top_lev)) / (heights(bot_lev) - heights(top_lev))
-   my_status = 0
-   return
-enddo levloop
-
-! you shouldn't get here
-if (bot_lev == MISSING_I) then
-  write(string1,*) 'should not happen - contact DART support'
-  write(string2,*) 'height value ', h_val, ' was not found in height column'
-  call error_handler(E_ERR,routine,string1,source,revision,revdate,text2=string2)
-endif
+if (my_status /= 0) my_status = 11
 
 end subroutine height_to_level
 
@@ -1781,19 +1609,19 @@ end subroutine height_to_level
 !> the top level is always closer to the model top and so has a *smaller*
 !> level number than the bottom level. 
 
-function range_set(vert_value, valid_range, bot, top, fract)
+function check_good_levels(vert_value, valid_range, bot, top, fract)
 real(r8), intent(in)  :: vert_value
 integer,  intent(in)  :: valid_range
 integer,  intent(out) :: bot
 integer,  intent(out) :: top
 real(r8), intent(out) :: fract
-logical               :: range_set
+logical               :: check_good_levels
 
 integer :: integer_level
 real(r8) :: fract_level
 
 ! be a pessimist, then you're never disappointed
-range_set = .false.
+check_good_levels = .false.
 bot = MISSING_I
 top = MISSING_I
 fract = MISSING_R8
@@ -1811,8 +1639,8 @@ fract_level = vert_value - integer_level
 !>them correctly in the calling and vert_interp() code.
 
 ! out of range checks
-!print*,  'vert_value,  valid_range', vert_value,  valid_range
 if (vert_value < 1.0_r8 .or. vert_value > valid_range) return
+
 if (vert_value /= valid_range) then
    top = integer_level
    bot = top + 1
@@ -1824,11 +1652,9 @@ else
    fract = 1.0_r8
 endif
 
-!print*, 'top, bot, fract', top, bot, fract
+check_good_levels = .true.
 
-range_set = .true.
-
-end function range_set
+end function check_good_levels
 
 
 !-----------------------------------------------------------------------
@@ -1902,7 +1728,7 @@ subroutine end_model()
 
 call free_cam_grid(grid_data)
 
-call free_generic_columns()
+call free_std_atm_tables()
 
 call finalize_quad_interp(interp_nonstaggered)
 call finalize_quad_interp(interp_u_staggered)
@@ -2489,9 +2315,7 @@ allocate(grid_array%vals(grid_array%nsize))
 
 call nc_get_variable(ncid, varname, grid_array%vals, routine)
 
-if (debug_level > 30) then
-   call array_dump(grid_array%vals, label=varname)
-endif
+if (debug_level > 80) call array_dump(grid_array%vals, label=varname)
 
 end subroutine fill_cam_1d_array
 
@@ -2514,9 +2338,7 @@ allocate(grid_array%vals(grid_array%nsize))
 
 call nc_get_variable(ncid, varname, grid_array%vals, routine)
 
-if (debug_level > 10) then
-   print*, 'variable name ', trim(varname), grid_array%vals
-endif
+if (debug_level > 80) print*, 'variable name ', trim(varname), grid_array%vals
 
 end subroutine fill_cam_0d_array
 
@@ -2582,9 +2404,9 @@ select case (ucasename)
      vcoord = VERTISPRESSURE
   case ("HEIGHT")
      vcoord = VERTISHEIGHT
-  case ("SCALEHEIGHT", "SCALE_HEIGHT")
+  case ("SCALEHEIGHT", "SCALE_HEIGHT", "SCALE HEIGHT")
      vcoord = VERTISSCALEHEIGHT
-  case ("LEVEL", "MODEL_LEVEL")
+  case ("LEVEL", "MODEL_LEVEL", "MODEL LEVEL")
      vcoord = VERTISLEVEL
   case default
      write(string1,*)'unrecognized vertical localization coordinate type: '//trim(typename)
@@ -2612,8 +2434,8 @@ subroutine setup_interpolation(grid)
 type(cam_grid), intent(in) :: grid
 
 !>@todo FIXME the cam fv grid is really evenly spaced in lat and lon,
-!>even though they provide full lon() and lat() arrays.  the deltas
-!>between each pair would be faster
+!>even though they provide full lon() and lat() arrays.  providing the deltas
+!>between each pair would be slightly faster inside the interp code.
 
 ! mass points at cell centers
 call init_quad_interp(GRID_QUAD_IRREG_SPACED_REGULAR, grid%lon%nsize, grid%lat%nsize, &
@@ -2768,48 +2590,9 @@ do k = 1, nlevels
                       + mmr_o2(:,k)/O2_molar_mass &
                       + mmr_h1(:,k)/H_molar_mass  &
                       + mmr_n2(:,k)/N2_molar_mass)
-!print *, 'k, mbar, o1, o2, h1, n2: ', k, mbar(k,1), mmr_o1(1,k), mmr_o2(1,k), mmr_h1(1, k), mmr_n2(1, k)
-!print *, 'k, mmass o1, o2, h1, n2: ', k, mmr_o1(1,k)/O_molar_mass, mmr_o2(1,k)/O2_molar_mass, &
-!                                         mmr_h1(1, k)/H_molar_mass, mmr_n2(1, k)/N2_molar_mass
 enddo
 
 end subroutine compute_mean_mass
-
-
-!#! !real(r8) :: p_surf = 100183.18209922672_r8
-!#! !real(r8) :: h_surf = 329.4591445914210794_r8
-!#! !!tvX:
-!#! !real(r8) :: virtual_temp(26) = (/   &
-!#! !    219.504545724395342177_r8, &
-!#! !    220.755756266998901083_r8, &
-!#! !    218.649777340474969378_r8, &
-!#! !    218.144545911709940356_r8, &
-!#! !    217.728221229954215232_r8, &
-!#! !    216.143009218914528446_r8, &
-!#! !    214.481037053947034110_r8, &
-!#! !    211.658627994532224648_r8, &
-!#! !    211.833385313013934592_r8, &
-!#! !    212.213164703541366407_r8, &
-!#! !    212.615531561483351197_r8, &
-!#! !    209.756210669626966592_r8, &
-!#! !    209.138904604986379354_r8, &
-!#! !    212.498936606159986695_r8, &
-!#! !    219.523651584890700406_r8, &
-!#! !    229.031103260649530284_r8, &
-!#! !    237.766208609568053589_r8, &
-!#! !    245.843809142625332242_r8, &
-!#! !    253.456529559321467104_r8, &
-!#! !    258.270814547914710602_r8, &
-!#! !    260.346496319841151035_r8, &
-!#! !    261.759864813262595362_r8, &
-!#! !    262.993454407623175939_r8, &
-!#! !    266.850708906211991689_r8, &
-!#! !    270.064944946168111528_r8, &
-!#! !    271.721653151072075616_r8 /)
-!#! !
-!#! !
-!#! !write(*, 202) 'psurf, hsurf: ', p_surf, h_surf
-!#! 
 
 !-----------------------------------------------------------------------
 !> This code is using a finite difference method to evaluate an 
@@ -2837,6 +2620,9 @@ end subroutine compute_mean_mass
 !>   bottom as in CCM2.  This field is on full model levels (aka
 !>   "midpoints") not half levels.
 !>
+!> careful - if the calling code passes in the mbar() parameter a different gas
+!>           constant is used instead.  an mbar() array of 1.0 is not the same 
+!>           as no parameter specified.
 
 subroutine build_heights(nlevels,p_surf,h_surf,virtual_temp,height_midpts,height_interf,mbar)
 
@@ -2846,7 +2632,7 @@ real(r8), intent(in)  :: h_surf                             ! Surface height (m)
 real(r8), intent(in)  :: virtual_temp( nlevels)             ! Virtual Temperature
 real(r8), intent(out) :: height_midpts(nlevels)             ! Geopotential height at midpoints, top to bottom
 real(r8), intent(out), optional :: height_interf(nlevels+1) ! Geopotential height at interfaces, top to bottom
-real(r8), intent(in),  optional :: mbar(nlevels) !>@todo FIXME : is this simply average moisure???
+real(r8), intent(in),  optional :: mbar(nlevels)            ! Factor to support for variable gas constant
 
 ! Local variables
 !>@todo FIXME can we use the types_mod values here?  or have a model constants module?
@@ -2880,7 +2666,7 @@ endif
 ! the pressure at nlevels+1 is the pressure of the 
 ! actual surface interface, not a midpoint!!
 
-call cam_p_col_midpts(p_surf, nlevels, pm_ln)
+call single_pressure_column(p_surf, nlevels, pm_ln)
    
 pm_ln(nlevels+1) = p_surf * grid_data%hybi%vals(nlevels+1)   ! surface interface
    
@@ -2890,6 +2676,7 @@ else where (pm_ln <= 0.0_r8)
    pm_ln = 0
 end where
 
+!debug
 !200 format (I3, 6(1X, F24.16))
 !201 format (A, 1X, I3, 6(1X, F24.16))
 !202 format (A, 6(1X, F24.16))
@@ -2899,6 +2686,7 @@ end where
 !do i=1, nlevels+1
 !  write(*, 200) i, pm_ln(i)
 !enddo
+!end debug
 
 !        height_midpts(1)=top  ->  height_midpts(nlevels)=bottom
 ! 
@@ -2996,28 +2784,18 @@ integer :: i, j
 
 latr = lat * DEG2RAD  ! convert to radians
 call compute_surface_gravity(latr, g0)
-!print *, 'lat, latr, g0, G: ', lat, latr, g0, G
 
 ! compute local earth's radius using ellipse equation
 
 r0 = sqrt( ae**2 * cos(latr)**2 + be**2 * sin(latr)**2)  
-!print *, 'r0: ', r0
 
 ! Compute altitude above sea level
 do j=1, size(h, 2)
    do i=1, size(h, 1)
-!print *, ''
-!print *, 'height before (m) : ', h(i,j)
       h(i,j) = h(i,j) / 1000.0_r8   ! m to km
-!print *, 'height before (km): ', h(i,j)
-!print *, 'numerator  : ', r0 * h(i,j)
-!print *, 'denom parts: ', (g0*r0)/G, h(i,j)
-!print *, 'denominator: ', ((g0*r0)/G) - h(i,j)
-      if ((((g0*r0)/G) - h(i,j)) > 0) &
+      if ( ((g0*r0)/G) - h(i,j) > 0) &
          h(i,j) = (r0 * h(i,j)) / (((g0*r0)/G) - h(i,j))
-!print *, 'height after (km): ', h(i,j)
       h(i,j) = h(i,j) * 1000.0_r8   ! km to m
-!print *, 'height after (m) : ', h(i,j)
    enddo
 enddo
 
@@ -3136,7 +2914,7 @@ integer,             intent(in)    :: qty
 
 integer  :: iloc, jloc, vloc, myqty, level_one, status1
 integer  :: my_status(ens_size)
-real(r8) :: pressure_array(grid_data%lev%nsize), surface_pressure(ens_size)
+real(r8) :: pressure_array(global_nlevels), surface_pressure(ens_size)
 
 
 call get_model_variable_indices(location_indx, iloc, jloc, vloc, kind_index=myqty)
@@ -3152,7 +2930,7 @@ if (is_surface_field(myqty)) then
    endif
    call set_vertical(location, surface_pressure(1), VERTISPRESSURE)
 else
-   call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, grid_data%lev%nsize, &
+   call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, global_nlevels, &
                             qty, pressure_array, my_status)
 
    call set_vertical(location, pressure_array(vloc), VERTISPRESSURE)
@@ -3170,12 +2948,12 @@ integer(i8),         intent(in)    :: location_indx
 integer,             intent(in)    :: qty
 
 integer  :: iloc, jloc, vloc, my_status(ens_size)
-real(r8) :: height_array(grid_data%lev%nsize, ens_size)
+real(r8) :: height_array(global_nlevels, ens_size)
 
 ! build a height column and a pressure column and find the levels
 call get_model_variable_indices(location_indx, iloc, jloc, vloc)
 
-call cam_height_levels(ens_handle, ens_size, iloc, jloc, grid_data%lev%nsize, &
+call cam_height_levels(ens_handle, ens_size, iloc, jloc, global_nlevels, &
                        qty, height_array, my_status) 
 
 !>@todo FIXME this can only be used if ensemble size is 1
@@ -3193,7 +2971,7 @@ integer(i8),         intent(in)    :: location_indx
 integer,             intent(in)    :: qty
 
 integer  :: iloc, jloc, vloc, level_one, status1, my_status(ens_size)
-real(r8) :: pressure_array(grid_data%lev%nsize)
+real(r8) :: pressure_array(global_nlevels)
 real(r8) :: surface_pressure(1), scaleheight_val
 
 level_one = 1
@@ -3211,7 +2989,7 @@ call get_model_variable_indices(location_indx, iloc, jloc, vloc)
 call get_values_from_single_level(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
                                   iloc, jloc, level_one, surface_pressure, status1)
    
-call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, grid_data%lev%nsize, &
+call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, global_nlevels, &
                          qty, pressure_array, my_status)
    
 scaleheight_val = scale_height(surface_pressure(1), pressure_array(vloc))
@@ -3241,7 +3019,7 @@ call set_vertical(location, real(vloc,r8), VERTISLEVEL)
 end subroutine state_vertical_to_level
 
 !--------------------------------------------------------------------
-!> using a generic pressure column, convert a height directly to pressure
+!> using a standard atmosphere pressure column, convert a height directly to pressure
 
 function generic_height_to_pressure(height, status)
 real(r8), intent(in)  :: height
@@ -3253,17 +3031,17 @@ real(r8) :: fract
 
 generic_height_to_pressure = MISSING_R8
 
-call height_to_level(generic_nlevels, generic_height_column, height, &
-                     bot_lev, top_lev, fract, status)
+call height_to_level(std_atm_table_len, std_atm_hgt_col, height, & 
+                     bot_lev, top_lev, fract, status)      !$!
 if (status /= 0) return
 
-generic_height_to_pressure = generic_pressure_column(bot_lev) * fract + &
-                             generic_pressure_column(top_lev) * (1.0_r8-fract)
+generic_height_to_pressure = std_atm_pres_col(bot_lev) * fract + &                !*!
+                             std_atm_pres_col(top_lev) * (1.0_r8-fract)
 
 end function generic_height_to_pressure
 
 !--------------------------------------------------------------------
-!> using a generic pressure column, convert a pressure directly to height
+!> using a standard atmosphere pressure column, convert a pressure directly to height
 
 function generic_pressure_to_height(pressure, status)
 real(r8), intent(in)  :: pressure
@@ -3275,35 +3053,39 @@ real(r8) :: fract
 
 generic_pressure_to_height = MISSING_R8
 
-call pressure_to_level(generic_nlevels, generic_pressure_column, pressure, &
-                       bot_lev, top_lev, fract, status)
+call pressure_to_level(std_atm_table_len, std_atm_pres_col, pressure, &
+                       bot_lev, top_lev, fract, status)                  !$!
 if (status /= 0) return
 
-generic_pressure_to_height = generic_height_column(bot_lev) * fract + &
-                             generic_height_column(top_lev) * (1.0_r8-fract)
+generic_pressure_to_height = std_atm_hgt_col(bot_lev) * fract + &                 !*!
+                             std_atm_hgt_col(top_lev) * (1.0_r8-fract)
 
 end function generic_pressure_to_height
 
 !--------------------------------------------------------------------
-!> using a generic pressure column, convert a pressure directly to model level
+!> using the cam eta arrays, convert a pressure directly to model level
+!> use P0 as surface, ignore elevation.
 
-function generic_pressure_to_level(pressure, status)
+function generic_cam_pressure_to_cam_level(pressure, status)
 real(r8), intent(in)  :: pressure
 integer,  intent(out) :: status
-real(r8) :: generic_pressure_to_level
+real(r8) :: generic_cam_pressure_to_cam_level
 
 integer :: bot_lev, top_lev
 real(r8) :: fract
+real(r8) :: pressure_array(global_nlevels)
 
-generic_pressure_to_level = MISSING_R8
+generic_cam_pressure_to_cam_level = MISSING_R8
 
-call pressure_to_level(generic_nlevels, generic_pressure_column, pressure, &
-                       bot_lev, top_lev, fract, status)
+call single_pressure_column(global_ref_pressure, global_nlevels, pressure_array)
+
+call pressure_to_level(global_nlevels, pressure_array, pressure, &
+                       bot_lev, top_lev, fract, status)                  !$!
 if (status /= 0) return
 
-generic_pressure_to_level = bot_lev + fract
+generic_cam_pressure_to_cam_level = bot_lev + (1.0_r8 - fract)            !*!
 
-end function generic_pressure_to_level
+end function generic_cam_pressure_to_cam_level
 
 !-----------------------------------------------------------------------
 !> Compute the pressure values at midpoint levels
@@ -3336,7 +3118,7 @@ if (status1 /= 0) then
    return
 endif
 
-call build_cam_pressure_columns(ens_size, surface_pressure, grid_data%lev%nsize, &
+call build_cam_pressure_columns(ens_size, surface_pressure, global_nlevels, &
                                pressure_array)
 my_status(:) = 0
 
@@ -3361,8 +3143,8 @@ integer :: current_vert_type, i
 
 do i=1,num
    current_vert_type = nint(query_location(locs(i)))
-   if ( current_vert_type == which_vert ) cycle
 
+   if ( current_vert_type == which_vert ) cycle
    if ( current_vert_type == VERTISUNDEF) cycle
 
    select case (which_vert)
@@ -3391,7 +3173,7 @@ type(location_type), intent(inout) :: location
 integer,             intent(out)   :: my_status
 
 integer  :: varid, ens_size, status(1), qty
-real(r8) :: pressure_array(grid_data%lev%nsize)
+real(r8) :: pressure_array(global_nlevels)
 
 character(len=*), parameter :: routine = 'obs_vertical_to_pressure'
 
@@ -3428,7 +3210,7 @@ type(location_type), intent(inout) :: location
 integer,             intent(out)   :: my_status
 
 integer  :: varid, ens_size, status(1)
-real(r8) :: pressure_array(grid_data%lev%nsize)
+real(r8) :: pressure_array(global_nlevels)
 real(r8) :: height_array(1)
 
 character(len=*), parameter :: routine = 'obs_vertical_to_height'
@@ -3487,15 +3269,16 @@ integer,             intent(out)   :: my_status
 integer  :: varid1, varid2, stat1, stat2, ens_size, status(1)
 real(r8) :: pressure_array(1), surface_pressure_array(1)
 real(r8) :: scaleheight_val
+integer :: i
 
 character(len=*), parameter :: routine = 'obs_vertical_to_scaleheight'
 
 ens_size = 1
 
-! by definition
+! by definition this is ok
 if (query_location(location) == VERTISSURFACE) then
-   call set_vertical(location, -log(1.0_r8), VERTISSCALEHEIGHT)
-   my_status = 2
+   call set_vertical(location, 0.0_r8, VERTISSCALEHEIGHT)  ! -log(1.0_r8)
+   my_status = 0
    return
 endif
    
@@ -3506,20 +3289,30 @@ if (stat1 /= 0 .or. stat2 /= 0) then
    return
 endif
 
-call interpolate_values(ens_handle, ens_size, location, QTY_PRESSURE, varid1, &
-                              pressure_array(:), status(:))
-if (status(1) /= 0) then
-   my_status = status(1)
-   return
-endif
-                              
 call interpolate_values(ens_handle, ens_size, location, QTY_SURFACE_PRESSURE, varid2, &
-                              surface_pressure_array(:), status(:))
+                        surface_pressure_array(:), status(:))
 if (status(1) /= 0) then
    my_status = status(1)
    return
 endif
 
+!>@todo FIXME IFF the obs location is already pressure, we can take it at
+!> face value here and not interpolate it.  however, it can result in negative
+!> scale height values if the pressure is larger than the surface pressure at
+!> that location.  that's what the original cam model_mod did.  is that ok?
+
+if (is_vertical(location, "PRESSURE")) then
+   pressure_array(:) = query_location(location, "VLOC")
+   status(:) = 0
+else
+   call interpolate_values(ens_handle, ens_size, location, QTY_PRESSURE, varid1, &
+                           pressure_array(:), status(:))
+endif
+if (status(1) /= 0) then
+   my_status = status(1)
+   return
+endif
+                              
 scaleheight_val = scale_height(surface_pressure_array(1), pressure_array(1))
 
 call set_vertical(location, scaleheight_val, VERTISSCALEHEIGHT)
@@ -3556,75 +3349,6 @@ loc = bl(1)
 
 end subroutine convert_vert_one_obs
 
-!-----------------------------------------------------------------------
-!> Store a generic column of pressures and heights.
-!>  not precise - use only when rough numbers are good enough.
-
-subroutine store_generic_columns()
-
-! table from:
-! http://meteorologytraining.tpub.com/14269/css/14269_75.htm
-! see also
-! https://www.engineeringtoolbox.com/standard-atmosphere-d_604.html
-
-integer :: i
-real(r8) :: generic_height_to_pressure(2, generic_nlevels)
-
-generic_height_to_pressure(:,  1) =  (/  609600.0_r8,   4.80_r8*10E-10 /)
-generic_height_to_pressure(:,  2) =  (/  152400.0_r8,   4.98_r8*10E-7 /)
-generic_height_to_pressure(:,  3) =  (/  91440.0_r8 ,   1.09_r8*10E-6  /)
-generic_height_to_pressure(:,  4) =  (/  60960.0_r8 ,   2.20_r8*10E-2  /)
-generic_height_to_pressure(:,  5) =  (/  45720.0_r8 ,    14000.0_r8   /)
-generic_height_to_pressure(:,  6) =  (/  30510.0_r8 ,   112000.0_r8   /)
-generic_height_to_pressure(:,  7) =  (/  27459.0_r8 ,   176000.0_r8   /)
-generic_height_to_pressure(:,  8) =  (/  24408.0_r8 ,   280000.0_r8   /)
-generic_height_to_pressure(:,  9) =  (/  21357.0_r8 ,   449000.0_r8   /)
-generic_height_to_pressure(:, 10) =  (/  18306.0_r8 ,   724000.0_r8   /)
-generic_height_to_pressure(:, 11) =  (/  16781.0_r8 ,   917000.0_r8   /)
-generic_height_to_pressure(:, 12) =  (/  15255.0_r8 ,  1165000.0_r8   /)
-generic_height_to_pressure(:, 13) =  (/  13730.0_r8 ,  1482000.0_r8   /)
-generic_height_to_pressure(:, 14) =  (/  12204.0_r8 ,  1882000.0_r8   /)
-generic_height_to_pressure(:, 15) =  (/  10679.0_r8 ,  2393000.0_r8   /)
-generic_height_to_pressure(:, 16) =  (/  9153.0_r8  ,  3013000.0_r8   /)
-generic_height_to_pressure(:, 17) =  (/  7628.0_r8  ,  3765000.0_r8   /)
-generic_height_to_pressure(:, 18) =  (/  6102.0_r8  ,  4661000.0_r8   /)
-generic_height_to_pressure(:, 19) =  (/  4577.0_r8  ,  5716000.0_r8   /)
-generic_height_to_pressure(:, 20) =  (/  3050.0_r8  ,  6964000.0_r8   /)
-generic_height_to_pressure(:, 21) =  (/  2746.0_r8  ,  7240000.0_r8   /)
-generic_height_to_pressure(:, 22) =  (/  2441.0_r8  ,  7522000.0_r8   /)
-generic_height_to_pressure(:, 23) =  (/  2136.0_r8  ,  7819000.0_r8   /)
-generic_height_to_pressure(:, 24) =  (/  1831.0_r8  ,  8122000.0_r8   /)
-generic_height_to_pressure(:, 25) =  (/  1526.0_r8  ,  8433000.0_r8   /)
-generic_height_to_pressure(:, 26) =  (/  1373.0_r8  ,  8591000.0_r8   /)
-generic_height_to_pressure(:, 27) =  (/  1220.0_r8  ,  8749000.0_r8   /)
-generic_height_to_pressure(:, 28) =  (/  1068.0_r8  ,  8915000.0_r8   /)
-generic_height_to_pressure(:, 29) =  (/  915.0_r8   ,  9081000.0_r8   /)
-generic_height_to_pressure(:, 30) =  (/  763.0_r8   ,  9246000.0_r8   /)
-generic_height_to_pressure(:, 31) =  (/  610.0_r8   ,  9419000.0_r8   /)
-generic_height_to_pressure(:, 32) =  (/  458.0_r8   ,  9591000.0_r8   /)
-generic_height_to_pressure(:, 33) =  (/  305.0_r8   ,  9763000.0_r8   /)
-generic_height_to_pressure(:, 34) =  (/  153.0_r8   ,  9949000.0_r8   /)
-generic_height_to_pressure(:, 35) =  (/  0.0_r8     , 10133000.0_r8   /)
-
-allocate(generic_height_column(generic_nlevels), generic_pressure_column(generic_nlevels))
-
-do i=1, generic_nlevels
-   generic_height_column(i)   = generic_height_to_pressure(1, i)
-   generic_pressure_column(i) = generic_height_to_pressure(2, i)
-enddo
-
-end subroutine store_generic_columns
-
-!-----------------------------------------------------------------------
-!> Free arrays associated with generic columns
-
-subroutine free_generic_columns()
-
-if (allocated(generic_height_column)) deallocate(generic_height_column)
-if (allocated(generic_pressure_column)) deallocate(generic_pressure_column)
-
-end subroutine free_generic_columns
-
 !--------------------------------------------------------------------
 
 subroutine init_discard_high_obs()
@@ -3635,10 +3359,43 @@ subroutine init_discard_high_obs()
 ! use only for quick conversions when absolute accuracy 
 ! isn't a primary concern.
 
-call store_generic_columns()
+character(len=*), parameter :: routine = 'init_discard_high_obs'
+integer :: my_status
 
-write(string1, *) 'Discarding observations above a pressure level of ', &
+character(len=16) :: fmt_lo = '(A,F12.5,2A)'
+character(len=16) :: fmt_hi = '(A,E12.5,2A)'
+character(len=16) :: use_fmt
+
+if (global_model_top < high_top_threshold) then
+   use_fmt = fmt_hi
+else
+   use_fmt = fmt_lo
+endif
+
+call store_std_atm_tables(global_model_top)
+
+write(string1, use_fmt) 'Discarding observations above a pressure level of ', &
                    no_assim_above_pressure, ' Pascals' 
+call error_handler(E_MSG, 'init_discard_high_obs', string1, source, revision, revdate)
+
+no_assim_above_height = generic_pressure_to_height(no_assim_above_pressure, my_status)
+if (my_status /= 0) then
+   call error_handler(E_ERR, routine, 'error converting pressure to height', &
+                      source, revision, revdate, text2='"no_assim_above_pressure" invalid value')
+endif
+ 
+write(string1, use_fmt) 'Discarding observations above a height of         ', &
+                   no_assim_above_height, ' meters' 
+call error_handler(E_MSG, 'init_discard_high_obs', string1, source, revision, revdate)
+
+no_assim_above_level = generic_cam_pressure_to_cam_level(no_assim_above_pressure, my_status)
+if (my_status /= 0) then
+   call error_handler(E_ERR, routine, 'error converting pressure to model level', &
+                      source, revision, revdate, text2='"no_assim_above_pressure" invalid value')
+endif
+ 
+write(string1, fmt_lo) 'Discarding observations above a model level of      ', &
+                   no_assim_above_level
 call error_handler(E_MSG, 'init_discard_high_obs', string1, source, revision, revdate)
 
 end subroutine init_discard_high_obs
@@ -3654,12 +3411,22 @@ end subroutine init_discard_high_obs
 subroutine init_damping_ramp_info()
 
 type(location_type) :: model_top_loc
-real(r8) :: valid_region_start, model_top, fract
-integer :: bot_lev, top_lev, status
+real(r8) :: valid_region_start, model_top
+integer  :: status
 
 character(len=*), parameter :: routine = 'init_damping_ramp_info'
 
-damp_weight = 1.0_r8  !? is this the neutral/no ramp setting ?
+character(len=16) :: fmt_lo = '(A,F12.5,2A)'
+character(len=16) :: fmt_hi = '(A,E12.5,2A)'
+character(len=16) :: use_fmt
+
+if (global_model_top < high_top_threshold) then
+   use_fmt = fmt_hi
+else
+   use_fmt = fmt_lo
+endif
+
+call store_std_atm_tables(global_model_top)
 
 ! these start out as pressure and are converted, if needed, into
 ! the right values in the vertical localization coordinate type.
@@ -3671,17 +3438,17 @@ valid_region_start = find_lowest_pure_pressure()
 ! if it's below the pure pressure region, error out.
 if (ramp_start <= global_model_top) then
 
-   write(string1, *) 'no damping to do. "start_damping_ramp_at_pressure" = ', ramp_start
-   write(string2, *) 'highest useful value:     model top is ', global_model_top, ' Pa.' 
-   write(string3, *) 'lowest   valid value: region starts at ', valid_region_start, ' Pa.'
+   write(string1, use_fmt) 'no damping to do. "start_damping_ramp_at_pressure" = ', ramp_start
+   write(string2, use_fmt) 'highest useful value:     model top is ', global_model_top, ' Pa.' 
+   write(string3, use_fmt) 'lowest   valid value: region starts at ', valid_region_start, ' Pa.'
    call error_handler(E_MSG, routine, string1, source, revision, revdate, &
                       text2=string2, text3=string3)
    return
 endif
 if (ramp_start > valid_region_start) then
-   write(string1, *) 'unable to damp starting that low. "start_damping_ramp_at_pressure" = ', ramp_start
-   write(string2, *) 'highest useful value:     model top is ', global_model_top, ' Pa.' 
-   write(string3, *) 'lowest   valid value: region starts at ', valid_region_start, ' Pa.'
+   write(string1, use_fmt) 'unable to damp starting that low. "start_damping_ramp_at_pressure" = ', ramp_start
+   write(string2, use_fmt) 'highest useful value:     model top is ', global_model_top, ' Pa.' 
+   write(string3, use_fmt) 'lowest   valid value: region starts at ', valid_region_start, ' Pa.'
    call error_handler(E_ERR, routine, string1, source, revision, revdate, &
                       text2=string2, text3=string3)
    return
@@ -3705,8 +3472,8 @@ select case (vertical_localization_type)
     string3 = 'meters'
 
   case (VERTISLEVEL)
-    ramp_start = generic_pressure_to_level(ramp_start, status)
-    model_top =  generic_pressure_to_level(model_top, status)
+    ramp_start = generic_cam_pressure_to_cam_level(ramp_start, status)
+    model_top =  generic_cam_pressure_to_cam_level(model_top, status)
     string3 = 'levels'
 
   case default
@@ -3729,8 +3496,8 @@ model_top_loc  = set_location(0.0_r8, 0.0_r8, model_top,  vertical_localization_
 damp_weight = 1.0_r8/get_dist(ramp_start_loc, model_top_loc)
 
 ! and let the log know what we're doing
-write(string1, *) 'Decreasing increments on state starting at', ramp_start, trim(string3)
-write(string2, *) 'Increments will be 0 at model top, ', model_top, trim(string3)
+write(string1, use_fmt) 'Decreasing increments on state starting at', ramp_start, ' ', trim(string3)
+write(string2, use_fmt) 'Increments will be 0 at model top, ', model_top, ' ', trim(string3)
 call error_handler(E_MSG, routine, string1, source, revision, revdate, text2=string2)
 
 end subroutine init_damping_ramp_info
@@ -3999,8 +3766,316 @@ is_surface_field = (qty == QTY_SURFACE_PRESSURE .or. qty == QTY_SURFACE_ELEVATIO
    
 end function is_surface_field
 
+!-----------------------------------------------------------------------
+!> Store a table of pressures and heights. based on a std atmosphere.
+!>  not precise - use only when rough numbers are good enough.
+
+subroutine store_std_atm_tables(this_model_top)
+real(r8), intent(in) :: this_model_top
+
+logical, save :: table_initialized = .false.
+
+! table from: http://www.pdas.com/atmos.html
+! and also see:  http://www.pdas.com/upatmos.html
+! for a good explanation of why you can't use the standard
+! equations at high altitudes.   the low tables came from
+! tables.c, and the high one came from bigtables.out.
+! (all found in the atmos.zip file from that web site.)
+
+if (table_initialized) return
+
+if (this_model_top < high_top_threshold) then
+   call load_high_top_table()
+else
+   call load_low_top_table()
+endif
+
+table_initialized = .true.
+
+end subroutine store_std_atm_tables
+
+!-----------------------------------------------------------------------
+!> Free arrays associated with generic tables
+
+subroutine free_std_atm_tables()
+
+if (allocated(std_atm_hgt_col))  deallocate(std_atm_hgt_col)
+if (allocated(std_atm_pres_col)) deallocate(std_atm_pres_col)
+
+end subroutine free_std_atm_tables
+
 !--------------------------------------------------------------------
 
+subroutine load_low_top_table()
+	
+std_atm_table_len = 45
+allocate(std_atm_hgt_col(std_atm_table_len), std_atm_pres_col(std_atm_table_len))
+	
+std_atm_hgt_col(1)  = 86.0_r8 ; std_atm_pres_col(1)  = 3.732E-01_r8
+std_atm_hgt_col(2)  = 84.0_r8 ; std_atm_pres_col(2)  = 5.308E-01_r8
+std_atm_hgt_col(3)  = 82.0_r8 ; std_atm_pres_col(3)  = 7.498E-01_r8
+std_atm_hgt_col(4)  = 80.0_r8 ; std_atm_pres_col(4)  = 1.052E+00_r8
+std_atm_hgt_col(5)  = 78.0_r8 ; std_atm_pres_col(5)  = 1.467E+00_r8
+std_atm_hgt_col(6)  = 76.0_r8 ; std_atm_pres_col(6)  = 2.033E+00_r8
+std_atm_hgt_col(7)  = 74.0_r8 ; std_atm_pres_col(7)  = 2.800E+00_r8
+std_atm_hgt_col(8)  = 72.0_r8 ; std_atm_pres_col(8)  = 3.835E+00_r8
+std_atm_hgt_col(9)  = 70.0_r8 ; std_atm_pres_col(9)  = 5.220E+00_r8
+std_atm_hgt_col(10) = 68.0_r8 ; std_atm_pres_col(10) = 7.051E+00_r8
+std_atm_hgt_col(11) = 66.0_r8 ; std_atm_pres_col(11) = 9.459E+00_r8
+std_atm_hgt_col(12) = 64.0_r8 ; std_atm_pres_col(12) = 1.260E+01_r8
+std_atm_hgt_col(13) = 62.0_r8 ; std_atm_pres_col(13) = 1.669E+01_r8
+std_atm_hgt_col(14) = 60.0_r8 ; std_atm_pres_col(14) = 2.196E+01_r8
+std_atm_hgt_col(15) = 58.0_r8 ; std_atm_pres_col(15) = 2.872E+01_r8
+std_atm_hgt_col(16) = 56.0_r8 ; std_atm_pres_col(16) = 3.736E+01_r8
+std_atm_hgt_col(17) = 54.0_r8 ; std_atm_pres_col(17) = 4.833E+01_r8
+std_atm_hgt_col(18) = 52.0_r8 ; std_atm_pres_col(18) = 6.221E+01_r8
+std_atm_hgt_col(19) = 50.0_r8 ; std_atm_pres_col(19) = 7.977E+01_r8
+std_atm_hgt_col(20) = 48.0_r8 ; std_atm_pres_col(20) = 1.023E+02_r8
+std_atm_hgt_col(21) = 46.0_r8 ; std_atm_pres_col(21) = 1.313E+02_r8
+std_atm_hgt_col(22) = 44.0_r8 ; std_atm_pres_col(22) = 1.695E+02_r8
+std_atm_hgt_col(23) = 42.0_r8 ; std_atm_pres_col(23) = 2.200E+02_r8
+std_atm_hgt_col(24) = 40.0_r8 ; std_atm_pres_col(24) = 2.871E+02_r8
+std_atm_hgt_col(25) = 38.0_r8 ; std_atm_pres_col(25) = 3.771E+02_r8
+std_atm_hgt_col(26) = 36.0_r8 ; std_atm_pres_col(26) = 4.985E+02_r8
+std_atm_hgt_col(27) = 34.0_r8 ; std_atm_pres_col(27) = 6.634E+02_r8
+std_atm_hgt_col(28) = 32.0_r8 ; std_atm_pres_col(28) = 8.890E+02_r8
+std_atm_hgt_col(29) = 30.0_r8 ; std_atm_pres_col(29) = 1.197E+03_r8
+std_atm_hgt_col(30) = 28.0_r8 ; std_atm_pres_col(30) = 1.616E+03_r8
+std_atm_hgt_col(31) = 26.0_r8 ; std_atm_pres_col(31) = 2.188E+03_r8
+std_atm_hgt_col(32) = 24.0_r8 ; std_atm_pres_col(32) = 2.972E+03_r8
+std_atm_hgt_col(33) = 22.0_r8 ; std_atm_pres_col(33) = 4.047E+03_r8
+std_atm_hgt_col(34) = 20.0_r8 ; std_atm_pres_col(34) = 5.529E+03_r8
+std_atm_hgt_col(35) = 18.0_r8 ; std_atm_pres_col(35) = 7.565E+03_r8
+std_atm_hgt_col(36) = 16.0_r8 ; std_atm_pres_col(36) = 1.035E+04_r8
+std_atm_hgt_col(37) = 14.0_r8 ; std_atm_pres_col(37) = 1.417E+04_r8
+std_atm_hgt_col(38) = 12.0_r8 ; std_atm_pres_col(38) = 1.940E+04_r8
+std_atm_hgt_col(39) = 10.0_r8 ; std_atm_pres_col(39) = 2.650E+04_r8
+std_atm_hgt_col(40) =  8.0_r8 ; std_atm_pres_col(40) = 3.565E+04_r8
+std_atm_hgt_col(41) =  6.0_r8 ; std_atm_pres_col(41) = 4.722E+04_r8
+std_atm_hgt_col(42) =  4.0_r8 ; std_atm_pres_col(42) = 6.166E+04_r8
+std_atm_hgt_col(43) =  2.0_r8 ; std_atm_pres_col(43) = 7.950E+04_r8
+std_atm_hgt_col(44) =  0.0_r8 ; std_atm_pres_col(44) = 1.013E+05_r8
+std_atm_hgt_col(45) = -2.0_r8 ; std_atm_pres_col(45) = 1.278E+05_r8
+
+! convert km to m
+std_atm_hgt_col(:) = std_atm_hgt_col(:) * 1000.0_r8
+	
+end subroutine load_low_top_table
+
+!--------------------------------------------------------------------
+
+subroutine load_high_top_table()
+
+std_atm_table_len = 201
+allocate(std_atm_hgt_col(std_atm_table_len), std_atm_pres_col(std_atm_table_len))
+
+std_atm_hgt_col(1)   = 1000.0_r8  ;  std_atm_pres_col(1)   = 7.518E-09_r8
+std_atm_hgt_col(2)   =  995.0_r8  ;  std_atm_pres_col(2)   = 7.651E-09_r8
+std_atm_hgt_col(3)   =  990.0_r8  ;  std_atm_pres_col(3)   = 7.790E-09_r8
+std_atm_hgt_col(4)   =  985.0_r8  ;  std_atm_pres_col(4)   = 7.931E-09_r8
+std_atm_hgt_col(5)   =  980.0_r8  ;  std_atm_pres_col(5)   = 8.075E-09_r8
+std_atm_hgt_col(6)   =  975.0_r8  ;  std_atm_pres_col(6)   = 8.222E-09_r8
+std_atm_hgt_col(7)   =  970.0_r8  ;  std_atm_pres_col(7)   = 8.371E-09_r8
+std_atm_hgt_col(8)   =  965.0_r8  ;  std_atm_pres_col(8)   = 8.524E-09_r8
+std_atm_hgt_col(9)   =  960.0_r8  ;  std_atm_pres_col(9)   = 8.680E-09_r8
+std_atm_hgt_col(10)  =  955.0_r8  ;  std_atm_pres_col(10)  = 8.839E-09_r8
+std_atm_hgt_col(11)  =  950.0_r8  ;  std_atm_pres_col(11)  = 9.001E-09_r8
+std_atm_hgt_col(12)  =  945.0_r8  ;  std_atm_pres_col(12)  = 9.168E-09_r8
+std_atm_hgt_col(13)  =  940.0_r8  ;  std_atm_pres_col(13)  = 9.338E-09_r8
+std_atm_hgt_col(14)  =  935.0_r8  ;  std_atm_pres_col(14)  = 9.513E-09_r8
+std_atm_hgt_col(15)  =  930.0_r8  ;  std_atm_pres_col(15)  = 9.692E-09_r8
+std_atm_hgt_col(16)  =  925.0_r8  ;  std_atm_pres_col(16)  = 9.875E-09_r8
+std_atm_hgt_col(17)  =  920.0_r8  ;  std_atm_pres_col(17)  = 1.006E-08_r8
+std_atm_hgt_col(18)  =  915.0_r8  ;  std_atm_pres_col(18)  = 1.026E-08_r8
+std_atm_hgt_col(19)  =  910.0_r8  ;  std_atm_pres_col(19)  = 1.046E-08_r8
+std_atm_hgt_col(20)  =  905.0_r8  ;  std_atm_pres_col(20)  = 1.066E-08_r8
+std_atm_hgt_col(21)  =  900.0_r8  ;  std_atm_pres_col(21)  = 1.087E-08_r8
+std_atm_hgt_col(22)  =  895.0_r8  ;  std_atm_pres_col(22)  = 1.109E-08_r8
+std_atm_hgt_col(23)  =  890.0_r8  ;  std_atm_pres_col(23)  = 1.132E-08_r8
+std_atm_hgt_col(24)  =  885.0_r8  ;  std_atm_pres_col(24)  = 1.155E-08_r8
+std_atm_hgt_col(25)  =  880.0_r8  ;  std_atm_pres_col(25)  = 1.179E-08_r8
+std_atm_hgt_col(26)  =  875.0_r8  ;  std_atm_pres_col(26)  = 1.203E-08_r8
+std_atm_hgt_col(27)  =  870.0_r8  ;  std_atm_pres_col(27)  = 1.229E-08_r8
+std_atm_hgt_col(28)  =  865.0_r8  ;  std_atm_pres_col(28)  = 1.255E-08_r8
+std_atm_hgt_col(29)  =  860.0_r8  ;  std_atm_pres_col(29)  = 1.283E-08_r8
+std_atm_hgt_col(30)  =  855.0_r8  ;  std_atm_pres_col(30)  = 1.311E-08_r8
+std_atm_hgt_col(31)  =  850.0_r8  ;  std_atm_pres_col(31)  = 1.340E-08_r8
+std_atm_hgt_col(32)  =  845.0_r8  ;  std_atm_pres_col(32)  = 1.371E-08_r8
+std_atm_hgt_col(33)  =  840.0_r8  ;  std_atm_pres_col(33)  = 1.402E-08_r8
+std_atm_hgt_col(34)  =  835.0_r8  ;  std_atm_pres_col(34)  = 1.435E-08_r8
+std_atm_hgt_col(35)  =  830.0_r8  ;  std_atm_pres_col(35)  = 1.469E-08_r8
+std_atm_hgt_col(36)  =  825.0_r8  ;  std_atm_pres_col(36)  = 1.504E-08_r8
+std_atm_hgt_col(37)  =  820.0_r8  ;  std_atm_pres_col(37)  = 1.541E-08_r8
+std_atm_hgt_col(38)  =  815.0_r8  ;  std_atm_pres_col(38)  = 1.579E-08_r8
+std_atm_hgt_col(39)  =  810.0_r8  ;  std_atm_pres_col(39)  = 1.619E-08_r8
+std_atm_hgt_col(40)  =  805.0_r8  ;  std_atm_pres_col(40)  = 1.660E-08_r8
+std_atm_hgt_col(41)  =  800.0_r8  ;  std_atm_pres_col(41)  = 1.704E-08_r8
+std_atm_hgt_col(42)  =  795.0_r8  ;  std_atm_pres_col(42)  = 1.749E-08_r8
+std_atm_hgt_col(43)  =  790.0_r8  ;  std_atm_pres_col(43)  = 1.795E-08_r8
+std_atm_hgt_col(44)  =  785.0_r8  ;  std_atm_pres_col(44)  = 1.844E-08_r8
+std_atm_hgt_col(45)  =  780.0_r8  ;  std_atm_pres_col(45)  = 1.896E-08_r8
+std_atm_hgt_col(46)  =  775.0_r8  ;  std_atm_pres_col(46)  = 1.949E-08_r8
+std_atm_hgt_col(47)  =  770.0_r8  ;  std_atm_pres_col(47)  = 2.006E-08_r8
+std_atm_hgt_col(48)  =  765.0_r8  ;  std_atm_pres_col(48)  = 2.064E-08_r8
+std_atm_hgt_col(49)  =  760.0_r8  ;  std_atm_pres_col(49)  = 2.126E-08_r8
+std_atm_hgt_col(50)  =  755.0_r8  ;  std_atm_pres_col(50)  = 2.191E-08_r8
+std_atm_hgt_col(51)  =  750.0_r8  ;  std_atm_pres_col(51)  = 2.260E-08_r8
+std_atm_hgt_col(52)  =  745.0_r8  ;  std_atm_pres_col(52)  = 2.331E-08_r8
+std_atm_hgt_col(53)  =  740.0_r8  ;  std_atm_pres_col(53)  = 2.407E-08_r8
+std_atm_hgt_col(54)  =  735.0_r8  ;  std_atm_pres_col(54)  = 2.487E-08_r8
+std_atm_hgt_col(55)  =  730.0_r8  ;  std_atm_pres_col(55)  = 2.571E-08_r8
+std_atm_hgt_col(56)  =  725.0_r8  ;  std_atm_pres_col(56)  = 2.660E-08_r8
+std_atm_hgt_col(57)  =  720.0_r8  ;  std_atm_pres_col(57)  = 2.755E-08_r8
+std_atm_hgt_col(58)  =  715.0_r8  ;  std_atm_pres_col(58)  = 2.854E-08_r8
+std_atm_hgt_col(59)  =  710.0_r8  ;  std_atm_pres_col(59)  = 2.960E-08_r8
+std_atm_hgt_col(60)  =  705.0_r8  ;  std_atm_pres_col(60)  = 3.072E-08_r8
+std_atm_hgt_col(61)  =  700.0_r8  ;  std_atm_pres_col(61)  = 3.191E-08_r8
+std_atm_hgt_col(62)  =  695.0_r8  ;  std_atm_pres_col(62)  = 3.317E-08_r8
+std_atm_hgt_col(63)  =  690.0_r8  ;  std_atm_pres_col(63)  = 3.451E-08_r8
+std_atm_hgt_col(64)  =  685.0_r8  ;  std_atm_pres_col(64)  = 3.594E-08_r8
+std_atm_hgt_col(65)  =  680.0_r8  ;  std_atm_pres_col(65)  = 3.746E-08_r8
+std_atm_hgt_col(66)  =  675.0_r8  ;  std_atm_pres_col(66)  = 3.908E-08_r8
+std_atm_hgt_col(67)  =  670.0_r8  ;  std_atm_pres_col(67)  = 4.080E-08_r8
+std_atm_hgt_col(68)  =  665.0_r8  ;  std_atm_pres_col(68)  = 4.264E-08_r8
+std_atm_hgt_col(69)  =  660.0_r8  ;  std_atm_pres_col(69)  = 4.459E-08_r8
+std_atm_hgt_col(70)  =  655.0_r8  ;  std_atm_pres_col(70)  = 4.668E-08_r8
+std_atm_hgt_col(71)  =  650.0_r8  ;  std_atm_pres_col(71)  = 4.892E-08_r8
+std_atm_hgt_col(72)  =  645.0_r8  ;  std_atm_pres_col(72)  = 5.130E-08_r8
+std_atm_hgt_col(73)  =  640.0_r8  ;  std_atm_pres_col(73)  = 5.385E-08_r8
+std_atm_hgt_col(74)  =  635.0_r8  ;  std_atm_pres_col(74)  = 5.659E-08_r8
+std_atm_hgt_col(75)  =  630.0_r8  ;  std_atm_pres_col(75)  = 5.951E-08_r8
+std_atm_hgt_col(76)  =  625.0_r8  ;  std_atm_pres_col(76)  = 6.264E-08_r8
+std_atm_hgt_col(77)  =  620.0_r8  ;  std_atm_pres_col(77)  = 6.600E-08_r8
+std_atm_hgt_col(78)  =  615.0_r8  ;  std_atm_pres_col(78)  = 6.961E-08_r8
+std_atm_hgt_col(79)  =  610.0_r8  ;  std_atm_pres_col(79)  = 7.349E-08_r8
+std_atm_hgt_col(80)  =  605.0_r8  ;  std_atm_pres_col(80)  = 7.765E-08_r8
+std_atm_hgt_col(81)  =  600.0_r8  ;  std_atm_pres_col(81)  = 8.213E-08_r8
+std_atm_hgt_col(82)  =  595.0_r8  ;  std_atm_pres_col(82)  = 8.695E-08_r8
+std_atm_hgt_col(83)  =  590.0_r8  ;  std_atm_pres_col(83)  = 9.214E-08_r8
+std_atm_hgt_col(84)  =  585.0_r8  ;  std_atm_pres_col(84)  = 9.774E-08_r8
+std_atm_hgt_col(85)  =  580.0_r8  ;  std_atm_pres_col(85)  = 1.038E-07_r8
+std_atm_hgt_col(86)  =  575.0_r8  ;  std_atm_pres_col(86)  = 1.103E-07_r8
+std_atm_hgt_col(87)  =  570.0_r8  ;  std_atm_pres_col(87)  = 1.173E-07_r8
+std_atm_hgt_col(88)  =  565.0_r8  ;  std_atm_pres_col(88)  = 1.249E-07_r8
+std_atm_hgt_col(89)  =  560.0_r8  ;  std_atm_pres_col(89)  = 1.330E-07_r8
+std_atm_hgt_col(90)  =  555.0_r8  ;  std_atm_pres_col(90)  = 1.418E-07_r8
+std_atm_hgt_col(91)  =  550.0_r8  ;  std_atm_pres_col(91)  = 1.514E-07_r8
+std_atm_hgt_col(92)  =  545.0_r8  ;  std_atm_pres_col(92)  = 1.617E-07_r8
+std_atm_hgt_col(93)  =  540.0_r8  ;  std_atm_pres_col(93)  = 1.728E-07_r8
+std_atm_hgt_col(94)  =  535.0_r8  ;  std_atm_pres_col(94)  = 1.849E-07_r8
+std_atm_hgt_col(95)  =  530.0_r8  ;  std_atm_pres_col(95)  = 1.979E-07_r8
+std_atm_hgt_col(96)  =  525.0_r8  ;  std_atm_pres_col(96)  = 2.120E-07_r8
+std_atm_hgt_col(97)  =  520.0_r8  ;  std_atm_pres_col(97)  = 2.273E-07_r8
+std_atm_hgt_col(98)  =  515.0_r8  ;  std_atm_pres_col(98)  = 2.439E-07_r8
+std_atm_hgt_col(99)  =  510.0_r8  ;  std_atm_pres_col(99)  = 2.618E-07_r8
+std_atm_hgt_col(100) =  505.0_r8  ;  std_atm_pres_col(100) = 2.813E-07_r8
+std_atm_hgt_col(101) =  500.0_r8  ;  std_atm_pres_col(101) = 3.024E-07_r8
+std_atm_hgt_col(102) =  495.0_r8  ;  std_atm_pres_col(102) = 3.252E-07_r8
+std_atm_hgt_col(103) =  490.0_r8  ;  std_atm_pres_col(103) = 3.501E-07_r8
+std_atm_hgt_col(104) =  485.0_r8  ;  std_atm_pres_col(104) = 3.770E-07_r8
+std_atm_hgt_col(105) =  480.0_r8  ;  std_atm_pres_col(105) = 4.063E-07_r8
+std_atm_hgt_col(106) =  475.0_r8  ;  std_atm_pres_col(106) = 4.382E-07_r8
+std_atm_hgt_col(107) =  470.0_r8  ;  std_atm_pres_col(107) = 4.728E-07_r8
+std_atm_hgt_col(108) =  465.0_r8  ;  std_atm_pres_col(108) = 5.104E-07_r8
+std_atm_hgt_col(109) =  460.0_r8  ;  std_atm_pres_col(109) = 5.514E-07_r8
+std_atm_hgt_col(110) =  455.0_r8  ;  std_atm_pres_col(110) = 5.960E-07_r8
+std_atm_hgt_col(111) =  450.0_r8  ;  std_atm_pres_col(111) = 6.445E-07_r8
+std_atm_hgt_col(112) =  445.0_r8  ;  std_atm_pres_col(112) = 6.974E-07_r8
+std_atm_hgt_col(113) =  440.0_r8  ;  std_atm_pres_col(113) = 7.550E-07_r8
+std_atm_hgt_col(114) =  435.0_r8  ;  std_atm_pres_col(114) = 8.179E-07_r8
+std_atm_hgt_col(115) =  430.0_r8  ;  std_atm_pres_col(115) = 8.864E-07_r8
+std_atm_hgt_col(116) =  425.0_r8  ;  std_atm_pres_col(116) = 9.612E-07_r8
+std_atm_hgt_col(117) =  420.0_r8  ;  std_atm_pres_col(117) = 1.043E-06_r8
+std_atm_hgt_col(118) =  415.0_r8  ;  std_atm_pres_col(118) = 1.132E-06_r8
+std_atm_hgt_col(119) =  410.0_r8  ;  std_atm_pres_col(119) = 1.229E-06_r8
+std_atm_hgt_col(120) =  405.0_r8  ;  std_atm_pres_col(120) = 1.336E-06_r8
+std_atm_hgt_col(121) =  400.0_r8  ;  std_atm_pres_col(121) = 1.452E-06_r8
+std_atm_hgt_col(122) =  395.0_r8  ;  std_atm_pres_col(122) = 1.579E-06_r8
+std_atm_hgt_col(123) =  390.0_r8  ;  std_atm_pres_col(123) = 1.718E-06_r8
+std_atm_hgt_col(124) =  385.0_r8  ;  std_atm_pres_col(124) = 1.870E-06_r8
+std_atm_hgt_col(125) =  380.0_r8  ;  std_atm_pres_col(125) = 2.037E-06_r8
+std_atm_hgt_col(126) =  375.0_r8  ;  std_atm_pres_col(126) = 2.220E-06_r8
+std_atm_hgt_col(127) =  370.0_r8  ;  std_atm_pres_col(127) = 2.421E-06_r8
+std_atm_hgt_col(128) =  365.0_r8  ;  std_atm_pres_col(128) = 2.641E-06_r8
+std_atm_hgt_col(129) =  360.0_r8  ;  std_atm_pres_col(129) = 2.884E-06_r8
+std_atm_hgt_col(130) =  355.0_r8  ;  std_atm_pres_col(130) = 3.151E-06_r8
+std_atm_hgt_col(131) =  350.0_r8  ;  std_atm_pres_col(131) = 3.445E-06_r8
+std_atm_hgt_col(132) =  345.0_r8  ;  std_atm_pres_col(132) = 3.769E-06_r8
+std_atm_hgt_col(133) =  340.0_r8  ;  std_atm_pres_col(133) = 4.126E-06_r8
+std_atm_hgt_col(134) =  335.0_r8  ;  std_atm_pres_col(134) = 4.521E-06_r8
+std_atm_hgt_col(135) =  330.0_r8  ;  std_atm_pres_col(135) = 4.957E-06_r8
+std_atm_hgt_col(136) =  325.0_r8  ;  std_atm_pres_col(136) = 5.440E-06_r8
+std_atm_hgt_col(137) =  320.0_r8  ;  std_atm_pres_col(137) = 5.975E-06_r8
+std_atm_hgt_col(138) =  315.0_r8  ;  std_atm_pres_col(138) = 6.568E-06_r8
+std_atm_hgt_col(139) =  310.0_r8  ;  std_atm_pres_col(139) = 7.226E-06_r8
+std_atm_hgt_col(140) =  305.0_r8  ;  std_atm_pres_col(140) = 7.957E-06_r8
+std_atm_hgt_col(141) =  300.0_r8  ;  std_atm_pres_col(141) = 8.770E-06_r8
+std_atm_hgt_col(142) =  295.0_r8  ;  std_atm_pres_col(142) = 9.676E-06_r8
+std_atm_hgt_col(143) =  290.0_r8  ;  std_atm_pres_col(143) = 1.069E-05_r8
+std_atm_hgt_col(144) =  285.0_r8  ;  std_atm_pres_col(144) = 1.181E-05_r8
+std_atm_hgt_col(145) =  280.0_r8  ;  std_atm_pres_col(145) = 1.308E-05_r8
+std_atm_hgt_col(146) =  275.0_r8  ;  std_atm_pres_col(146) = 1.449E-05_r8
+std_atm_hgt_col(147) =  270.0_r8  ;  std_atm_pres_col(147) = 1.608E-05_r8
+std_atm_hgt_col(148) =  265.0_r8  ;  std_atm_pres_col(148) = 1.787E-05_r8
+std_atm_hgt_col(149) =  260.0_r8  ;  std_atm_pres_col(149) = 1.989E-05_r8
+std_atm_hgt_col(150) =  255.0_r8  ;  std_atm_pres_col(150) = 2.218E-05_r8
+std_atm_hgt_col(151) =  250.0_r8  ;  std_atm_pres_col(151) = 2.476E-05_r8
+std_atm_hgt_col(152) =  245.0_r8  ;  std_atm_pres_col(152) = 2.770E-05_r8
+std_atm_hgt_col(153) =  240.0_r8  ;  std_atm_pres_col(153) = 3.105E-05_r8
+std_atm_hgt_col(154) =  235.0_r8  ;  std_atm_pres_col(154) = 3.488E-05_r8
+std_atm_hgt_col(155) =  230.0_r8  ;  std_atm_pres_col(155) = 3.927E-05_r8
+std_atm_hgt_col(156) =  225.0_r8  ;  std_atm_pres_col(156) = 4.432E-05_r8
+std_atm_hgt_col(157) =  220.0_r8  ;  std_atm_pres_col(157) = 5.015E-05_r8
+std_atm_hgt_col(158) =  215.0_r8  ;  std_atm_pres_col(158) = 5.690E-05_r8
+std_atm_hgt_col(159) =  210.0_r8  ;  std_atm_pres_col(159) = 6.476E-05_r8
+std_atm_hgt_col(160) =  205.0_r8  ;  std_atm_pres_col(160) = 7.394E-05_r8
+std_atm_hgt_col(161) =  200.0_r8  ;  std_atm_pres_col(161) = 8.474E-05_r8
+std_atm_hgt_col(162) =  195.0_r8  ;  std_atm_pres_col(162) = 9.749E-05_r8
+std_atm_hgt_col(163) =  190.0_r8  ;  std_atm_pres_col(163) = 1.127E-04_r8
+std_atm_hgt_col(164) =  185.0_r8  ;  std_atm_pres_col(164) = 1.308E-04_r8
+std_atm_hgt_col(165) =  180.0_r8  ;  std_atm_pres_col(165) = 1.527E-04_r8
+std_atm_hgt_col(166) =  175.0_r8  ;  std_atm_pres_col(166) = 1.794E-04_r8
+std_atm_hgt_col(167) =  170.0_r8  ;  std_atm_pres_col(167) = 2.121E-04_r8
+std_atm_hgt_col(168) =  165.0_r8  ;  std_atm_pres_col(168) = 2.528E-04_r8
+std_atm_hgt_col(169) =  160.0_r8  ;  std_atm_pres_col(169) = 3.039E-04_r8
+std_atm_hgt_col(170) =  155.0_r8  ;  std_atm_pres_col(170) = 3.693E-04_r8
+std_atm_hgt_col(171) =  150.0_r8  ;  std_atm_pres_col(171) = 4.542E-04_r8
+std_atm_hgt_col(172) =  145.0_r8  ;  std_atm_pres_col(172) = 5.669E-04_r8
+std_atm_hgt_col(173) =  140.0_r8  ;  std_atm_pres_col(173) = 7.203E-04_r8
+std_atm_hgt_col(174) =  135.0_r8  ;  std_atm_pres_col(174) = 9.357E-04_r8
+std_atm_hgt_col(175) =  130.0_r8  ;  std_atm_pres_col(175) = 1.250E-03_r8
+std_atm_hgt_col(176) =  125.0_r8  ;  std_atm_pres_col(176) = 1.736E-03_r8
+std_atm_hgt_col(177) =  120.0_r8  ;  std_atm_pres_col(177) = 2.537E-03_r8
+std_atm_hgt_col(178) =  115.0_r8  ;  std_atm_pres_col(178) = 4.004E-03_r8
+std_atm_hgt_col(179) =  110.0_r8  ;  std_atm_pres_col(179) = 7.149E-03_r8
+std_atm_hgt_col(180) =  105.0_r8  ;  std_atm_pres_col(180) = 1.442E-02_r8
+std_atm_hgt_col(181) =  100.0_r8  ;  std_atm_pres_col(181) = 3.201E-02_r8
+std_atm_hgt_col(182) =   95.0_r8  ;  std_atm_pres_col(182) = 7.577E-02_r8
+std_atm_hgt_col(183) =   90.0_r8  ;  std_atm_pres_col(183) = 1.844E-01_r8
+std_atm_hgt_col(184) =   85.0_r8  ;  std_atm_pres_col(184) = 4.457E-01_r8
+std_atm_hgt_col(185) =   80.0_r8  ;  std_atm_pres_col(185) = 1.052E+00_r8
+std_atm_hgt_col(186) =   75.0_r8  ;  std_atm_pres_col(186) = 2.388E+00_r8
+std_atm_hgt_col(187) =   70.0_r8  ;  std_atm_pres_col(187) = 5.221E+00_r8
+std_atm_hgt_col(188) =   65.0_r8  ;  std_atm_pres_col(188) = 1.093E+01_r8
+std_atm_hgt_col(189) =   60.0_r8  ;  std_atm_pres_col(189) = 2.196E+01_r8
+std_atm_hgt_col(190) =   55.0_r8  ;  std_atm_pres_col(190) = 4.253E+01_r8
+std_atm_hgt_col(191) =   50.0_r8  ;  std_atm_pres_col(191) = 7.978E+01_r8
+std_atm_hgt_col(192) =   45.0_r8  ;  std_atm_pres_col(192) = 1.491E+02_r8
+std_atm_hgt_col(193) =   40.0_r8  ;  std_atm_pres_col(193) = 2.871E+02_r8
+std_atm_hgt_col(194) =   35.0_r8  ;  std_atm_pres_col(194) = 5.746E+02_r8
+std_atm_hgt_col(195) =   30.0_r8  ;  std_atm_pres_col(195) = 1.197E+03_r8
+std_atm_hgt_col(196) =   25.0_r8  ;  std_atm_pres_col(196) = 2.549E+03_r8
+std_atm_hgt_col(197) =   20.0_r8  ;  std_atm_pres_col(197) = 5.529E+03_r8
+std_atm_hgt_col(198) =   15.0_r8  ;  std_atm_pres_col(198) = 1.211E+04_r8
+std_atm_hgt_col(199) =   10.0_r8  ;  std_atm_pres_col(199) = 2.650E+04_r8
+std_atm_hgt_col(200) =    5.0_r8  ;  std_atm_pres_col(200) = 5.405E+04_r8
+std_atm_hgt_col(201) =    0.0_r8  ;  std_atm_pres_col(201) = 1.013E+05_r8
+
+! convert km to m
+std_atm_hgt_col(:) = std_atm_hgt_col(:) * 1000.0_r8
+
+end subroutine load_high_top_table
+	
 !===================================================================
 ! End of model_mod
 !===================================================================

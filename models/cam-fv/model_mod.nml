@@ -15,13 +15,14 @@
 #                     'H', 'QTY_ATOMIC_H_MIXING_RATIO',      'NA', 'NA', 'UPDATE',
 #                     'Op','QTY_ION_O_MIXING_RATIO',         'NA', 'NA', 'UPDATE',
 
+# pressures are in pascals
 
 &model_nml
    cam_template_filename           = 'caminput.nc'
    cam_phis_filename               = 'camphis.nc'
    vertical_localization_coord     = 'PRESSURE'
-   no_assim_above_pressure         = -1.0      ! pascals
-   start_damping_ramp_at_pressure  = -1.0      ! pascals
+   no_assim_above_pressure         = -1.0     
+   start_damping_ramp_at_pressure  = -1.0    
    assimilation_period_days        = 0
    assimilation_period_seconds     = 21600
    use_log_vertical_scale          = .false.
@@ -29,8 +30,8 @@
    use_variable_mean_mass          = .false.
    suppress_grid_info_in_output    = .false.
    custom_routine_to_generate_ensemble = .false.
-   fields_to_perturb(MAX_PERT)         = "QTY_TEMPERATURE"
-   perturbation_amplitude(MAX_PERT)    = 0.00001_r8
+   fields_to_perturb               = "QTY_TEMPERATURE"
+   perturbation_amplitude          = 0.00001_r8
    debug_level                     = 0
    state_variables                 = ''
 /
