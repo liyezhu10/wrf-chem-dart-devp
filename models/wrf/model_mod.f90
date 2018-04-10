@@ -5282,6 +5282,7 @@ if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_gz
    if ( rc .ne. 0 ) &
         print*, 'model_mod.f90 :: get_model_height_profile :: getCorners rc = ', rc
 
+   ! model level heights, on model levels
    do k = 1, wrf%dom(id)%var_size(3,wrf%dom(id)%type_gz)
 
       ill = get_dart_vector_index(ll(1), ll(2), k, domain_id(id), wrf%dom(id)%type_gz)
@@ -5295,14 +5296,16 @@ if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_gz
       x_iur = get_state(iur, state_handle)
 
       geop(:) = ( dym*( dxm*( wrf%dom(id)%phb(ll(1),ll(2),k) + x_ill ) + &
-                      dx*( wrf%dom(id)%phb(lr(1),lr(2),k) + x_ilr ) ) + &
-                dy*( dxm*( wrf%dom(id)%phb(ul(1),ul(2),k) + x_iul ) + &
-                      dx*( wrf%dom(id)%phb(ur(1),ur(2),k) + x_iur ) ) )/gravity
+                         dx*( wrf%dom(id)%phb(lr(1),lr(2),k) + x_ilr ) ) + &
+                   dy*( dxm*( wrf%dom(id)%phb(ul(1),ul(2),k) + x_iul ) + &
+                         dx*( wrf%dom(id)%phb(ur(1),ur(2),k) + x_iur ) ) )/gravity
 
+      ! this is computing an average latitude and not using dx, dxm, dy, dym.
+      ! is it because of handling the poles correctly?
       lat(:) = ( wrf%dom(id)%latitude(ll(1),ll(2)) + &
-              wrf%dom(id)%latitude(lr(1),lr(2)) + &
-              wrf%dom(id)%latitude(ul(1),ul(2)) + &
-              wrf%dom(id)%latitude(ur(1),ur(2)) ) / 4.0_r8
+                 wrf%dom(id)%latitude(lr(1),lr(2)) + &
+                 wrf%dom(id)%latitude(ul(1),ul(2)) + &
+                 wrf%dom(id)%latitude(ur(1),ur(2)) ) / 4.0_r8
 
       do e = 1, ens_size
          fll(k, e) = compute_geometric_height(geop(e), lat(e))
@@ -5310,14 +5313,16 @@ if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_gz
 
    end do
 
+   ! heights at each level midpoint
    do k=1,n
       v_h(k, :) = 0.5_r8*(fll(k, :) + fll(k+1, :) )
    end do
 
+   ! surface elevation
    v_h(0, :) = dym*( dxm*wrf%dom(id)%hgt(ll(1), ll(2)) + &
-                   dx*wrf%dom(id)%hgt(lr(1), lr(2)) ) + &
-             dy*( dxm*wrf%dom(id)%hgt(ul(1), ul(2)) + &
-                   dx*wrf%dom(id)%hgt(ur(1), ur(2)) )
+                      dx*wrf%dom(id)%hgt(lr(1), lr(2)) ) + &
+                dy*( dxm*wrf%dom(id)%hgt(ul(1), ul(2)) + &
+                      dx*wrf%dom(id)%hgt(ur(1), ur(2)) )
 
    if (debug) &
         print*, 'model_mod.f90 :: get_model_height_profile :: n, v_h() ', n, v_h(1:n, :)
