@@ -14,9 +14,8 @@
 
 module obs_kind_mod
 
-use    utilities_mod, only : register_module, error_handler,  &
-                             E_ERR, E_MSG, E_WARN,               &
-                             logfileunit, find_namelist_in_file, &
+use    utilities_mod, only : register_module, error_handler, E_ERR, E_WARN,  &
+                             logfileunit, find_namelist_in_file,             &
                              check_namelist_read, do_output, ascii_file_format
 
 implicit none
@@ -140,6 +139,12 @@ integer, parameter, public :: &
 integer, parameter, public :: &
     KIND_ALTIMETER_TENDENCY          = 48
 
+! kind for precip water; contrast with
+! total precip water (also in this file),
+! which is the total column integrated value.
+integer, parameter, public :: &
+    KIND_PRECIPITABLE_WATER          = 49
+
 ! kinds for the MITgcm, POP ocean model
 integer, parameter, public :: &
     KIND_SALINITY                    = 50, &
@@ -167,7 +172,7 @@ integer, parameter, public :: &
     KIND_INFRARED_BRIGHT_TEMP        = 61, &
     KIND_LANDMASK                    = 62
 
-! kind for unstructured grids 
+! kind for unstructured grids
 integer, parameter, public :: &
     KIND_EDGE_NORMAL_SPEED           = 63
 
@@ -185,8 +190,6 @@ integer, parameter, public :: &
     KIND_NADIR_RADIANCE              = 71, &
     KIND_TRACER_1_MIXING_RATIO       = 72, &  ! for active dust aerosols
     KIND_TRACER_2_MIXING_RATIO       = 73, &  ! for active dust aerosols
-    ! Is KIND_TRACER_MIXING_RATIO necessary with KIND_TRACER_CONCENTRATION
-    !   (= 29) available from the simple advection model?
     KIND_SOIL_TEMPERATURE            = 74, &  ! missing from WRF model_mod (?)
     KIND_SOIL_LIQUID_WATER           = 75     ! missing from WRF model_mod (?)
 
@@ -230,7 +233,7 @@ integer, parameter, public :: &
     KIND_SEASALT                     = 99
 
 ! kinds for ZVD (advanced microphysics)
-integer, parameter, public ::&
+integer, parameter, public :: &
     KIND_HAIL_MIXING_RATIO           = 100, &
     KIND_HAIL_NUMBER_CONCENTR        = 101, &
     KIND_GRAUPEL_VOLUME              = 102, &
@@ -263,66 +266,121 @@ integer, parameter, public :: &
     KIND_ROOT_NITROGEN               = 125, &
     KIND_STEM_NITROGEN               = 126, &
     KIND_LEAF_NITROGEN               = 127, &
-    KIND_WATER_TABLE_DEPTH           = 128
+    KIND_WATER_TABLE_DEPTH           = 128, &
+    KIND_FRAC_PHOTO_AVAIL_RADIATION  = 129, &
+    KIND_TOTAL_WATER_STORAGE         = 130
 
-! kinds for NOAH  (Tim Hoar)
 integer, parameter, public :: &
-    KIND_NEUTRON_INTENSITY           = 129, &
-    KIND_CANOPY_WATER                = 130, &
-    KIND_GROUND_HEAT_FLUX            = 131
-
-! more kinds for TIEGCM Alex Chartier 
-integer, parameter, public :: &
-    KIND_VERTICAL_TEC                = 132  ! total electron content
+    KIND_NEUTRON_INTENSITY           = 140, &
+    KIND_CANOPY_WATER                = 141, &
+    KIND_GROUND_HEAT_FLUX            = 142
 
 !! For now we have agreed to reserve kind numbers 151 to 250
 !! for chemistry types, specifically for WRF-Chem/DART, but
 !! possibly of interest to other models with Chemistry species.
 !! DO NOT USE numbers between 151-250 without talking to me, please?  (nancy)
 
-! kinds for GITM (Alexey Morozov)
+! these chemistry kinds match the numbers Arthur Mizzi is using
 integer, parameter, public :: &
-  KIND_TEMPERATURE_ELECTRON          = 251, &
-  KIND_TEMPERATURE_ION               = 252, &
-  KIND_DENSITY_NEUTRAL_O3P           = 253, &
-  KIND_DENSITY_NEUTRAL_O2            = 254, &
-  KIND_DENSITY_NEUTRAL_N2            = 255, &
-  KIND_DENSITY_NEUTRAL_N4S           = 256, &
-  KIND_DENSITY_NEUTRAL_NO            = 257, &
-  KIND_DENSITY_NEUTRAL_N2D           = 258, &
-  KIND_DENSITY_NEUTRAL_N2P           = 259, &
-  KIND_DENSITY_NEUTRAL_H             = 260, &
-  KIND_DENSITY_NEUTRAL_HE            = 261, &
-  KIND_DENSITY_NEUTRAL_CO2           = 262, &
-  KIND_DENSITY_NEUTRAL_O1D           = 263, &
-  KIND_DENSITY_ION_O4SP              = 264, &
-  KIND_DENSITY_ION_O2P               = 265, &
-  KIND_DENSITY_ION_N2P               = 266, &
-  KIND_DENSITY_ION_NP                = 267, &
-  KIND_DENSITY_ION_NOP               = 268, &
-  KIND_DENSITY_ION_O2DP              = 269, &
-  KIND_DENSITY_ION_O2PP              = 270, &
-  KIND_DENSITY_ION_HP                = 271, &
-  KIND_DENSITY_ION_HEP               = 272, &
-  KIND_DENSITY_ION_E                 = 273, &
-  KIND_VELOCITY_U                    = 274, &
-  KIND_VELOCITY_V                    = 275, &
-  KIND_VELOCITY_W                    = 276, &
-  KIND_VELOCITY_U_ION                = 277, &
-  KIND_VELOCITY_V_ION                = 278, &
-  KIND_VELOCITY_W_ION                = 279, &
-  KIND_VELOCITY_VERTICAL_O3P         = 280, &
-  KIND_VELOCITY_VERTICAL_O2          = 281, &
-  KIND_VELOCITY_VERTICAL_N2          = 282, &
-  KIND_VELOCITY_VERTICAL_N4S         = 283, &
-  KIND_VELOCITY_VERTICAL_NO          = 284, &
-  KIND_GND_GPS_VTEC                  = 285, &
-  KIND_DENSITY_ION_OP                = 286
- 
+    KIND_O3                          = 151, &
+    KIND_CO                          = 153, &
+    KIND_NO                          = 155, &
+    KIND_NO2                         = 156
+
+! more chemistry kinds (Jerome Barre)  (last three slots)
+integer, parameter, public :: &
+    KIND_CO2                         = 247, &
+    KIND_NH3                         = 248, &
+    KIND_CH4                         = 249
+
+! kinds for GITM,TIEGCM
+integer, parameter, public :: &
+    KIND_TEMPERATURE_ELECTRON        = 251, &
+    KIND_TEMPERATURE_ION             = 252, &
+    KIND_DENSITY_NEUTRAL_O3P         = 253, &
+    KIND_DENSITY_NEUTRAL_O2          = 254, &
+    KIND_DENSITY_NEUTRAL_N2          = 255, &
+    KIND_DENSITY_NEUTRAL_N4S         = 256, &
+    KIND_DENSITY_NEUTRAL_NO          = 257, &
+    KIND_DENSITY_NEUTRAL_N2D         = 258, &
+    KIND_DENSITY_NEUTRAL_N2P         = 259, &
+    KIND_DENSITY_NEUTRAL_H           = 260, &
+    KIND_DENSITY_NEUTRAL_HE          = 261, &
+    KIND_DENSITY_NEUTRAL_CO2         = 262, &
+    KIND_DENSITY_NEUTRAL_O1D         = 263, &
+    KIND_DENSITY_ION_O4SP            = 264, &
+    KIND_DENSITY_ION_O2P             = 265, &
+    KIND_DENSITY_ION_N2P             = 266, &
+    KIND_DENSITY_ION_NP              = 267, &
+    KIND_DENSITY_ION_NOP             = 268, &
+    KIND_DENSITY_ION_O2DP            = 269, &
+    KIND_DENSITY_ION_O2PP            = 270, &
+    KIND_DENSITY_ION_HP              = 271, &
+    KIND_DENSITY_ION_HEP             = 272, &
+    KIND_DENSITY_ION_E               = 273, &
+    KIND_VELOCITY_U                  = 274, &
+    KIND_VELOCITY_V                  = 275, &
+    KIND_VELOCITY_W                  = 276, &
+    KIND_VELOCITY_U_ION              = 277, &
+    KIND_VELOCITY_V_ION              = 278, &
+    KIND_VELOCITY_W_ION              = 279, &
+    KIND_VELOCITY_VERTICAL_O3P       = 280, &
+    KIND_VELOCITY_VERTICAL_O2        = 281, &
+    KIND_VELOCITY_VERTICAL_N2        = 282, &
+    KIND_VELOCITY_VERTICAL_N4S       = 283, &
+    KIND_VELOCITY_VERTICAL_NO        = 284, &
+    KIND_GND_GPS_VTEC                = 285, &
+    KIND_DENSITY_ION_OP              = 286, &
+    KIND_TOTAL_ELECTRON_CONTENT      = 287, &
+    KIND_VERTICAL_TEC                = 288, &
+    KIND_O_N2_COLUMN_DENSITY_RATIO   = 289
+
+! kinds for WRF-Hydro (James McCreight)
+integer, parameter, public :: &
+    KIND_STREAMFLOW                  = 290, &
+    KIND_SURFACE_HEAD                = 291
+
+! kind for COSMO (german weather)
+integer, parameter, public :: &
+    KIND_SURFACE_GEOPOTENTIAL        = 292, &
+    KIND_PRESSURE_PERTURBATION       = 293
+
+! more land kinds
+integer, parameter, public :: &
+    KIND_BRIGHTNESS_TEMPERATURE      = 300, &
+    KIND_VEGETATION_TEMPERATURE      = 301, &
+    KIND_CANOPY_HEIGHT               = 302, &
+    KIND_FPAR_DIRECT                 = 303, &
+    KIND_FPAR_DIFFUSE                = 304, &
+    KIND_FPAR_SUNLIT_DIRECT          = 305, &
+    KIND_FPAR_SUNLIT_DIFFUSE         = 306, &
+    KIND_FPAR_SHADED_DIRECT          = 307, &
+    KIND_FPAR_SHADED_DIFFUSE         = 308, &
+    KIND_FPSN                        = 309, &
+    KIND_FSIF                        = 310, &
+    KIND_GROSS_PRIMARY_PROD_FLUX     = 311, &
+    KIND_ER_FLUX                     = 312, &
+    KIND_BIOMASS                     = 313, &
+    KIND_SOIL_RESPIRATION_FLUX       = 314, &
+    KIND_NET_PRIMARY_PROD_FLUX       = 315, &
+    KIND_RADIATION_VISIBLE_DOWN      = 316, &
+    KIND_RADIATION_VISIBLE_UP        = 317, &
+    KIND_RADIATION_NEAR_IR_DOWN      = 318, &
+    KIND_RADIATION_NEAR_IR_UP        = 319, &
+    KIND_LIVE_STEM_CARBON            = 320, &
+    KIND_LIVE_STEM_NITROGEN          = 321, &
+    KIND_DEAD_STEM_CARBON            = 322, &
+    KIND_DEAD_STEM_NITROGEN          = 323, &
+    KIND_LIVE_ROOT_CARBON            = 324, &
+    KIND_LIVE_ROOT_NITROGEN          = 325, &
+    KIND_DEAD_ROOT_CARBON            = 326, &
+    KIND_DEAD_ROOT_NITROGEN          = 327, &
+    KIND_STEM_AREA_INDEX             = 328
+
 !! PRIVATE ONLY TO THIS MODULE. see comment below near the max_obs_specific
 !! declaration.
 
-integer, parameter :: max_obs_generic = 286
+integer, parameter :: max_obs_generic = 328
 
 !----------------------------------------------------------------------------
 ! This list is autogenerated by the 'preprocess' program.  To add new
@@ -495,7 +553,7 @@ obs_kind_names(45) = obs_kind_type(KIND_3D_PARAMETER, 'KIND_3D_PARAMETER')
 obs_kind_names(46) = obs_kind_type(KIND_ATOMIC_OXYGEN_MIXING_RATIO, 'KIND_ATOMIC_OXYGEN_MIXING_RATIO')
 obs_kind_names(47) = obs_kind_type(KIND_MOLEC_OXYGEN_MIXING_RATIO, 'KIND_MOLEC_OXYGEN_MIXING_RATIO')
 obs_kind_names(48) = obs_kind_type(KIND_ALTIMETER_TENDENCY, 'KIND_ALTIMETER_TENDENCY')
-
+obs_kind_names(49) = obs_kind_type(KIND_PRECIPITABLE_WATER, 'KIND_PRECIPITABLE_WATER')
 obs_kind_names(50) = obs_kind_type(KIND_SALINITY, 'KIND_SALINITY')
 obs_kind_names(51) = obs_kind_type(KIND_U_CURRENT_COMPONENT, 'KIND_U_CURRENT_COMPONENT')
 obs_kind_names(52) = obs_kind_type(KIND_V_CURRENT_COMPONENT, 'KIND_V_CURRENT_COMPONENT')
@@ -551,69 +609,118 @@ obs_kind_names(104) = obs_kind_type(KIND_DIFFERENTIAL_REFLECTIVITY, 'KIND_DIFFER
 obs_kind_names(105) = obs_kind_type(KIND_SPECIFIC_DIFFERENTIAL_PHASE, 'KIND_SPECIFIC_DIFFERENTIAL_PHASE')
 obs_kind_names(106) = obs_kind_type(KIND_FLASH_RATE_2D, 'KIND_FLASH_RATE_2D')
 
-obs_kind_names(107) = obs_kind_type(KIND_SNOW_THICKNESS        ,'KIND_SNOW_THICKNESS')
-obs_kind_names(108) = obs_kind_type(KIND_SNOW_WATER            ,'KIND_SNOW_WATER')
-obs_kind_names(109) = obs_kind_type(KIND_SNOWCOVER_FRAC        ,'KIND_SNOWCOVER_FRAC')
-obs_kind_names(110) = obs_kind_type(KIND_LIQUID_WATER          ,'KIND_LIQUID_WATER')
-obs_kind_names(111) = obs_kind_type(KIND_ICE                   ,'KIND_ICE')
-obs_kind_names(112) = obs_kind_type(KIND_CARBON                ,'KIND_CARBON')
-obs_kind_names(113) = obs_kind_type(KIND_SOIL_CARBON           ,'KIND_SOIL_CARBON')
-obs_kind_names(114) = obs_kind_type(KIND_ROOT_CARBON           ,'KIND_ROOT_CARBON')
-obs_kind_names(115) = obs_kind_type(KIND_STEM_CARBON           ,'KIND_STEM_CARBON')
-obs_kind_names(116) = obs_kind_type(KIND_LEAF_CARBON           ,'KIND_LEAF_CARBON')
-obs_kind_names(117) = obs_kind_type(KIND_LEAF_AREA_INDEX       ,'KIND_LEAF_AREA_INDEX')
-obs_kind_names(118) = obs_kind_type(KIND_NET_CARBON_FLUX       ,'KIND_NET_CARBON_FLUX')
-obs_kind_names(119) = obs_kind_type(KIND_LATENT_HEAT_FLUX      ,'KIND_LATENT_HEAT_FLUX')
-obs_kind_names(120) = obs_kind_type(KIND_SENSIBLE_HEAT_FLUX    ,'KIND_SENSIBLE_HEAT_FLUX')
-obs_kind_names(121) = obs_kind_type(KIND_RADIATION             ,'KIND_RADIATION')
-obs_kind_names(122) = obs_kind_type(KIND_NET_CARBON_PRODUCTION ,'KIND_NET_CARBON_PRODUCTION')
-obs_kind_names(123) = obs_kind_type(KIND_NITROGEN              ,'KIND_NITROGEN')
-obs_kind_names(124) = obs_kind_type(KIND_SOIL_NITROGEN         ,'KIND_SOIL_NITROGEN')
-obs_kind_names(125) = obs_kind_type(KIND_ROOT_NITROGEN         ,'KIND_ROOT_NITROGEN')
-obs_kind_names(126) = obs_kind_type(KIND_STEM_NITROGEN         ,'KIND_STEM_NITROGEN')
-obs_kind_names(127) = obs_kind_type(KIND_LEAF_NITROGEN         ,'KIND_LEAF_NITROGEN')
-obs_kind_names(128) = obs_kind_type(KIND_WATER_TABLE_DEPTH     ,'KIND_WATER_TABLE_DEPTH')
-obs_kind_names(129) = obs_kind_type(KIND_NEUTRON_INTENSITY     ,'KIND_NEUTRON_INTENSITY')
-obs_kind_names(130) = obs_kind_type(KIND_CANOPY_WATER          ,'KIND_CANOPY_WATER')
-obs_kind_names(131) = obs_kind_type(KIND_GROUND_HEAT_FLUX      ,'KIND_GROUND_HEAT_FLUX')
-obs_kind_names(132) = obs_kind_type(KIND_VERTICAL_TEC          ,'KIND_VERTICAL_TEC')
+obs_kind_names(107) = obs_kind_type(KIND_SNOW_THICKNESS, 'KIND_SNOW_THICKNESS')
+obs_kind_names(108) = obs_kind_type(KIND_SNOW_WATER, 'KIND_SNOW_WATER')
+obs_kind_names(109) = obs_kind_type(KIND_SNOWCOVER_FRAC, 'KIND_SNOWCOVER_FRAC')
+obs_kind_names(110) = obs_kind_type(KIND_LIQUID_WATER, 'KIND_LIQUID_WATER')
+obs_kind_names(111) = obs_kind_type(KIND_ICE, 'KIND_ICE')
+obs_kind_names(112) = obs_kind_type(KIND_CARBON, 'KIND_CARBON')
+obs_kind_names(113) = obs_kind_type(KIND_SOIL_CARBON, 'KIND_SOIL_CARBON')
+obs_kind_names(114) = obs_kind_type(KIND_ROOT_CARBON, 'KIND_ROOT_CARBON')
+obs_kind_names(115) = obs_kind_type(KIND_STEM_CARBON, 'KIND_STEM_CARBON')
+obs_kind_names(116) = obs_kind_type(KIND_LEAF_CARBON, 'KIND_LEAF_CARBON')
+obs_kind_names(117) = obs_kind_type(KIND_LEAF_AREA_INDEX, 'KIND_LEAF_AREA_INDEX')
+obs_kind_names(118) = obs_kind_type(KIND_NET_CARBON_FLUX, 'KIND_NET_CARBON_FLUX')
+obs_kind_names(119) = obs_kind_type(KIND_LATENT_HEAT_FLUX, 'KIND_LATENT_HEAT_FLUX')
+obs_kind_names(120) = obs_kind_type(KIND_SENSIBLE_HEAT_FLUX, 'KIND_SENSIBLE_HEAT_FLUX')
+obs_kind_names(121) = obs_kind_type(KIND_RADIATION, 'KIND_RADIATION')
+obs_kind_names(122) = obs_kind_type(KIND_NET_CARBON_PRODUCTION, 'KIND_NET_CARBON_PRODUCTION')
+obs_kind_names(123) = obs_kind_type(KIND_NITROGEN, 'KIND_NITROGEN')
+obs_kind_names(124) = obs_kind_type(KIND_SOIL_NITROGEN, 'KIND_SOIL_NITROGEN')
+obs_kind_names(125) = obs_kind_type(KIND_ROOT_NITROGEN, 'KIND_ROOT_NITROGEN')
+obs_kind_names(126) = obs_kind_type(KIND_STEM_NITROGEN, 'KIND_STEM_NITROGEN')
+obs_kind_names(127) = obs_kind_type(KIND_LEAF_NITROGEN, 'KIND_LEAF_NITROGEN')
+obs_kind_names(128) = obs_kind_type(KIND_WATER_TABLE_DEPTH, 'KIND_WATER_TABLE_DEPTH')
+obs_kind_names(129) = obs_kind_type(KIND_FRAC_PHOTO_AVAIL_RADIATION, 'KIND_FRAC_PHOTO_AVAIL_RADIATION')
+obs_kind_names(130) = obs_kind_type(KIND_TOTAL_WATER_STORAGE, 'KIND_TOTAL_WATER_STORAGE')
 
-obs_kind_names(251) = obs_kind_type(KIND_TEMPERATURE_ELECTRON  ,'KIND_TEMPERATURE_ELECTRON')
-obs_kind_names(252) = obs_kind_type(KIND_TEMPERATURE_ION       ,'KIND_TEMPERATURE_ION')
-obs_kind_names(253) = obs_kind_type(KIND_DENSITY_NEUTRAL_O3P   ,'KIND_DENSITY_NEUTRAL_O3P')
-obs_kind_names(254) = obs_kind_type(KIND_DENSITY_NEUTRAL_O2    ,'KIND_DENSITY_NEUTRAL_O2')
-obs_kind_names(255) = obs_kind_type(KIND_DENSITY_NEUTRAL_N2    ,'KIND_DENSITY_NEUTRAL_N2')
-obs_kind_names(256) = obs_kind_type(KIND_DENSITY_NEUTRAL_N4S   ,'KIND_DENSITY_NEUTRAL_N4S')
-obs_kind_names(257) = obs_kind_type(KIND_DENSITY_NEUTRAL_NO    ,'KIND_DENSITY_NEUTRAL_NO')
-obs_kind_names(258) = obs_kind_type(KIND_DENSITY_NEUTRAL_N2D   ,'KIND_DENSITY_NEUTRAL_N2D')
-obs_kind_names(259) = obs_kind_type(KIND_DENSITY_NEUTRAL_N2P   ,'KIND_DENSITY_NEUTRAL_N2P')
-obs_kind_names(260) = obs_kind_type(KIND_DENSITY_NEUTRAL_H     ,'KIND_DENSITY_NEUTRAL_H')
-obs_kind_names(261) = obs_kind_type(KIND_DENSITY_NEUTRAL_HE    ,'KIND_DENSITY_NEUTRAL_HE')
-obs_kind_names(262) = obs_kind_type(KIND_DENSITY_NEUTRAL_CO2   ,'KIND_DENSITY_NEUTRAL_CO2')
-obs_kind_names(263) = obs_kind_type(KIND_DENSITY_NEUTRAL_O1D   ,'KIND_DENSITY_NEUTRAL_O1D')
-obs_kind_names(264) = obs_kind_type(KIND_DENSITY_ION_O4SP      ,'KIND_DENSITY_ION_O4SP')
-obs_kind_names(265) = obs_kind_type(KIND_DENSITY_ION_O2P       ,'KIND_DENSITY_ION_O2P')
-obs_kind_names(266) = obs_kind_type(KIND_DENSITY_ION_N2P       ,'KIND_DENSITY_ION_N2P')
-obs_kind_names(267) = obs_kind_type(KIND_DENSITY_ION_NP        ,'KIND_DENSITY_ION_NP')
-obs_kind_names(268) = obs_kind_type(KIND_DENSITY_ION_NOP       ,'KIND_DENSITY_ION_NOP')
-obs_kind_names(269) = obs_kind_type(KIND_DENSITY_ION_O2DP      ,'KIND_DENSITY_ION_O2DP')
-obs_kind_names(270) = obs_kind_type(KIND_DENSITY_ION_O2PP      ,'KIND_DENSITY_ION_O2PP')
-obs_kind_names(271) = obs_kind_type(KIND_DENSITY_ION_HP        ,'KIND_DENSITY_ION_HP')
-obs_kind_names(272) = obs_kind_type(KIND_DENSITY_ION_HEP       ,'KIND_DENSITY_ION_HEP')
-obs_kind_names(273) = obs_kind_type(KIND_DENSITY_ION_E         ,'KIND_DENSITY_ION_E')
-obs_kind_names(274) = obs_kind_type(KIND_VELOCITY_U            ,'KIND_VELOCITY_U')
-obs_kind_names(275) = obs_kind_type(KIND_VELOCITY_V            ,'KIND_VELOCITY_V')
-obs_kind_names(276) = obs_kind_type(KIND_VELOCITY_W            ,'KIND_VELOCITY_W')
-obs_kind_names(277) = obs_kind_type(KIND_VELOCITY_U_ION        ,'KIND_VELOCITY_U_ION')
-obs_kind_names(278) = obs_kind_type(KIND_VELOCITY_V_ION        ,'KIND_VELOCITY_V_ION')
-obs_kind_names(279) = obs_kind_type(KIND_VELOCITY_W_ION        ,'KIND_VELOCITY_W_ION')
-obs_kind_names(280) = obs_kind_type(KIND_VELOCITY_VERTICAL_O3P ,'KIND_VELOCITY_VERTICAL_O3P')
-obs_kind_names(281) = obs_kind_type(KIND_VELOCITY_VERTICAL_O2  ,'KIND_VELOCITY_VERTICAL_O2')
-obs_kind_names(282) = obs_kind_type(KIND_VELOCITY_VERTICAL_N2  ,'KIND_VELOCITY_VERTICAL_N2')
-obs_kind_names(283) = obs_kind_type(KIND_VELOCITY_VERTICAL_N4S ,'KIND_VELOCITY_VERTICAL_N4S')
-obs_kind_names(284) = obs_kind_type(KIND_VELOCITY_VERTICAL_NO  ,'KIND_VELOCITY_VERTICAL_NO')
-obs_kind_names(285) = obs_kind_type(KIND_GND_GPS_VTEC          ,'KIND_GND_GPS_VTEC')
-obs_kind_names(286) = obs_kind_type(KIND_DENSITY_ION_OP        ,'KIND_DENSITY_ION_OP')
+obs_kind_names(140) = obs_kind_type(KIND_NEUTRON_INTENSITY, 'KIND_NEUTRON_INTENSITY')
+obs_kind_names(141) = obs_kind_type(KIND_CANOPY_WATER, 'KIND_CANOPY_WATER')
+obs_kind_names(142) = obs_kind_type(KIND_GROUND_HEAT_FLUX, 'KIND_GROUND_HEAT_FLUX')
+
+obs_kind_names(151) = obs_kind_type(KIND_O3, 'KIND_O3')
+obs_kind_names(153) = obs_kind_type(KIND_CO, 'KIND_CO')
+obs_kind_names(155) = obs_kind_type(KIND_NO, 'KIND_NO')
+obs_kind_names(156) = obs_kind_type(KIND_NO2, 'KIND_NO2')
+
+obs_kind_names(247) = obs_kind_type(KIND_CO2, 'KIND_CO2')
+obs_kind_names(248) = obs_kind_type(KIND_NH3, 'KIND_NH3')
+obs_kind_names(249) = obs_kind_type(KIND_CH4, 'KIND_CH4')
+
+obs_kind_names(251) = obs_kind_type(KIND_TEMPERATURE_ELECTRON, 'KIND_TEMPERATURE_ELECTRON')
+obs_kind_names(252) = obs_kind_type(KIND_TEMPERATURE_ION, 'KIND_TEMPERATURE_ION')
+obs_kind_names(253) = obs_kind_type(KIND_DENSITY_NEUTRAL_O3P, 'KIND_DENSITY_NEUTRAL_O3P')
+obs_kind_names(254) = obs_kind_type(KIND_DENSITY_NEUTRAL_O2, 'KIND_DENSITY_NEUTRAL_O2')
+obs_kind_names(255) = obs_kind_type(KIND_DENSITY_NEUTRAL_N2, 'KIND_DENSITY_NEUTRAL_N2')
+obs_kind_names(256) = obs_kind_type(KIND_DENSITY_NEUTRAL_N4S, 'KIND_DENSITY_NEUTRAL_N4S')
+obs_kind_names(257) = obs_kind_type(KIND_DENSITY_NEUTRAL_NO, 'KIND_DENSITY_NEUTRAL_NO')
+obs_kind_names(258) = obs_kind_type(KIND_DENSITY_NEUTRAL_N2D, 'KIND_DENSITY_NEUTRAL_N2D')
+obs_kind_names(259) = obs_kind_type(KIND_DENSITY_NEUTRAL_N2P, 'KIND_DENSITY_NEUTRAL_N2P')
+obs_kind_names(260) = obs_kind_type(KIND_DENSITY_NEUTRAL_H, 'KIND_DENSITY_NEUTRAL_H')
+obs_kind_names(261) = obs_kind_type(KIND_DENSITY_NEUTRAL_HE, 'KIND_DENSITY_NEUTRAL_HE')
+obs_kind_names(262) = obs_kind_type(KIND_DENSITY_NEUTRAL_CO2, 'KIND_DENSITY_NEUTRAL_CO2')
+obs_kind_names(263) = obs_kind_type(KIND_DENSITY_NEUTRAL_O1D, 'KIND_DENSITY_NEUTRAL_O1D')
+obs_kind_names(264) = obs_kind_type(KIND_DENSITY_ION_O4SP, 'KIND_DENSITY_ION_O4SP')
+obs_kind_names(265) = obs_kind_type(KIND_DENSITY_ION_O2P, 'KIND_DENSITY_ION_O2P')
+obs_kind_names(266) = obs_kind_type(KIND_DENSITY_ION_N2P, 'KIND_DENSITY_ION_N2P')
+obs_kind_names(267) = obs_kind_type(KIND_DENSITY_ION_NP, 'KIND_DENSITY_ION_NP')
+obs_kind_names(268) = obs_kind_type(KIND_DENSITY_ION_NOP, 'KIND_DENSITY_ION_NOP')
+obs_kind_names(269) = obs_kind_type(KIND_DENSITY_ION_O2DP, 'KIND_DENSITY_ION_O2DP')
+obs_kind_names(270) = obs_kind_type(KIND_DENSITY_ION_O2PP, 'KIND_DENSITY_ION_O2PP')
+obs_kind_names(271) = obs_kind_type(KIND_DENSITY_ION_HP, 'KIND_DENSITY_ION_HP')
+obs_kind_names(272) = obs_kind_type(KIND_DENSITY_ION_HEP, 'KIND_DENSITY_ION_HEP')
+obs_kind_names(273) = obs_kind_type(KIND_DENSITY_ION_E, 'KIND_DENSITY_ION_E')
+obs_kind_names(274) = obs_kind_type(KIND_VELOCITY_U, 'KIND_VELOCITY_U')
+obs_kind_names(275) = obs_kind_type(KIND_VELOCITY_V, 'KIND_VELOCITY_V')
+obs_kind_names(276) = obs_kind_type(KIND_VELOCITY_W, 'KIND_VELOCITY_W')
+obs_kind_names(277) = obs_kind_type(KIND_VELOCITY_U_ION, 'KIND_VELOCITY_U_ION')
+obs_kind_names(278) = obs_kind_type(KIND_VELOCITY_V_ION, 'KIND_VELOCITY_V_ION')
+obs_kind_names(279) = obs_kind_type(KIND_VELOCITY_W_ION, 'KIND_VELOCITY_W_ION')
+obs_kind_names(280) = obs_kind_type(KIND_VELOCITY_VERTICAL_O3P, 'KIND_VELOCITY_VERTICAL_O3P')
+obs_kind_names(281) = obs_kind_type(KIND_VELOCITY_VERTICAL_O2, 'KIND_VELOCITY_VERTICAL_O2')
+obs_kind_names(282) = obs_kind_type(KIND_VELOCITY_VERTICAL_N2, 'KIND_VELOCITY_VERTICAL_N2')
+obs_kind_names(283) = obs_kind_type(KIND_VELOCITY_VERTICAL_N4S, 'KIND_VELOCITY_VERTICAL_N4S')
+obs_kind_names(284) = obs_kind_type(KIND_VELOCITY_VERTICAL_NO, 'KIND_VELOCITY_VERTICAL_NO')
+obs_kind_names(285) = obs_kind_type(KIND_GND_GPS_VTEC, 'KIND_GND_GPS_VTEC')
+obs_kind_names(286) = obs_kind_type(KIND_DENSITY_ION_OP, 'KIND_DENSITY_ION_OP')
+obs_kind_names(287) = obs_kind_type(KIND_TOTAL_ELECTRON_CONTENT, 'KIND_TOTAL_ELECTRON_CONTENT')
+obs_kind_names(288) = obs_kind_type(KIND_VERTICAL_TEC, 'KIND_VERTICAL_TEC')
+obs_kind_names(289) = obs_kind_type(KIND_O_N2_COLUMN_DENSITY_RATIO, 'KIND_O_N2_COLUMN_DENSITY_RATIO')
+
+obs_kind_names(290) = obs_kind_type(KIND_STREAMFLOW, 'KIND_STREAMFLOW')
+obs_kind_names(291) = obs_kind_type(KIND_SURFACE_HEAD, 'KIND_SURFACE_HEAD')
+obs_kind_names(292) = obs_kind_type(KIND_SURFACE_GEOPOTENTIAL, 'KIND_SURFACE_GEOPOTENTIAL')
+obs_kind_names(293) = obs_kind_type(KIND_PRESSURE_PERTURBATION, 'KIND_PRESSURE_PERTURBATION')
+
+obs_kind_names(300) = obs_kind_type(KIND_BRIGHTNESS_TEMPERATURE, 'KIND_BRIGHTNESS_TEMPERATURE')
+obs_kind_names(301) = obs_kind_type(KIND_VEGETATION_TEMPERATURE, 'KIND_VEGETATION_TEMPERATURE')
+obs_kind_names(302) = obs_kind_type(KIND_CANOPY_HEIGHT, 'KIND_CANOPY_HEIGHT')
+obs_kind_names(303) = obs_kind_type(KIND_FPAR_DIRECT, 'KIND_FPAR_DIRECT')
+obs_kind_names(304) = obs_kind_type(KIND_FPAR_DIFFUSE, 'KIND_FPAR_DIFFUSE')
+obs_kind_names(305) = obs_kind_type(KIND_FPAR_SUNLIT_DIRECT, 'KIND_FPAR_SUNLIT_DIRECT')
+obs_kind_names(306) = obs_kind_type(KIND_FPAR_SUNLIT_DIFFUSE, 'KIND_FPAR_SUNLIT_DIFFUSE')
+obs_kind_names(307) = obs_kind_type(KIND_FPAR_SHADED_DIRECT, 'KIND_FPAR_SHADED_DIRECT')
+obs_kind_names(308) = obs_kind_type(KIND_FPAR_SHADED_DIFFUSE, 'KIND_FPAR_SHADED_DIFFUSE')
+obs_kind_names(309) = obs_kind_type(KIND_FPSN, 'KIND_FPSN')
+obs_kind_names(310) = obs_kind_type(KIND_FSIF, 'KIND_FSIF')
+obs_kind_names(311) = obs_kind_type(KIND_GROSS_PRIMARY_PROD_FLUX, 'KIND_GROSS_PRIMARY_PROD_FLUX')
+obs_kind_names(312) = obs_kind_type(KIND_ER_FLUX, 'KIND_ER_FLUX')
+obs_kind_names(313) = obs_kind_type(KIND_BIOMASS, 'KIND_BIOMASS')
+obs_kind_names(314) = obs_kind_type(KIND_SOIL_RESPIRATION_FLUX, 'KIND_SOIL_RESPIRATION_FLUX')
+obs_kind_names(315) = obs_kind_type(KIND_NET_PRIMARY_PROD_FLUX, 'KIND_NET_PRIMARY_PROD_FLUX')
+obs_kind_names(316) = obs_kind_type(KIND_RADIATION_VISIBLE_DOWN, 'KIND_RADIATION_VISIBLE_DOWN')
+obs_kind_names(317) = obs_kind_type(KIND_RADIATION_VISIBLE_UP, 'KIND_RADIATION_VISIBLE_UP')
+obs_kind_names(318) = obs_kind_type(KIND_RADIATION_NEAR_IR_DOWN, 'KIND_RADIATION_NEAR_IR_DOWN')
+obs_kind_names(319) = obs_kind_type(KIND_RADIATION_NEAR_IR_UP, 'KIND_RADIATION_NEAR_IR_UP')
+obs_kind_names(320) = obs_kind_type(KIND_LIVE_STEM_CARBON, 'KIND_LIVE_STEM_CARBON')
+obs_kind_names(321) = obs_kind_type(KIND_LIVE_STEM_NITROGEN, 'KIND_LIVE_STEM_NITROGEN')
+obs_kind_names(322) = obs_kind_type(KIND_DEAD_STEM_CARBON, 'KIND_DEAD_STEM_CARBON')
+obs_kind_names(323) = obs_kind_type(KIND_DEAD_STEM_NITROGEN, 'KIND_DEAD_STEM_NITROGEN')
+obs_kind_names(324) = obs_kind_type(KIND_LIVE_ROOT_CARBON, 'KIND_LIVE_ROOT_CARBON')
+obs_kind_names(325) = obs_kind_type(KIND_LIVE_ROOT_NITROGEN, 'KIND_LIVE_ROOT_NITROGEN')
+obs_kind_names(326) = obs_kind_type(KIND_DEAD_ROOT_CARBON, 'KIND_DEAD_ROOT_CARBON')
+obs_kind_names(327) = obs_kind_type(KIND_DEAD_ROOT_NITROGEN, 'KIND_DEAD_ROOT_NITROGEN')
+obs_kind_names(328) = obs_kind_type(KIND_STEM_AREA_INDEX, 'KIND_STEM_AREA_INDEX')
 
 ! count here, then output below
 
@@ -629,7 +736,7 @@ do i = 1, max_obs_specific
    num_kind_evaluate = i
 end do
 
-if (do_output()) then
+if (do_output() .and. (num_kind_assimilate > 0 .or. num_kind_evaluate > 0)) then
    write(*, *) '------------------------------------------------------'
    write(*, *)
 
