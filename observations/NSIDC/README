@@ -1,0 +1,12 @@
+WGET Instructions - for command line in Mac and Unix/Linux
+1. Configure your username and password for authentication using a .netrc file
+
+echo "machine urs.earthdata.nasa.gov login <uid> password <password>" >> ~/.netrc
+chmod 0600 ~/.netrc
+
+where <uid> is your Earthdata Login username and <password> is your URS password. Do not include the brackets <>.
+
+2. Use a WGET command to download your data. Example WGET command:
+
+wget --load-cookies ~/.urs_cookies --save-cookies ~/.urs_cookies --keep-session-cookies --no-check-certificate --auth-no-challenge=on -r --reject "index.html*" -np -e robots=off < insert complete data HTTPS URL >
+
