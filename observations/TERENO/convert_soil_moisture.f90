@@ -8,12 +8,16 @@ program convert_soil_moisture
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
-! convert_soil_moisture - program that reads a TERENO netCDF 
-!                        file and writes a DART
-!                        obs_seq file using the DART library routines.
+! convert_soil_moisture - program that reads a TERENO netCDF file and 
+!     writes a DART obs_seq file. The TERENO soil moisture observations
+!     are taken by two instruments about 8cm apart to increase 
+!     representativeness - we are simply going to average the two.
 !
 ! Apr 2018, Tim Hoar, NCAR/DAReS
 !
+! SoilWaterContent_0.2mSensor2_QC:comment = "Processing status (qcdim[0]) and quality flag (qcdim[1]) 
+! is mapped to variable processing_status and quality_flag" ;
+
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 use         types_mod, only : r8, missing_r8, digits12
@@ -38,7 +42,7 @@ use  obs_sequence_mod, only : obs_sequence_type, obs_type, read_obs_seq, &
 
 use      obs_kind_mod, only : SOIL_MOISTURE
 
-use obs_utilities_mod, only : getvar_real, getvar_real_2d, getvar_int_2d, &
+use obs_utilities_mod, only : getvar_real, getvar_real_2d, getvar_int_3d, &
                               getdimlen, create_3d_obs, add_obs_to_seq
 
 use netcdf
@@ -113,6 +117,11 @@ character(len=*), parameter :: qcvarname2(NDEPTHS) = &
 
 real(r8) ::   sensor1_miss(NDEPTHS),   sensor2_miss(NDEPTHS)
 integer  :: qcsensor1_miss(NDEPTHS), qcsensor2_miss(NDEPTHS)
+
+! These values came from a dump of 'processing_status,quality_flag'
+!>@todo determine these from the string instead of the presumed index
+integer, parameter :: processing_status = 4 ! processing_status == 'approved upload'
+integer, parameter :: quality_flag = 2      ! quality_flag      == 'ok: ok'
 
 !-----------------------------------------------------------------------
 ! start of executable code
@@ -200,8 +209,6 @@ FileLoop: do ifile = 1,num_input_files
 
    call convert_to_dart_time(ncid, dart_time, filename)
 
-   write(*,*)'TJH early exit 1'
-
    allocate(  sensor1(NDEPTHS,ntimes,nstations),   sensor2(NDEPTHS,ntimes,nstations))
    allocate(qcsensor1(NDEPTHS,nqcdims,ntimes,nstations), qcsensor2(NDEPTHS,nqcdims,ntimes,nstations))
 
@@ -212,14 +219,24 @@ FileLoop: do ifile = 1,num_input_files
    do idepth = 1,NDEPTHS
       call getvar_real_2d(ncid,   varname1(idepth), sensor1(  idepth,:,:), sensor1_miss(idepth))
       call getvar_real_2d(ncid,   varname2(idepth), sensor2(  idepth,:,:), sensor2_miss(idepth))
-      call getvar_int_2d( ncid, qcvarname1(idepth), qcsensor1(idepth,1,:,:), qcsensor1_miss(idepth))
-      call getvar_int_2d( ncid, qcvarname2(idepth), qcsensor2(idepth,1,:,:), qcsensor2_miss(idepth))
+      call getvar_int_3d( ncid, qcvarname1(idepth), qcsensor1(idepth,:,:,:), qcsensor1_miss(idepth))
+      call getvar_int_3d( ncid, qcvarname2(idepth), qcsensor2(idepth,:,:,:), qcsensor2_miss(idepth))
    enddo
 
    call nc_check(nf90_close(ncid),routine,'closing "'//trim(filename)//'"')
 
-   write(*,*)'TJH early exit 2'
-   stop
+   ! Having a NaN as the _FillValue is just the dumbest thing ever.
+   ! By definition they fail every test ... so you cannot test for equality
+   where(.not. (sensor1 <= 0.0) .and. .not. (sensor1 > 0.0)) sensor1 = MISSING_R8
+   where(.not. (sensor2 <= 0.0) .and. .not. (sensor2 > 0.0)) sensor2 = MISSING_R8
+
+   if (verbose) then
+      write(string1,*)'..  range of sensor1 ',minval(  sensor1),maxval(  sensor1), &
+                                              minval(qcsensor1),maxval(qcsensor1)
+      write(string2,*)    'range of sensor2 ',minval(  sensor2),maxval(  sensor2), &
+                                              minval(qcsensor2),maxval(qcsensor2)
+      call error_handler(E_MSG,routine,string1,text2=string2)
+   endif
 
    ! I want to add the all the observations at a particular time FIRST
    ! before going on to the next time.
@@ -230,42 +247,43 @@ FileLoop: do ifile = 1,num_input_files
       STATIONLOOP: do istation=1,nstations
       DEPTHLOOP:   do idepth  =1,NDEPTHS
 
-         ! Work on Sensor 1
-   
-         if (   sensor1(idepth,itime,istation) /=   sensor1_miss(idepth) .and. &
-              qcsensor1(idepth,1,itime,istation) /= qcsensor1_miss(idepth) ) then
-   
-            obs_val =   sensor1(idepth,itime,istation)
-            qc      = qcsensor1(idepth,1,itime,istation)
-   
-            ! The observation error is either 20% or 0.02 
-            err_std = max(obs_val/20.0_r8, 0.02_r8)
+         if ( sensor1(idepth,itime,istation) == MISSING_R8 ) cycle DEPTHLOOP
+         if ( sensor2(idepth,itime,istation) == MISSING_R8 ) cycle DEPTHLOOP
+
+         ! If both sensors have good quality, average them.
+         ! If only one sensor has good quality, only use it.
+
+         ! processing_status and quality_flag came from the netCDF metadata
+         if ( qcsensor1(idepth,1,itime,istation) == processing_status .and. &
+              qcsensor1(idepth,2,itime,istation) == quality_flag .and. &
+              qcsensor2(idepth,1,itime,istation) == processing_status .and. &
+              qcsensor2(idepth,2,itime,istation) == quality_flag ) then
+            obs_val = 0.5_r8*sensor1(idepth,itime,istation) + &
+                      0.5_r8*sensor2(idepth,itime,istation)
+            qc      = 0
+         elseif ( qcsensor1(idepth,1,itime,istation) == processing_status .and. &
+                  qcsensor1(idepth,2,itime,istation) == quality_flag .and. &
+            obs_val = sensor1(idepth,itime,istation)
+            qc      = 0
+         elseif ( qcsensor2(idepth,1,itime,istation) == processing_status .and. &
+                  qcsensor2(idepth,2,itime,istation) == quality_flag ) then
+            obs_val = sensor2(idepth,itime,istation)
+            qc      = 0
+         else
+            cycle DEPTHLOOP
+         endif
+ 
+         write(*,*)obs_val, qcsensor1(idepth,:,itime,istation), qcsensor2(idepth,:,itime,istation)
+ 
+         ! The observation error is either 20% or 0.02 
+         err_std = max(obs_val/20.0_r8, 0.02_r8)
   
-!>@todo be more descriptive than SOIL_MOISTURE ... what kind of instrument 
+         !>@todo be more descriptive than SOIL_MOISTURE ... what kind of instrument 
 
-            call create_3d_obs(latitude(istation), longitude(istation), depths(idepth), &
-                    VERTISHEIGHT, obs_val, SOIL_MOISTURE, err_std, oday, osec, qc, obs)
+         call create_3d_obs(latitude(istation), longitude(istation), depths(idepth), &
+                 VERTISHEIGHT, obs_val, SOIL_MOISTURE, err_std, oday, osec, qc, obs)
    
-            call add_obs_to_seq(obs_seq, obs, dart_time(itime), prev_obs, prev_time, first_obs)
-         endif
-
-         ! Work on Sensor 2
-   
-         if (   sensor2(idepth,itime,istation) ==   sensor2_miss(idepth) .and. &
-              qcsensor2(idepth,1,itime,istation) == qcsensor2_miss(idepth) ) then
-   
-            obs_val =   sensor2(idepth,itime,istation)
-            qc      = qcsensor2(idepth,1,itime,istation)
-   
-            ! The observation error is either 20% or 0.02 
-   
-            err_std = max(obs_val/20.0_r8, 0.02_r8)
-   
-            call create_3d_obs(latitude(istation), longitude(istation), depths(idepth), &
-                    VERTISHEIGHT, obs_val, SOIL_MOISTURE, err_std, oday, osec, qc, obs)
-   
-            call add_obs_to_seq(obs_seq, obs, dart_time(itime), prev_obs, prev_time, first_obs)
-         endif
+         call add_obs_to_seq(obs_seq, obs, dart_time(itime), prev_obs, prev_time, first_obs)
 
       enddo DEPTHLOOP
       enddo STATIONLOOP
