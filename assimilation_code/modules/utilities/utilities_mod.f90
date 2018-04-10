@@ -204,7 +204,8 @@ public :: file_exist, &
           string_to_real, &
           string_to_integer, &
           string_to_logical, &
-          array_dump
+          array_dump, &
+          find_enclosing_indices
 
 ! this routine is either in the null_mpi_utilities_mod.f90, or in
 ! the mpi_utilities_mod.f90 file, but it is not a module subroutine.
@@ -2458,6 +2459,162 @@ do k=1, asize_k
 enddo
 
 end subroutine array_3d_dump
+
+!-----------------------------------------------------------------------
+!> given an array of sorted values and a value to find, return the
+!> two indices that enclose that value, and the fraction between.
+!>
+!>
+!> and higher index values, and the fraction across.
+!>
+!> fraction_across = 0.0 is the 100% the smaller index value, 
+!>                   1.0 is the 100% the larger index value.
+!>
+!> if the array values are inverted (e.g. index 1 is the largest value),
+!> set inverted = .true.  the interpretation in the calling code for
+!> smaller index, larger index and fraction_across remain the same as the default case.
+!>
+!> if the fraction_across the enclosing level should be computed using a
+!> log scale, set log_scale = .true.
+!>
+!> my_status values:
+!>   0 = good return
+!>  -1 = value_to_find is below smallest value
+!>   1 = value_to_find is above largest value
+!>  96 = cannot use log scale with negative data values
+!>  97 = array only has a single value
+!>  98 = interval has 0 width or values are inverted
+!>  99 = unknown error
+!>
+!> bad output values use MISSING_I and MISSING_R8
+!>
+!> FIXME:
+!> added to the utilities module, but this module should be split into
+!> smaller modules because right now it's a dumping ground for every
+!> random routine that is useful to more than one module.  (my fault
+!> as much as anyones.
+
+subroutine find_enclosing_indices(nitems, data_array, value_to_find,     &
+                                  smaller_index, larger_index, fraction_across, my_status, &
+                                  inverted, log_scale)
+
+integer,  intent(in)  :: nitems
+real(r8), intent(in)  :: data_array(nitems)
+real(r8), intent(in)  :: value_to_find
+integer,  intent(out) :: smaller_index
+integer,  intent(out) :: larger_index
+real(r8), intent(out) :: fraction_across
+integer,  intent(out) :: my_status
+logical,  intent(in), optional :: inverted
+logical,  intent(in), optional :: log_scale
+
+integer :: i, j, k
+integer :: smaller_val_i, larger_val_i
+logical :: one_is_smallest, linear_interp    ! the normal defaults
+
+! set defaults and initialize intent(out) items
+! so we can return immediately on error.
+
+one_is_smallest = .true.
+if (present(inverted)) one_is_smallest = .not. inverted
+
+linear_interp = .true.
+if (present(log_scale)) linear_interp = .not. log_scale
+
+smaller_index = MISSING_I
+larger_index  = MISSING_I
+fraction_across = MISSING_R8
+my_status = -99
+
+
+! exclude malformed call cases
+if (nitems <= 1) then
+   my_status = 97
+   return
+endif
+
+! set these indices so we can simplify the tests below
+if (one_is_smallest) then
+   smaller_val_i = 1
+   larger_val_i  = nitems
+else
+   smaller_val_i = nitems
+   larger_val_i  = 1
+endif
+   
+! discard out of range values
+if (value_to_find < data_array(smaller_val_i)) then
+   my_status = -1
+   return
+endif
+
+if (value_to_find > data_array(larger_val_i)) then
+   my_status = 1
+   return
+endif
+
+! bisection section (get it?)
+i = 1
+j = nitems
+
+do
+   k=(i+j)/2
+   if ((value_to_find < data_array(k) .and.       one_is_smallest) .or. &
+       (value_to_find > data_array(k) .and. .not. one_is_smallest)) then
+      j=k
+   else
+      i=k
+   endif
+   if (i+1 >= j) exit
+enddo
+
+! return vals
+smaller_index = i
+larger_index  = i+1
+
+! again, set these indices so we can simplify the tests below
+! to compute fraction_across
+if (one_is_smallest) then
+   smaller_val_i = i
+   larger_val_i  = i+1
+else
+   smaller_val_i = i+1
+   larger_val_i  = i
+endif
+   
+! avoid divide by 0.  at this point we'll be returning valid index values
+! but returning a bad fraction and status code.  might help identify where
+! in the incoming data array things are bad.
+if ((data_array(larger_val_i) - data_array(smaller_val_i)) <= 0.0_r8) then
+   my_status = 98
+   return
+endif
+
+! no log computations if any data values are negative
+! (do this on 2 lines to avoid testing the data value
+!  unless we are planning to take the log.)
+if (.not. linear_interp) then
+   if (data_array(smaller_val_i) <= 0.0) then
+      my_status = 96
+      return
+   endif
+endif
+
+! compute fraction here
+if (linear_interp) then
+   fraction_across = (value_to_find            - data_array(smaller_val_i)) / &
+                     (data_array(larger_val_i) - data_array(smaller_val_i))
+else
+   fraction_across = (log(value_to_find)            - log(data_array(smaller_val_i))) / &
+                     (log(data_array(larger_val_i)) - log(data_array(smaller_val_i)))
+
+endif
+
+! good return
+my_status = 0
+
+end subroutine find_enclosing_indices
+!-----------------------------------------------------------------------
 
 !=======================================================================
 ! End of utilities_mod
