@@ -71,6 +71,8 @@ integer, parameter      :: print_every = 5000
 ! lazy, pick big number.  make it bigger if too small.
 integer, parameter :: max_obs_input_types = 500
 
+! 8 is now failed vert convert
+integer, parameter :: MAX_DART_QC = 8
 
 !----------------------------------------------------------------
 ! Namelist input with default values
@@ -79,11 +81,13 @@ integer, parameter :: max_obs_input_types = 500
 character(len = 160) :: obs_sequence_name = ''
 character(len = 160) :: obs_sequence_list = ''
 
-character(len=32)    :: calendar    = 'Gregorian'
+logical :: stats_by_obs_type = .false.
+
+character(len=32) :: calendar    = 'Gregorian'
 
 
 namelist /obs_assim_count_nml/ &
-         obs_sequence_name, obs_sequence_list, calendar
+         obs_sequence_name, obs_sequence_list, calendar, stats_by_obs_type
 
 !----------------------------------------------------------------
 ! Start of the program:
@@ -168,7 +172,7 @@ ObsFileLoop : do      ! until we run out of names
    call validate_obs_seq_time(seq_in, filename_in)
    
    ! the counting up is done here now.
-   call print_obs_seq_info(seq_in, filename_in)
+   call compute_and_print_obs_seq_info(seq_in, filename_in)
    
    ! clean up
    
@@ -206,7 +210,7 @@ end subroutine shutdown
 
 
 !---------------------------------------------------------------------
-subroutine print_obs_seq_info(seq_in, filename)
+subroutine compute_and_print_obs_seq_info(seq_in, filename)
 
 ! you can get more info by running the obs_diag program, but this
 ! prints out a quick table of obs types and counts, overall start and
@@ -223,16 +227,19 @@ type(obs_type)     :: obs, next_obs
 type(obs_def_type) :: this_obs_def
 logical            :: is_there_one, is_this_last
 integer            :: size_seq_in
-integer            :: i
+integer            :: i, qc_int, obt
 integer            :: this_obs_type
-integer            :: type_count(max_defined_types_of_obs), identity_count, qc_count(0:7), qcindex
+integer            :: type_count(0:max_defined_types_of_obs), identity_count, qc_count(0:MAX_DART_QC), qcindex
+integer            :: qc_count_by_type(0:MAX_DART_QC, 0:max_defined_types_of_obs)
 real(r8)           :: qcval(1)
+character(len=32)  :: this_obs_name
 
 
 ! Initialize counters
 type_count(:) = 0
 identity_count = 0
 qc_count(:) = 0
+qc_count_by_type(:,:) = 0
 
 
 size_seq_in = get_num_obs(seq_in)
@@ -291,7 +298,10 @@ ObsLoop : do while ( .not. is_this_last)
 !   if(this_obs_type > 0)print *, 'obs name = ', get_name_for_type_of_obs(this_obs_type)
    if (qcindex > 0) then
       call get_qc(obs, qcval, qcindex)
-      qc_count(nint(qcval(1))) = qc_count(nint(qcval(1))) + 1
+      qc_int = nint(qcval(1))
+      qc_count(qc_int) = qc_count(qc_int) + 1
+      if (this_obs_type >= 0) &
+         qc_count_by_type(qc_int,this_obs_type) = qc_count_by_type(qc_int,this_obs_type) + 1
    endif
 
    call get_next_obs(seq_in, obs, next_obs, is_this_last)
@@ -325,7 +335,7 @@ if (qcindex > 0) then
    call error_handler(E_MSG, '', ' ')
    write(msgstring, *) 'DART QC results: '
    call error_handler(E_MSG, '', msgstring)
-   do i=0, 7
+   do i=0, MAX_DART_QC
       if (qc_count(i) > 0) then
          write(msgstring, '(a16,2(i8))') 'DART QC value', i, &
                                         qc_count(i)
@@ -334,6 +344,26 @@ if (qcindex > 0) then
    enddo
    write(msgstring, *) 'Total obs: ', sum(qc_count(:))
    call error_handler(E_MSG, '', msgstring)
+
+   if (stats_by_obs_type) then
+      do obt = 0, max_defined_types_of_obs
+         if (sum(qc_count_by_type(:,obt)) <= 0) cycle
+         this_obs_name = get_name_for_type_of_obs(obt)
+
+         call error_handler(E_MSG, '', ' ')
+         write(msgstring, *) 'DART QC results for '//trim(this_obs_name)//':'
+         call error_handler(E_MSG, '', msgstring)
+         do i=0, MAX_DART_QC
+            if (qc_count(i) > 0) then
+               write(msgstring, '(a16,2(i8))') 'DART QC value', i, &
+                                              qc_count_by_type(i,obt)
+               call error_handler(E_MSG, '', msgstring)
+            endif
+         enddo
+         write(msgstring, *) 'Total '//trim(this_obs_name)//' obs: ', sum(qc_count_by_type(:,obt))
+         call error_handler(E_MSG, '', msgstring)
+      enddo
+   endif
 endif
 
 ! another blank line
@@ -344,7 +374,7 @@ call error_handler(E_MSG, '', ' ')
 call destroy_obs(     obs)
 call destroy_obs(next_obs)
 
-end subroutine print_obs_seq_info
+end subroutine compute_and_print_obs_seq_info
 
 
 !---------------------------------------------------------------------
