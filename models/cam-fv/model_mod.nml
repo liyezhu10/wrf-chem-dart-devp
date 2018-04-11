@@ -30,8 +30,8 @@
    assimilation_period_seconds     = 21600
    vertical_localization_coord     = 'PRESSURE'
    use_log_vertical_scale          = .false.
-   no_assim_above_pressure         = -1.0      ! pascals
-   start_damping_ramp_at_pressure  = -1.0      ! pascals
+   no_assim_above_pressure         = -1.0      
+   start_damping_ramp_at_pressure  = -1.0      
    using_chemistry                 = .false.
    use_variable_mean_mass          = .false.
    suppress_grid_info_in_output    = .false.
