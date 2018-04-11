@@ -243,14 +243,9 @@ contains
          ! be used just yet. If we cannot open a logfile, we
          ! always abort execution at this step.
 
-         if ( present(progname) ) then
-            if (do_output_flag) write(*,*)'Starting program ',trim(adjustl(progname))
-         endif
-
-         if (do_output_flag) write(*,*)'Initializing the utilities module.'
-
-         ! Read the namelist entry
-         call find_namelist_in_file("input.nml", "utilities_nml", iunit, .false.)
+         ! Read the namelist entry, do not attempt to write to logfileunit
+         call find_namelist_in_file("input.nml", "utilities_nml", iunit, &
+                                    write_to_logfile_in = .false.)
          read(iunit, nml = utilities_nml, iostat = io)
          call check_namelist_read(iunit, io, "utilities_nml", .false.)
 
@@ -268,10 +263,7 @@ contains
             lname = logfilename
          endif
 
-         if (do_output_flag) write(*,*)'Trying to log to unit ', logfileunit
-         if (do_output_flag) write(*,*)'Trying to open file ', trim(adjustl(lname))
-
-         open(logfileunit, file=trim(adjustl(lname)), form='formatted', &
+         open(logfileunit, file=trim(lname), form='formatted', &
                            action='write', position='append', iostat = io )
          if ( io /= 0 ) then
             write(*,*)'FATAL ERROR in initialize_utilities'
@@ -298,6 +290,10 @@ contains
             endif 
          endif
 
+         if (do_output_flag) write(*,*)'Initializing the utilities module.'
+         if (do_output_flag) write(*,*)'Trying to log to unit ', logfileunit
+         if (do_output_flag) write(*,*)'Trying to open file "'//trim(lname)//'"'
+
          ! Check to make sure termlevel is set to a reasonable value
          call checkTermLevel
 
@@ -310,20 +306,20 @@ contains
          ! If nmlfilename != logfilename, open it.  otherwise set nmlfileunit
          ! to be same as logunit.
          if (do_nml_file()) then
-            if (trim(adjustl(nmlfilename)) /= trim(adjustl(lname))) then
+            if (trim(nmlfilename) /= trim(lname)) then
                if (do_output_flag) &
-                write(*,*)'Trying to open namelist log ', trim(adjustl(nmlfilename))
+                write(*,*)'Trying to open namelist log "'//trim(nmlfilename)//'"'
        
                nmlfileunit = nextunit()
                if (nmlfileunit < 0) &
                   call error_handler(E_ERR,'initialize_utilities', &
-                    'Cannot get unit for nm log file', source, revision, revdate)
+                    'Cannot get unit for namelist log file', source, revision, revdate)
    
-               open(nmlfileunit, file=trim(adjustl(nmlfilename)), form='formatted', &
+               open(nmlfileunit, file=trim(nmlfilename), form='formatted', &
                     position='append', iostat = io )
                if ( io /= 0 ) then
                   call error_handler(E_ERR,'initialize_utilities', &
-                      'Cannot open nm log file', source, revision, revdate)
+                      'Cannot open namelist log file "'//trim(nmlfilename)//'"', source, revision, revdate)
                endif
        
             else
@@ -488,9 +484,9 @@ contains
       if ( .not. module_initialized ) call initialize_utilities
       if ( .not. do_output_flag) return
 
-      if (trim(adjustl(pos)) == 'end') then
+      if (trim(pos) == 'end') then
          call finalize_utilities()
-      else if (trim(adjustl(pos)) == 'brief') then
+      else if (trim(pos) == 'brief') then
          call write_time (logfileunit, brief=.true., & 
                           string1=string1, string2=string2, string3=string3)
          call write_time (             brief=.true., &
@@ -581,7 +577,7 @@ contains
 
       inquire(iunit, name = file_name, iostat=ios)
       if ( ios == 0 ) then
-         write(str1,*)'file name is ' // trim(adjustl(file_name))
+         write(str1,*)'file name is ' // trim(file_name)
          call error_handler(E_MSG, srname, str1, source, revision, revdate)
       endif
 
