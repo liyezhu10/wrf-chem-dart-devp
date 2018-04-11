@@ -1,38 +1,40 @@
 
 # options for vertical localization:  'PRESSURE', 'HEIGHT', 'SCALEHEIGHT', 'LEVEL'
+# options for vertical interpolation (use_log_vertical_scale) = .false., .true.
 #
 # examples of state_variables, 5 columns per field:
 #
-#    netcdf varname, dart quantity, min clamp value, max clamp value, update or noupdate
+#    netcdf varname, dart quantity, min allowed value, max allowed value, (no)update this var
 #
-#   state_variables = 'T', 'QTY_TEMPERATURE',                'NA', 'NA', 'UPDATE',
-#                     'US','QTY_U_WIND_COMPONENT',           'NA', 'NA', 'UPDATE',
-#                     'VS','QTY_V_WIND_COMPONENT',           'NA', 'NA', 'UPDATE',
-#                     'Q', 'QTY_SPECIFIC_HUMIDITY',          'NA', 'NA', 'UPDATE',
-#                     'PS','QTY_SURFACE_PRESSURE',           'NA', 'NA', 'UPDATE',
-#                     'O', 'QTY_ATOMIC_OXYGEN_MIXING_RATIO', 'NA', 'NA', 'UPDATE',
-#                     'O2','QTY_MOLEC_OXYGEN_MIXING_RATIO',  'NA', 'NA', 'UPDATE',
-#                     'H', 'QTY_ATOMIC_H_MIXING_RATIO',      'NA', 'NA', 'UPDATE',
-#                     'Op','QTY_ION_O_MIXING_RATIO',         'NA', 'NA', 'UPDATE',
+#   state_variables = 'T', 'QTY_TEMPERATURE',                'NA', 'NA', 'UPDATE'
+#                     'US','QTY_U_WIND_COMPONENT',           'NA', 'NA', 'UPDATE'
+#                     'VS','QTY_V_WIND_COMPONENT',           'NA', 'NA', 'UPDATE'
+#                     'Q', 'QTY_SPECIFIC_HUMIDITY',          'NA', 'NA', 'UPDATE'
+#                     'CLDLIQ','QTY_CLOUD_LIQUID_WATER',     'NA', 'NA', 'UPDATE'
+#                     'CLDICE','QTY_CLOUD_ICE',              'NA', 'NA', 'UPDATE'
+#                     'PS','QTY_SURFACE_PRESURE',            'NA', 'NA', 'UPDATE'
+#                     'O', 'QTY_ATOMIC_OXYGEN_MIXING_RATIO', 'NA', 'NA', 'UPDATE'
+#                     'O2','QTY_MOLEC_OXYGEN_MIXING_RATIO',  'NA', 'NA', 'UPDATE'
+#                     'H', 'QTY_ATOMIC_H_MIXING_RATIO',      'NA', 'NA', 'UPDATE'
+#                     'Op','QTY_ION_O_MIXING_RATIO',         'NA', 'NA', 'UPDATE'
 
-# pressures are in pascals
 
 &model_nml
    cam_template_filename           = 'caminput.nc'
-   cam_phis_filename               = 'camphis.nc'
-   vertical_localization_coord     = 'PRESSURE'
-   no_assim_above_pressure         = -1.0     
-   start_damping_ramp_at_pressure  = -1.0    
-   assimilation_period_days        = 0
-   assimilation_period_seconds     = 21600
-   use_log_vertical_scale          = .false.
-   using_chemistry                 = .false.
-   use_variable_mean_mass          = .false.
-   suppress_grid_info_in_output    = .false.
+   cam_phis_filename               = 'cam_phis.nc'
+   state_variables                 = ''
    custom_routine_to_generate_ensemble = .false.
    fields_to_perturb               = "QTY_TEMPERATURE"
    perturbation_amplitude          = 0.00001_r8
+   assimilation_period_days        = 0
+   assimilation_period_seconds     = 21600
+   vertical_localization_coord     = 'PRESSURE'
+   use_log_vertical_scale          = .false.
+   no_assim_above_pressure         = -1.0      ! pascals
+   start_damping_ramp_at_pressure  = -1.0      ! pascals
+   using_chemistry                 = .false.
+   use_variable_mean_mass          = .false.
+   suppress_grid_info_in_output    = .false.
    debug_level                     = 0
-   state_variables                 = ''
 /
 

@@ -1,10 +1,10 @@
 ! This namelist is set up for a single, CAM-FV, assimilation cycle 
-! using the default values as found in model_mod.f90 and CESM1_2_1_setup_{hybrid,advanced}
+! using the default values as found in model_mod.f90 and 
+! shell_scripts/cesm2_0/setup_{hybrid,advanced}
 ! starting from a single model state, which must be perturbed into an ensemble.
 ! Comments below give suggestions for setting it up for other assimilations:
 ! > continuing an assimilation (no perturbations) and/or starting from an ensemble.
-! > Setting up a CAM-SE assimilation
-! > Setting up a WACCM assimilation
+! > Setting up a WACCM(-X) assimilation
 ! > Setting up for perfect_model_obs
 !
 ! PLEASE READ
@@ -12,8 +12,7 @@
 ! https://proxy.subversion.ucar.edu/DAReS/DART/trunk/models/cam/model_mod.html
 !
 ! for recommendations on namelist settings for CAM. It has examples of configurations
-! for taking a single state and creating an ensemble, differences between using
-! the FV core or SE core ... variable resolution grids, etc.
+! for taking a single state and creating an ensemble, variable resolution grids, etc.
 
 ! ens_size, num_output_*  will be (re)set by the setup script
 
@@ -25,39 +24,17 @@
 !    inf_sd_initial_from_restart = .true.,                 .false.,
 ! Also search for 'single model state' to make changes in model_nml.
 
-! Changes for DART2.0 ("RMA" "Manhattan")
-!    To be removed:
-!       restart_in_file_name     = 'no_restart_in'
-!       restart_out_file_name    = 'no_restart_out'
-!       direct_netcdf*
-!    To be added: 
-!       output_list_file         = 'cam_output_init_files'
-!       perturb_from_single_instance = .true.       MUST be true in order to use model_mod's 
-!                                                   perturbation routine
-!       perturbation_amplitude       = 0.2,         Will be ignored because the amplitude is 
-!                                                   provided in model_nml.
-!       stages_to_write          = Controls diagnostic and restart output.  Valid values are 
-!                                 'input', 'forecast','preassim', 'postassim', 'analysis', and 'output'.
-!                                 If only prior inflation is used, then 'postassim' and 'analysis'
-!                                 are redundant with 'output'.  
-!                                 If only posterior inflation is used, 'analysis' and 'preassim'
-!                                 are redundant with 'input'.
-!                                 If you want input_mean and input_sd, you'll 
-!                                 need to set output_mean and output_sd = .true. 
-!                                 (and include 'input' in stages_to_write).
-
-! Removed from the filter_nml in $rma_trunk
-!    direct_netcdf_read       = .true.
-!    direct_netcdf_write      = .true.
-!    add_domain_extension     = .false.
-!    overwrite_state_input    = .false.
-!    use_restart_list         = .true.
-!    restart_in_file_name     = "filter_ics",
-!    inf_in_file_name            = 'input_priorinf',        'input_postinf'
-!    output_inflation            = .true.
-!    inf_output_restart          = .true.,                  .true.
-!    inf_out_file_name           = 'output_priorinf',       'output_postinf'
-!    inf_diag_file_name          = 'output_priorobsinfl',   'output_postobsinf'
+! perturbation_amplitude   is missing from filter_nml because the amplitude is 
+!                          provided in model_nml.
+! stages_to_write          Controls diagnostic and restart output.  Valid values are 
+!                          'input', 'forecast','preassim', 'postassim', 'analysis', and 'output'.
+!                          If only prior inflation is used, then 'postassim' and 'analysis'
+!                          are redundant with 'output'.  
+!                          If only posterior inflation is used, 'analysis' and 'preassim'
+!                          are redundant with 'input'.
+!                          If you want input_mean and input_sd, you'll 
+!                          need to set output_mean and output_sd = .true. 
+!                          (and include 'input' in stages_to_write).
 
 ! These vars are in the filter_nml as of r10786
 
@@ -135,44 +112,104 @@
    output_forward_op_errors   = .false.,
    /
 
-&model_nml
-   cam_template_filename       = 'caminput.nc' 
-   cam_phis_filename           = 'cam_phis.nc'
-   vertical_localization_coord = 'SCALEHEIGHT'
-   state_variables             = 'T'  'QTY_TEMPERATURE',       'NA', 'NA', 'UPDATE'
-                                 'US' 'QTY_U_WIND_COMPONENT',  'NA', 'NA', 'UPDATE'
-                                 'VS' 'QTY_V_WIND_COMPONENT',  'NA', 'NA', 'UPDATE'
-                                 'Q'  'QTY_SPECIFIC_HUMIDITY', 'NA', 'NA', 'UPDATE'
-                                 'PS' 'QTY_SURFACE_PRESSURE',  'NA', 'NA', 'UPDATE'
-   assimilation_period_seconds = 21600
-   assimilation_period_days    = 0
-   use_log_vertical_scale      = .true.
-   no_assim_above_pressure     = 2000.0
-   start_damping_ramp_at_pressure  = 6000.0
-   suppress_grid_info_in_output    = .false.
-   custom_routine_to_generate_ensemble = .true.
-   fields_to_perturb               = 'QTY_TEMPERATURE'
-   perturbation_amplitude          = 0.0001
-   debug_level                     = 0
+#========================================================================
+# Start of CAM-FV dependencies and general discussion.
+#========================================================================
+!
+! Creation of initial ensemble from a single model state.
+!     fields_to_perturb lists the state variables to be perturbed to make the ensemble.
+!         Providing an empty list is one of the changes to use an existing ensemble.
+!     perturbation_amplitude > 0 allows each point of the fields_to_perturb fields of each ens member 
+!         to be randomly perturbed with a standard deviation of perturbation_amplitude.  
+!         Each field can be given a different perturbation_amplitude.
+!     Used by filter's call to pert_model_copies.
+!
+! state_variables (5 columns for each variable):  
+!     netcdf varname, dart quantity, min allowed value, max allowed value, (no)update this var
+!
+! use_log_vertical_scale(vertical interpolation only):
+!     .false. or .true.
+! 
+! start_damping_ramp_at_pressure 
+!     The default values given are the minimums recommended, given the choices
+!     of several other CESM and DART parameters.
+!     You calculate your own as illustrated in models/cam/doc/highest_state_p_Pa.pptx. 
+!     Or you can start with the minimum and increase it if there seems to be excessive
+!     noise in the upper layers.
+! The parameters on which the minimum start_damping_ramp_at_pressure depends are:
+!     cutoff (0.2 assumed)
+!     vert_coord
+!     vert_normalization_{pressure,scale_height}
+!     CAM's model top 
+!     number of model top levels with extra diffusion 
+!
+! CAM-FV Section
+!     model top 220 Pa
+!     number of model top levels with extra diffusion, controlled by div24del2:
+!         2 = div2    -> 2 levels
+!         4,24 = del2 -> 3 levels -> highest_state_pressure_Pa = 10500.
+!     vert_normalization_pressure = 20000. is a better choice than 100000.
+!         for allowing upper levels to be pulled towards the obs.
+! 
+! WACCM can be used with either FV or SE
+!     vert_normalization_scale_height does not have extensive exploration available.
+!     Pedatella settled on 1.5.
+!     The model top for WACCM is (naturally) much higher: 4.5e-4 Pa 
+!     This has ramifications for the diffusion near the model top so 
+!     changes to start_damping_ramp_at_pressure and no_assim_above_pressure are appropriate.
+!     number of model top levels with extra diffusion, controlled by CAM's fv_div24del2flag:
+!         2 = div2    -> 3 levels
+!         4,24 = del2 -> 4 levels
+!
+! WACCM settings that must be changed no matter what core is being used.
+!     vert_normalization_scale_height = 1.5 
+!     use_log_vertical_scale          = .true.
+!     no_assim_above_pressure         = .0001,
+!     start_damping_ramp_at_pressure  = .01,
+!
+!========================================================================
+
+&location_nml
+   horiz_dist_only             = .false.,
+   vert_normalization_pressure = 20000.0, 
+   vert_normalization_height   = 10000.0,
+   vert_normalization_level    = 20.0,
+   vert_normalization_scale_height    = 1.5,
+   approximate_distance        = .true.,
+   nlon                        = 141, 
+   nlat                        = 72,
+   output_box_info             = .false.,
+   print_box_level             = 0,
    /
 
-!#!    vert_coord          = 'log_invP'
-!#!    pert_names          = 'T'
-!#!    pert_sd             = 0.1,
-!#!    pert_base_vals      = -888888.0d0,
-!#!    highest_obs_pressure_Pa   = 300.0,
-!#!    highest_state_pressure_Pa = 300.0,
-!#!    max_obs_lat_degree        = 90.0,
-!#!    model_version       = 'cam5.4.101',
-!#!    state_num_0d        = 0,
-!#!    state_num_1d        = 0,
-!#!    state_num_2d        = 1,
-!#!    state_num_3d        = 6,
-!#!    state_names_2d      = 'PS'
-!#!    state_names_3d      = 'T','US','VS','Q','CLDLIQ','CLDICE'
-!#!    which_vert_1d       = 0,
-!#!    which_vert_2d       = -1,
-!#!    which_vert_3d       = 6*1,
+&model_nml
+   cam_template_filename = 'caminput.nc' 
+   cam_phis_filename     = 'cam_phis.nc'
+   state_variables       = 'T',     'QTY_TEMPERATURE',         'NA', 'NA', 'UPDATE'
+                           'US',    'QTY_U_WIND_COMPONENT',    'NA', 'NA', 'UPDATE'
+                           'VS',    'QTY_V_WIND_COMPONENT',    'NA', 'NA', 'UPDATE'
+                           'Q',     'QTY_SPECIFIC_HUMIDITY',   'NA', 'NA', 'UPDATE'
+                           'CLDLIQ','QTY_CLOUD_LIQUID_WATER',  'NA', 'NA', 'UPDATE'
+                           'CLDICE','QTY_CLOUD_ICE',           'NA', 'NA', 'UPDATE'
+                           'PS',    'QTY_SURFACE_PRESSURE',    'NA', 'NA', 'UPDATE'
+   custom_routine_to_generate_ensemble = .true.
+   fields_to_perturb                   = 'QTY_TEMPERATURE'
+   perturbation_amplitude              = 0.0001
+   assimilation_period_days    = 0
+   assimilation_period_seconds = 21600
+   vertical_localization_coord = 'SCALEHEIGHT'
+   use_log_vertical_scale      = .true.
+   no_assim_above_pressure         = 2000.0
+   start_damping_ramp_at_pressure  = 6000.0
+   using_chemistry               = .false.
+   use_variable_mean_mass        = .false.
+   suppress_grid_info_in_output  = .false.
+   debug_level                   = 0
+   /
+
+#========================================================================
+# End of CAM-FV dependencies.
+#========================================================================
 
 &state_vector_io_nml
   buffer_state_io         = .false.
@@ -230,123 +267,6 @@
    outlier_threshold           =  3.0
    enable_special_outlier_code = .false.
    /
-
-#========================================================================
-# Start of CAM-SE, CAM-FV dependencies and general discussion.
-#========================================================================
-!
-! You MUST configure this file to support EITHER the CAM-SE -OR- CAM-FV cores.
-! There are simply too many changes to support both at the same time.
-! Enable or Disable the appropriate blocks by commenting out or 
-! removing the comment character from the block of interest.
-!
-! highest_state_pressure_Pa 
-!     The default values given are the minimums recommended, given the choices
-!     of several other CESM and DART parameters.
-!     You calculate your own as illustrated in models/cam/doc/highest_state_p_Pa.pptx. 
-!     Or you can start with the minimum and increase it if there seems to be excessive
-!     noise in the upper layers.
-! The parameters on which the minimum highest_state_pressure_Pa depends are:
-!     cutoff (0.2 assumed)
-!     vert_coord
-!     vert_normalization_{pressure,scale_height}
-!     CAM's model top 
-!     number of model top levels with extra diffusion 
-!
-! WACCM can be used with either FV or SE
-!     vert_normalization_scale_height does not have extensive exploration available.
-!     Pedatella settled on 2.5.
-!     The model top for WACCM is (naturally) much higher: 4.5e-4 Pa 
-!     This has ramifications for the diffusion near the model top so 
-!     changes to the highest_*_pressure_Pa are appropriate.
-!     number of model top levels with extra diffusion, controlled by CAM's div24del2:
-!         2 = div2    -> 3 levels
-!         4,24 = del2 -> 4 levels
-!
-! WACCM settings that must be changed no matter what core is being used.
-!     vert_normalization_scale_height = 2.5 
-!     vert_coord                      = 'log_invP'
-!     highest_obs_pressure_Pa         = .0001,
-!     highest_state_pressure_Pa       = .01,
-!
-! Creation of initial ensemble from a single model state.
-!     pert_names lists the state variables to be perturbed to make the ensemble.
-!                Providing an empty list is one of the changes to use an existing ensemble.
-!     pert_sd > 0 allows each point of the pert_names fields of each ens member 
-!             to be randomly perturbed with a standard deviation of pert_sd.  
-!     Used by filter's call to pert_model_state.
-!
-#========================================================================
-# CAM-FV Section
-# model top 220 Pa
-# number of model top levels with extra diffusion, controlled by div24del2:
-#         2 = div2    -> 2 levels
-#         4,24 = del2 -> 3 levels -> highest_state_pressure_Pa = 10500.
-# vert_normalization_pressure = 20000. is a better choice than
-#         100000. for allowing upper levels to be pulled towards the obs.
-#========================================================================
-
-&location_nml
-   horiz_dist_only             = .false.,
-   vert_normalization_pressure = 20000.0, 
-   vert_normalization_height   = 10000.0,
-   vert_normalization_level    = 20.0,
-   vert_normalization_scale_height    = 2.5,
-   approximate_distance        = .true.,
-   nlon                        = 141, 
-   nlat                        = 72,
-   output_box_info             = .false.,
-   print_box_level             = 0,
-   /
-
-#========================================================================
-# CAM-SE Section
-# model top 220 Pa
-# number of model top levels with extra diffusion (3 only)
-#========================================================================
-
-!CAM-SE &model_nml
-!CAM-SE    model_version       = '5.1.1',
-!CAM-SE    model_config_file   = 'caminput.nc' 
-!CAM-SE    cs_grid_file        = 'SEMapping_cs_grid.nc'
-!CAM-SE    homme_map_file      = '../SEMapping.nc'
-!CAM-SE    state_num_0d        = 0,
-!CAM-SE    state_num_1d        = 1,
-!CAM-SE    state_num_2d        = 6,
-!CAM-SE    state_num_3d        = 0,
-!CAM-SE    state_names_1d      = 'PS'
-!CAM-SE    state_names_2d      = 'T','U','V','Q','CLDLIQ','CLDICE'
-!CAM-SE    state_names_3d      = ''
-!CAM-SE    which_vert_1d       = -1,
-!CAM-SE    which_vert_2d       = 6*1,
-!CAM-SE    vert_coord          = 'pressure'
-!CAM-SE    pert_names          = 'T'
-!CAM-SE    pert_sd             = 0.1,
-!CAM-SE    pert_base_vals      = -888888.0d0,
-!CAM-SE    highest_obs_pressure_Pa   = 1000.0,
-!CAM-SE    highest_state_pressure_Pa = 9400.0,
-!CAM-SE    max_obs_lat_degree        = 90.0,
-!CAM-SE    Time_step_seconds         = 21600,
-!CAM-SE    Time_step_days            = 0,
-!CAM-SE    print_details             = .false.,
-!CAM-SE    /
-!CAM-SE 
-!CAM-SE &location_nml
-!CAM-SE    horiz_dist_only             = .false.,
-!CAM-SE    vert_normalization_pressure = 20000.0, 
-!CAM-SE    vert_normalization_height   = 10000.0,
-!CAM-SE    vert_normalization_level    = 20.0,
-!CAM-SE    vert_normalization_scale_height    = 2.5,
-!CAM-SE    approximate_distance        = .FALSE.,
-!CAM-SE    nlon                        = 141, 
-!CAM-SE    nlat                        = 72,
-!CAM-SE    output_box_info             = .false.,
-!CAM-SE    print_box_level             = 0,
-!CAM-SE    /
-
-#========================================================================
-# End of CAM-SE, CAM-FV dependencies.
-#========================================================================
 
 &xyz_location_nml
    /
