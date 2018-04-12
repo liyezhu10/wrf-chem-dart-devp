@@ -40,7 +40,7 @@ use  obs_sequence_mod, only : obs_sequence_type, obs_type, read_obs_seq, &
                               init_obs_sequence, get_num_obs, & 
                               set_copy_meta_data, set_qc_meta_data
 
-use      obs_kind_mod, only : SOIL_MOISTURE
+use      obs_kind_mod, only : SOIL_WATER_CONTENT  ! as a percentage
 
 use obs_utilities_mod, only : getvar_real, getvar_real_2d, getvar_int_3d, &
                               getdimlen, create_3d_obs, add_obs_to_seq
@@ -120,8 +120,8 @@ integer  :: qcsensor1_miss(NDEPTHS), qcsensor2_miss(NDEPTHS)
 
 ! These values came from a dump of 'processing_status,quality_flag'
 !>@todo determine these from the string instead of the presumed index
-integer, parameter :: processing_status = 4 ! processing_status == 'approved upload'
-integer, parameter :: quality_flag = 2      ! quality_flag      == 'ok: ok'
+integer, parameter :: GOOD_STATUS = 4 ! processing_status == 'approved upload'
+integer, parameter :: GOOD_QUALITY = 2      ! quality_flag      == 'ok: ok'
 
 !-----------------------------------------------------------------------
 ! start of executable code
@@ -253,35 +253,32 @@ FileLoop: do ifile = 1,num_input_files
          ! If both sensors have good quality, average them.
          ! If only one sensor has good quality, only use it.
 
-         ! processing_status and quality_flag came from the netCDF metadata
-         if ( qcsensor1(idepth,1,itime,istation) == processing_status .and. &
-              qcsensor1(idepth,2,itime,istation) == quality_flag .and. &
-              qcsensor2(idepth,1,itime,istation) == processing_status .and. &
-              qcsensor2(idepth,2,itime,istation) == quality_flag ) then
+         if ( qcsensor1(idepth,1,itime,istation) == GOOD_STATUS .and. &
+              qcsensor1(idepth,2,itime,istation) == GOOD_QUALITY .and. &
+              qcsensor2(idepth,1,itime,istation) == GOOD_STATUS .and. &
+              qcsensor2(idepth,2,itime,istation) == GOOD_QUALITY ) then
             obs_val = 0.5_r8*sensor1(idepth,itime,istation) + &
                       0.5_r8*sensor2(idepth,itime,istation)
             qc      = 0
-         elseif ( qcsensor1(idepth,1,itime,istation) == processing_status .and. &
-                  qcsensor1(idepth,2,itime,istation) == quality_flag .and. &
+         elseif ( qcsensor1(idepth,1,itime,istation) == GOOD_STATUS .and. &
+                  qcsensor1(idepth,2,itime,istation) == GOOD_QUALITY ) then
             obs_val = sensor1(idepth,itime,istation)
             qc      = 0
-         elseif ( qcsensor2(idepth,1,itime,istation) == processing_status .and. &
-                  qcsensor2(idepth,2,itime,istation) == quality_flag ) then
+         elseif ( qcsensor2(idepth,1,itime,istation) == GOOD_STATUS .and. &
+                  qcsensor2(idepth,2,itime,istation) == GOOD_QUALITY ) then
             obs_val = sensor2(idepth,itime,istation)
             qc      = 0
          else
             cycle DEPTHLOOP
          endif
  
-         write(*,*)obs_val, qcsensor1(idepth,:,itime,istation), qcsensor2(idepth,:,itime,istation)
- 
-         ! The observation error is either 20% or 0.02 
-         err_std = max(obs_val/20.0_r8, 0.02_r8)
+         ! The observation error is at least 4% but may be up to 10%
+         err_std = max(obs_val/10.0_r8, 4.0_r8)
   
-         !>@todo be more descriptive than SOIL_MOISTURE ... what kind of instrument 
+         !>@todo be more descriptive than SOIL_WATER_CONTENT ... what kind of instrument 
 
          call create_3d_obs(latitude(istation), longitude(istation), depths(idepth), &
-                 VERTISHEIGHT, obs_val, SOIL_MOISTURE, err_std, oday, osec, qc, obs)
+                 VERTISHEIGHT, obs_val, SOIL_WATER_CONTENT, err_std, oday, osec, qc, obs)
    
          call add_obs_to_seq(obs_seq, obs, dart_time(itime), prev_obs, prev_time, first_obs)
 

@@ -8,6 +8,7 @@
 !WATER_TABLE_DEPTH,              KIND_WATER_TABLE_DEPTH,        COMMON_CODE
 !SOIL_TEMPERATURE,               KIND_SOIL_TEMPERATURE,         COMMON_CODE
 !SOIL_MOISTURE,                  KIND_SOIL_MOISTURE,            COMMON_CODE
+!SOIL_WATER_CONTENT,             KIND_SOIL_WATER_CONTENT,       COMMON_CODE   ! a percentage
 !LAYER_LIQUID_WATER,             KIND_LIQUID_WATER,             COMMON_CODE
 !LAYER_ICE,                      KIND_ICE,                      COMMON_CODE
 !SNOW_THICKNESS,                 KIND_SNOW_THICKNESS,           COMMON_CODE
