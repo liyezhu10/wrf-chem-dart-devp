@@ -1,0 +1,289 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
+          "http://www.w3.org/TR/html4/strict.dtd">
+<HTML>
+<HEAD>
+<TITLE>TERENO Data</TITLE>
+<link rel="stylesheet" type="text/css" href="../../doc/html/doc.css" />
+<link href="../../doc/images/dart.ico" rel="shortcut icon" />
+</HEAD>
+<BODY>
+<A NAME="TOP"></A>
+
+<H1>TERENO Data </H1>
+
+<table border=0 summary="" cellpadding=5>
+<tr>
+    <td valign=middle>
+    <img src="../../doc/images/Dartboard7.png" alt="DART project logo" height=70 />
+    </td>
+    <td>
+       <P>Jump to <a href="../../index.html">DART Documentation Main Index</a><br />
+          <small><small>version information for this file: <br />
+          <!-- version tag follows, do not edit -->
+          $Id$</small></small>
+       </P></td>
+</tr>
+</table>
+
+<A HREF="#DataSources">DATA SOURCES</A> /
+<A HREF="#Programs">PROGRAMS</A> / 
+<A HREF="#Modules">MODULES</A> /
+<A HREF="#Namelist">NAMELIST</A> /
+<A HREF="#Errors">ERRORS</A> /
+<A HREF="#FuturePlans">FUTURE PLANS</A> /
+<A HREF="#Legalese">TERMS OF USE</A>
+
+<H2>Overview</H2>
+
+<a href="http://teodoor.icg.kfa-juelich.de/ibg3searchportal2/">TERENO Data Portal</a>
+<P>This comes directly from the data portal:
+<blockquote>
+TERENO Eifel-Rur Observatory. TERENO (TERrestrial ENvironmental Observatories)
+spans an Earth observation network across Germany that extends from the 
+North German lowlands to the Bavarian Alps. This unique large-scale project 
+aims to catalogue the longterm ecological, social and economic impact of 
+global change at regional level. The central monitoring site of the TERENO 
+Eifel/Lower Rhine Valley Observatory is the catchment area of the River Rur. 
+It covers a total area of 2354 km² and exhibits a distinct land use gradient: 
+The lowland region in the northern part is characterised by urbanisation and 
+intensive agriculture whereas the low mountain range in the southern part is 
+sparsely populated and includes several drinking water reservoirs. 
+Furthermore, the Eifel National Park is situated in the southern part of the 
+Rur catchment serving as a reference site. Intensive test sites are placed 
+along a transect across the Rur catchments in representative land cover, soil, 
+and geologic settings. The Rollesbroich site is located in the low mountain 
+range "Eifel" near the German-Belgium border and covers the area of the small 
+Kieselbach catchment (40 ha) with altitudes ranging from 474 to 518 m.a.s.l.. 
+The climate is temperate maritime with a mean annual air temperature and 
+precipitation of 7.7 °C and 1033 mm, respectively, for the period from 1981 
+to 2001. The study site is highly instrumented. All components of the water 
+balance (e.g. precipitation, evapotranspiration, runoff, soil water content) 
+are continuously monitored using state-of-the-art instrumentation, including 
+weighable lysimeters, runoff gauges, cosmic-ray soil moisture sensors, a 
+wireless sensor network that monitors soil temperature, and soil moisture at 
+189 locations in different depths (5, 20 and 50 cm) throughout the study 
+site. Periodically also different chamber measurements were made to access 
+soil or plant gas exchange. Soil water content was determined using the 
+wireless sensor network SoilNet (Bogena et al., 2010) in 15 minute intervals 
+at 87 locations within the southern part of catchment. The SPADE soil water 
+content sensors (H&#252;bner et al., 2009; Qu et al., 2013) were installed at 
+5 cm, 20 cm and 50 cm depth along a vertical profile. In order to increase 
+the measurement volume and to allow examination of inconsistencies in sensor 
+output (e.g. due to imperfect contact of sensors with the soil matrix), two 
+sensors were installed in parallel at each depth with a distance of ~8 cm. 
+Soil water content measurements outside the physical plausibility range 
+(0.05 to 0.85 cm3cm-3) caused by temporary sensor failure or reduced current 
+supply were identified and flagged. The same was done for soil temperature 
+(-5 and 30 °C). Unreliable measurements were identified and flagged based 
+on the continuity of the time series data. For this, the first derivative 
+of the soil water content time series was used. If the increase in soil 
+water content at a particular time step was larger than two times the 
+standard deviations of the soil water content measurements in the preceding 
+24 hours, the soil water content measurement was identified and flagged as 
+an unreliable measurement. All the data from the wireless sensor network 
+were visualized to identify the performance of this automatic flagging 
+method. <br />
+Literature<br /> 
+Bogena, H.R., M. Herbst, J.A. Huisman, U. Rosenbaum, A. Weuthen and H. Vereecken (2010): 
+Potential of wireless sensor networks 
+for measuring soil water content variability. Vadose Zone J., 9 (4): 
+1002-1013, doi:10.2136/vzj2009.0173.<br />
+Hübner, C., Cardell-Oliver, R., Becker, R., Spohrer, K., Jotter, K., and Wagenknecht, T., 2009, 
+Wireless soil moisture sensor networks for environmental monitoring and 
+vineyard irrigation: Helsinki University of Technology, no. 1, p. 408-415.<br /> 
+Qu, W., Bogena, H. R., Huisman, J. A., and Vereecken, H., 2013, 
+Calibration of a novel low-cost soil water content sensor based on a 
+ring oscillator: Vadose Zone Journal, v. 12, no. 2., doi: 10.2136/vzj2012.0139.
+</blockquote>
+</P>
+
+<H2>Workflow</H2>
+<P>
+To convert a series of data files (where different types of
+observations are distributed in separate files), one high level
+view of the workflow is:
+</P>
+<ol>
+<li>Download the data for the stations of interest and the timeframe of interest.
+    This is usually the most painful part.</li>
+<li>Convert each data file into an obs_seq file.
+    One file in, one file out.
+    Do not modify the time of the observations.
+    Change the name of each output file to make them unique.</li>
+<li>Repeat step 1 for any/all observations for any/all stations.</li>
+<li>After you have converted all the desired observations into lots of DART
+    observation sequence files - the 
+    <a href="../../obs_sequence/obs_sequence_tool.html">obs_sequence_tool</a> 
+    can be used to consolidate all the observation sequence files into
+    a single easy-to-use file. This file may be large and might benefit from
+    being chopped into a series of smaller files each covering non-overlapping 
+    time windows.</li>
+</ol>
+
+<!--==================================================================-->
+
+<A NAME="DataSources"></A>
+<HR />
+<H2>DATA SOURCES</H2>
+
+<P>
+<a href="http://teodoor.icg.kfa-juelich.de/ibg3searchportal2/">TERENO Data Portal</a>
+</P>
+
+<!-- P>There are two satellite wind converter programs; the one in
+this directory and one in the
+<a href="../SSEC/SSEC.html">SSEC</a> directory.
+The observations distributed here come from
+<a href="http://www.nesdis.noaa.gov">NESDIS</a>.
+The SSEC observations are processed by SSEC itself and
+will differ from the observations converted here.
+</P -->
+
+<P>
+The data files are distributed in netCDF format and have names like
+<em class=file>soilnet.rollesbroich.wc.2015.3.nc</em>&nbsp;.
+Reading these particular netcdf files can be a bit tricky because of the
+use of <em class=code>NaN</em> for a <em class=code>_FillValue</em>.
+The exact same code compiled with <em class=program>gfortran</em> and 
+<em class=program>ifort</em> yield vastly different numbers of observations.  
+<em class=code>NaN</em>s (by definition) will not pass any logical test ...
+</P>
+
+<pre>
+        ...
+        char processing_status(processing_status_dim, qc_strlen) ;
+                processing_status:long_name = "processing_status" ;
+        char quality_flag(qualityflag_dim, qc_strlen) ;
+                quality_flag:long_name = "quality_flag" ;
+        double time(time) ;
+                time:long_name = "time" ;
+                time:units = "milliseconds since 1970-01-01T00:00:00" ;
+
+        double SoilWaterContent_0.05mSensor2(station, time) ;
+                SoilWaterContent_0.05mSensor2:long_name = "SoilWaterContent_0.05mSensor2" ;
+                SoilWaterContent_0.05mSensor2:units = "%_Sat" ;
+                SoilWaterContent_0.05mSensor2:_FillValue = NaN ;
+        int SoilWaterContent_0.05mSensor2_QC(station, time, qcdim) ;
+                SoilWaterContent_0.05mSensor2_QC:long_name = "SoilWaterContent_0.05mSensor2_QC" ;
+                SoilWaterContent_0.05mSensor2_QC:units = "level" ;
+        ...
+</pre>
+
+<!--==================================================================-->
+
+<A NAME="Programs"></A>
+<HR />
+<H2>PROGRAMS</H2>
+<P>
+The programs in the <em class=file>DART/observations/TERENO/</em> 
+directory extract data from the distribution files 
+and create DART observation sequence (obs_seq) files.
+Build them in the <em class=file>work</em> directory by running
+the <em class=program>./quickbuild.csh</em> script.  In addition
+to the converters, the <em class=file>advance_time</em> and
+<em class=file>obs_sequence_tool</em> utilities will be built.
+</P>
+<P>
+There are currently converters for these data types:</P>
+<TABLE border=0 cellpadding=3 summary="">
+<TBODY valign=top>
+<TR><TD>soil water content</TD>  <TD> convert_soil_moisture  </TD>
+</TABLE>
+<P>
+
+
+Please note that the converter is named <em class=program>convert_soil_moisture</em>
+because you search for <em class=code>soil moisture</em> in the data portal. The metadata
+for what is included in the data files clearly states these are <em class=code>soil water content</em>
+expressed in saturation percent. <strong>This converter outputs SOIL_WATER_CONTENT observations.</strong>
+
+
+
+Example scripts for converting batches of these files are
+in the <em class=file>shell_scripts</em> directory.  
+These are <em>NOT</em> intended to be turnkey scripts; they will
+certainly need to be customized for your use.  There are comments
+at the top of the scripts saying what options they include, and
+should be commented enough to indicate where changes will be
+likely to need to be made.
+</P>
+<P>Several converters have compile-time choices
+for outputting various types of moist variables.
+Check the source code for more details.
+Some converters also read multiple T/F strings
+from the console (standard input) to control at
+run-time what types of observations to convert.
+Again, check the source code for more details.
+</P>
+<P>Each converter has hard-coded input and output filenames:</P>
+<TABLE border=0 cellpadding=5 summary="input/output filenames">
+<TBODY valign=top>
+<TR> <TD>convert_madis_acars:   </TD> <TD> acars_input.nc    </TD> <TD> obs_seq.acars    </TD>
+<TR> <TD>convert_madis_marine:  </TD> <TD> marine_input.nc   </TD> <TD> obs_seq.marine   </TD>
+<TR> <TD>convert_madis_mesonet: </TD> <TD> mesonet_input.nc  </TD> <TD> obs_seq.mesonet  </TD>
+<TR> <TD>convert_madis_metar:   </TD> <TD> metar_input.nc    </TD> <TD> obs_seq.metar    </TD>
+<TR> <TD>convert_madis_profiler:</TD> <TD> profiler_input.nc </TD> <TD> obs_seq.profiler </TD>
+<TR> <TD>convert_madis_rawin:   </TD> <TD> rawin_input.nc    </TD> <TD> obs_seq.rawin    </TD>
+<TR> <TD>convert_madis_satwnd:  </TD> <TD> satwnd_input.nc   </TD> <TD> obs_seq.satwnd   </TD>
+</TABLE>
+
+<P>The expected usage pattern is that a script will copy,
+rename, or make a symbolic link from the actual input file
+(which often contains a timestamp in the name) to the fixed input 
+name before conversion, and move the output file to an
+appropriate filename before the next invocation of the converter.  
+If an existing observation sequence file of the same output name is 
+found when the converter is run again, it will open that file and append
+the next set of observations to it.
+</P>
+
+<!--==================================================================-->
+<!-- Describe the bugs.                                               -->
+<!--==================================================================-->
+
+<A NAME="KnownBugs"></A>
+<HR />
+<H2>KNOWN BUGS</H2>
+<P>
+none
+</P>
+
+<!--==================================================================-->
+<!-- Describe Future Plans.                                           -->
+<!--==================================================================-->
+
+<A NAME="FuturePlans"></A>
+<HR />
+<H2>FUTURE PLANS</H2>
+<P>
+none
+</P>
+
+<!--==================================================================-->
+<!-- Legalese & Metadata                                              -->
+<!--==================================================================-->
+
+<A NAME="Legalese"></A>
+<HR />
+<H2>Terms of Use</H2>
+
+<P>
+DART software - Copyright 2004 - 2013 UCAR.<br />
+This open source software is provided by UCAR, "as is",<br />
+without charge, subject to all terms of use at<br />
+<a href="http://www.image.ucar.edu/DAReS/DART/DART_download">
+http://www.image.ucar.edu/DAReS/DART/DART_download</a>
+</P>
+
+<TABLE border=0 cellpadding=0 width=100% summary="">
+<TR><TD valign=top>Contact:       </TD><TD> nancy collins </TD></TR>
+<TR><TD valign=top>Revision:      </TD><TD> $Revision$ </TD></TR>
+<TR><TD valign=top>Source:        </TD><TD> $URL$ </TD></TR>
+<TR><TD valign=top>Change Date:   </TD><TD> $Date$ </TD></TR>
+<TR><TD valign=top>Change&nbsp;history:&nbsp;</TD><TD> try "svn&nbsp;log" or "svn&nbsp;diff" </TD></TR>
+</TABLE>
+
+<!--==================================================================-->
+
+</BODY>
+</HTML>
