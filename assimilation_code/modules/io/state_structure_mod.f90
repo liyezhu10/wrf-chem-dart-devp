@@ -59,7 +59,9 @@ module state_structure_mod
 !> variables after reading from a netcdf file.  There may be calculations in model_mod
 !> that are assuming a transformed order which no longer exists.
 
-use utilities_mod, only : E_ERR, error_handler, nc_check, do_output
+use utilities_mod, only : E_ERR, error_handler, do_output
+
+use netcdf_utilities_mod, only : nc_check
 
 use  obs_kind_mod, only : get_name_for_quantity, get_index_for_quantity
 

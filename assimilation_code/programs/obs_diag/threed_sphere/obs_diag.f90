@@ -47,8 +47,9 @@ use    utilities_mod, only : open_file, close_file, register_module, &
                              file_exist, error_handler, E_ERR, E_WARN, E_MSG,  &
                              initialize_utilities, logfileunit, nmlfileunit,   &
                              find_namelist_in_file, check_namelist_read,       &
-                             nc_check, do_nml_file, do_nml_term, finalize_utilities, &
-                             next_file, get_next_filename
+                             do_nml_file, do_nml_term, finalize_utilities, &
+                             get_next_filename
+use netcdf_utilities_mod, only : nc_check
 use         sort_mod, only : sort
 use   random_seq_mod, only : random_seq_type, init_random_seq, several_random_gaussians
 
@@ -453,12 +454,8 @@ write(nsigmaUnit,'(a)') '   day   secs    lon      lat    level         obs    p
 
 ObsFileLoop : do ifile=1, size(obs_seq_filenames)
 
-   if (obs_sequence_list == '') then
-      obs_seq_in_file_name = next_file(obs_sequence_name,ifile)
-   else
-      obs_seq_in_file_name = get_next_filename(obs_sequence_list,ifile)
-      if (obs_seq_in_file_name == '') exit ObsFileLoop
-   endif
+   obs_seq_in_file_name = get_next_filename(obs_sequence_list,ifile)
+   if (obs_seq_in_file_name == '') exit ObsFileLoop
 
    if ( file_exist(trim(obs_seq_in_file_name)) ) then
       write(string1,*)'opening ', trim(obs_seq_in_file_name)

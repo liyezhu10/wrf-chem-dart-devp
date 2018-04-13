@@ -3622,7 +3622,7 @@ character(len=*), parameter :: routine = 'nc_write_model_atts'
 ! Put file into define mode and
 ! Write Global Attributes 
 !-------------------------------------------------------------------------------
-call nc_redef(ncid)
+call nc_begin_define_mode(ncid)
 
 call nc_add_global_creation_time(ncid)
 
@@ -3762,7 +3762,7 @@ call nc_add_attribute_to_variable(ncid, 'HGT', 'coordinates', 'XLONG XLAT XTIME'
  
 ! Leave define mode so we can fill the variables.
 
-call nc_enddef(ncid)
+call nc_end_define_mode(ncid)
 
 !-----------------------------------------------------------------
 ! Fill the variables
@@ -3794,7 +3794,7 @@ call nc_put_variable(ncid, 'HGT',    wrf%dom(dom_id)%hgt,  routine)
 ! Flush the buffer and leave netCDF file open
 !-----------------------------------------------------------------
 
-call nc_sync(ncid)
+call nc_synchronize_file(ncid)
 
 end subroutine nc_write_model_atts
 
@@ -8102,7 +8102,7 @@ character(len=DATELEN) :: timestring
 call get_date(dart_time, year, month, day, hour, minute, second)
 call set_wrf_date(timestring, year, month, day, hour, minute, second)
 
-call nc_redef(ncid)
+call nc_begin_define_mode(ncid)
 
 ! Define Times variable if it does not exist
 ret = nf90_inq_varid(ncid, "Times", var_id)
@@ -8128,7 +8128,7 @@ if (ret /= NF90_NOERR) then
       dimids=dim_ids, varid=var_id), "write_model_time def_var Times")
 endif
 
-call nc_enddef(ncid)
+call nc_end_define_mode(ncid)
 
 call nc_check( nf90_put_var(ncid, var_id, timestring), &
                'write_model_time', 'put_var Times' )
@@ -8137,8 +8137,6 @@ end subroutine write_model_time
 
 !--------------------------------------------------------------------
 
-!> this routine computes the number of unique values in arrayin
-
 function count_unique_vals(arrayin)
 
 integer, intent(in)  :: arrayin(:)
@@ -8206,76 +8204,52 @@ enddo
 end subroutine keep_unique_vals
 
 !--------------------------------------------------------------------
+!> for debugging
 
 subroutine static_data_sizes(domain)
 integer, intent(in) :: domain
->>>>>>> .merge-right.r12510
 
-function count_unique_vals(arrayin)
+print*
+print*, '******** wrf_static_data_for_dart domain ',domain
+print*, 'znu, dn, dnw, zs, znw ', size(wrf%dom(domain)%znu), &
+                                  size(wrf%dom(domain)%dn ), &
+                                  size(wrf%dom(domain)%dnw), &
+                                  size(wrf%dom(domain)%zs ), &
+                                  size(wrf%dom(domain)%znw)
 
-integer, intent(in)  :: arrayin(:)
-integer              :: count_unique_vals
+print*, 'mub, hgt ', size(wrf%dom(domain)%mub), size(wrf%dom(domain)%hgt)
 
-integer :: insize, sorted(size(arrayin))
-integer :: i, sizeout
+print*, 'latitude, latitude_u, latitude_v ', size(wrf%dom(domain)%latitude), &
+                                             size(wrf%dom(domain)%latitude_u), &
+                                             size(wrf%dom(domain)%latitude_v)
 
-! count the unique values and sort them
-insize = size(arrayin)
+print*, 'longitude, longitude_u, longitude_v ', size(wrf%dom(domain)%longitude), &
+                                                size(wrf%dom(domain)%longitude_u), &
+                                                size(wrf%dom(domain)%longitude_v)
 
-sorted = sort(arrayin)
+print*, 'phb             ', size(wrf%dom(domain)%phb)
+print*, 'var_index       ', size(wrf%dom(domain)%var_index)
+print*, 'var_size        ', size(wrf%dom(domain)%var_size)
+print*, 'var_type        ', size(wrf%dom(domain)%var_type)
+print*, 'var_index_list  ', size(wrf%dom(domain)%var_index_list)
+print*, 'var_update_list ', size(wrf%dom(domain)%var_update_list)
+print*, 'dart_kind       ', size(wrf%dom(domain)%dart_kind)
+print*, 'land            ', size(wrf%dom(domain)%land)
 
-sizeout = 1
-do i = 2, insize
-   if ( sorted(i) /= sorted(i-1) ) sizeout = sizeout + 1
-enddo
+print*, 'lower_bound,upper_bound ', size(wrf%dom(domain)%lower_bound), &
+                                    size(wrf%dom(domain)%upper_bound)
 
-count_unique_vals = sizeout
+print*, 'clamp_or_fail   ', size(wrf%dom(domain)%clamp_or_fail)
 
-end function count_unique_vals
+print*, 'description, units, stagger, coordinates ', size(wrf%dom(domain)%description), &
+                                                     size(wrf%dom(domain)%units), &
+                                                     size(wrf%dom(domain)%stagger), &
+                                                     size(wrf%dom(domain)%coordinates)
 
-!--------------------------------------------------------------------
+print*, 'dart_ind ', size(wrf%dom(domain)%dart_ind)
+print*
 
-!> caller must allocate the right size (see count_unique_vals())
-!> and then this routine returns the unique items from the arrayin
-!> in arrayout, sorted if that's useful.
-
-subroutine keep_unique_vals(arrayin, arrayout)
-
-integer, intent(in)  :: arrayin(:)
-integer, intent(out) :: arrayout(:)
-
-integer :: insize, sorted(size(arrayin))
-integer :: i, nextu, itemcount
-integer :: outsize, numuniq
-
-! count the unique values and sort them
-insize = size(arrayin)
-outsize = size(arrayout)
-
-sorted = sort(arrayin)
-
-numuniq = 1
-do i = 2, insize
-   if ( sorted(i) /= sorted(i-1) ) numuniq = numuniq + 1
-enddo
-
-if(numuniq /= outsize) then
-   call error_handler(E_ERR, 'keep_unique_vals:', &
-          'output array must match number of unique values in input array', &
-          source, revision, revdate)
-endif
-
-arrayout(1) = sorted(1)
-
-nextu = 2
-do i = 2, insize
-   if ( sorted(i) /= sorted(i-1) ) then
-      arrayout(nextu) = sorted(i)
-      nextu = nextu + 1
-   endif
-enddo
-
-end subroutine keep_unique_vals
+end subroutine static_data_sizes
 
 !--------------------------------------------------------------------
 

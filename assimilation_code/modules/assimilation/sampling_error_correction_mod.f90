@@ -16,7 +16,8 @@
 module sampling_error_correction_mod
 
 use types_mod,      only : r8
-use utilities_mod,  only : error_handler, E_ERR, nc_check
+use utilities_mod,  only : error_handler, E_ERR
+use netcdf_utilities_mod, only : nc_check
 
 use netcdf
 

@@ -51,7 +51,7 @@ use ensemble_manager_mod, only : ensemble_type, map_pe_to_task, &
                                  all_copies_to_all_vars, all_vars_to_all_copies, &
                                  get_var_owner_index
 
-use utilities_mod,        only : error_handler, nc_check, check_namelist_read, &
+use utilities_mod,        only : error_handler, check_namelist_read, &
                                  find_namelist_in_file, nmlfileunit, do_nml_file, &
                                  do_nml_term, register_module, to_upper,  E_MSG, E_ERR
 

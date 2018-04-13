@@ -16,7 +16,7 @@ module obs_kind_mod
 
 use        types_mod, only : obstypelength
 use    utilities_mod, only : register_module, error_handler, E_ERR, E_WARN,  &
-                             logfileunit, find_namelist_in_file,             &
+                             logfileunit, find_namelist_in_file, log_it,     &
                              check_namelist_read, do_output, ascii_file_format
 
 implicit none
@@ -898,53 +898,35 @@ if (do_output() .and. (num_kind_assimilate          > 0 .or. &
                        num_kind_evaluate            > 0 .or.  &
                        num_kind_use_precomputed_FOs > 0 )) then  
 
-   write(*, *)
-   write(*, *) '--------------------------------------------------------'
-   write(*, *) '-------------- ASSIMILATE_THESE_OBS_TYPES --------------'
-   write(logfileunit, *)
-   write(logfileunit, *) 'Assimilate_these_obs_types:'
-
+   call log_it('')
+   call log_it('Assimilate_these_obs_types:')
    if (num_kind_assimilate < 1) then
-         write(logfileunit, *) '   none'
-         write(     *     , *) '   none'
+         call log_it('   none')
    else
       do i = 1, num_kind_assimilate
-         write(logfileunit, *) '   '//trim(assimilate_these_obs_types(i))
-         write(     *     , *) '   '//trim(assimilate_these_obs_types(i))
+         call log_it('   '//trim(assimilate_these_obs_types(i)))
       enddo
    endif
 
-   write(*, *) '--------------------------------------------------------'
-   write(*, *) '-------------- EVALUATE_THESE_OBS_TYPES   --------------'
-   write(logfileunit, *) 'Evaluate_these_obs_types:'
-
+   call log_it('Evaluate_these_obs_types:')
    if (num_kind_evaluate <1) then
-         write(logfileunit, *) '   none'
-         write(     *     , *) '   none'
+         call log_it('   none')
    else
       do i = 1, num_kind_evaluate
-         write(logfileunit, *) '   '//trim(evaluate_these_obs_types(i))
-         write(     *     , *) '   '//trim(evaluate_these_obs_types(i))
+         call log_it('   '//trim(evaluate_these_obs_types(i)))
       enddo
    endif
 
-   write(*, *) '--------------------------------------------------------'
-   write(*, *) '---------- USE_PRECOMPUTED_FO_OBS_TYPES   --------------'
-   write(logfileunit, *) 'Use the precomputed Prior Forward Operators for these obs types:'
+   call log_it('Use the precomputed Prior Forward Operators for these obs types:')
 
    if (num_kind_use_precomputed_FOs <1) then
-         write(logfileunit, *) '   none'
-         write(     *     , *) '   none'
+         call log_it('   none')
    else
       do i = 1, num_kind_use_precomputed_FOs
-         write(logfileunit, *) trim(use_precomputed_FOs_these_obs_types(i))
-         write(     *     , *) trim(use_precomputed_FOs_these_obs_types(i))
+         call log_it('   '//trim(use_precomputed_FOs_these_obs_types(i)))
       enddo
    endif
-
-   write(*, *) '--------------------------------------------------------'
-   write(*, *)
-   write(logfileunit, *)
+   call log_it('')
 
 endif
 

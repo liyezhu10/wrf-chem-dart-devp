@@ -19,7 +19,7 @@ use     location_mod,      only : location_type, set_location, set_location_miss
 
 use    utilities_mod,      only : register_module, error_handler, E_ERR, E_MSG, nmlfileunit, &
                                   do_output, find_namelist_in_file, check_namelist_read,     &
-                                  do_nml_file, do_nml_term, nc_check
+                                  do_nml_file, do_nml_term
 
 use ensemble_manager_mod,  only : ensemble_type
 
