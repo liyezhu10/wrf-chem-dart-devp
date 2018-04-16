@@ -8,7 +8,7 @@ module location_mod
 
 ! Implements location interfaces for a three dimensional cyclic region.
 ! The internal representation of the location is currently implemented
-! as (x, y) from 0.0 to 1.0 in both dimensions.
+! as (x,y,z) from 0.0 to 1.0 in all dimensions.
 !
 ! If you are looking for a geophysical locations module, look at either
 ! the threed_sphere or threed_cartesian versions of this file.
@@ -28,7 +28,7 @@ public :: location_type, get_location, set_location, &
           set_location_missing, is_location_in_region, &
           write_location, read_location, interactive_location, query_location, &
           LocationDims, LocationName, LocationLName, LocationStorageOrder, LocationUnits, &
-          get_close_type, get_close_init, get_close, get_close_destroy, &
+          get_close_type, get_close_init, get_close_obs, get_close_state, get_close_destroy, &
           operator(==), operator(/=), get_dist, has_vertical_choice, vertical_localization_on, &
           set_vertical, is_vertical, get_vertical_localization_coord, &
           set_vertical_localization_coord, convert_vertical_obs, convert_vertical_state
@@ -56,14 +56,14 @@ type(random_seq_type) :: ran_seq
 logical :: ran_seq_init = .false.
 logical, save :: module_initialized = .false.
 
-integer,              parameter :: LocationDims = 3
-character(len = 129), parameter :: LocationName = "loc3D"
-character(len = 129), parameter :: LocationLName = "threed cyclic locations: x, y, z"
-character(len = 129), parameter :: LocationStorageOrder = "X Y Z"
-character(len = 129), parameter :: LocationUnits = "none none none"
+integer,           parameter :: LocationDims = 3
+character(len=64), parameter :: LocationName = "loc3D"
+character(len=64), parameter :: LocationLName = "threed cyclic locations: x, y, z"
+character(len=64), parameter :: LocationStorageOrder = "X Y Z"
+character(len=64), parameter :: LocationUnits = "none none none"
 
 
-character(len = 129) :: errstring
+character(len=512) :: errstring
 
 interface operator(==); module procedure loc_eq; end interface
 interface operator(/=); module procedure loc_ne; end interface
@@ -456,6 +456,49 @@ subroutine get_close_destroy(gc)
 type(get_close_type), intent(inout) :: gc
 
 end subroutine get_close_destroy
+
+!----------------------------------------------------------------------------
+
+subroutine get_close_obs(gc, base_loc, base_type, locs, loc_qtys, loc_types, &
+                         num_close, close_ind, dist, ens_handle)
+
+! The specific type of the base observation, plus the generic kinds list
+! for either the state or obs lists are available if a more sophisticated
+! distance computation is needed.
+
+type(get_close_type),          intent(in)  :: gc
+type(location_type),           intent(in)  :: base_loc, locs(:)
+integer,                       intent(in)  :: base_type, loc_qtys(:), loc_types(:)
+integer,                       intent(out) :: num_close, close_ind(:)
+real(r8),            optional, intent(out) :: dist(:)
+type(ensemble_type), optional, intent(in)  :: ens_handle
+
+call get_close(gc, base_loc, base_type, locs, loc_qtys, &
+               num_close, close_ind, dist, ens_handle)
+
+end subroutine get_close_obs
+
+!----------------------------------------------------------------------------
+
+subroutine get_close_state(gc, base_loc, base_type, locs, loc_qtys, loc_indx, &
+                           num_close, close_ind, dist, ens_handle)
+
+! The specific type of the base observation, plus the generic kinds list
+! for either the state or obs lists are available if a more sophisticated
+! distance computation is needed.
+
+type(get_close_type),          intent(in)  :: gc
+type(location_type),           intent(in)  :: base_loc, locs(:)
+integer,                       intent(in)  :: base_type, loc_qtys(:)
+integer(i8),                   intent(in)  :: loc_indx(:)
+integer,                       intent(out) :: num_close, close_ind(:)
+real(r8),            optional, intent(out) :: dist(:)
+type(ensemble_type), optional, intent(in)  :: ens_handle
+
+call get_close(gc, base_loc, base_type, locs, loc_qtys, &
+               num_close, close_ind, dist, ens_handle)
+
+end subroutine get_close_state
 
 !----------------------------------------------------------------------------
 

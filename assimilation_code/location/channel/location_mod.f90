@@ -13,7 +13,7 @@ module location_mod
 
 use      types_mod, only : r8, i8, MISSING_R8, MISSING_I, PI, RAD2DEG, DEG2RAD
 use  utilities_mod, only : register_module, error_handler, E_ERR, ascii_file_format, &
-                           nc_check, E_MSG, open_file, close_file, set_output,       &
+                           E_MSG, open_file, close_file, set_output,       &
                            logfileunit, nmlfileunit, find_namelist_in_file,          &
                            check_namelist_read, do_output, do_nml_file,              &
                            do_nml_term, is_longitude_between
@@ -68,14 +68,14 @@ type(random_seq_type) :: ran_seq
 logical               :: ran_seq_init = .false.
 logical, save         :: module_initialized = .false.
 
-integer,              parameter :: LocationDims = 3
-character(len = 129), parameter :: LocationName = "loc3Dchan"
-character(len = 129), parameter :: LocationLName = &
+integer,           parameter :: LocationDims = 3
+character(len=64), parameter :: LocationName = "loc3Dchan"
+character(len=64), parameter :: LocationLName = &
                                    "threed channel locations: x, y, z"
-character(len = 129), parameter :: LocationStorageOrder = "X Y Z"
-character(len = 129), parameter :: LocationUnits = "none none none"
+character(len=64), parameter :: LocationStorageOrder = "X Y Z"
+character(len=64), parameter :: LocationUnits = "none none none"
 
-character(len = 512) :: errstring
+character(len=512) :: errstring
 
 real(r8) :: radius     ! used only for converting points on a sphere into x,y,z and back
 
@@ -331,7 +331,6 @@ character(len = *),  intent(out), optional :: charstring
 
 integer             :: charlength
 logical             :: writebuf
-character(len=129)  :: string1
 
 10 format(1X,3(G25.16,1X))
 
@@ -481,108 +480,6 @@ location%y = v(2)
 location%z = v(3)
 
 end subroutine interactive_location
-
-!----------------------------------------------------------------------------
-
-function nc_write_location_atts( ncFileID, fname, ObsNumDimID ) result (ierr)
- 
-! Writes the "location module" -specific attributes to a netCDF file.
-
-use typeSizes
-use netcdf
-
-integer,          intent(in) :: ncFileID     ! handle to the netcdf file
-character(len=*), intent(in) :: fname        ! file name (for printing purposes)
-integer,          intent(in) :: ObsNumDimID  ! handle to the dimension that grows
-integer                      :: ierr
-
-integer :: LocDimID
-integer :: VarID
-
-if ( .not. module_initialized ) call initialize_module
-
-ierr = -1 ! assume things will fail ...
-
-! define the rank/dimension of the location information
-call nc_check(nf90_def_dim(ncid=ncFileID, name='location', len=LocationDims, &
-       dimid = LocDimID), 'nc_write_location_atts', 'def_dim:location '//trim(fname))
-
-! Define the location variable and attributes
-
-call nc_check(nf90_def_var(ncid=ncFileID, name='location', xtype=nf90_double, &
-          dimids=(/ LocDimID, ObsNumDimID /), varid=VarID), &
-            'nc_write_location_atts', 'location:def_var')
-
-call nc_check(nf90_put_att(ncFileID, VarID, 'description', &
-        'location coordinates'), 'nc_write_location_atts', 'location:description')
-call nc_check(nf90_put_att(ncFileID, VarID, 'location_type', &
-        trim(LocationName)), 'nc_write_location_atts', 'location:location_type')
-call nc_check(nf90_put_att(ncFileID, VarID, 'long_name', &
-        trim(LocationLName)), 'nc_write_location_atts', 'location:long_name')
-call nc_check(nf90_put_att(ncFileID, VarID, 'storage_order',     &
-        'X Y Z'), 'nc_write_location_atts', 'location:storage_order')
-call nc_check(nf90_put_att(ncFileID, VarID, 'units',     &
-        'X Y Z'), 'nc_write_location_atts', 'location:units')
-
-ierr = 0
-
-end function nc_write_location_atts
-
-!----------------------------------------------------------------------------
-
-subroutine nc_get_location_varids( ncFileID, fname, LocationVarID, WhichVertVarID )
-
-! Return the LocationVarID and WhichVertVarID variables from a given netCDF file.
-!
-! ncFileId         the netcdf file descriptor
-! fname            the name of the netcdf file (for error messages only)
-! LocationVarID    the integer ID of the 'location' variable in the netCDF file
-! WhichVertVarID   the integer ID of the 'which_vert' variable in the netCDF file
-
-use typeSizes
-use netcdf
-
-integer,          intent(in)  :: ncFileID   ! handle to the netcdf file
-character(len=*), intent(in)  :: fname      ! file name (for printing purposes)
-integer,          intent(out) :: LocationVarID, WhichVertVarID
-
-if ( .not. module_initialized ) call initialize_module
-
-call nc_check(nf90_inq_varid(ncFileID, 'location', varid=LocationVarID), &
-          'nc_get_location_varids', 'inq_varid:location '//trim(fname))
-
-WhichVertVarID = -1
-
-end subroutine nc_get_location_varids
-
-!----------------------------------------------------------------------------
-
-subroutine nc_write_location(ncFileID, LocationVarID, loc, obsindex, WhichVertVarID)
- 
-! Writes a SINGLE location to the specified netCDF variable and file.
-! The LocationVarID and WhichVertVarID must be the values returned from
-! the nc_get_location_varids call.
-
-use typeSizes
-use netcdf
-
-integer,             intent(in) :: ncFileID, LocationVarID
-type(location_type), intent(in) :: loc
-integer,             intent(in) :: obsindex
-integer,             intent(in) :: WhichVertVarID
-
-real(r8), dimension(LocationDims) :: locations
-integer,  dimension(1) :: intval
-
-if ( .not. module_initialized ) call initialize_module
-
-locations = get_location( loc )
-
-call nc_check(nf90_put_var(ncFileID, LocationVarId, locations, &
-          start=(/ 1, obsindex /), count=(/ LocationDims, 1 /) ), &
-            'nc_write_location', 'put_var:location')
-
-end subroutine nc_write_location
 
 !----------------------------------------------------------------------------
 

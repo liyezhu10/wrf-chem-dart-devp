@@ -6,20 +6,24 @@
 
 module location_mod
 
-! Implements location interfaces for a two dimensional annulus
-! discrete levels. The internal representation of the azimuth is 
+! Implements location interfaces for a two dimensional annulus.
+! The internal representation of the azimuth is 
 ! implemented as radians and is namelist selectable to be valid 
 ! from -PI/2 to PI/2 (like latitudes) or from 0 to 2 PI (like longitudes)
 ! The radial distance is in meters and the inner and outer boundary
 ! distances are namelist settable.
 !
 
-use      types_mod, only : r8, PI, RAD2DEG, DEG2RAD, MISSING_R8, MISSING_I
+use      types_mod, only : r8, PI, RAD2DEG, DEG2RAD, MISSING_R8, i8, MISSING_I
 use  utilities_mod, only : register_module, error_handler, E_ERR, ascii_file_format, &
-                           nc_check, find_namelist_in_file, check_namelist_read, &
+                           find_namelist_in_file, check_namelist_read, &
                            do_output, do_nml_file, do_nml_term, nmlfileunit, &
-                           open_file, close_file, nc_check, is_longitude_between
+                           open_file, close_file, is_longitude_between
 use random_seq_mod, only : random_seq_type, init_random_seq, random_uniform
+use ensemble_manager_mod, only : ensemble_type
+use default_location_mod, only : has_vertical_choice, vertical_localization_on, &
+                                 get_vertical_localization_coord, &
+                                 set_vertical_localization_coord
 
 implicit none
 private
@@ -27,13 +31,11 @@ private
 public :: location_type, get_location, set_location, &
           set_location_missing, is_location_in_region, &
           write_location, read_location, interactive_location, query_location, &
-          LocationDims, LocationName, LocationLName, get_close_obs, &
-          get_close_maxdist_init, get_close_obs_init, get_close_type, &
-          operator(==), operator(/=), get_dist, get_close_obs_destroy, &
-          nc_write_location_atts, nc_get_location_varids, nc_write_location, &
-          vert_is_height, vert_is_pressure, vert_is_undef, vert_is_level, &
-          vert_is_surface, has_vertical_localization, &
-          set_vert, get_vert, set_which_vert
+          LocationDims, LocationName, LocationLName, LocationStorageOrder, LocationUnits, &
+          get_close_type, get_close_init, get_close_obs, get_close_state, get_close_destroy, &
+          operator(==), operator(/=), get_dist, has_vertical_choice, vertical_localization_on, &
+          set_vertical, is_vertical, get_vertical_localization_coord, &
+          set_vertical_localization_coord, convert_vertical_obs, convert_vertical_state
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -65,10 +67,12 @@ type(random_seq_type) :: ran_seq
 logical :: ran_seq_init = .false.
 logical, save :: module_initialized = .false.
 
-integer,              parameter :: LocationDims = 2
-character(len = 129), parameter :: LocationName = "loc_2d_annulus"
-character(len = 129), parameter :: LocationLName = &
-                                   "2D Annulus location: azimuthal angle, radius"
+integer,           parameter :: LocationDims = 3
+character(len=64), parameter :: LocationName = "loc_2d_annulus"
+character(len=64), parameter :: LocationLName = &
+                                   "2D Annulus location: azimuthal angle, radius, which_azm"
+character(len=64), parameter :: LocationStorageOrder = "azm rad which_azm"
+character(len=64), parameter :: LocationUnits = "degrees none none"
 
 ! limits on the radius (sets inner and outer radius values)
 real(r8) :: min_radius = 0.0_r8
@@ -78,7 +82,7 @@ real(r8) :: max_radius = 100000.0_r8
 ! in various places in the code.  none of that is there at this point.
 namelist /location_nml/ min_radius, max_radius
 
-character(len = 129) :: errstring
+character(len=512) :: errstring
 
 interface operator(==); module procedure loc_eq; end interface
 interface operator(/=); module procedure loc_ne; end interface
@@ -94,11 +98,8 @@ contains
 
 subroutine initialize_module
  
-! read namelist, set up anything that needs one-time initialization
-
 integer :: iunit, io
 
-! only do this code once
 if (module_initialized) return
 
 call register_module(source, revision, revdate)
@@ -113,9 +114,6 @@ call check_namelist_read(iunit, io, "location_nml")
 
 if(do_nml_file()) write(nmlfileunit, nml=location_nml)
 if(do_nml_term()) write(     *     , nml=location_nml)
-
-! copy code from threed sphere module for handing the
-! distances?
 
 end subroutine initialize_module
 
@@ -315,7 +313,6 @@ character(len = *),  intent(out), optional :: charstring
 
 integer             :: charlength
 logical             :: writebuf
-character(len = 128) :: string1
 
 10 format(1X,F21.16,1X,G25.16,1X,I2)
 
@@ -446,6 +443,10 @@ do while (r > 0)
    if (r > 0) write(*, *) 'Please input 0 or -1 for selection'
 enddo
 
+!>@todo FIXME: set min/max degrees above and stop having all
+!>these separate cases.  oh, and somehow support a random
+!>value without having to put in limits (use minval/maxval).
+
 if (r == 0) then
 101 continue
    if (location%which_azm == AZMISUNBOUND) then
@@ -564,178 +565,108 @@ endif
 end subroutine interactive_location
 
 !----------------------------------------------------------------------------
+! Initializes get_close accelerator - unused in this location module
 
-function nc_write_location_atts( ncFileID, fname, ObsNumDimID ) result (ierr)
- 
-! Writes the "location module" -specific attributes to a netCDF file.
-
-use typeSizes
-use netcdf
-
-integer,          intent(in) :: ncFileID     ! handle to the netcdf file
-character(len=*), intent(in) :: fname        ! file name (for printing purposes)
-integer,          intent(in) :: ObsNumDimID  ! handle to the dimension that grows
-integer                      :: ierr
-
-integer :: LocDimID
-integer :: VarID
-
-if ( .not. module_initialized ) call initialize_module
-
-ierr = -1 ! assume things will fail ...
-
-! define the rank/dimension of the location information
-call nc_check(nf90_def_dim(ncid=ncFileID, name='location', len=LocationDims, &
-       dimid = LocDimID), 'nc_write_location_atts', 'def_dim:location '//trim(fname))
-
-! Define the observation location variable and attributes
-
-call nc_check(nf90_def_var(ncid=ncFileID, name='location', xtype=nf90_double, &
-          dimids=(/ LocDimID, ObsNumDimID /), varid=VarID), &
-            'nc_write_location_atts', 'location:def_var')
-
-call nc_check(nf90_put_att(ncFileID, VarID, 'description', &
-        'location coordinates'), 'nc_write_location_atts', 'location:description')
-call nc_check(nf90_put_att(ncFileID, VarID, 'location_type', &
-        trim(LocationName)), 'nc_write_location_atts', 'location:location_type')
-call nc_check(nf90_put_att(ncFileID, VarID, 'long_name', &
-        trim(LocationLName)), 'nc_write_location_atts', 'location:long_name')
-call nc_check(nf90_put_att(ncFileID, VarID, 'storage_order',     &
-        'Azimuth Radius'), 'nc_write_location_atts', 'location:storage_order')
-call nc_check(nf90_put_att(ncFileID, VarID, 'units',     &
-        'degrees meters'), 'nc_write_location_atts', 'location:units')
-
-! Define the ancillary vertical array and attributes
-
-! If we made it to here without error-ing out ... we're good.
-
-ierr = 0
-
-end function nc_write_location_atts
-
-!----------------------------------------------------------------------------
-
-subroutine nc_get_location_varids( ncFileID, fname, LocationVarID, WhichVertVarID )
-
-! Return the LocationVarID and WhichVertVarID variables from a given netCDF file.
-!
-! ncFileId         the netcdf file descriptor
-! fname            the name of the netcdf file (for error messages only)
-! LocationVarID    the integer ID of the 'location' variable in the netCDF file
-! WhichVertVarID   the integer ID of the 'which_vert' variable in the netCDF file
-
-use typeSizes
-use netcdf
-
-integer,          intent(in)  :: ncFileID   ! handle to the netcdf file
-character(len=*), intent(in)  :: fname      ! file name (for printing purposes)
-integer,          intent(out) :: LocationVarID, WhichVertVarID
-
-if ( .not. module_initialized ) call initialize_module
-
-call nc_check(nf90_inq_varid(ncFileID, 'location', varid=LocationVarID), &
-          'nc_get_location_varids', 'inq_varid:location '//trim(fname))
-
-WhichVertVarID = -99
-
-end subroutine nc_get_location_varids
-
-!----------------------------------------------------------------------------
-
-subroutine nc_write_location(ncFileID, LocationVarID, loc, obsindex, WhichVertVarID)
- 
-! Writes a SINGLE location to the specified netCDF variable and file.
-! The LocationVarID and WhichVertVarID must be the values returned from
-! the nc_get_location_varids call.
-
-use typeSizes
-use netcdf
-
-integer,             intent(in) :: ncFileID, LocationVarID
-type(location_type), intent(in) :: loc
-integer,             intent(in) :: obsindex
-integer,             intent(in) :: WhichVertVarID
-
-real(r8), dimension(LocationDims) :: locations
-integer,  dimension(1) :: intval
-
-if ( .not. module_initialized ) call initialize_module
-
-locations = get_location( loc ) ! converts from radians to degrees, btw
-
-call nc_check(nf90_put_var(ncFileID, LocationVarId, locations, &
-          start=(/ 1, obsindex /), count=(/ LocationDims, 1 /) ), &
-            'nc_write_location', 'put_var:location')
-
-end subroutine nc_write_location
-
-!----------------------------------------------------------------------------
-
-subroutine get_close_obs_init(gc, num, obs)
- 
-! Initializes part of get_close accelerator that depends on the particular obs
+subroutine get_close_init(gc, num, maxdist, locs, maxdist_list)
 
 type(get_close_type), intent(inout) :: gc
 integer,              intent(in)    :: num
-type(location_type),  intent(in)    :: obs(num)
-
-! Set the value of num_obs in the structure
-gc%num = num
-
-end subroutine get_close_obs_init
-
-!----------------------------------------------------------------------------
-
-subroutine get_close_obs_destroy(gc)
-
-type(get_close_type), intent(inout) :: gc
-
-end subroutine get_close_obs_destroy
-
-!----------------------------------------------------------------------------
-
-subroutine get_close_maxdist_init(gc, maxdist, maxdist_list)
-
-type(get_close_type), intent(inout) :: gc
 real(r8),             intent(in)    :: maxdist
+type(location_type),  intent(in)    :: locs(:)
 real(r8), intent(in), optional      :: maxdist_list(:)
 
-! Set the maximum distance in the structure
+! Set the maximum localization distance
 gc%maxdist = maxdist
 
-end subroutine get_close_maxdist_init
+! Save the value of num_locs
+gc%num = num
+
+if (present(maxdist_list)) then
+   write(errstring,*)'twod_annulus locations does not support different cutoff distances by type'
+   call error_handler(E_ERR, 'get_close_init', errstring, source, revision, revdate)
+endif
+
+end subroutine get_close_init
 
 !----------------------------------------------------------------------------
 
-subroutine get_close_obs(gc, base_obs_loc, base_obs_type, obs, obs_kind, &
-   num_close, close_ind, dist)
+subroutine get_close_destroy(gc)
 
-! Return how many locations are closer than cutoff distance, along with a
-! count, and the actual distances if requested.  The kinds are available if
-! more sophisticated distance computations are wanted.
+type(get_close_type), intent(inout) :: gc
+
+end subroutine get_close_destroy
+
+!----------------------------------------------------------------------------
+
+subroutine get_close_obs(gc, base_loc, base_type, locs, loc_qtys, loc_types, &
+                         num_close, close_ind, dist, ens_handle)
+
+! The specific type of the base observation, plus the generic kinds list
+! for either the state or obs lists are available if a more sophisticated
+! distance computation is needed.
+
+type(get_close_type),          intent(in)  :: gc
+type(location_type),           intent(in)  :: base_loc, locs(:)
+integer,                       intent(in)  :: base_type, loc_qtys(:), loc_types(:)
+integer,                       intent(out) :: num_close, close_ind(:)
+real(r8),            optional, intent(out) :: dist(:)
+type(ensemble_type), optional, intent(in)  :: ens_handle
+
+call get_close(gc, base_loc, base_type, locs, loc_qtys, &
+               num_close, close_ind, dist, ens_handle)
+
+end subroutine get_close_obs
+
+!----------------------------------------------------------------------------
+
+subroutine get_close_state(gc, base_loc, base_type, locs, loc_qtys, loc_indx, &
+                           num_close, close_ind, dist, ens_handle)
+
+! The specific type of the base observation, plus the generic kinds list
+! for either the state or obs lists are available if a more sophisticated
+! distance computation is needed.
+
+type(get_close_type),          intent(in)  :: gc
+type(location_type),           intent(in)  :: base_loc, locs(:)
+integer,                       intent(in)  :: base_type, loc_qtys(:)
+integer(i8),                   intent(in)  :: loc_indx(:)
+integer,                       intent(out) :: num_close, close_ind(:)
+real(r8),            optional, intent(out) :: dist(:)
+type(ensemble_type), optional, intent(in)  :: ens_handle
+
+call get_close(gc, base_loc, base_type, locs, loc_qtys, &
+               num_close, close_ind, dist, ens_handle)
+
+end subroutine get_close_state
+
+!----------------------------------------------------------------------------
+
+subroutine get_close(gc, base_loc, base_type, locs, loc_qtys, &
+                     num_close, close_ind, dist, ensemble_handle)
 
 type(get_close_type), intent(in)  :: gc
-type(location_type),  intent(in)  :: base_obs_loc, obs(:)
-integer,              intent(in)  :: base_obs_type, obs_kind(:)
+type(location_type),  intent(in)  :: base_loc, locs(:)
+integer,              intent(in)  :: base_type, loc_qtys(:)
 integer,              intent(out) :: num_close, close_ind(:)
 real(r8), optional,   intent(out) :: dist(:)
+type(ensemble_type), optional, intent(in)  :: ensemble_handle
 
 integer :: i
 real(r8) :: this_dist
 
-! the list of locations in the obs() argument must be the same
-! as the list of locations passed into get_close_obs_init(), so
-! gc%num and size(obs) better be the same.   if the list changes,
+! the list of locations in the locs() argument must be the same
+! as the list of locations passed into get_close_init(), so
+! gc%num and size(locs) better be the same.   if the list changes,
 ! you have to destroy the old gc and init a new one.
-if (size(obs) /= gc%num) then
-   write(errstring,*)'obs() array must match one passed to get_close_obs_init()'
-   call error_handler(E_ERR, 'get_close_obs', errstring, source, revision, revdate)
+if (size(locs) /= gc%num) then
+   write(errstring,*)'locs() array must match one passed to get_close_init()'
+   call error_handler(E_ERR, 'get_close', errstring, source, revision, revdate)
 endif
 
 ! Return list of obs that are within maxdist and their distances
 num_close = 0
 do i = 1, gc%num
-   this_dist = get_dist(base_obs_loc, obs(i), base_obs_type, obs_kind(i))
+   this_dist = get_dist(base_loc, locs(i), base_type, loc_qtys(i))
    if(this_dist <= gc%maxdist) then
       ! Add this ob to the list
       num_close = num_close + 1
@@ -744,7 +675,7 @@ do i = 1, gc%num
    endif
 end do
 
-end subroutine get_close_obs
+end subroutine get_close
 
 !----------------------------------------------------------------------------
 
@@ -780,121 +711,63 @@ is_location_in_region = .true.
 end function is_location_in_region
 
 !----------------------------------------------------------------------------
-
-function vert_is_undef(loc)
- 
-! Stub, always returns false.
-
-logical                          :: vert_is_undef
-type(location_type), intent(in)  :: loc
-
-vert_is_undef = .false.
-
-end function vert_is_undef
-
+! stubs - here only because they have a location type as one of the arguments
 !----------------------------------------------------------------------------
 
-function vert_is_surface(loc)
- 
-! Stub, always returns false.
+function is_vertical(loc, which_vert)
 
-logical                          :: vert_is_surface
+logical                          :: is_vertical
 type(location_type), intent(in)  :: loc
+character(len=*),    intent(in)  :: which_vert
 
-if ( .not. module_initialized ) call initialize_module
+is_vertical = .false.
 
-vert_is_surface = .false.
-
-end function vert_is_surface
-
-!----------------------------------------------------------------------------
-
-function vert_is_pressure(loc)
+end function is_vertical
  
-! Stub, always returns false.
-
-logical                          :: vert_is_pressure
-type(location_type), intent(in)  :: loc
-
-vert_is_pressure = .false.
-
-end function vert_is_pressure
-
-!----------------------------------------------------------------------------
-
-function vert_is_height(loc)
- 
-! Stub, always returns false.
-
-logical                          :: vert_is_height
-type(location_type), intent(in)  :: loc
-
-if ( .not. module_initialized ) call initialize_module
-
-vert_is_height = .false.
-
-end function vert_is_height
-
-!----------------------------------------------------------------------------
-
-function vert_is_level(loc)
- 
-! Stub, always returns false.
-
-logical                          :: vert_is_level
-type(location_type), intent(in)  :: loc
-
-if ( .not. module_initialized ) call initialize_module
-
-vert_is_level = .false.
-
-end function vert_is_level
-
-!---------------------------------------------------------------------------
-
-function has_vertical_localization()
- 
-! Always returns false since this type of location doesn't support
-! vertical localization.
-
-logical :: has_vertical_localization
-
-if ( .not. module_initialized ) call initialize_module
-
-has_vertical_localization = .false.
-
-end function has_vertical_localization
-
 !--------------------------------------------------------------------
-!> dummy routine for models that don't have a vertical location
-function get_vert(loc)
 
-type(location_type), intent(in) :: loc
-real(r8) :: get_vert
-
-get_vert = 1 ! any old value
-
-end function get_vert
-
-!--------------------------------------------------------------------
-!> dummy routine for models that don't have a vertical location
-subroutine set_vert(loc, vloc)
+subroutine set_vertical(loc, vloc, which_vert)
 
 type(location_type), intent(inout) :: loc
-real(r8), intent(in) :: vloc
+real(r8), optional,  intent(in)    :: vloc
+integer,  optional,  intent(in)    :: which_vert
 
 
-end subroutine set_vert
+end subroutine set_vertical
 
-!----------------------------------------------------------------------------
-!> set the which vert
-subroutine set_which_vert(loc, which_vert)
+!--------------------------------------------------------------------
 
-type(location_type), intent(inout) :: loc
-integer,                intent(in) :: which_vert !< vertical coordinate type
+subroutine convert_vertical_obs(ens_handle, num, locs, loc_qtys, loc_types, &
+                                which_vert, status)
 
+type(ensemble_type), intent(in)    :: ens_handle
+integer,             intent(in)    :: num
+type(location_type), intent(inout) :: locs(:)
+integer,             intent(in)    :: loc_qtys(:)
+integer,             intent(in)    :: loc_types(:)
+integer,             intent(in)    :: which_vert
+integer,             intent(out)   :: status(:)
 
-end subroutine set_which_vert
+status(:) = 0
+
+end subroutine convert_vertical_obs
+
+!--------------------------------------------------------------------
+
+subroutine convert_vertical_state(ens_handle, num, locs, loc_qtys, loc_indx, &
+                                  which_vert, status)
+
+type(ensemble_type), intent(in)    :: ens_handle
+integer,             intent(in)    :: num
+type(location_type), intent(inout) :: locs(:)
+integer,             intent(in)    :: loc_qtys(:)
+integer(i8),         intent(in)    :: loc_indx(:)
+integer,             intent(in)    :: which_vert
+integer,             intent(out)   :: status
+
+status = 0
+
+end subroutine convert_vertical_state
 
 !----------------------------------------------------------------------------
 ! end of location/twod_annulus/location_mod.f90

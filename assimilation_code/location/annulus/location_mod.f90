@@ -14,7 +14,7 @@ module location_mod
 ! and the vertical coordinate is zero at the bottom of the annulus.
 !
 
-use      types_mod, only : r8, PI, RAD2DEG, DEG2RAD, MISSING_R8, MISSING_I
+use      types_mod, only : r8, PI, RAD2DEG, DEG2RAD, MISSING_R8, i8, MISSING_I
 use  utilities_mod, only : register_module, error_handler, E_ERR, ascii_file_format, &
                            find_namelist_in_file, check_namelist_read, &
                            do_output, do_nml_file, do_nml_term, nmlfileunit, &
@@ -29,7 +29,7 @@ public :: location_type, get_location, set_location, &
           set_location_missing, is_location_in_region, &
           write_location, read_location, interactive_location, query_location, &
           LocationDims, LocationName, LocationLName, LocationStorageOrder, LocationUnits, &
-          get_close_type, get_close_init, get_close, get_close_destroy, &
+          get_close_type, get_close_init, get_close_obs, get_close_state, get_close_destroy, &
           operator(==), operator(/=), get_dist, &
           vertical_localization_on, is_vertical, set_vertical, &
           get_vertical_localization_coordinate, set_vertical_localization_coordinate, &
@@ -63,12 +63,12 @@ logical :: ran_seq_init = .false.
 logical, save :: module_initialized = .false.
 character(len=256) :: msgstring
 
-integer,             parameter :: LocationDims = 3
-character(len = 64), parameter :: LocationName = "loc_annulus"
-character(len = 64), parameter :: LocationLName = &
+integer,            parameter :: LocationDims = 3
+character(len=64), parameter :: LocationName = "loc_annulus"
+character(len=64), parameter :: LocationLName = &
                                    "Annulus location: azimuthal angle, radius, and height"
-character(len = 64), parameter :: LocationStorageOrder = 'Azimuth Radius Vertical'
-character(len = 64), parameter :: LocationUnits = 'degrees meters which_vert'
+character(len=64), parameter :: LocationStorageOrder = 'Azimuth Radius Vertical'
+character(len=64), parameter :: LocationUnits = 'degrees meters which_vert'
 
 
 ! really just a placeholder.  there was a comment that this code
@@ -81,7 +81,7 @@ real(r8) :: max_radius = 100000.0_r8
 ! in various places in the code.  none of that is there at this point.
 namelist /location_nml/ min_radius, max_radius
 
-character(len = 129) :: errstring
+character(len=512) :: errstring
 
 interface operator(==); module procedure loc_eq; end interface
 interface operator(/=); module procedure loc_ne; end interface
@@ -590,6 +590,49 @@ subroutine get_close_destroy(gc)
 type(get_close_type), intent(inout) :: gc
 
 end subroutine get_close_destroy
+
+!----------------------------------------------------------------------------
+
+subroutine get_close_obs(gc, base_loc, base_type, locs, loc_qtys, loc_types, &
+                         num_close, close_ind, dist, ens_handle)
+
+! The specific type of the base observation, plus the generic kinds list
+! for either the state or obs lists are available if a more sophisticated
+! distance computation is needed.
+
+type(get_close_type),          intent(in)  :: gc
+type(location_type),           intent(in)  :: base_loc, locs(:)
+integer,                       intent(in)  :: base_type, loc_qtys(:), loc_types(:)
+integer,                       intent(out) :: num_close, close_ind(:)
+real(r8),            optional, intent(out) :: dist(:)
+type(ensemble_type), optional, intent(in)  :: ens_handle
+
+call get_close(gc, base_loc, base_type, locs, loc_qtys, &
+               num_close, close_ind, dist, ens_handle)
+
+end subroutine get_close_obs
+
+!----------------------------------------------------------------------------
+
+subroutine get_close_state(gc, base_loc, base_type, locs, loc_qtys, loc_indx, &
+                           num_close, close_ind, dist, ens_handle)
+
+! The specific type of the base observation, plus the generic kinds list
+! for either the state or obs lists are available if a more sophisticated
+! distance computation is needed.
+
+type(get_close_type),          intent(in)  :: gc
+type(location_type),           intent(in)  :: base_loc, locs(:)
+integer,                       intent(in)  :: base_type, loc_qtys(:)
+integer(i8),                   intent(in)  :: loc_indx(:)
+integer,                       intent(out) :: num_close, close_ind(:)
+real(r8),            optional, intent(out) :: dist(:)
+type(ensemble_type), optional, intent(in)  :: ens_handle
+
+call get_close(gc, base_loc, base_type, locs, loc_qtys, &
+               num_close, close_ind, dist, ens_handle)
+
+end subroutine get_close_state
 
 !----------------------------------------------------------------------------
 !> Return how many locations are closer than cutoff distance, along with a

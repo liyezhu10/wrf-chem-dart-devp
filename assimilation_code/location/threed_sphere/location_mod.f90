@@ -758,12 +758,10 @@ type(location_type), intent(in)            :: loc
 character(len = *),  intent(in),  optional :: fform
 character(len = *),  intent(out), optional :: charstring
 
-integer             :: charlength
-logical             :: writebuf
-character(len=129)  :: string1
+integer            :: charlength
+logical            :: writebuf
+character(len=64)  :: string1  ! see length lims below
 
-! 10 format(1x,3(f22.14,1x),i4)  ! old
-10 format(1X,3(G25.16,1X),I2)
 
 if ( .not. module_initialized ) call initialize_module()
 
@@ -775,6 +773,7 @@ if (.not. writebuf) then
    if (ascii_file_format(fform)) then
       write(locfile, '(''loc3d'')' ) 
       write(locfile, 10) loc%lon, loc%lat, loc%vloc, loc%which_vert
+10 format(1X,3(G25.16,1X),I2)  ! more precision than before
    else
       write(locfile) loc%lon, loc%lat, loc%vloc, loc%which_vert
    endif

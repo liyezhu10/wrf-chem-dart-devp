@@ -10,8 +10,7 @@ module location_mod
 
 use            types_mod, only : i8, r8, MISSING_R8, MISSING_I
 use ensemble_manager_mod, only : ensemble_type
-use        utilities_mod, only : register_module, error_handler, E_ERR, ascii_file_format, &
-                                 nc_check
+use        utilities_mod, only : register_module, error_handler, E_ERR, ascii_file_format
 
 implicit none
 private
@@ -60,14 +59,13 @@ integer :: location_vertical_localization_coord = 0
 
 logical, save :: module_initialized = .false.
 
-integer,             parameter :: LocationDims = 1
-character(len = 64), parameter :: LocationName = "loc1Dcolumn"
-character(len = 64), parameter :: LocationLName = "one-dimensional column"
-character(len = 64), parameter :: LocationStorageOrder = "Vertical"
-character(len = 64), parameter :: LocationUnits = "which_vert"
+integer,           parameter :: LocationDims = 1
+character(len=64), parameter :: LocationName = "loc1Dcolumn"
+character(len=64), parameter :: LocationLName = "one-dimensional column"
+character(len=64), parameter :: LocationStorageOrder = "Vertical"
+character(len=64), parameter :: LocationUnits = "which_vert"
 
-
-character(len = 129) :: errstring
+character(len=512) :: errstring
 
 interface operator(==); module procedure loc_eq; end interface
 interface operator(/=); module procedure loc_ne; end interface
@@ -421,7 +419,7 @@ else if(location%which_vert == VERTISUNDEF ) then
    location%vloc = 0.0_r8
 else
    write(*, *) 'Wrong choice of which_vert try again between ',VERTISUNDEF, &
-               ' and ',VERTISHEIGHT
+               ' and ',VERTISSCALEHEIGHT
    go to 100
 end if
 

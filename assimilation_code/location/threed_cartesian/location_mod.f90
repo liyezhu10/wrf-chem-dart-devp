@@ -12,7 +12,7 @@ module location_mod
 
 use      types_mod, only : r8, i8, MISSING_R8, MISSING_I, PI, RAD2DEG, DEG2RAD
 use  utilities_mod, only : register_module, error_handler, E_ERR, ascii_file_format, &
-                           nc_check, E_MSG, open_file, close_file, set_output,       &
+                           E_MSG, open_file, close_file, set_output,                 &
                            logfileunit, nmlfileunit, find_namelist_in_file,          &
                            check_namelist_read, do_output, do_nml_file,              &
                            do_nml_term, is_longitude_between
@@ -44,12 +44,12 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-integer,              parameter :: LocationDims = 3
-character(len = 129), parameter :: LocationName = "loc3Dcartesian"
-character(len = 129), parameter :: LocationLName = &
+integer,           parameter :: LocationDims = 3
+character(len=64), parameter :: LocationName = "loc3Dcartesian"
+character(len=64), parameter :: LocationLName = &
                                    "threed cartesian locations: x, y, z"
-character(len = 129), parameter :: LocationStorageOrder = "X Y Z"
-character(len = 129), parameter :: LocationUnits = "none none none"
+character(len=64), parameter :: LocationStorageOrder = "X Y Z"
+character(len=64), parameter :: LocationUnits = "none none none"
 
 type location_type
    private
@@ -98,7 +98,7 @@ type(random_seq_type) :: ran_seq
 logical               :: ran_seq_init = .false.
 logical, save         :: module_initialized = .false.
 
-character(len = 512) :: errstring
+character(len=512) :: errstring
 
 real(r8) :: radius     ! used only for converting points on a sphere into x,y,z and back
 
@@ -217,7 +217,6 @@ subroutine initialize_module
 ! things which need doing exactly once.
 
 integer :: iunit, io, i
-character(len=129) :: str1
 
 if (module_initialized) return
 
