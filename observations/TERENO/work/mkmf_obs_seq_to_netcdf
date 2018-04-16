@@ -6,8 +6,8 @@
 #
 # DART $Id$
 
-../../../mkmf/mkmf -p advance_time -t ../../../mkmf/mkmf.template   \
- -a "../../.." path_names_advance_time
+../../../mkmf/mkmf -p obs_seq_to_netcdf -t ../../../mkmf/mkmf.template \
+ -a "../../.." path_names_obs_seq_to_netcdf
 
 exit $status
 

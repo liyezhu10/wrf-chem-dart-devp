@@ -1,3 +1,4 @@
+# DART $Id$
 
 &CNOFS_text_to_obs_nml
    text_input_file = "cnofs_jan_2012_data_assim.ivm",
