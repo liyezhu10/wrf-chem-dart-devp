@@ -337,7 +337,7 @@ Subroutine generate_qc_meta_data( seq )
 
 type(obs_sequence_type), intent(inout) :: seq
 
-call set_qc_meta_data(seq, 1, 'Quality Control')
+call set_qc_meta_data(seq, 1, 'original QC')
 call set_qc_meta_data(seq, 2, 'DART quality control')
 
 end Subroutine generate_qc_meta_data

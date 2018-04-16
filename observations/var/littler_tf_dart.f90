@@ -530,7 +530,7 @@ else
    call init_obs_sequence(dart_seq, num_copies, num_qc, max_num_obs)
 
    call set_copy_meta_data(dart_seq, 1, 'littler observations')
-   call set_qc_meta_data(  dart_seq, 1, 'littler QC')
+   call set_qc_meta_data(  dart_seq, 1, 'original QC')
 
    iunit = open_file(littler_file_name, action = 'read')
 

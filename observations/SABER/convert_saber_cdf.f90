@@ -119,7 +119,7 @@ if ( file_exist ) then
     call set_copy_meta_data(obs_seq, k, 'observation')
   end do
   do k = 1, num_qc
-    call set_qc_meta_data(obs_seq, k, 'Data QC')
+    call set_qc_meta_data(obs_seq, k, 'original QC')
   end do
 
 else
@@ -132,7 +132,7 @@ else
     call set_copy_meta_data(obs_seq, k, 'observation')
   end do
   do k = 1, num_qc
-    call set_qc_meta_data(obs_seq, k, 'Data QC')
+    call set_qc_meta_data(obs_seq, k, 'original QC')
   end do
 
 end if

@@ -206,7 +206,7 @@ num_qc = 1
 call init_obs_sequence(seq, num_copies, num_qc, max_num_obs)
 
 call set_copy_meta_data(seq, 1, 'WRFVAR 2.1 GTS observations')
-call set_qc_meta_data(  seq, 1, 'WRFVAR OBSPROC Quality Control')
+call set_qc_meta_data(  seq, 1, 'original QC')
 
 call init_obs(obs, num_copies, num_qc)
 

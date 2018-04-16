@@ -134,7 +134,7 @@ do i = 1, num_copies
 end do
 
 do i = 1, num_qc
-   call set_qc_meta_data(real_obs_sequence, i, 'AIRS QC')
+   call set_qc_meta_data(real_obs_sequence, i, 'original QC')
 end do
 
 ! Initialize the obs variables

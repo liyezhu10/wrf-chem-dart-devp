@@ -88,7 +88,7 @@ Bogena, H.R., M. Herbst, J.A. Huisman, U. Rosenbaum, A. Weuthen and H. Vereecken
 Potential of wireless sensor networks 
 for measuring soil water content variability. Vadose Zone J., 9 (4): 
 1002-1013, doi:10.2136/vzj2009.0173.<br />
-Hübner, C., Cardell-Oliver, R., Becker, R., Spohrer, K., Jotter, K., and Wagenknecht, T., 2009, 
+H&#252;bner, C., Cardell-Oliver, R., Becker, R., Spohrer, K., Jotter, K., and Wagenknecht, T., 2009, 
 Wireless soil moisture sensor networks for environmental monitoring and 
 vineyard irrigation: Helsinki University of Technology, no. 1, p. 408-415.<br /> 
 Qu, W., Bogena, H. R., Huisman, J. A., and Vereecken, H., 2013, 
@@ -118,12 +118,29 @@ view of the workflow is:
     a single easy-to-use file. This file may be large and might benefit from
     being chopped into a series of smaller files each covering non-overlapping 
     time windows.</li>
+<!-- li>Example scripts for converting batches of these files are in the 
+    <em class=file>shell_scripts</em> directory.  These are <em>NOT</em> 
+    intended to be turnkey scripts; they will certainly need to be customized 
+    for your use.  There are comments at the top of the scripts saying what 
+    options they include, and should be commented enough to indicate where 
+    changes will be likely to need to be made.
+    <br />
+    <br />
+    The expected usage pattern is that a script will copy, rename, or make a 
+    symbolic link from the actual input file (which often contains a timestamp 
+    in the name) to the fixed input name before conversion, and move the output 
+    file to an appropriate filename before the next invocation of the converter.  
+    If an existing observation sequence file of the same output name is 
+    found when the converter is run again, it will open that file and append
+    the next set of observations to it.
+</li -->
 </ol>
+
 
 <!--==================================================================-->
 
 <A NAME="DataSources"></A>
-<HR />
+<div class="top">[<a href="#">top</a>]</div><hr />
 <H2>DATA SOURCES</H2>
 
 <P>
@@ -144,9 +161,13 @@ The data files are distributed in netCDF format and have names like
 <em class=file>soilnet.rollesbroich.wc.2015.3.nc</em>&nbsp;.
 Reading these particular netcdf files can be a bit tricky because of the
 use of <em class=code>NaN</em> for a <em class=code>_FillValue</em>.
-The exact same code compiled with <em class=program>gfortran</em> and 
-<em class=program>ifort</em> yield vastly different numbers of observations.  
-<em class=code>NaN</em>s (by definition) will not pass any logical test ...
+Since you cannot use the _FillValue attribute value of NaN in a test, 
+logic was employed that basically implicitly ignores the _FillValue 
+attribute value.  The current logic is to test if the data value matches 
+itself. If it does not - the value is a NaN (you cannot test if a value 
+is equal to a NaN - by definition, no value will equal a NaN, 
+not even itself).  If the data providers ever decide to change the 
+_FillValue, this converter will need to be modified.
 </P>
 
 <pre>
@@ -172,7 +193,7 @@ The exact same code compiled with <em class=program>gfortran</em> and
 <!--==================================================================-->
 
 <A NAME="Programs"></A>
-<HR />
+<div class="top">[<a href="#">top</a>]</div><hr />
 <H2>PROGRAMS</H2>
 <P>
 The programs in the <em class=file>DART/observations/TERENO/</em> 
@@ -185,67 +206,85 @@ to the converters, the <em class=file>advance_time</em> and
 </P>
 <P>
 There are currently converters for these data types:</P>
-<TABLE border=0 cellpadding=3 summary="">
+<TABLE border=0 cellpadding=3 summary="" width=50%>
 <TBODY valign=top>
-<TR><TD>soil water content</TD>  <TD> convert_soil_moisture  </TD>
+<TR><TH align=left>data type</TH>  <TH align=left>program</TH></TR>
+<TR><TD>soil water content</TD>  <TD><em class=program>convert_soil_moisture </em></TD>
 </TABLE>
+
 <P>
-
-
 Please note that the converter is named <em class=program>convert_soil_moisture</em>
 because you search for <em class=code>soil moisture</em> in the data portal. The metadata
 for what is included in the data files clearly states these are <em class=code>soil water content</em>
 expressed in saturation percent. <strong>This converter outputs SOIL_WATER_CONTENT observations.</strong>
-
-
-
-Example scripts for converting batches of these files are
-in the <em class=file>shell_scripts</em> directory.  
-These are <em>NOT</em> intended to be turnkey scripts; they will
-certainly need to be customized for your use.  There are comments
-at the top of the scripts saying what options they include, and
-should be commented enough to indicate where changes will be
-likely to need to be made.
 </P>
-<P>Several converters have compile-time choices
-for outputting various types of moist variables.
-Check the source code for more details.
-Some converters also read multiple T/F strings
-from the console (standard input) to control at
-run-time what types of observations to convert.
-Again, check the source code for more details.
+<!--===================== DESCRIPTION OF A NAMELIST =====================-->
+
+<A NAME="Namelist"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
+<H2>NAMELIST</H2>
+<P>
+These namelists are read from the file <em class=file>input.nml</em>.
+Namelists start with an ampersand '&amp;' and terminate with a slash '/'.
+Character strings that contain a '/' must be enclosed in quotes to prevent 
+them from prematurely terminating the namelist.
+The default values are listed here.
 </P>
-<P>Each converter has hard-coded input and output filenames:</P>
-<TABLE border=0 cellpadding=5 summary="input/output filenames">
+
+<div class=namelist>
+<pre>
+&amp;convert_soil_moisture
+   input_file_list = 'file_list.txt'
+   obs_out_file    = 'obs_seq.out'
+   verbose         = .false.
+   /
+</pre>
+</div>
+<div>
+<TABLE border=0 cellpadding=3 width=100% summary='namelist description'>
+<THEAD align=left>
+<TR><TH> Item </TH>
+    <TH> Type </TH>
+    <TH> Description </TH> </TR>
+</THEAD>
 <TBODY valign=top>
-<TR> <TD>convert_madis_acars:   </TD> <TD> acars_input.nc    </TD> <TD> obs_seq.acars    </TD>
-<TR> <TD>convert_madis_marine:  </TD> <TD> marine_input.nc   </TD> <TD> obs_seq.marine   </TD>
-<TR> <TD>convert_madis_mesonet: </TD> <TD> mesonet_input.nc  </TD> <TD> obs_seq.mesonet  </TD>
-<TR> <TD>convert_madis_metar:   </TD> <TD> metar_input.nc    </TD> <TD> obs_seq.metar    </TD>
-<TR> <TD>convert_madis_profiler:</TD> <TD> profiler_input.nc </TD> <TD> obs_seq.profiler </TD>
-<TR> <TD>convert_madis_rawin:   </TD> <TD> rawin_input.nc    </TD> <TD> obs_seq.rawin    </TD>
-<TR> <TD>convert_madis_satwnd:  </TD> <TD> satwnd_input.nc   </TD> <TD> obs_seq.satwnd   </TD>
-</TABLE>
 
-<P>The expected usage pattern is that a script will copy,
-rename, or make a symbolic link from the actual input file
-(which often contains a timestamp in the name) to the fixed input 
-name before conversion, and move the output file to an
-appropriate filename before the next invocation of the converter.  
-If an existing observation sequence file of the same output name is 
-found when the converter is run again, it will open that file and append
-the next set of observations to it.
-</P>
+<TR><TD>input_file</TD>
+    <TD>character(len=256)</TD>
+    <TD>This is the input filename.</TD>
+</TR>
+
+<TR><TD>obs_out_file</TD>
+    <TD>character(len=256)</TD>
+    <TD>This is the filename of the DART-format observation sequence file.
+        If the file already exists, the new observations will be <em>appended</em>
+        to it in a manner consistent with the linked-list structure of DART observation
+        sequence files. Traversing the link in the appropriate fashion will result in
+        traversing the link in an ascending time order - despite the fact the order of
+        the observations in the file is not required to be strictly ascending.
+    </TD>
+</TR>
+
+<TR><TD>verbose</TD>
+    <TD>logical</TD>
+    <TD>controls the amount of run-time output</TD>
+</TR>
+
+</TBODY>
+</TABLE>
+</div>
+
+<P><!-- useless space so 'top' aligns --></P>
 
 <!--==================================================================-->
 <!-- Describe the bugs.                                               -->
 <!--==================================================================-->
 
-<A NAME="KnownBugs"></A>
-<HR />
+<A NAME="Errors"></A>
+<div class="top">[<a href="#">top</a>]</div><hr />
 <H2>KNOWN BUGS</H2>
 <P>
-none
+Processing the NaN value is a problem.
 </P>
 
 <!--==================================================================-->
@@ -253,10 +292,14 @@ none
 <!--==================================================================-->
 
 <A NAME="FuturePlans"></A>
-<HR />
+<div class="top">[<a href="#">top</a>]</div><hr />
 <H2>FUTURE PLANS</H2>
 <P>
-none
+Either extend the existing converter to handle soil temperature as well
+as soil moisture, or create another converter.
+<br />
+<br />
+There are no plans to support the csv-format data files from TERENO.
 </P>
 
 <!--==================================================================-->
@@ -264,19 +307,18 @@ none
 <!--==================================================================-->
 
 <A NAME="Legalese"></A>
-<HR />
+<div class="top">[<a href="#">top</a>]</div><hr />
 <H2>Terms of Use</H2>
 
 <P>
-DART software - Copyright 2004 - 2013 UCAR.<br />
-This open source software is provided by UCAR, "as is",<br />
-without charge, subject to all terms of use at<br />
+DART software - Copyright UCAR. This open source software is provided
+by UCAR, "as is", without charge, subject to all terms of use at
 <a href="http://www.image.ucar.edu/DAReS/DART/DART_download">
 http://www.image.ucar.edu/DAReS/DART/DART_download</a>
 </P>
 
 <TABLE border=0 cellpadding=0 width=100% summary="">
-<TR><TD valign=top>Contact:       </TD><TD> nancy collins </TD></TR>
+<TR><TD valign=top>Contact:       </TD><TD> Tim Hoar </TD></TR>
 <TR><TD valign=top>Revision:      </TD><TD> $Revision$ </TD></TR>
 <TR><TD valign=top>Source:        </TD><TD> $URL$ </TD></TR>
 <TR><TD valign=top>Change Date:   </TD><TD> $Date$ </TD></TR>

@@ -159,7 +159,7 @@ else
     call set_copy_meta_data(obs_seq, k, 'COSMIC GPS observation')
   end do
   do k = 1, num_qc
-    call set_qc_meta_data(obs_seq, k, 'COSMIC QC')
+    call set_qc_meta_data(obs_seq, k, 'original QC')
   end do
 
 end if

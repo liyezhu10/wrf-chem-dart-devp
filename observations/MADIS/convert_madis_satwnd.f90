@@ -161,7 +161,7 @@ else
     call set_copy_meta_data(obs_seq, i, 'MADIS observation')
   end do
   do i = 1, num_qc
-    call set_qc_meta_data(obs_seq, i, 'Data QC')
+    call set_qc_meta_data(obs_seq, i, 'original QC')
   end do
 
 endif

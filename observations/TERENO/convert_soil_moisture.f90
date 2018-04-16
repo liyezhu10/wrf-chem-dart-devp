@@ -1,5 +1,5 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 ! $Id$
@@ -167,7 +167,7 @@ else ! create a new one
     call set_copy_meta_data(obs_seq, i, 'observation')
   enddo
   do i = 1, num_qc
-    call set_qc_meta_data(obs_seq, i, 'Data QC')
+    call set_qc_meta_data(obs_seq, i, 'original QC')
   enddo
 
 endif
@@ -225,10 +225,12 @@ FileLoop: do ifile = 1,num_input_files
 
    call nc_check(nf90_close(ncid),routine,'closing "'//trim(filename)//'"')
 
-   ! Having a NaN as the _FillValue is just the dumbest thing ever.
-   ! By definition they fail every test ... so you cannot test for equality
-   where(.not. (sensor1 <= 0.0) .and. .not. (sensor1 > 0.0)) sensor1 = MISSING_R8
-   where(.not. (sensor2 <= 0.0) .and. .not. (sensor2 > 0.0)) sensor2 = MISSING_R8
+   ! Having a NaN as the _FillValue is more work than it needs to be.
+   ! By definition they fail every test ... so you cannot test to see if a data value
+   ! equals the _FillValue ... must have some other test. 
+
+   where (sensor1 .ne. sensor1) sensor1 = MISSING_R8
+   where (sensor2 .ne. sensor2) sensor2 = MISSING_R8
 
    if (verbose) then
       write(string1,*)'..  range of sensor1 ',minval(  sensor1),maxval(  sensor1), &

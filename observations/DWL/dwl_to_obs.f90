@@ -119,7 +119,7 @@ if (add_obs_data) then
    ! the first one needs to contain the string 'observation' and the
    ! second needs the string 'QC'.
    call set_copy_meta_data(obs_seq, 1, 'observation')
-   call set_qc_meta_data(obs_seq, 1, 'Data QC')
+   call set_qc_meta_data(obs_seq, 1, 'original QC')
 endif
 
 ! Set the DART data quality control.   0 is good data. 

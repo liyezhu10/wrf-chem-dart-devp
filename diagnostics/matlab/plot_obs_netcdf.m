@@ -26,7 +26,7 @@ function obsstruct = plot_obs_netcdf(fname, ObsTypeString, region, CopyString, .
 % ObsTypeString = 'ALL';
 % region        = [0 360 -90 90 -Inf Inf];
 % CopyString    = 'WOD observation';
-% QCString      = 'WOD QC';
+% QCString      = 'original QC';
 % maxgoodQC     = 0;
 % verbose       = 1;   % anything > 0 == 'true'
 % twoup         = 1;   % anything > 0 == 'true'

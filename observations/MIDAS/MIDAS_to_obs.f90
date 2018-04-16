@@ -120,7 +120,7 @@ call init_obs_sequence(obs_seq, num_copies, num_qc, max_obs)
 ! the first one needs to contain the string 'observation' and the
 ! second needs the string 'QC'.
 call set_copy_meta_data(obs_seq, 1, 'observation')
-call set_qc_meta_data(  obs_seq, 1, 'MIDAS QC')
+call set_qc_meta_data(  obs_seq, 1, 'original QC')
 
 call nc_check(nf90_open(input_file, NF90_NOWRITE, ncid), &
                    'main', 'open '//trim(input_file))

@@ -150,7 +150,7 @@ print *, "max entries = ", num_new_obs
     call set_copy_meta_data(obs_seq, k, 'GTSPP observation')
   end do
   do k = 1, num_qc
-    call set_qc_meta_data(obs_seq, k, 'GTSPP QC')
+    call set_qc_meta_data(obs_seq, k, 'original QC')
   end do
 
 end if

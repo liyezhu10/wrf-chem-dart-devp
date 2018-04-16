@@ -212,7 +212,7 @@ DAYLOOP: do idd = start_day, start_day + total_days - 1
    call init_obs_sequence(obs_seq, num_copies, num_qc, max_obs)
 
    call set_copy_meta_data(obs_seq, 1, 'MODIS observation')
-   call set_qc_meta_data(obs_seq, 1, 'MODIS QC')
+   call set_qc_meta_data(obs_seq, 1, 'original QC')
 
    ! construct the input and output filenames
    write(obsdate, '(i4.4, i2.2, i2.2)') start_year, start_month, idd

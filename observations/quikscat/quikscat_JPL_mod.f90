@@ -181,7 +181,7 @@ do i = 1, num_copies
    call set_copy_meta_data(real_obs_sequence, i, 'observation')
 end do
 
-call set_qc_meta_data(real_obs_sequence, 1, 'QC flag - wvc_quality_flag')
+call set_qc_meta_data(real_obs_sequence, 1, 'original QC')
 !call set_qc_meta_data(real_obs_sequence, 2, 'IMUDH - mp_rain_probability')
 !call set_qc_meta_data(real_obs_sequence, 3, 'NOF Index - nof_rain_index')
 

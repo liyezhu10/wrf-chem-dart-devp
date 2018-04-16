@@ -151,7 +151,7 @@ else ! create a new one
     call set_copy_meta_data(obs_seq, i, 'observation')
   enddo
   do i = 1, num_qc
-    call set_qc_meta_data(obs_seq, i, 'Data QC')
+    call set_qc_meta_data(obs_seq, i, 'original QC')
   enddo
 endif
 
