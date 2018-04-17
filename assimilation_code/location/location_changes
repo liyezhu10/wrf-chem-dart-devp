@@ -1,0 +1,197 @@
+
+old public interface list:                                                               new public interface list:
+
+ LocationDims                                                                             LocationDims
+ LocationLName                                                                            LocationLName
+ LocationName                                                                             LocationName
+ get_close_maxdist_init                                                                   LocationStorageOrder
+ get_close_obs                                                                            LocationUnits
+ get_close_obs_destroy                                                                    convert_vertical_obs
+ get_close_obs_init                                                                       convert_vertical_state
+ get_close_type                                                                           get_close_destroy
+ get_dist                                                                                 get_close_init
+ get_location                                                                             get_close_obs
+ get_vert                                                                                 get_close_state
+ has_vertical_localization                                                                get_close_type
+ interactive_location                                                                     get_dist
+ is_location_in_region                                                                    get_location
+ nc_get_location_varids                                                                   get_vertical_localization_coord
+ nc_write_location                                                                        has_vertical_choice
+ nc_write_location_atts                                                                   interactive_location
+ operator(/=)                                                                             is_location_in_region
+ operator(==)                                                                             is_vertical
+ query_location                                                                           location_type
+ read_location                                                                            operator(/=)
+ set_location                                                                             operator(==)
+ set_location_missing                                                                     query_location
+ set_vert                                                                                 read_location
+ set_which_vert                                                                           set_location
+ vert_is_height                                                                           set_location_missing
+ vert_is_level                                                                            set_vertical
+ vert_is_pressure                                                                         set_vertical_localization_coord
+ vert_is_surface                                                                          vertical_localization_on
+ vert_is_undef                                                                            write_location
+ write_location
+ location_type
+                                                                                         ! example location parms
+
+                                                                                         integer,             parameter :: LocationDims = 1
+                                                                                         character(len = 64), parameter :: LocationName = "loc1d"
+                                                                                         character(len = 64), parameter :: LocationLName = "location on unit circle"
+                                                                                         character(len = 64), parameter :: LocationStorageOrder = "X"
+                                                                                         character(len = 64), parameter :: LocationUnits = "none"
+
+                                                                                         interface operator(==); module procedure loc_eq; end interface
+                                                                                         interface operator(/=); module procedure loc_ne; end interface
+
+                                                                                         interface set_location
+                                                                                            module procedure set_location_single
+                                                                                            module procedure set_location_array
+                                                                                         end interface set_location
+
+                                                                                         ! if no vert
+                                                                                         use default_location_mod, only : has_vertical_choice, vertical_localization_on, &
+                                                                                                                          get_vertical_localization_coord, &
+                                                                                                                          set_vertical_localization_coord
+
+
+
+                                                                                         subroutine initialize_module
+subroutine initialize_module
+                                                                                         function get_dist(loc1, loc2, type1, kind2)
+function get_dist(loc1, loc2, type1, kind2)                                              type(location_type), intent(in) :: loc1, loc2
+type(location_type), intent(in) :: loc1, loc2                                            integer, optional,   intent(in) :: type1, kind2
+integer, optional,   intent(in) :: type1, kind2                                          real(r8)                        :: get_dist
+real(r8)                        :: get_dist
+                                                                                         function loc_eq(loc1,loc2)
+function loc_eq(loc1,loc2)                                                               type(location_type), intent(in) :: loc1, loc2
+type(location_type), intent(in) :: loc1, loc2                                            logical                         :: loc_eq
+logical                         :: loc_eq
+                                                                                         function loc_ne(loc1,loc2)
+function loc_ne(loc1,loc2)                                                               type(location_type), intent(in) :: loc1, loc2
+type(location_type), intent(in) :: loc1, loc2                                            logical                         :: loc_ne
+logical                         :: loc_ne
+                                                                                         function get_location(loc)
+function get_location(loc)                                                               type(location_type), intent(in) :: loc
+type(location_type), intent(in) :: loc                                                   real(r8)                        :: get_location
+real(r8), dimension(2) :: get_location
+                                                                                         function set_location_single(x)
+function set_location_single(lon, lat)                                                   real(r8), intent(in) :: x
+real(r8), intent(in) :: lon, lat                                                         type (location_type) :: set_location_single
+type (location_type) :: set_location_single
+                                                                                         function set_location_array(list)
+function set_location_array(list)                                                        real(r8), intent(in) :: list(:)
+real(r8), intent(in) :: list(:)                                                          type (location_type) :: set_location_array
+type (location_type) :: set_location_array
+                                                                                         function set_location_missing()
+function set_location_missing()                                                          type (location_type) :: set_location_missing
+type (location_type) :: set_location_missing
+                                                                                         function query_location(loc, attr)
+function query_location(loc, attr)                                                       type(location_type),        intent(in) :: loc
+type(location_type),        intent(in) :: loc                                            character(len=*), optional, intent(in) :: attr
+character(len=*), optional, intent(in) :: attr                                           real(r8)                               :: query_location
+real(r8)                               :: query_location
+                                                                                         subroutine write_location(locfile, loc, fform, charstring)
+subroutine write_location(locfile, loc, fform, charstring)                               integer, intent(in)                        :: locfile
+integer, intent(in)                        :: locfile                                    type(location_type), intent(in)            :: loc
+type(location_type), intent(in)            :: loc                                        character(len = *),  intent(in),  optional :: fform
+character(len = *),  intent(in),  optional :: fform                                      character(len = *),  intent(out), optional :: charstring
+character(len = *),  intent(out), optional :: charstring
+                                                                                         function read_location(locfile, fform)
+function read_location(locfile, fform)                                                   integer, intent(in)                      :: locfile
+integer, intent(in)                      :: locfile                                      character(len = *), intent(in), optional :: fform
+character(len = *), intent(in), optional :: fform                                        type(location_type)                      :: read_location
+type(location_type)                      :: read_location
+                                                                                         subroutine interactive_location(location, set_to_default)
+subroutine interactive_location(location, set_to_default)                                type(location_type), intent(out) :: location
+type(location_type), intent(out) :: location                                             logical, intent(in), optional    :: set_to_default
+logical, intent(in), optional    :: set_to_default
+
+function nc_write_location_atts( ncFileID, fname, ObsNumDimID ) result (ierr)
+integer,          intent(in) :: ncFileID     ! handle to the netcdf file
+character(len=*), intent(in) :: fname        ! file name (for printing purposes)
+integer,          intent(in) :: ObsNumDimID  ! handle to the dimension that grows   
+integer                      :: ierr
+
+subroutine nc_get_location_varids( ncFileID, fname, LocationVarID, WhichVertVarID )
+integer,          intent(in)  :: ncFileID   ! handle to the netcdf file
+character(len=*), intent(in)  :: fname      ! file name (for printing purposes)
+integer,          intent(out) :: LocationVarID, WhichVertVarID
+
+subroutine nc_write_location(ncFileID, LocationVarID, loc, obsindex, WhichVertVarID)
+integer,             intent(in) :: ncFileID, LocationVarID
+type(location_type), intent(in) :: loc
+integer,             intent(in) :: obsindex
+integer,             intent(in) :: WhichVertVarID
+                                                                                         subroutine get_close_init(gc, num, maxdist, locs, maxdist_list)
+subroutine get_close_obs_init(gc, num, obs)                                              type(get_close_type), intent(inout) :: gc
+type(get_close_type), intent(inout) :: gc                                                integer,              intent(in)    :: num
+integer,              intent(in)    :: num                                               real(r8),             intent(in)    :: maxdist
+type(location_type),  intent(in)    :: obs(num)                                          type(location_type),  intent(in)    :: locs(:)
+                                                                                         real(r8), intent(in), optional      :: maxdist_list(:)
+subroutine get_close_obs_destroy(gc)
+type(get_close_type), intent(inout) :: gc                                                subroutine get_close_destroy(gc)
+                                                                                         type(get_close_type), intent(inout) :: gc
+subroutine get_close_maxdist_init(gc, maxdist, maxdist_list)
+type(get_close_type), intent(inout) :: gc                                                subroutine get_close_obs(gc, base_loc, base_type, locs, loc_qtys, loc_types, &
+real(r8),             intent(in)    :: maxdist                                                                    num_close, close_ind, dist, ensemble_handle)
+real(r8), intent(in), optional      :: maxdist_list(:)                                   type(get_close_type),          intent(in)  :: gc
+                                                                                         type(location_type),           intent(in)  :: base_loc, locs(:)
+subroutine get_close_obs(gc, base_obs_loc, base_obs_type, obs, obs_kind, &               integer,                       intent(in)  :: base_type, loc_qtys(:), loc_types(:)
+                         num_close, close_ind, dist)                                     integer,                       intent(out) :: num_close, close_ind(:)
+type(get_close_type), intent(in)  :: gc                                                  real(r8),            optional, intent(out) :: dist(:)
+type(location_type),  intent(in)  :: base_obs_loc, obs(:)                                type(ensemble_type), optional, intent(in)  :: ensemble_handle
+integer,              intent(in)  :: base_obs_type, obs_kind(:)
+integer,              intent(out) :: num_close, close_ind(:)                             subroutine get_close_state(gc, base_loc, base_type, locs, loc_qtys, loc_indx, &
+real(r8), optional,   intent(out) :: dist(:)                                                                        num_close, close_ind, dist, ensemble_handle)
+                                                                                         type(get_close_type),          intent(in)  :: gc
+                                                                                         type(location_type),           intent(in)  :: base_loc, locs(:)
+                                                                                         integer,                       intent(in)  :: base_type, loc_qtys(:)
+                                                                                         integer(i8),                   intent(in)  :: loc_indx(:)
+                                                                                         integer,                       intent(out) :: num_close, close_ind(:)
+                                                                                         real(r8),            optional, intent(out) :: dist(:)
+                                                                                         type(ensemble_type), optional, intent(in)  :: ensemble_handle
+
+                                                                                         subroutine get_close(gc, base_loc, base_type, locs, loc_qtys, &
+                                                                                                              num_close, close_ind, dist, ensemble_handle)
+                                                                                         type(get_close_type),          intent(in)  :: gc
+                                                                                         type(location_type),           intent(in)  :: base_loc, locs(:)
+                                                                                         integer,                       intent(in)  :: base_type, loc_qtys(:)
+                                                                                         integer,                       intent(out) :: num_close, close_ind(:)
+                                                                                         real(r8),            optional, intent(out) :: dist(:)
+                                                                                         type(ensemble_type), optional, intent(in)  :: ensemble_handle
+
+function is_location_in_region(loc, minl, maxl)                                          function is_location_in_region(loc, minl, maxl)
+logical                          :: is_location_in_region                                logical                          :: is_location_in_region
+type(location_type), intent(in)  :: loc, minl, maxl                                      type(location_type), intent(in)  :: loc, minl, maxl
+
+function vert_is_undef(loc)                                                              function is_vertical(loc, which_vert)
+logical                          :: vert_is_undef                                        logical                          :: is_vertical
+type(location_type), intent(in)  :: loc                                                  type(location_type), intent(in)  :: loc
+                                                                                         character(len=*),    intent(in)  :: which_vert
+function vert_is_surface(loc)
+logical                          :: vert_is_surface                                      subroutine set_vertical(loc, vloc, which_vert)
+type(location_type), intent(in)  :: loc                                                  type(location_type), intent(inout) :: loc
+                                                                                         real(r8), optional,  intent(in)    :: vloc
+function vert_is_pressure(loc)                                                           integer,  optional,  intent(in)    :: which_vert
+logical                          :: vert_is_pressure
+type(location_type), intent(in)  :: loc                                                  subroutine convert_vertical_obs(ens_handle, num, locs, loc_qtys, loc_types, &
+                                                                                                                         which_vert, status)
+function vert_is_height(loc)                                                             type(ensemble_type), intent(in)    :: ens_handle
+logical                          :: vert_is_height                                       integer,             intent(in)    :: num
+type(location_type), intent(in)  :: loc                                                  type(location_type), intent(inout) :: locs(:)
+                                                                                         integer,             intent(in)    :: loc_qtys(:)
+function vert_is_level(loc)                                                              integer,             intent(in)    :: loc_types(:)
+logical                          :: vert_is_level                                        integer,             intent(in)    :: which_vert
+type(location_type), intent(in)  :: loc                                                  integer,             intent(out)   :: status(:)
+
+function has_vertical_localization()                                                     subroutine convert_vertical_state(ens_handle, num, locs, loc_qtys, loc_indx, &
+logical :: has_vertical_localization                                                                                       which_vert, status)
+                                                                                         type(ensemble_type), intent(in)    :: ens_handle
+function get_vert(loc)                                                                   integer,             intent(in)    :: num
+type(location_type), intent(in) :: loc                                                   type(location_type), intent(inout) :: locs(:)
+real(r8) :: get_vert                                                                     integer,             intent(in)    :: loc_qtys(:)
+                                                                                         integer(i8),         intent(in)    :: loc_indx(:)
+subroutine set_vert(loc, vloc)                                                           integer,             intent(in)    :: which_vert
+type(location_type), intent(inout) :: loc                                                integer,             intent(out)   :: status
+real(r8), intent(in) :: vloc

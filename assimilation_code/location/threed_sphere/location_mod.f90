@@ -25,7 +25,7 @@ module location_mod
 use      types_mod, only : r8, MISSING_R8, MISSING_I, PI, RAD2DEG, DEG2RAD, OBSTYPELENGTH, i8
 use  utilities_mod, only : register_module, error_handler, E_ERR, ascii_file_format, &
                            E_MSG, open_file, close_file, set_output,                 &
-                           logfileunit, nmlfileunit, find_namelist_in_file,          &
+                           nmlfileunit, find_namelist_in_file,          &
                            check_namelist_read, do_output, do_nml_file,              &
                            do_nml_term, is_longitude_between
 use random_seq_mod, only : random_seq_type, init_random_seq, random_uniform
@@ -518,16 +518,15 @@ if(loc1%which_vert == VERTISSURFACE .and. loc2%which_vert == VERTISSURFACE) comp
 if(.not. comp_h_only) then
    ! Vert distance can only be done for like vertical locations units
    if(loc1%which_vert /= loc2%which_vert) then
+      call write_location(-1, loc1, charstring=msgstring)
+      call error_handler(E_MSG, 'get_dist', 'location1: '//msgstring)
+      call write_location(-1, loc2, charstring=msgstring)
+      call error_handler(E_MSG, 'get_dist', 'location2: '//msgstring)
       write(msgstring,*)'loc1%which_vert (',loc1%which_vert, &
                    ') /= loc2%which_vert (',loc2%which_vert,')'
-      call error_handler(E_MSG, 'get_dist', msgstring, source, revision, revdate)
-      call write_location(logfileunit,loc1)
-      call write_location(logfileunit,loc2)
-      call write_location(0,loc1)
-      call write_location(0,loc2)
       call error_handler(E_ERR, 'get_dist', &
          'Dont know how to compute vertical distance for unlike vertical coordinates', &
-         source, revision, revdate)
+         source, revision, revdate, text2=msgstring)
    endif
 
    ! Compute the difference and divide by the appropriate normalization factor
