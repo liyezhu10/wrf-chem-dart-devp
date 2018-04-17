@@ -526,6 +526,7 @@ integer           :: o_index
 logical           :: is_ascii
 character(len=32) :: fileformat   ! here for backwards compatibility only
 logical           :: has_precomputed_FO
+character(len=64) :: errstring
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -546,8 +547,10 @@ endif
 if (is_ascii) then
    read(ifile, '(a5)') header
    if(header /= 'obdef') then
+      write(errstring, *) 'read "'//header//'" instead'
       call error_handler(E_ERR,'read_obs_def', &
-         'Expected header "obdef" in input file', source, revision, revdate)
+         'Expected string "obdef" in input obs_seq file', &
+          source, revision, revdate, text2=errstring)
    endif
 endif
 
@@ -556,9 +559,10 @@ obs_def%location = read_location(ifile, fform)
 if (is_ascii) then
    read(ifile, '(a5)' ) header
    if(header /= 'kind ') then
+      write(errstring, *) 'read "'//header//'" instead'
       call error_handler(E_ERR,'read_kind', &
-         'Expected kind header "kind " in input file', &
-          source, revision, revdate)
+         'Expected string "kind " in input obs_seq file', &
+          source, revision, revdate, text2=errstring)
    endif
    read(ifile, *) o_index
 else
@@ -586,9 +590,10 @@ select case(obs_def%kind)
       continue
 
    case DEFAULT
+      write(errstring, *) 'unknown type number was ', obs_def%kind
       call error_handler(E_ERR, 'read_obs_def', &
-         'Attempt to read for undefined obs_kind type.', &
-         source, revision, revdate)
+         'Attempt to read observation for an undefined observation type.', &
+         source, revision, revdate, text2=errstring)
 end select
 
 has_precomputed_FO = has_ext_prior_this_obs_kind(obs_def%kind)
@@ -626,6 +631,7 @@ character(len=*), intent(in), optional :: fform
 logical           :: is_ascii
 character(len=32) :: fileformat   ! here for backwards compatibility only
 logical           :: has_precomputed_FO
+character(len=64) :: errstring
 
 if ( .not. module_initialized ) call initialize_module
 
@@ -665,9 +671,10 @@ select case(obs_def%kind)
       continue
 
    case DEFAULT
+      write(errstring, *) 'unknown type number was ', obs_def%kind
       call error_handler(E_ERR, 'write_obs_def', &
-         'Attempt to write for undefined obs_kind type.', &
-         source, revision, revdate)
+         'Attempt to write observation for an undefined observation type.', &
+         source, revision, revdate, text2=errstring)
 end select
 
 has_precomputed_FO = has_ext_prior_this_obs_kind(obs_def%kind)
@@ -698,6 +705,8 @@ subroutine interactive_obs_def(obs_def, key)
 type(obs_def_type), intent(inout) :: obs_def
 integer,               intent(in) :: key
 
+character(len=64) :: errstring
+
 if ( .not. module_initialized ) call initialize_module
 
 ! Get the observation kind WANT A STRING OPTION, TOO?
@@ -715,9 +724,10 @@ select case(obs_def%kind)
    case (:-1)
       continue
    case DEFAULT
+      write(errstring, *) 'unknown type number was ', obs_def%kind
       call error_handler(E_ERR, 'interactive_obs_def', &
-         'Attempt to interactively create undefined obs_kind type.', &
-         source, revision, revdate)
+         'Attempt to interactively create observation for an undefined observation type.', &
+         source, revision, revdate, text2=errstring)
 end select
 
 ! If the kind is an identity observation, don't need to call location

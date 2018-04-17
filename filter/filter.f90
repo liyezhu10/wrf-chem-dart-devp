@@ -13,5 +13,10 @@ use filter_mod, only : filter_main
 
 call filter_main()
 
-end program
+end program filter
 
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

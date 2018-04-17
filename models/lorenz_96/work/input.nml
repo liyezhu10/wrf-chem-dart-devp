@@ -48,6 +48,7 @@
    output_inflation         = .true.,
    output_timestamps        = .true.,
    trace_execution          = .false.,
+   write_obs_every_cycle    = .false.,
    silence                  = .false.,
 
    inf_flavor                  = 2,                       0,
@@ -128,6 +129,8 @@
 
 &obs_kind_nml
    assimilate_these_obs_types = 'RAW_STATE_VARIABLE',
+                                'RAW_STATE_1D_INTEGRAL',
+                                'RAW_STATE_VAR_POWER'            
    /
 
 &assim_model_nml

@@ -821,18 +821,14 @@ end subroutine error_handler
 !> write, and to position at the file start or end.  returns
 !> the open unit number.
 
-function open_file(fname, form, action) result (iunit)
+function open_file (fname, form, action, return_rc) result (iunit)
 
-character(len=*), intent(in)           :: fname
-character(len=*), intent(in), optional :: form, action
-integer :: iunit
+   character(len=*), intent(in)            :: fname
+   character(len=*), intent(in) , optional :: form, action
+   integer,          intent(out), optional :: return_rc
+   integer  :: iunit
 
-integer           :: nc, rc
-logical           :: open
-character(len=11) :: format
-character(len=6)  :: pos
-character(len=9)  :: act
-character(len=7)  :: stat
+   character(len=32) :: msgstring1
 
 if ( .not. module_initialized ) call initialize_utilities
 
@@ -841,10 +837,13 @@ inquire (file=fname, opened=open, number=iunit,  &
 
 ! if already open, let fortran runtime library catch bad
 ! calls, e.g. a write to a file that was opened read-only.
-if (open) return
+if (open) then
+   if (present(return_rc)) return_rc = rc
+   return
+endif
 
-! ---------- open file ----------
- 
+! not already open, so open it.
+         
 ! this code used to only set the form and position, not the action.
 ! not specifying 'read' meant that many compilers would create an
 ! empty file instead of returning a read error.  this leads to lots
@@ -909,14 +908,7 @@ end function open_file
 
 !----------------------------------------------------------------
 
-!> prints routine name and version number to a log file 
-!>
-!>    in:  iunit    = unit number to direct output
-!>         routine = routine name (character, max len=20)
-!>         version = version name or number (character, max len=8)
-
 subroutine print_version_number (iunit, routine, version)
-
 integer,          intent(in) :: iunit
 character(len=*), intent(in) :: routine, version
 

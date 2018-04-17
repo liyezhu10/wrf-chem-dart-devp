@@ -46,6 +46,7 @@
 ! SAT_F107,                        KIND_1D_PARAMETER,               COMMON_CODE
 ! SAT_RHO,                         KIND_DENSITY
 ! GPS_PROFILE,                     KIND_ELECTRON_DENSITY,           COMMON_CODE
+! COSMIC_ELECTRON_DENSITY,         KIND_ELECTRON_DENSITY,           COMMON_CODE
 ! GND_GPS_VTEC,		           KIND_GND_GPS_VTEC
 ! CHAMP_DENSITY,                   KIND_DENSITY
 ! MIDAS_TEC,                       KIND_VERTICAL_TEC
@@ -309,8 +310,6 @@ real(r8),            intent(in) :: x(:)
 type(location_type), intent(in) :: location
 real(r8),           intent(out) :: obs_val
 integer,            intent(out) :: istatus
-real(r8)                        :: mmro1, mmro2 ! mass mixing ratio 
-real(r8)                        :: pressure, temperature 
 
 if ( .not. module_initialized ) call initialize_module
 
