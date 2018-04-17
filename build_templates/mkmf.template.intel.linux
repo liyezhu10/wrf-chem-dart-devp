@@ -132,8 +132,10 @@ LD = ifort
 #
 # NETCDF = /opt/local
 
-INCS = -I$(NETCDF)/include
-LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf
+GPTL = /glade/p/work/bdobbins/Projects/DART/source/graph_coloring/GPTL
+
+INCS = -I$(NETCDF)/include -I$(GPTL)
+LIBS = ${GPTL}/libgptl.a -L$(NETCDF)/lib -lnetcdff -lnetcdf 
 FFLAGS  = -O -assume buffered_io $(INCS)
 LDFLAGS = $(FFLAGS) $(LIBS)
 

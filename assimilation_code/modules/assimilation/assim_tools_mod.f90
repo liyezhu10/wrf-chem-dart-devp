@@ -78,7 +78,13 @@ private
 public :: filter_assim, &
           set_assim_tools_trace, &
           test_state_copies, &
-          update_ens_from_weights  ! Jeff thinks this routine is in the wild.
+          update_ens_from_weights, &  ! Jeff thinks this routine is in the wild.
+          assim_tools_init, &  ! For assim_graph_tools_mod
+          update_from_obs_inc, & ! "" 
+          obs_increment, &     ! "" 
+          get_my_obs_loc, &    ! ""
+          log_namelist_selections ! ""
+
 
 ! Indicates if module initialization subroutine has been called yet
 logical :: module_initialized = .false.

@@ -40,6 +40,7 @@ use assim_model_mod,       only : static_init_assim_model, get_model_size,      
                                   end_assim_model,  pert_model_copies
 
 use assim_tools_mod,       only : filter_assim, set_assim_tools_trace, test_state_copies
+use assim_graph_tools_mod, only : filter_assim_chunks
 use obs_model_mod,         only : move_ahead, advance_state, set_obs_model_trace
 
 use ensemble_manager_mod,  only : init_ensemble_manager, end_ensemble_manager,                &
@@ -894,7 +895,7 @@ AdvanceTime : do
    call     trace_message('Before observation assimilation')
    call timestamp_message('Before observation assimilation')
 
-   call filter_assim(state_ens_handle, obs_fwd_op_ens_handle, seq, keys, &
+   call filter_assim_chunks(state_ens_handle, obs_fwd_op_ens_handle, seq, keys, &
       ens_size, num_groups, obs_val_index, prior_inflate, &
       ENS_MEAN_COPY, ENS_SD_COPY, &
       PRIOR_INF_COPY, PRIOR_INF_SD_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY, &
