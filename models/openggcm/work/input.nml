@@ -27,7 +27,7 @@
    input_state_file_list    = "input_list.txt"
    init_time_days           = -1
    init_time_seconds        = -1
-   ens_size                 =  2
+   ens_size                 =  3
    num_output_obs_members   = 10
    num_output_state_members = 10
 
@@ -80,7 +80,7 @@
 
 
 &test_interp_nml
-   test_case = 1
+   test_case = 4
   /
 
 

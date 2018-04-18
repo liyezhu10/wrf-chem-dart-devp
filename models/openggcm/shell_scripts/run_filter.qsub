@@ -53,7 +53,7 @@
 #PBS -N filter
 #PBS -e filter.err
 #PBS -o filter.log
-#PBS -l nodes=3:ppn=32
+#PBS -l nodes=1:ppn=32
 #PBS -l walltime=2:00:00
 
 #----------------------------------------------------------------------
@@ -86,9 +86,8 @@ else if ($?PBS_QUEUE) then
    setenv JOBID       $PBS_JOBID
    setenv MYQUEUE     $PBS_QUEUE
    setenv MYHOST      $PBS_O_HOST
-   setenv MPI         aprun -np xx
-
-   env | sort
+   setenv NUMCPUS     `cat $PBS_NODEFILE | wc -l`
+   setenv MPI         "aprun -n $NUMCPUS"
 
 else
 
@@ -133,16 +132,19 @@ switch ( ${OSTYPE} )
       setenv REMOVE 'rm -rf'
       setenv   COPY 'cp -p'
       setenv   MOVE 'mv -f'
+      setenv   LINK 'ln -s'
       breaksw
    case AIX:
       setenv REMOVE 'rm -rf'
       setenv   COPY 'cp -p'
       setenv   MOVE 'mv -f'
+      setenv   LINK 'ln -s'
       breaksw
    default:
       setenv REMOVE 'rm -rvf'
       setenv   COPY 'cp -vp'
       setenv   MOVE 'mv -fv'
+      setenv   LINK 'ln -sv'
       breaksw
 endsw
 
@@ -152,6 +154,7 @@ echo "${JOBNAME} ($JOBID) RUNPATH == $RUNPATH"
 # Set variables containing various directory names where we will GET things
 #-----------------------------------------------------------------------------
 
+set DARTROOT = /mnt/lustre/lus0/home/dart/dart/rma_openggcm
 set DARTDIR = /mnt/lustre/lus0/home/dart/dart/rma_openggcm/models/openggcm
 set OBSERVATIONDIR = $DARTDIR/observations
 
@@ -160,28 +163,31 @@ set OBSERVATIONDIR = $DARTDIR/observations
 #-----------------------------------------------------------------------------
 
 # executables
-${COPY} ${DARTDIR}/work/filter                     .
-${COPY} ${DARTDIR}/work/input.nml                  .
+${COPY} ${DARTDIR}/work/filter.exe .  || exit 1
+${COPY} ${DARTDIR}/work/input.nml  .  || exit 1
 
-set SAMP_ERR_FILE = ${DARTROOT}/assimilation_code/programs/system_simulation/work/sampling_error_correction_table.Lanai.nc
-${COPY} ${SAMP_ERR_FILE}  sampling_error_correction_table.nc
+set SAMP_ERR_FILE = ${DARTROOT}/assimilation_code/programs/gen_sampling_err_table/work/sampling_error_correction_table.nc
 
-# COMPLETE HACK ...
+${COPY} ${SAMP_ERR_FILE}  .
 
-${COPY} $DARTDIR/data/Data.ionos2.nc input_prior_inflation_mean.nc
-${COPY} $DARTDIR/data/Data.ionos2.nc input_prior_inflation_sd.nc
+# COMPLETE HACK ... for inflation files
+
+${COPY} $DARTDIR/data/DATA.ionos2.nc input_prior_inflation_mean.nc
+${COPY} $DARTDIR/data/DATA.ionos2.nc input_prior_inflation_sd.nc
+
+set ens_size = 3
 
 @ ncycle = 0
 while ( 1 ) 
    
-   find . -name to_dart.semaphore > semaphore_files.txt
+   find . -name to_dart.semaphore >! semaphore_files.txt
    set nfiles = `cat semaphore_files.txt | wc -l`
    if ($nfiles == $ens_size) then
 
       #------------------------------------------------------------
       # Get the time 
 
-      @ncycle ++  # debug
+      @ ncycle ++  # debug
       if ( $ncycle > 3 ) break
 
       set semaphore = `head -n 1 semaphore_files.txt`
@@ -191,20 +197,22 @@ while ( 1 )
 
       if ( $TimeString == "done" ) exit
 
-      \rm `find . -name to_dart.semaphore`
-
       #------------------------------------------------------------
       # link the obs
 
-      ${LINK} ${OBSERVATIONDIR}/obs_seq.$TimeString obs_seq.out
+      \rm -f obs_seq.out
+      # ${LINK} ${OBSERVATIONDIR}/obs_seq.$TimeString obs_seq.out || exit 1
+      ${LINK} ${OBSERVATIONDIR}/obs_seq201303170100 obs_seq.out || exit 1
 
       #------------------------------------------------------------
-      # input.nml presumes 'input_file_list.txt', 'output_file_list.txt'
+      # input.nml presumes 'input_list.txt', 'output_list.txt'
 
-      ls -1 $RUNPATH/hoptest_*/target/DATA.ionos2.nc >! input_file_list.txt
-      sed -e "s/DATA.ionos2.nc/dart_posterior.nc/" input_file_list.txt >! output_file_list.txt
+      ls -1 $RUNPATH/target_*/target/DATA.ionos2.nc >! input_list.txt
+      sed -e "s/DATA.ionos2.nc/dart_posterior.nc/" input_list.txt >! output_list.txt
 
-      ${MPI} ./filter
+      ${LINK} -s `head -n 1 input_list.txt` .
+
+      ${MPI} ./filter.exe || exit 2
 
       #------------------------------------------------------------
       # rename output files (inflation, diagnostics, etc)
