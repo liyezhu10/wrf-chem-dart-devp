@@ -159,3 +159,13 @@ The lat arrays at the moment are [-180,0] ... Jimmy agreed that OpenGGCM should 
 
 Right now pmo can run ... but there is no vertical interpolation support yet.
 
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+Tue Apr  3 15:57:05 CEST 2018
+
+I updated this branch to be up-to-date with the rma_trunk and added the 
+scripting from Doug Cramer.  
+
+There will be confusion with the netcdf_utilities_mod.f90 ... the openggcm/netcdf_utilities_mod.f90 is designed to be used by openggcm, but DART routines will use the assimilation_code/modules/utilities/netcdf_utilities_mod.f90 ... should rename.
+
+The openggcm_interp_mod.f90 has not totally been integrated into the model_mod - and model_mod_check process.

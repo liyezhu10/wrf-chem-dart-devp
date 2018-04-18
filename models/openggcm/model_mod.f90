@@ -62,7 +62,7 @@ use     default_model_mod, only : get_close_obs, get_close_state, nc_write_model
 
 use              cotr_mod, only : transform, cotr_set, cotr, xyzdeg, degxyz
 
-use   openggcm_interp_mod, only : g_oplus_pre, g_oplus_int, nsearch
+use   openggcm_interp_mod, only : g_oplus_pre, g_oplus_int, convert_to_cartesian
 
 use typesizes
 use netcdf 
@@ -330,6 +330,7 @@ end function get_model_size
 !> value of an observation at some location. The interpolated value is 
 !> returned in interp_val and istatus is 0 for success.
 
+
 subroutine model_interpolate(state_handle, ens_size, location, obs_kind, expected_obs, istatus)
 
 type(ensemble_type), intent(in) :: state_handle !< ensemble handle for data to interpolate in
@@ -341,12 +342,14 @@ integer,            intent(out) :: istatus(ens_size) !< array of returned status
 
 ! Local storage
 real(r8)    :: loc_array(3), llon, llat, lheight
+real(r8)    :: x,y,z   ! cartesian versions
 integer     :: ind
 integer     :: hgt_bot, hgt_top
 real(r8)    :: hgt_fract
 integer     :: hstatus
 type(grid_type), pointer :: mygrid
 logical     :: interp_initialized = .false.
+integer, parameter :: DO_INTEGRAL = 12
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -412,85 +415,16 @@ END SELECT
 
 
 if( is_vertical(location,"UNDEFINED") ) then
-   call lon_lat_interpolate(state_handle, ens_size, mygrid, obs_kind, llon, llat, VERT_LEVEL_1, &
-                            expected_obs, istatus)
-
+   istatus = DO_INTEGRAL
    return
 endif
 
-!>@todo  the heights vary at each location ... 
-call height_bounds(lheight, mygrid%nheight, mygrid%height, hgt_bot, hgt_top, hgt_fract, hstatus)
+call convert_to_cartesian(llon,llat,lheight,x,y,z)
 
-if(hstatus /= 0) then
-   istatus = 12
-   return
-endif
-
-! do a 2d interpolation for the value at the bottom level, then again for
-! the top level, then do a linear interpolation in the vertical to get the
-! final value.  this sets both interp_val and istatus.
-call do_interp(state_handle, ens_size, mygrid, hgt_bot, hgt_top, hgt_fract, &
-               llon, llat, obs_kind, expected_obs, istatus)
+call g_oplus_int(state_handle, ens_size, mygrid%nlon, mygrid%nlat, mygrid%nheight, &
+                 x,y,z,expected_obs,istatus)
 
 end subroutine model_interpolate
-
-!------------------------------------------------------------------
-
-!> Subroutine to interpolate to a lon lat location given the state handle.
-!> Successful interpolation returns istatus=0.
-
-subroutine lon_lat_interpolate(state_handle, ens_size, grid_handle, var_kind, &
-                               lon, lat, height_index, expected_obs, istatus)
-
-type(ensemble_type), intent(in)  :: state_handle           !< state ensemble handle
-integer,             intent(in)  :: ens_size               !< ensemble size
-type(grid_type),     intent(in)  :: grid_handle            !< geo or mag grid
-integer,             intent(in)  :: var_kind               !< dart variable kind
-real(r8),            intent(in)  :: lon                    !< longitude to interpolate
-real(r8),            intent(in)  :: lat                    !< latitude to interpolate
-integer,             intent(in)  :: height_index           !< height index to interpolate
-real(r8),            intent(out) :: expected_obs(ens_size) !< returned interpolations
-integer,             intent(out) :: istatus(ens_size)      !< returned statuses
-
-! Local storage, 
-integer  :: lat_bot, lat_top, lon_bot, lon_top
-real(r8) :: p(4,ens_size), xbot(ens_size), xtop(ens_size)
-real(r8) :: lon_fract, lat_fract
-
-! Succesful return has istatus of 0
-istatus = 0
-
-! find the lower and upper indices which enclose the given value
-! in this model, the data at lon 0 is replicated at lon 360, so no special
-! wrap case is needed.
-call lon_bounds(lon, grid_handle, lon_bot, lon_top, lon_fract)
-
-if (grid_handle%uses_colatitude) then
-   call colat_bounds(lat, grid_handle, lat_bot, lat_top, lat_fract, istatus(1))
-else
-   call lat_bounds(lat, grid_handle, lat_bot, lat_top, lat_fract, istatus(1))
-endif
-
-if (istatus(1) /= 0) then
-   istatus(:) = 18 
-   return
-endif
-
-! Get the values at the four corners of the box or quad
-! Corners go around counterclockwise from lower left
-p(1, :) = get_val(lon_bot, lat_bot, height_index, var_kind, state_handle, ens_size)
-p(2, :) = get_val(lon_top, lat_bot, height_index, var_kind, state_handle, ens_size)
-p(3, :) = get_val(lon_top, lat_top, height_index, var_kind, state_handle, ens_size)
-p(4, :) = get_val(lon_bot, lat_top, height_index, var_kind, state_handle, ens_size)
-
-! Rectangular bilinear interpolation
-xbot = p(1, :) + lon_fract * (p(2, :) - p(1, :))
-xtop = p(4, :) + lon_fract * (p(3, :) - p(4, :))
-
-! Now interpolate in latitude
-expected_obs = xbot + lat_fract * (xtop - xbot)
-
-end subroutine lon_lat_interpolate
 
 !------------------------------------------------------------
 
@@ -1149,53 +1083,6 @@ enddo
 
 end subroutine pert_model_copies
 
-!------------------------------------------------------------------
-
-!> do a 2d horizontal interpolation for the value at the bottom level, 
-!> then again for the top level, then do a linear interpolation in the 
-!> vertical to get the final value.
-
-subroutine do_interp(state_handle, ens_size, grid_handle, hgt_bot, hgt_top, hgt_fract, &
-                     llon, llat, obs_kind, expected_obs, istatus)
-
-type(ensemble_type), intent(in)  :: state_handle           !< state ensemble handle
-integer,             intent(in)  :: ens_size               !< ensemble size
-type(grid_type),     intent(in)  :: grid_handle            !< geo or mag grid
-integer,             intent(in)  :: hgt_bot                !< index to bottom bound
-integer,             intent(in)  :: hgt_top                !< index to top bound
-real(r8),            intent(in)  :: hgt_fract              !< fraction inbetween top and bottom
-real(r8),            intent(in)  :: llon                   !< longitude to interpolate
-real(r8),            intent(in)  :: llat                   !< latitude to interpolate
-integer,             intent(in)  :: obs_kind               !< dart kind
-real(r8),            intent(out) :: expected_obs(ens_size) !< interpolated value
-integer,             intent(out) :: istatus(ens_size)      !< status of interpolation
-
-! Local Variables
-real(r8)    :: bot_val(ens_size), top_val(ens_size)
-integer     :: temp_status(ens_size)
-logical     :: return_now
-
-istatus(:) = 0 ! need to start with istatus = 0 for track status to work properly
-
-call lon_lat_interpolate(state_handle, ens_size, grid_handle, obs_kind, &
-                         llon, llat, hgt_bot, bot_val, temp_status)
-call track_status(ens_size, temp_status, bot_val, istatus, return_now)
-if (return_now) return
-
-call lon_lat_interpolate(state_handle, ens_size, grid_handle, obs_kind, &
-                         llon, llat, hgt_top, top_val, temp_status)
-call track_status(ens_size, temp_status, top_val, istatus, return_now)
-if (return_now) return
-
-! Then weight them by the vertical fraction and return
-where (istatus == 0) 
-   expected_obs = bot_val + hgt_fract * (top_val - bot_val)
-elsewhere
-   expected_obs = MISSING_R8
-endwhere
-
-end subroutine do_interp
-
 !--------------------------------------------------------------------
 !> read the current model time from openggcm output file
 !> the time is encoded as a 64bit real with units of 
@@ -1775,10 +1662,9 @@ subroutine initialize_interpolation()
 call g_oplus_pre(geo_grid%nlon, geo_grid%nlat, geo_grid%nheight,&
                  geo_grid%longitude, &
                  geo_grid%latitude, &
-                 geo_grid%height, test_case)
+                 geo_grid%height, test=2)
 
 end subroutine initialize_interpolation
-
 
 !----------------------------------------------------------------------
 end module model_mod

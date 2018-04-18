@@ -232,11 +232,13 @@
    verbose    = .false.
   /
 
+   loc_of_interest       = 0.0, 68.0, 100000.0    ! (1,80,1) 13415.611342337905
+   loc_of_interest       = 54.0, -88.0, 425835.8  ! (40,2,4)   516815258820.758
 &model_mod_check_nml
    verbose               = .true.
    test1thru             = 4
    x_ind                 = 3951
-   loc_of_interest       = 0.0, 68.0, 100000.0
+   loc_of_interest       = 54.0, -88.0, 425835.8
    quantity_of_interest  = 'QTY_ELECTRON_DENSITY'
    interp_test_lonrange  = 0.0, 360.0
    interp_test_dlon      = 1.0
@@ -244,7 +246,7 @@
    interp_test_dlat      = 1.0
    interp_test_vertrange = 1.0,  2.0
    interp_test_dvert     = 1.0
-   interp_test_vertcoord = 'VERTISUNDEF'
+   interp_test_vertcoord = 'VERTISHEIGHT'
    input_state_files     = 'DATA.ionos2.nc'
    output_state_files    = 'mmc_output.nc'
   /

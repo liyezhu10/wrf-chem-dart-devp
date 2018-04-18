@@ -75,7 +75,7 @@ use    utilities_mod, only : register_module, initialize_utilities,      &
                              do_nml_file, do_nml_term, logfileunit,      &
                              finalize_utilities 
 
-use  openggcm_interp_mod, only : g_oplus_pre, g_oplus_int, nsearch
+use  openggcm_interp_mod, only : g_oplus_pre, g_oplus_int, g_oplus_int_pnt, nsearch
 
 implicit none
 
@@ -99,15 +99,17 @@ integer :: nnz  ! number of vertical layers
 real(r8) :: pi, rad, re, x1, y1, z1, x2, y2, z2 
 real(r8) :: s, x, y, z, rr
 real(r8) :: a1, a2, a3, a4, output
+real(r8) :: tmpz, tmpp, tmpt
 
 integer :: nn
 integer :: iz, jz, ilat, jlat, ilon, jlon, i
 integer :: iunit, istat
+integer :: good, num
 
 ! namelist with default values
 
 character(len=256) :: data_file = '../data/grid-oplus'
-integer :: test_case = 1
+integer :: test_case = 4
 integer :: debug = 0
 
 namelist / test_interp_nml / &
@@ -143,10 +145,10 @@ do   jz=1, nnz   ! vertical
 
    read(10,*)iz,ilat,ilon,a1,a2,a3,a4
 
-   opl_grid_geo_lon(iz,ilat,ilon) = a1
-   opl_grid_geo_lat(iz,ilat,ilon) = a2
-   opl_grid_geo_hgt(iz,ilat,ilon) = a3
-                  u(iz,ilat,ilon) = a4
+   opl_grid_geo_lon(iz,ilat,ilon) = a1  ! longitude, degrees
+   opl_grid_geo_lat(iz,ilat,ilon) = a2  ! latitude, degrees
+   opl_grid_geo_hgt(iz,ilat,ilon) = a3  ! height, meters
+                  u(iz,ilat,ilon) = a4  ! values
 enddo
 enddo
 enddo
@@ -161,7 +163,37 @@ pi  = 4.0_r8*atan(1.0_r8)
 rad = pi/180.0_r8
 re  = 6372.0e3
 
-if (test_case == 1) then
+if (test_case == 4) then
+      do jlon=1,nphi
+      do jlat=1,nthe
+      do   jz=1,nnz
+         !u(jz,jlat,jlon)=opl_grid_geo_lon(jz,jlat,jlon)
+         !u(jz,jlat,jlon)=opl_grid_geo_lat(jz,jlat,jlon)
+         u(jz,jlat,jlon)=opl_grid_geo_hgt(jz,jlat,jlon)
+      enddo
+      enddo
+      enddo
+      num=1000
+      good=0
+      do i=1,num
+        tmpz=rand(0)*554635.+100000.
+        tmpp=rand(0)*2.*pi
+        tmpt=rand(0)*pi
+        x=(re+tmpz)*cos(tmpp)*sin(tmpt)
+        y=(re+tmpz)*sin(tmpp)*sin(tmpt)
+        z=(re+tmpz)*cos(tmpt)
+        call g_oplus_int(nphi,nthe,nnz,u,x,y,z,output,istat)
+        if (istat.eq.0) good=good+1
+        write(*,*)'test4 ',x,y,z,sqrt(x**2+y**2+z**2)-re,output,istat
+      enddo
+      write(*,*) 'found ',good,' out of ',num 
+      x=6522000.
+      y=0.
+      z=0.
+      call g_oplus_int(nphi,nthe,nnz,u,x,y,z,output,istat)
+      write(*,*)'test4 ',x,y,z,sqrt(x**2+y**2+z**2),output,istat
+
+elseif (test_case == 1) then
    !.... simple test in 1-spaced grid
    !     note that grid is overwritten with a simple box grid
    !     in g_oplus_pre(), look for test.eq.1
