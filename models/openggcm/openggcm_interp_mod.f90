@@ -85,6 +85,8 @@ real(r8),          intent(out) :: gt(nz,nt,np)
 real(r8),          intent(out) :: gz(nz,nt,np)
 integer, optional, intent(in)  :: test
 
+character(len=*), parameter :: routine = 'g_oplus_pre'
+
 real(r8) :: a(3,3), b(3,3), det
 real(r8) :: r, p, t
 
@@ -199,10 +201,10 @@ ZLOOP:     do iz = 1,nz-1
       !      needed later for the neighbor list
       jtet(1,i1)=jtet(1,i1)+1
       l=jtet(1,i1)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on NPOI'
-      stop
-      endif
+
+      if (l .gt. NPOI_MAX)  &
+         call error_handler(E_ERR, routine, 'error on NPOI', source, revision, revdate)
+
       jtet(l+1,i1)=ntet 
 94971 continue
       do l=1,jtet(1,i4)
@@ -210,10 +212,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i4)=jtet(1,i4)+1
       l=jtet(1,i4)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if (l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i4)=ntet 
 94961 continue
       do l=1,jtet(1,i8)
@@ -221,10 +221,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i8)=jtet(1,i8)+1
       l=jtet(1,i8)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if(l.gt.NPOI_MAX) & 
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i8)=ntet 
 94951 continue
       do l=1,jtet(1,i7)
@@ -232,10 +230,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i7)=jtet(1,i7)+1
       l=jtet(1,i7)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if (l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i7)=ntet 
 94941 continue
       !..... now compute mapping matrix isoparametric -->  physical
@@ -284,10 +280,8 @@ ZLOOP:     do iz = 1,nz-1
       jtet(1,i1)=jtet(1,i1)+1
       l=jtet(1,i1)
 
-      if(l.gt.NPOI_MAX)then
-         write(0,*)'error on MPOI'
-         stop
-      endif
+      if (l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
 
       jtet(l+1,i1)=ntet !..... add me to the list
 94911 continue
@@ -296,10 +290,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i5)=jtet(1,i5)+1
       l=jtet(1,i5)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if(l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i5)=ntet 
 94901 continue
       do l=1,jtet(1,i8)
@@ -307,10 +299,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i8)=jtet(1,i8)+1
       l=jtet(1,i8)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if(l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i8)=ntet 
 94891 continue
       do l=1,jtet(1,i7)
@@ -318,10 +308,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i7)=jtet(1,i7)+1
       l=jtet(1,i7)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if(l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i7)=ntet 
 94881 continue
       a(1,1)=hx(i5)-hx(i1)
@@ -365,10 +353,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i1)=jtet(1,i1)+1
       l=jtet(1,i1)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if(l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i1)=ntet 
 94851 continue
       do l=1,jtet(1,i5)
@@ -376,10 +362,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i5)=jtet(1,i5)+1
       l=jtet(1,i5)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if(l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i5)=ntet 
 94841 continue
       do l=1,jtet(1,i6)
@@ -387,10 +371,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i6)=jtet(1,i6)+1
       l=jtet(1,i6)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if(l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i6)=ntet 
 94831 continue
       do l=1,jtet(1,i7)
@@ -398,10 +380,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i7)=jtet(1,i7)+1
       l=jtet(1,i7)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if(l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i7)=ntet 
 94821 continue
       a(1,1)=hx(i5)-hx(i1)
@@ -445,10 +425,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i1)=jtet(1,i1)+1
       l=jtet(1,i1)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if(l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i1)=ntet 
 94791 continue
       do l=1,jtet(1,i4)
@@ -456,10 +434,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i4)=jtet(1,i4)+1
       l=jtet(1,i4)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if(l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i4)=ntet 
 94781 continue
       do l=1,jtet(1,i3)
@@ -467,10 +443,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i3)=jtet(1,i3)+1
       l=jtet(1,i3)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if(l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i3)=ntet 
 94771 continue
       do l=1,jtet(1,i7)
@@ -478,10 +452,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i7)=jtet(1,i7)+1
       l=jtet(1,i7)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if(l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i7)=ntet 
 94761 continue
       a(1,1)=hx(i4)-hx(i1)
@@ -525,10 +497,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i1)=jtet(1,i1)+1
       l=jtet(1,i1)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if(l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i1)=ntet 
 94731 continue
       do l=1,jtet(1,i2)
@@ -536,10 +506,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i2)=jtet(1,i2)+1
       l=jtet(1,i2)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if(l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i2)=ntet 
 94721 continue
       do l=1,jtet(1,i3)
@@ -547,10 +515,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i3)=jtet(1,i3)+1
       l=jtet(1,i3)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if(l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i3)=ntet 
 94711 continue
       do l=1,jtet(1,i7)
@@ -558,10 +524,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i7)=jtet(1,i7)+1
       l=jtet(1,i7)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if(l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i7)=ntet 
 94701 continue
       a(1,1)=hx(i2)-hx(i1)
@@ -605,10 +569,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i1)=jtet(1,i1)+1
       l=jtet(1,i1)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if(l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i1)=ntet 
 94671 continue
       do l=1,jtet(1,i2)
@@ -616,10 +578,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i2)=jtet(1,i2)+1
       l=jtet(1,i2)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if(l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i2)=ntet 
 94661 continue
       do l=1,jtet(1,i6)
@@ -627,10 +587,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i6)=jtet(1,i6)+1
       l=jtet(1,i6)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if(l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i6)=ntet 
 94651 continue
       do l=1,jtet(1,i7)
@@ -638,10 +596,8 @@ ZLOOP:     do iz = 1,nz-1
       enddo 
       jtet(1,i7)=jtet(1,i7)+1
       l=jtet(1,i7)
-      if(l.gt.NPOI_MAX)then
-      write(0,*)'error on MPOI'
-      stop
-      endif
+      if(l.gt.NPOI_MAX) &
+         call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
       jtet(l+1,i7)=ntet 
 94641 continue
       a(1,1)=hx(i2)-hx(i1)
@@ -695,10 +651,8 @@ do kt=1,ntet                !..... loop tets
          enddo 
          itet(5,kt)=itet(5,kt)+1
          ni=itet(5,kt)
-         if(ni.gt.MTET+1)then
-            write(0,*)'error on MTET'
-            stop
-         endif
+         if(ni.gt.MTET+1) &
+            call error_handler(E_ERR, routine, 'error on MPOI', source, revision, revdate)
          itet(ni+5,kt)=jt   !..... add to list
          itet(ni+6,kt)=kt   !..... add ourselves at the end, makes easier searching later
 
@@ -714,6 +668,8 @@ return
 end subroutine g_oplus_pre
 
 
+!-----------------------------------------------------------------------
+
 !> interpolates grid array u to point (x,y,z)
 !> hint: try to avoid entering points (x,y,z) that are not in the grid.
 !> istat=1 will be properly returned, but searches in vain are more expensive.
@@ -727,6 +683,8 @@ real(r8), intent(in) :: u(nz,nt,np)
 real(r8), intent(in) :: x,y,z
 real(r8), intent(out) :: output
 integer,  intent(out) :: istat
+
+character(len=*), parameter :: routine = 'g_oplus_int_pnt'
 
 !..... the point of the last interpolation
 !      most likely place to find this one
@@ -904,6 +862,8 @@ integer,  intent(in) :: nz
 real(r8), intent(in) :: x,y,z
 real(r8), intent(out) :: output(ens_size)
 integer,  intent(out) :: istat(ens_size)
+
+character(len=*), parameter :: routine = 'g_oplus_int'
 
 integer  :: domain_id, var_id
 integer  :: dim_index(3)
@@ -1090,6 +1050,8 @@ Ainv(3,3) = (A(1,1)*A(2,2) - A(1,2)*A(2,1))/Adet
 
 return
 end 
+
+!-----------------------------------------------------------------------
 
 
 subroutine convert_to_cartesian(phi,theta,height,x,y,z)
