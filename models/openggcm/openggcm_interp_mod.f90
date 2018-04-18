@@ -6,6 +6,8 @@
 
 module openggcm_interp_mod
 
+!>@todo remove the 'stop' and write(0,*) 
+
 use        types_mod, only : r4, r8
 
 use    utilities_mod, only : register_module, initialize_utilities,      &
@@ -13,7 +15,6 @@ use    utilities_mod, only : register_module, initialize_utilities,      &
                              error_handler, E_ERR, E_MSG, nmlfileunit,   &
                              do_nml_file, do_nml_term, logfileunit,      &
                              finalize_utilities 
-
 implicit none
 private
 
@@ -129,6 +130,9 @@ write(0,*)'max points ',k
 ntet = 0
 JTET = 0
 ITET = 0 
+
+!>@todo everything here is either stored in the wrong order or the
+! loop order is inside-out ...
 
 PHILOOP:   do ip = 1,np
 THETALOOP: do it = 1,nt-1
@@ -813,7 +817,5 @@ Ainv(3,3) = (A(1,1)*A(2,2) - A(1,2)*A(2,1))/Adet
 
 return
 end 
-
-
 
 end module openggcm_interp_mod

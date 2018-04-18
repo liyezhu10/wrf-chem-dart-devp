@@ -62,6 +62,8 @@ use     default_model_mod, only : get_close_obs, get_close_state, nc_write_model
 
 use              cotr_mod, only : transform, cotr_set, cotr, xyzdeg, degxyz
 
+use   openggcm_interp_mod, only : g_oplus_pre, g_oplus_int, nsearch
+
 use typesizes
 use netcdf 
 
@@ -214,13 +216,12 @@ integer(i8) :: model_size
 ! Domain id to be used by routines in state_structure_mod
 integer :: domain_id
 
+!------------------------------------------------------------------
 contains
-
-!------------------------------------------------------------------
 !------------------------------------------------------------------
 
-!> Called to do one time initialization of the model. In this case,
-!> it reads in the grid information.
+!> Called to do one-time initialization of the model.
+!> Read the namelist, initialize the grid ...
 
 subroutine static_init_model()
 
@@ -345,8 +346,11 @@ integer     :: hgt_bot, hgt_top
 real(r8)    :: hgt_fract
 integer     :: hstatus
 type(grid_type), pointer :: mygrid
+logical     :: interp_initialized = .false.
 
 if ( .not. module_initialized ) call static_init_model
+
+if ( .not. interp_initialized ) call initialize_interpolation()
 
 ! Let's assume failure.  Set return val to missing, then the code can
 ! just set istatus to something indicating why it failed, and return.
@@ -1554,9 +1558,9 @@ subroutine allocate_grid_space(grid_handle, conv)
 type(grid_type), intent(inout) :: grid_handle !< geo or mag grid handle
 logical,         intent(in)    :: conv !< if true, the grid has conversion arrays
 
-!>@todo use dim_order_list ... maybe ... at least check for consistency with variable shape
-! so that when we use the indices for the variable, we are sure that the indices will work
-! on the coordinate arrays
+!>@todo use dim_order_list ... maybe ... at least check for consistency with 
+! variable shape so that when we use the indices for the variable, we are sure 
+! that the indices will work on the coordinate arrays
 
 allocate(grid_handle%longitude(grid_handle%nheight, grid_handle%nlat, grid_handle%nlon))
 allocate(grid_handle%latitude( grid_handle%nheight, grid_handle%nlat, grid_handle%nlon))
@@ -1763,11 +1767,22 @@ enddo
 end subroutine make_dim_order_table
 
 !----------------------------------------------------------------------
-!------------------------------------------------------------------
-! End of model_mod
-!------------------------------------------------------------------
 
+!> Initialize the interpolation routines.
+
+subroutine initialize_interpolation()
+
+call g_oplus_pre(geo_grid%nlon, geo_grid%nlat, geo_grid%nheight,&
+                 geo_grid%longitude, &
+                 geo_grid%latitude, &
+                 geo_grid%height, test_case)
+
+end subroutine initialize_interpolation
+
+
+!----------------------------------------------------------------------
 end module model_mod
+!----------------------------------------------------------------------
 
 ! <next few lines under version control, do not edit>
 ! $URL$
