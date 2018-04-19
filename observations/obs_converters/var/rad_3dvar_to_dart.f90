@@ -8,7 +8,7 @@ PROGRAM rad_3dvar_to_dart
 
 use         types_mod, only : r8, missing_r8, missing_data, DEG2RAD, earth_radius
 use     utilities_mod, only : open_file, close_file, initialize_utilities, &
-                              register_module, logfileunit, nmlfileunit, E_MSG, timestamp, &
+                              register_module, nmlfileunit, E_MSG, timestamp, &
                               error_handler, find_namelist_in_file, check_namelist_read, &
                               finalize_utilities
 use  obs_sequence_mod, only : obs_type, obs_sequence_type, init_obs_sequence, insert_obs_in_seq, &

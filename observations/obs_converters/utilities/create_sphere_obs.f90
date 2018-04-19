@@ -17,8 +17,8 @@ program create_sphere_obs
 use         types_mod, only : r8, missing_r8, pi, rad2deg
 use      location_mod, only : VERTISPRESSURE, set_location
 use     utilities_mod, only : initialize_utilities, finalize_utilities, &
-                              find_namelist_in_file, check_namelist_read,         &
-                              do_nml_file, do_nml_term, logfileunit, nmlfileunit
+                              find_namelist_in_file, check_namelist_read, &
+                              do_nml_file, do_nml_term, nmlfileunit
 use netcdf_utilities_mod, only : nc_check
 use  time_manager_mod, only : time_type, set_calendar_type, set_date, GREGORIAN, &
                               get_time

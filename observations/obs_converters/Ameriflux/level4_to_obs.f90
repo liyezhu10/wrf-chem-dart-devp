@@ -22,7 +22,7 @@ use     utilities_mod, only : initialize_utilities, finalize_utilities, &
                               register_module, error_handler, E_MSG, E_ERR, &
                               open_file, close_file, do_nml_file, do_nml_term, &
                               check_namelist_read, find_namelist_in_file, &
-                              nmlfileunit, logfileunit
+                              nmlfileunit, log_it
 
 use  time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, &
                               set_date, set_time, get_time, print_time, &
@@ -211,37 +211,21 @@ obsloop: do iline = 2,nlines
    call stringparse(input_line, nwords, iline)
 
    if (iline <= 2) then
-      write(*,*)''
+      call log_it('')
       call print_date(tower%time_obs, ' first observation date (local time) is')
       call print_time(tower%time_obs, ' first observation time (local time) is')
-      write(*,*)'first observation raw values: (column,string,value) timezone not applied'
-      write(*,*)tower%monthindex, tower%monthstring , tower%month
-      write(*,*)tower%dayindex  , tower%daystring   , tower%day
-      write(*,*)tower%hourindex , tower%hourstring  , tower%hour
-      write(*,*)tower%doyindex  , tower%doystring   , tower%doy
-      write(*,*)tower%hindex    , tower%hstring     , tower%h
-      write(*,*)tower%hQCindex  , tower%hQCstring   , tower%hQC
-      write(*,*)tower%leindex   , tower%lestring    , tower%le
-      write(*,*)tower%leQCindex , tower%leQCstring  , tower%leQC
-      write(*,*)tower%neeindex  , tower%neestring   , tower%nee
-      write(*,*)tower%neeQCindex, tower%neeQCstring , tower%neeQC
-      write(*,*)''
-
-      write(logfileunit,*)''
-      call print_date(tower%time_obs, ' first observation date (local time) is',logfileunit)
-      call print_time(tower%time_obs, ' first observation time (local time) is',logfileunit)
-      write(logfileunit,*)'first observation raw values: (column,string,value) timezone not applied'
-      write(logfileunit,*)tower%monthindex, tower%monthstring , tower%month
-      write(logfileunit,*)tower%dayindex  , tower%daystring   , tower%day
-      write(logfileunit,*)tower%hourindex , tower%hourstring  , tower%hour
-      write(logfileunit,*)tower%doyindex  , tower%doystring   , tower%doy
-      write(logfileunit,*)tower%hindex    , tower%hstring     , tower%h
-      write(logfileunit,*)tower%hQCindex  , tower%hQCstring   , tower%hQC
-      write(logfileunit,*)tower%leindex   , tower%lestring    , tower%le
-      write(logfileunit,*)tower%leQCindex , tower%leQCstring  , tower%leQC
-      write(logfileunit,*)tower%neeindex  , tower%neestring   , tower%nee
-      write(logfileunit,*)tower%neeQCindex, tower%neeQCstring , tower%neeQC
-      write(logfileunit,*)''
+      write(string1,*)'first observation raw values: (column,string,value) timezone not applied' ; call log_it(string1)
+      write(string1,*)tower%monthindex, tower%monthstring , tower%month ; call log_it(string1)
+      write(string1,*)tower%dayindex  , tower%daystring   , tower%day   ; call log_it(string1)
+      write(string1,*)tower%hourindex , tower%hourstring  , tower%hour  ; call log_it(string1)
+      write(string1,*)tower%doyindex  , tower%doystring   , tower%doy   ; call log_it(string1)
+      write(string1,*)tower%hindex    , tower%hstring     , tower%h     ; call log_it(string1)
+      write(string1,*)tower%hQCindex  , tower%hQCstring   , tower%hQC   ; call log_it(string1)
+      write(string1,*)tower%leindex   , tower%lestring    , tower%le    ; call log_it(string1)
+      write(string1,*)tower%leQCindex , tower%leQCstring  , tower%leQC  ; call log_it(string1)
+      write(string1,*)tower%neeindex  , tower%neestring   , tower%nee   ; call log_it(string1)
+      write(string1,*)tower%neeQCindex, tower%neeQCstring , tower%neeQC ; call log_it(string1)
+      call log_it('')
    end if
 
    call get_time(tower%time_obs, osec, oday)
@@ -249,7 +233,6 @@ obsloop: do iline = 2,nlines
    if (verbose) then
       write(string1,*)'obs time is (seconds,days) ',osec, oday,' obs date is '
       call print_date(tower%time_obs, trim(string1))
-      call print_date(tower%time_obs, trim(string1),logfileunit)
    endif
 
    ! make an obs derived type, and then add it to the sequence
@@ -725,11 +708,6 @@ if ( iday > 0 ) then
       call print_time(time1, 'stringparse: using doy time is')
       call print_time(time2, 'stringparse: difference     is')
 
-      call print_date(time0, 'stringparse: using ymd date is',logfileunit)
-      call print_date(time1, 'stringparse: using doy date is',logfileunit)
-      call print_time(time0, 'stringparse: using ymd time is',logfileunit)
-      call print_time(time1, 'stringparse: using doy time is',logfileunit)
-      call print_time(time2, 'stringparse: difference     is',logfileunit)
    endif
 else
 

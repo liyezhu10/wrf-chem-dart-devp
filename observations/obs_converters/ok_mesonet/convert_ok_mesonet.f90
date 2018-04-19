@@ -29,7 +29,7 @@ program convert_ok_mesonet
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! may want to add a namelist - so leaving module components active for now
 use         utilities_mod, only : get_unit, find_namelist_in_file, check_namelist_read, &
-                                  do_nml_file, do_nml_term, logfileunit, nmlfileunit
+                                  do_nml_file, do_nml_term, nmlfileunit
 use             types_mod, only : r8, missing_r8
 use      time_manager_mod, only : time_type, set_calendar_type, set_date, &
                                   increment_time, get_time, operator(-), GREGORIAN
@@ -312,7 +312,7 @@ end program convert_ok_mesonet
 subroutine get_geo(search_stid,nlat,nlon,elevf)
 
 use         utilities_mod, only : get_unit, find_namelist_in_file, check_namelist_read, &
-                                  do_nml_file, do_nml_term, logfileunit, nmlfileunit
+                                  do_nml_file, do_nml_term, nmlfileunit
 use             types_mod, only : r8, missing_r8
 
 implicit none

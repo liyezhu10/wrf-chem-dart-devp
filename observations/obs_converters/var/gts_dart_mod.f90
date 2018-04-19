@@ -8,7 +8,7 @@ module gts_dart_mod
 
 use         types_mod, only : r8, missing_r8, missing_data, DEG2RAD, earth_radius
 use     utilities_mod, only : open_file, close_file, initialize_utilities, &
-                              register_module, logfileunit, E_MSG, &
+                              register_module, E_MSG, &
                               error_handler, find_namelist_in_file, check_namelist_read
 use  obs_sequence_mod, only : obs_type, obs_sequence_type, init_obs_sequence, insert_obs_in_seq, &
                               write_obs_seq, init_obs, assignment(=), &

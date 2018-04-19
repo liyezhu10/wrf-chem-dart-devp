@@ -17,7 +17,7 @@ use obs_sequence_mod, only : obs_sequence_type, write_obs_seq, &
 use quikscat_JPL_mod, only : real_obs_sequence, read_qscat2b, orbit_type, &
                              create_output_filename
 use    utilities_mod, only : initialize_utilities, register_module, &
-                             do_output, logfileunit, nmlfileunit, &
+                             do_output, nmlfileunit, &
                              error_handler, finalize_utilities, E_ERR, E_MSG, &
                              find_namelist_in_file, check_namelist_read
 

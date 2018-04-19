@@ -10,7 +10,7 @@ use        types_mod, only : r8, DEG2RAD, RAD2DEG, MISSING_I, MISSING_R8
 use    utilities_mod, only : open_file, close_file, file_exist, &
                              get_unit, initialize_utilities, &
                              register_module, error_handler, E_ERR, E_MSG, &
-                             finalize_utilities, logfileunit
+                             finalize_utilities
 use obs_sequence_mod, only : obs_type, obs_sequence_type, init_obs_sequence, &
                              insert_obs_in_seq, write_obs_seq, read_obs_seq, &
                              set_qc, set_qc_meta_data, set_obs_values, set_copy_meta_data, &

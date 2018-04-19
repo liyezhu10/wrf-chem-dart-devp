@@ -8,7 +8,7 @@ PROGRAM gts_to_dart
 
 use         types_mod, only : r8, missing_r8, missing_data, DEG2RAD, earth_radius
 use     utilities_mod, only : open_file, close_file, initialize_utilities, &
-                              register_module, logfileunit, E_MSG, finalize_utilities, &
+                              register_module, nmlfileunit, E_MSG, finalize_utilities, &
                               error_handler, find_namelist_in_file, check_namelist_read
 use  obs_sequence_mod, only : obs_type, obs_sequence_type, init_obs_sequence, insert_obs_in_seq, &
                               set_copy_meta_data, set_qc_meta_data, write_obs_seq, assignment(=), &
@@ -153,7 +153,7 @@ call check_namelist_read(iunit, io, "gts_to_dart_nml")
 
 ! Record the namelist values used for the run ...
 call error_handler(E_MSG,'gts_to_dart','gts_to_dart_nml values are',' ',' ',' ')
-write(logfileunit, nml=gts_to_dart_nml)
+write(nmlfileunit, nml=gts_to_dart_nml)
 write(     *     , nml=gts_to_dart_nml)
 
 call set_calendar_type(calendar_type)
