@@ -1,0 +1,35 @@
+Scripts for running a cycling experiment with the OpenGGCM model.
+
+advance_model.csh
+
+assimilate.csh
+
+create_base.csh
+
+create_runs.csh
+
+dart_test.csh
+
+dart_test.qsub
+
+perfect_model.csh
+
+run_filter.csh
+
+run_perfect_model_obs.csh
+
+stitch_post.sh
+
+stitch_prior.sh
+
+
+Observations:
+
+For preparing observations of GPS Ionosphere profiles,
+go to observations/obs_converters/gps/work.  the executable
+is convert_gps_ionosphere.  the easiest workflow is to
+doneload a day of profiles at a time and convert them
+all at once into a single output file. then in the
+shell_scripts directory is a script to break them up
+into separate files containing only 10 minute intervals
+of obs (can be configured to have whatever frequency is wanted).
