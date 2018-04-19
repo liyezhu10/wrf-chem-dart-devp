@@ -157,20 +157,22 @@ echo "${JOBNAME} ($JOBID) RUNPATH == $RUNPATH"
 set DARTROOT = /mnt/lustre/lus0/home/dart/dart/rma_openggcm
 set DARTDIR = /mnt/lustre/lus0/home/dart/dart/rma_openggcm/models/openggcm
 set OBSERVATIONDIR = $DARTDIR/observations
+set BASETIME = 1966-01-01_00:00:00
 
 #-----------------------------------------------------------------------------
 # Get the DART executables, scripts, and input files
 #-----------------------------------------------------------------------------
 
 # executables
-${COPY} ${DARTDIR}/work/filter.exe .  || exit 1
-${COPY} ${DARTDIR}/work/input.nml  .  || exit 1
+${COPY} ${DARTDIR}/work/advance_time.exe .  || exit 1
+${COPY} ${DARTDIR}/work/filter.exe       .  || exit 1
+${COPY} ${DARTDIR}/work/input.nml        .  || exit 1
 
 set SAMP_ERR_FILE = ${DARTROOT}/assimilation_code/programs/gen_sampling_err_table/work/sampling_error_correction_table.nc
 
 ${COPY} ${SAMP_ERR_FILE}  .
 
-# COMPLETE HACK ... for inflation files
+# COMPLETE HACK ... for staging inflation files
 
 ${COPY} $DARTDIR/data/DATA.ionos2.nc input_prior_inflation_mean.nc
 ${COPY} $DARTDIR/data/DATA.ionos2.nc input_prior_inflation_sd.nc
@@ -191,17 +193,24 @@ while ( 1 )
       if ( $ncycle > 3 ) break
 
       set semaphore = `head -n 1 semaphore_files.txt`
-      set TimeString = `head -n 1 $semaphore`
+      set TimeString = `head -n 1 $semaphore | sed -e "s/\..*//"`
 
       echo "DART: Running assimilation for $TimeString at "`date`
 
       if ( $TimeString == "done" ) exit
 
+      set ModelTime = `echo ${BASETIME} +${TimeString}s | ./advance_time.exe`
+      set ModelDDss = `echo ${BASETIME} +${TimeString}s -g | ./advance_time.exe`
+
+      echo "ModelTime is ${ModelTime}"
+      echo "ModelDDss is ${ModelDDss}"
+
       #------------------------------------------------------------
       # link the obs
 
-      \rm -f obs_seq.out
-      # ${LINK} ${OBSERVATIONDIR}/obs_seq.$TimeString obs_seq.out || exit 1
+      ${REMOVE} obs_seq.out
+#     ${LINK} ${OBSERVATIONDIR}/obs_seq.${ModelTime} obs_seq.out || exit 1
+
       ${LINK} ${OBSERVATIONDIR}/obs_seq201303170100 obs_seq.out || exit 1
 
       #------------------------------------------------------------
@@ -228,7 +237,7 @@ while ( 1 )
       # create the 'from_dart' semaphore
 
       foreach FILE ( `cat semaphore_files.txt` )
-         \rm $FILE
+         ${REMOVE} $FILE
          set FILE = `echo $FILE | sed -e "s/to_dart/from_dart/"`
          echo "600"                          >! $FILE
          echo "Assimilation for $TimeString" >> $FILE
