@@ -65,6 +65,7 @@ foreach TARGET ( mkmf_preprocess mkmf_* )
    set PROG = `echo $TARGET | sed -e 's/mkmf_//'`
 
    if ( $PROG == "preprocess" && $preprocess_done ) goto skip
+   if ( $PROG == "test_interp" ) goto skip
 
    if ( $with_mpi ) then
       foreach i ( $MPI_TARGETS )

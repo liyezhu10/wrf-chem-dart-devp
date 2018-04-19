@@ -36,8 +36,6 @@ integer, parameter :: MTET = 80  !... max num of neighbors for each tet
 integer, parameter :: MPOI = 80  !... max num of tets for each point
 integer, parameter :: MAXDIM = 100  !... max of each dimension
 
-real(r8) ::  a(3,3), b(3,3)
-
 !..... x,y,z grid point coord
 real(r8) :: hx(NPOI_MAX),hy(NPOI_MAX),hz(NPOI_MAX) 
 
@@ -692,9 +690,9 @@ character(len=*), parameter :: routine = 'g_oplus_int_pnt'
 !      so we'd start searching here
 integer, save :: itl = -1, ipl = -1
 
-real(r8) :: d1, dd, t
+real(r8) :: d1, dd 
 
-integer :: i, it, ilook, ni, kt, ip, k
+integer :: i, it, ilook, ni, ip, k
 
 integer  :: tphi, ttheta, tz
 integer  :: iphi, itheta, iz
@@ -880,7 +878,6 @@ real(r8) :: d1, dd
 
 integer :: i, it, ilook, ni, kt, t
 
-integer  :: i1, i2, i3, i4
 real(r8) :: oplus(ens_size,4)
 real(r8) :: xi, xtmp, yi, ytmp, zi, ztmp
 
@@ -1019,7 +1016,7 @@ enddo
       end
 
 !-----------------------------------------------------------------------
-
+!>todo this routine does not appear to be used ... remove?
 
 subroutine invert3x3(A, Ainv, Adet) 
 ! https://software.intel.com/en-us/forums/intel-fortran-compiler-for-linux-and-mac-os-x/topic/269207
@@ -1034,6 +1031,7 @@ Ainv(1,3) = A(1,2)*A(2,3) - A(1,3)*A(2,2)
 
 Adet = Ainv(1,1)*A(1,1) + Ainv(1,2)*A(2,1) + Ainv(1,3)*A(3,1)
 
+!>@todo given the Fortran standard, I am not sure Adet can ever be smaller than 'tiny' ...
 if (Adet < tiny(Adet)) &
    call error_handler(E_ERR,'invert3x3','nope',source,revision,revdate)
 

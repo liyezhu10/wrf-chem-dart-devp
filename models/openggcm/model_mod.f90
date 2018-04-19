@@ -208,7 +208,7 @@ type(grid_type), target :: geo_grid   ! Geometric Grid (oplus)
 type(grid_type), target :: mag_grid   ! Magnetic Grid
 
 ! Global Time Variables
-type(time_type) :: model_time, model_timestep
+type(time_type) :: model_timestep
 
 ! The state vector length
 integer(i8) :: model_size
@@ -329,7 +329,10 @@ end function get_model_size
 !> interpolated is obs_kind since normally this is used to find the expected
 !> value of an observation at some location. The interpolated value is 
 !> returned in interp_val and istatus is 0 for success.
-
+!>
+!> istatus of 99 ... unspecified
+!> istatus of 11 ... observation above or below top or bottom model level
+!> istatus of 12 ... unable to compute an integral
 
 subroutine model_interpolate(state_handle, ens_size, location, obs_kind, expected_obs, istatus)
 
@@ -344,11 +347,10 @@ integer,            intent(out) :: istatus(ens_size) !< array of returned status
 real(r8)    :: loc_array(3), llon, llat, lheight
 real(r8)    :: x,y,z   ! cartesian versions
 integer     :: ind
-integer     :: hgt_bot, hgt_top
-real(r8)    :: hgt_fract
-integer     :: hstatus
 type(grid_type), pointer :: mygrid
 logical     :: interp_initialized = .false.
+
+integer, parameter :: BAD_VERTICAL_LEVEL = 11
 integer, parameter :: DO_INTEGRAL = 12
 
 if ( .not. module_initialized ) call static_init_model
@@ -383,7 +385,7 @@ elseif ( is_vertical(location, "LEVEL") ) then
    ! convert the heights index to an actual height 
    ind = nint(loc_array(3))
    if ( ind < 1 .or. ind > geo_grid%nheight ) then 
-      istatus = 11
+      istatus = BAD_VERTICAL_LEVEL
       return
    else
       lheight = ind
@@ -470,209 +472,6 @@ state_index = get_dart_vector_index(dim_index(1), dim_index(2), dim_index(3), &
 get_val = get_state(state_index, state_handle)
 
 end function get_val
-
-!------------------------------------------------------------
-
-!> Given a longitude lon and a grid handle which contains both the 1D array 
-!> of longitudes and the grid longitude size, returns the indices of the grid
-!> below and above the location longitude and the fraction of the distance
-!> between.  This code assumes that the first and last rows are replicated
-!> and identical (e.g. 0 and 360 both have entries in the array)
-
-subroutine lon_bounds(lon, grid_handle, bot, top, fract)
-
-real(r8),        intent(in)  :: lon          !< input longitude
-type(grid_type), intent(in)  :: grid_handle  !< handle to either a geo or mag grid
-integer,         intent(out) :: bot          !< index of bottom layer
-integer,         intent(out) :: top          !< index of top layer
-real(r8),        intent(out) :: fract        !< fraction between layers
-
-! Local storage
-integer  :: i
-
-call error_handler(E_ERR, 'lon_bounds', 'routine needs to be rewritten for fully 3D grid', &
-                   source, revision, revdate )
-
-!todo do i = 2, grid_handle%nlon
-!todo    if (lon <= grid_handle%longitude(i)) then
-!todo       bot = i-1
-!todo       top = i
-!todo       fract = (lon - grid_handle%longitude(bot)) / &
-!todo               (grid_handle%longitude(top) - grid_handle%longitude(bot))
-!todo       return
-!todo    endif
-!todo enddo
-!todo 
-!todo write(string1, *) 'looking for lon ', lon
-!todo call error_handler(E_ERR, 'lon_bounds', 'reached end of loop without finding lon', &
-!todo                    source, revision, revdate, text2=string1)
-
-end subroutine lon_bounds
-
-!-------------------------------------------------------------
-
-!> Given a latitude lat and the grid_handle which contains both the 
-!> 1D array of latitudes and the grid latitude count, returns the
-!> indices of the grid below and above the location latitude and 
-!> the fraction of the distance between. istatus is returned as 0 
-!> unless the location latitude is south of the southernmost grid 
-!> point (1 returned) or north of the northernmost (2 returned),
-!> which may not be possible anymore and possibly could be removed.
-
-subroutine lat_bounds(lat, grid_handle, bot, top, fract, istatus)
-
-real(r8),        intent(in)  :: lat          !< input latitude
-type(grid_type), intent(in)  :: grid_handle  !< geo or mag grid
-integer,         intent(out) :: bot          !< index of bottom layer
-integer,         intent(out) :: top          !< index of top layer
-real(r8),        intent(out) :: fract        !< fraction between layers
-integer,         intent(out) :: istatus      !< return status
-
-! Local storage
-integer :: i
-
-! Success should return 0, failure a positive number.
-istatus = 0
-
-call error_handler(E_ERR, 'lat_bounds', 'routine needs to be rewritten for fully 3D grid', &
-                   source, revision, revdate )
-
-!todo ! Check for too far south or north
-!todo if(lat < grid_handle%latitude(1)) then
-!todo    istatus = 1
-!todo    return
-!todo else if(lat > grid_handle%latitude(grid_handle%nlat)) then
-!todo    istatus = 2
-!todo    return
-!todo endif
-!todo 
-!todo ! In the middle, search through
-!todo do i = 2, grid_handle%nlat
-!todo    if(lat <= grid_handle%latitude(i)) then
-!todo       bot = i - 1
-!todo       top = i
-!todo       fract = (lat - grid_handle%latitude(bot)) / &
-!todo               (grid_handle%latitude(top) - grid_handle%latitude(bot))
-!todo       return
-!todo    endif
-!todo enddo
-!todo 
-!todo write(string1, *) 'looking for lat ', lat
-!todo call error_handler(E_ERR, 'lat_bounds', 'reached end of loop without finding lat', &
-!todo                    source, revision, revdate, text2=string1)
-
-end subroutine lat_bounds
-
-!-------------------------------------------------------------
-
-!> Given a latitude lat, the grid handle which contains the 1d array of 
-!> colatitudes for the grid and the grid count, return the indices of
-!> the grid below and above the location colatitude and the fraction 
-!> of the distance between. colatitudes start at 0 and go to 180, but
-!> to be consistent with our locations mod we have already transformed
-!> them into 90 to -90.  this routine has to be different because the
-!> order of the points is north pole to south, while latitudes are ordered
-!> south pole to north.  we have to search in a different order and the
-!> test itself is reversed from the lat_bounds() routine.
-!> istatus is returned as 0 unless the location latitude is 
-!> south of the southernmost grid point (1 returned) or north of the 
-!> northernmost (2 returned). given our locations module i believe this
-!> test is no longer needed since the grid includes the poles.
-
-subroutine colat_bounds(lat, grid_handle, bot, top, fract, istatus)
-
-real(r8),        intent(in)  :: lat          !< input latitude
-type(grid_type), intent(in)  :: grid_handle  !< geo or mag grid
-integer,         intent(out) :: bot          !< index of bottom layer
-integer,         intent(out) :: top          !< index of top layer
-real(r8),        intent(out) :: fract        !< fraction between layers
-integer,         intent(out) :: istatus      !< return status
-
-! Local storage
-integer :: i
-
-call error_handler(E_ERR, 'colat_bounds', 'routine needs to be rewritten for fully 3D grid', &
-                   source, revision, revdate )
-
-! Success should return 0, failure a positive number.
-istatus = 0
-
-!todo ! Check for too far south or north
-!todo if(lat > grid_handle%latitude(1)) then
-!todo    istatus = 1
-!todo    return
-!todo else if(lat < grid_handle%latitude(grid_handle%nlat)) then
-!todo    istatus = 2
-!todo    return
-!todo endif
-!todo 
-!todo ! In the middle, search through
-!todo do i = 2, grid_handle%nlat
-!todo    if(lat >= grid_handle%latitude(i)) then
-!todo       bot = i - 1
-!todo       top = i
-!todo       fract = (lat - grid_handle%latitude(bot)) / &
-!todo               (grid_handle%latitude(top) - grid_handle%latitude(bot))
-!todo       return
-!todo    endif
-!todo enddo
-!todo 
-!todo write(string1, *) 'looking for colat ', lat
-!todo call error_handler(E_ERR, 'colat_bounds', 'reached end of loop without finding colat', &
-!todo                    source, revision, revdate, text2=string1)
-
-end subroutine colat_bounds
-
-!------------------------------------------------------------
-
-!> find the index top and bottom index for a variable given an lheight and an
-!> array of heights.
-
-subroutine height_bounds(lheight, nheights, hgt_array, bot, top, fract, istatus)
-
-real(r8),   intent(in)  :: lheight             !< height location
-integer,    intent(in)  :: nheights            !< number of total heights
-real(r8),   intent(in)  :: hgt_array(nheights) !< array of heights
-integer,    intent(out) :: bot                 !< bottom bounding height
-integer,    intent(out) :: top                 !< top bounding height
-real(r8),   intent(out) :: fract               !< fraction inbetween
-integer,    intent(out) :: istatus             !< return status
-
-
-! Local variables
-integer   :: i
-
-! Succesful istatus is 0
-! Make any failure here return istatus in the 20s
-istatus = 0
-
-if(lheight <= hgt_array(1)) then
-   bot = 1
-   top = 2
-   ! NOTE: the fract definition is the relative distance from bottom to top
-   fract = 1.0_r8 
-   return
-endif
-
-! Search through the boxes
-do i = 2, nheights
-   ! If the location is lower than this entry, it must be in this box
-   if(lheight < hgt_array(i)) then
-      top = i
-      bot = i -1
-      fract = (lheight - hgt_array(bot)) / (hgt_array(top) - hgt_array(bot))
-      return
-   endif
-enddo
-
-! Falling off the end means the location is higher than the model top.
-bot   = -1
-top   = -1
-fract = -1.0_r8
-
-istatus = 20
-
-end subroutine height_bounds
 
 !------------------------------------------------------------------
 
@@ -816,8 +615,6 @@ character(len=*), intent(in)    :: z_name         !< height variable name
 logical,          intent(in)    :: is_conv        !< fill conversion grid
 logical,          intent(in)    :: is_co_latitude !< is grid in co-latitude
 
-integer :: hgtdim, latdim, londim
-
 if (is_conv) then
 
    call nc_get_variable(ncid, lon_name, grid_handle%conv_2d_lon, 'read_conv_horiz_grid')
@@ -871,13 +668,13 @@ integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
 ! for the dimensions and coordinate variables
 integer :: NlonDimID, NlatDimID, NhgtDimID
 integer :: geoLonVarID, geoLatVarID, geoHeightVarID
-integer :: magLonVarID, magLatVarID, magHeightVarID
-integer ::  coLonVarID,  coLatVarID
+! integer :: magLonVarID, magLatVarID, magHeightVarID
+! integer ::  coLonVarID,  coLatVarID
 
 ! we are going to need these to record the creation date in the netCDF file.
 ! This is entirely optional, but nice.
 
-character(len=128) :: filename
+character(len=256) :: filename
 
 if ( .not. module_initialized ) call static_init_model
 
