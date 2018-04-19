@@ -21,7 +21,7 @@ use     location_mod, only : location_type, get_dist, set_location, get_location
                              loc_get_close_state => get_close_state, get_close_type,  &
                              convert_vertical_obs, convert_vertical_state
 use    utilities_mod, only : register_module, error_handler, get_unit,         &
-                             E_ERR, E_WARN, E_MSG, logfileunit, nmlfileunit,   &
+                             E_ERR, E_WARN, E_MSG, log_it, nmlfileunit,   &
                              do_output, to_upper, do_nml_file, do_nml_term,    &
                              find_namelist_in_file, check_namelist_read,       &
                              file_exist, find_textfile_dims, file_to_text
@@ -345,10 +345,11 @@ call verify_state_variables(model_state_variables, nfields, variable_table, stat
 !  e.g. S,T,U,V = 256 x 225 x 70
 !  e.g. PSURF = 256 x 225
 
-if (do_output()) write(logfileunit, *) 'Using grid : Nx, Ny, Nz = ', &
-                                                     Nx, Ny, Nz
-if (do_output()) write(     *     , *) 'Using grid : Nx, Ny, Nz = ', &
-                                                     Nx, Ny, Nz
+if (do_output()) then
+   write(string1, *) 'Using grid : Nx, Ny, Nz = ', Nx, Ny, Nz
+   call log_it(string1)
+endif
+
 ! initialize the pressure array - pressure in bars
 allocate(pressure(Nz))
 call dpth2pres(Nz, ZC, pressure)

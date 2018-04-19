@@ -23,8 +23,8 @@ use     location_mod, only : location_type, get_dist, query_location,          &
                              convert_vertical_obs, convert_vertical_state,     &
                              set_periodic
 
-use    utilities_mod, only : register_module, error_handler,                   &
-                             E_ERR, E_WARN, E_MSG, logfileunit, nmlfileunit,   &
+use    utilities_mod, only : register_module, error_handler, log_it,           &
+                             E_ERR, E_MSG, nmlfileunit,                        &
                              get_unit, do_output, to_upper,                    &
                              find_namelist_in_file, check_namelist_read,       &
                              open_file, file_exist, find_textfile_dims,        &
@@ -271,9 +271,9 @@ call get_grid_info(ncid)
 
 if(debug > 0 .and. do_output()) then
    write(string1,'("static    grid: ni,   nj,   nk   =",3(1x,i5))')  ni, nj, nk
-   call say(string1)
+   call log_it(string1)
    write(string1,'("staggered grid: nip1, njp1, nkp1 =",3(1x,i5))') nip1, njp1, nkp1
-   call say(string1)
+   call log_it(string1)
 endif
 
 ! reads in staggered and scalar grid arrays
@@ -315,7 +315,7 @@ model_size = get_domain_size(domid)
 
 if (debug > 0 .and. do_output()) then
   write(string1, *)'static_init_model: model_size = ', model_size
-  call say(string1)
+  call log_it(string1)
 endif
 
 call set_calendar_type( calendar )   ! comes from model_mod_nml
@@ -612,7 +612,7 @@ endif
 
 if (debug > 0 .and. do_output()) then
    write(string1, *) 'model namelist: nlines, linelen = ', nlines, linelen
-   call say(string1)
+   call log_it(string1)
 endif
 
 if (has_model_namelist) then
@@ -711,7 +711,7 @@ obs_kind = obs_type
 if (debug > 99) then
    call write_location(0,location,charstring=string1)
    write(string1, *) 'task ', my_task_id(), ' kind, loc ', obs_kind, ' ', trim(string1)
-   call say(string1)
+   call log_it(string1)
 endif
 
 obs_loc_array = get_location(location)
@@ -723,7 +723,7 @@ if (varid < 0) then
       write(string1, *) 'obs kind not found in state.  kind ', obs_kind, ' (', &
                                  trim(get_name_for_quantity(obs_kind)), ')  loc: ', trim(string1)
 
-      call say(string1)
+      call log_it(string1)
    endif
    istatus(:) = 11
    return ! this kind isn't found in the state vector
@@ -733,7 +733,7 @@ nlevs = get_z_axis_length(varid)
 ndims = get_num_dims(domid, varid)
 if (debug > 99) then
    write(string1, *) 'varid, nlevs, ndims = ', varid, nlevs, ndims
-   call say(string1)
+   call log_it(string1)
 endif
 ! 2d vs. 3d variable test
 if (ndims == 3) then
@@ -743,15 +743,15 @@ else if (ndims == 2) then ! 2D, surface obs
 else
    ! should this be an error?
    write(string1, *) 'ndims not 3 or 2, unexpected? is ', ndims
-   call say(string1)
+   call log_it(string1)
    nlevs = 1  !? just a guess
    call write_location(0,location,charstring=string1)
    write(string1, *) 'task ', my_task_id(), ' kind ', obs_kind, ' (', &
                              trim(get_name_for_quantity(obs_kind)), ')  loc: ', trim(string1)
 
-   call say(string1)
+   call log_it(string1)
    write(string1, *) 'varid, nlevs, ndims = ', varid, nlevs, ndims
-   call say(string1)
+   call log_it(string1)
 endif
 
 
@@ -763,7 +763,7 @@ endif
 
 if (debug > 99) then
    write(string1, *) 'nlevs', nlevs
-   call say(string1)
+   call log_it(string1)
 endif
 
 ! Interpolate the height field (z) to get the height at each level at
@@ -1607,11 +1607,11 @@ call nc_check(ret, 'closing', filename)
 
 if (debug > 0 .and. do_output()) then
    write(string1,*) 'read_model_time was called to get date/time from: '//trim(filename)
-   call say(string1)
+   call log_it(string1)
    call print_date(base_time, 'read_model_time:simulation starting date')
    call print_time(base_time, 'read_model_time:simulation starting time')
    write(string1,*)'model offset is ',second ,' seconds.'
-   call say(string1)
+   call log_it(string1)
    call print_date(read_model_time, 'read_model_time:current model date')
    call print_time(read_model_time, 'read_model_time:current model time')
 endif
@@ -1817,27 +1817,6 @@ call nc_check( rc, 'set global string attribute ', varname //' to '//trim(val)//
 
 
 end subroutine set_netcdf_string_attr
-
-!------------------------------------------------------------------
-
-! write to both the logfile (assumes logfileunit is accessible and
-! an open filehandle to the log) and to the stdout/console.
-! THIS IS FOR DEBUGGING ONLY - if this is a message that the user
-! should see and it should stay in the code long-term, call the
-! error_handler with E_MSG.  once we decide to remove the debugging,
-! we can search for all instances of this call and remove it or
-! convert it to using the error_handler.   p.s. using the error_handler
-! means you don't have to do if (do_output()) because E_MSG already
-! does that.
-
-subroutine say(str)
-
-character(len=*), intent(in) :: str
-
-write(logfileunit, *) trim(str)
-write(    *      , *) trim(str)
-
-end subroutine say
 
 !------------------------------------------------------------------
 

@@ -18,8 +18,9 @@ program dart_to_cice
 use        types_mod, only : r8
 use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read, &
-                             logfileunit, nc_check, file_exist, &
-                             error_handler, E_ERR, E_MSG, to_upper
+                             file_exist, error_handler, E_ERR, E_MSG, to_upper
+use netcdf_utilities_mod, only : nc_check
+
 use netcdf 
 
 implicit none

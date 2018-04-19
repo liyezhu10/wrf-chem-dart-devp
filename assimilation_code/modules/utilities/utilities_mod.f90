@@ -22,8 +22,8 @@ integer, parameter :: NML_NONE = 0, NML_FILE = 1, NML_TERMINAL = 2, NML_BOTH = 3
 
 real(r8), parameter :: TWOPI = PI * 2.0_r8
 
-logical :: do_output_flag = .true.
-integer :: nml_flag       = NML_FILE
+logical :: do_output_flag = .false.
+integer :: nml_flag       = NML_NONE
 logical :: single_task    = .true.
 integer :: task_number    = 0
 logical :: module_initialized = .false.
@@ -156,10 +156,17 @@ character(len=512) :: string1,string2,string3
 
 if ( module_initialized ) return
 
-   
 module_initialized = .true.
 
-if (present(output_flag)) do_output_flag = output_flag
+if (standalone) return
+
+! now default to false, and only turn on if i'm task 0
+! or the caller tells me to turn it on.
+if (present(output_flag)) then
+   do_output_flag = output_flag
+else
+   if (single_task .or. task_number == 0) do_output_flag = .true.
+endif
 
 ! Since the logfile is not open yet, the error terminations
 ! must be handled differently than all other cases.
@@ -343,6 +350,8 @@ character(len=*), intent(in), optional :: progname
 ! if called multiple times, just return
 if (.not. module_initialized) return
 
+if (standalone) return
+
 if (do_output_flag) then
    if ( present(progname) ) then
       call write_time (logfileunit, label='Finished ', &
@@ -380,6 +389,7 @@ if ( .not. module_initialized ) call initialize_utilities
 if ( .not. do_output_flag) return
 if ( .not. module_details) return
 
+if (standalone) return
 
 call log_it('')
 call log_it('Registering module :')
@@ -404,7 +414,7 @@ logical :: do_nml_file
 
 if ( .not. module_initialized ) call initialize_utilities
 
-if ( .not. do_output()) then
+if ( .not. do_output() .or. standalone) then
    do_nml_file = .false.
 else
    do_nml_file = (nml_flag == NML_FILE .or. nml_flag == NML_BOTH)
@@ -422,7 +432,7 @@ logical :: do_nml_term
 
 if ( .not. module_initialized ) call initialize_utilities
 
-if ( .not. do_output()) then
+if ( .not. do_output() .or. standalone) then
    do_nml_term = .false.
 else
    do_nml_term = (nml_flag == NML_TERMINAL .or. nml_flag == NML_BOTH)
@@ -451,6 +461,7 @@ character(len=256) :: nml_string, test_string, string1
 integer            :: io
 logical            :: write_to_logfile
 
+if (standalone) return
 
 ! Decide if there is a logfile or not
 write_to_logfile = .true.
@@ -534,6 +545,8 @@ character(len=256) :: nml_string
 integer            :: io
 logical            :: write_to_logfile
 
+if (standalone) return
+
 ! Decide if there is a logfile or not
 write_to_logfile = .true.
 if(present(write_to_logfile_in)) write_to_logfile = write_to_logfile_in
@@ -590,8 +603,8 @@ end subroutine check_namelist_read
 subroutine log_it(message)
  character(len=*), intent(in) :: message
 
-write(     *     , *) trim(message)
-write(logfileunit, *) trim(message)
+                      write(     *     , *) trim(message)
+if (logfileunit >= 0) write(logfileunit, *) trim(message)
 
 end subroutine log_it
 

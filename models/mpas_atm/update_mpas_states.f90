@@ -24,8 +24,8 @@ program update_mpas_states
 use        types_mod, only : r8
 use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read, &
-                             logfileunit, open_file, close_file, nc_check, &
-                             get_next_filename
+                             logfileunit, open_file, close_file, get_next_filename
+use netcdf_utilities_mod, only : nc_check
 use time_manager_mod, only : time_type, print_time, print_date, operator(-), &
                              get_time, get_date
 use direct_netcdf_mod,only : read_transpose, read_variables

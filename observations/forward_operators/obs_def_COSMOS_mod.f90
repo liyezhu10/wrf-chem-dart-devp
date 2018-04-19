@@ -68,12 +68,11 @@
 ! BEGIN DART PREPROCESS MODULE CODE
 module obs_def_COSMOS_mod
 
-use        types_mod, only : r8, PI, metadatalength, MISSING_R8
-use    utilities_mod, only : register_module, error_handler, E_ERR, E_WARN, E_MSG, &
-                             logfileunit, get_unit, open_file, close_file, nc_check, &
-                             file_exist, ascii_file_format
+use        types_mod, only : r8, PI, MISSING_R8
+use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG, &
+                             ascii_file_format
 use     location_mod, only : location_type, set_location, get_location, &
-                             VERTISHEIGHT, VERTISLEVEL, set_location_missing
+                             VERTISHEIGHT, VERTISLEVEL
 use     obs_kind_mod, only : QTY_GEOPOTENTIAL_HEIGHT, QTY_SOIL_MOISTURE
 use  assim_model_mod, only : interpolate
 

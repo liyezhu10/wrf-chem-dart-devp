@@ -34,9 +34,10 @@ program convert_madis_rawin
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 use         types_mod, only : r8, missing_r8
-use     utilities_mod, only : nc_check, initialize_utilities, finalize_utilities, &
+use     utilities_mod, only : initialize_utilities, finalize_utilities, &
                               find_namelist_in_file, check_namelist_read,         &
                               do_nml_file, do_nml_term, logfileunit, nmlfileunit
+use netcdf_utilities_mod, only : nc_check
 use  time_manager_mod, only : time_type, set_calendar_type, set_date, &
                                   increment_time, get_time, operator(-), GREGORIAN
 use      location_mod, only : VERTISSURFACE, VERTISPRESSURE, VERTISHEIGHT

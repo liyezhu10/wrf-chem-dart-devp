@@ -16,8 +16,9 @@
 program test_sampling_err_table
 
 use types_mod,      only : r8
-use utilities_mod,  only : error_handler, E_ERR, nc_check,      &
+use utilities_mod,  only : error_handler, E_ERR, &
                            initialize_utilities, finalize_utilities
+use netcdf_utilities_mod, only : nc_check
 
 use sampling_error_correction_mod, only : get_sampling_error_table_size, &
                                           read_sampling_error_correction

@@ -2908,15 +2908,17 @@ end subroutine time_manager_init
 
 
 
-subroutine print_time (time,str,iunit)
+subroutine print_time (time,str,iunit,outstr)
 !------------------------------------------------------------------------
 
-type(time_type)  , intent(in)           :: time
-character (len=*), intent(in), optional :: str
-integer          , intent(in), optional :: iunit
+type(time_type)  , intent(in)            :: time
+character (len=*), intent(in),  optional :: str
+integer          , intent(in),  optional :: iunit
+character (len=*), intent(out), optional :: outstr
 
-integer           :: s,d, ns,nd, unit_in
+integer           :: s,d, ns,nd, out_unit
 character(len=13) :: fmt
+character(len=64) :: daysec
 
 if ( .not. module_initialized ) call time_manager_init
 
@@ -2924,40 +2926,55 @@ if ( .not. module_initialized ) call time_manager_init
 ! NOTE: there is no check for PE number
 
 ! NEED TO GET DEFAULT FOR STANDARD OUT< HARD CODED FOR NOW
-!!!  unit_in = stdout()
-  unit_in = 6
+!!!  out_unit = stdout()
+out_unit = 6
 
-  if (present(iunit)) unit_in = iunit
+if (present(iunit)) then
+   if (iunit < 0) return
+   out_unit = iunit
+endif
 
-  call get_time (time,s,d)
+call get_time (time,s,d)
 
 ! format output
 ! get number of digits for days and seconds strings
 
-   nd = int(log10(real(max(1,d))))+1
-   ns = int(log10(real(max(1,s))))+1
-   write (fmt,10) nd, ns
+nd = int(log10(real(max(1,d))))+1
+ns = int(log10(real(max(1,s))))+1
+write (fmt,10) nd, ns
 10 format ('(a,i',i2.2,',a,i',i2.2,')')
 
-  if (present(str)) then
-     write (unit_in,fmt) trim(str)//' day=', d, ', sec=', s
-  else
-     write (unit_in,fmt)       'TIME: day=', d, ', sec=', s
-  endif
+write(daysec,fmt) 'TIME: day=', d, ', sec=', s
+
+if (present(str)) then
+   if (present(outstr)) then
+      write (outstr,fmt)   trim(str)//trim(daysec)
+   else
+      write (out_unit,fmt) trim(str)//trim(daysec)
+   endif
+else
+   if (present(outstr)) then
+      write (outstr,fmt)   trim(daysec)
+   else
+      write (out_unit,fmt) trim(daysec)
+   endif
+endif
 
 end subroutine print_time
 
 
 
-subroutine print_date (time,str,iunit)
+subroutine print_date (time,str,iunit,outstr)
 !------------------------------------------------------------------------
 
-type(time_type)  , intent(in)           :: time
-character (len=*), intent(in), optional :: str
-integer          , intent(in), optional :: iunit
+type(time_type)  , intent(in)            :: time
+character (len=*), intent(in),  optional :: str
+integer          , intent(in),  optional :: iunit
+character (len=*), intent(out), optional :: outstr
 
-integer          :: y,mo,d,h,m,s, unit_in
-character(len=9) :: mon
+integer           :: y,mo,d,h,m,s, out_unit
+character(len=9)  :: mon
+character(len=64) :: datestr
 
 if ( .not. module_initialized ) call time_manager_init
 
@@ -2968,41 +2985,46 @@ if (calendar_type == NO_CALENDAR) return
 ! prints the time to standard output (or optional iunit) as a date
 ! NOTE: there is no check for PE number
 
-  unit_in = 6
+out_unit = 6
 
-  if (present(iunit)) unit_in = iunit
+if (present(iunit)) then
+   if (iunit < 0) return
+   out_unit = iunit
+endif
 
-  call get_date (time,y,mo,d,h,m,s)
+call get_date (time,y,mo,d,h,m,s)
 
-  ! print_date assumes an Earth calendar -- so check for calendar_type  
-  ! mars day numbers can be 3 digits long since there are no months.
-  if ( calendar_type == GREGORIAN_MARS ) then
-     mon = 'sol'
-     if (present(str)) then
-        write (unit_in,10) trim(str)//' ', y,mon(1:3),' ',d,' ',h,':',m,':',s
-     else
-        write (unit_in,10)       'DATE: ', y,mon(1:3),' ',d,' ',h,':',m,':',s
-     endif
-10   format (a,i4,1x,a3,a1,i3.3,3(a1,i2.2))
-  else if (calendar_type == SOLAR_MARS ) then
-     mon = 'sol'
-     if (present(str)) then
-        write (unit_in,12) trim(str)//' ', y,mon(1:3),' ',d,' ',h,':',m,':',s
-     else
-        write (unit_in,12)       'DATE: ', y,mon(1:3),' ',d,' ',h,':',m,':',s
-     endif
-12   format (a,i4,1x,a3,a1,i5.5,3(a1,i2.2))
+! print_date assumes an Earth calendar -- so check for calendar_type  
+! mars day numbers can be 3 digits long since there are no months.
+if ( calendar_type == GREGORIAN_MARS ) then
+   mon = 'sol'
+   write(datestr,10) y,mon(1:3),' ',d,' ',h,':',m,':',s
+10 format (a,i4,1x,a3,a1,i3.3,3(a1,i2.2))
+else if (calendar_type == SOLAR_MARS ) then
+   mon = 'sol'
+   write(datestr,12) y,mon(1:3),' ',d,' ',h,':',m,':',s
+12 format (a,i4,1x,a3,a1,i5.5,3(a1,i2.2))
 
-  ! if not Mars, then use Earth calendar
-  else
-     mon = month_name(mo)
-     if (present(str)) then
-        write (unit_in,11) trim(str)//' ', y,mon(1:3),' ',d,' ',h,':',m,':',s
-     else
-        write (unit_in,11)       'DATE: ', y,mon(1:3),' ',d,' ',h,':',m,':',s
-     endif
-11   format (a,i4,1x,a3,4(a1,i2.2))
-  end if
+! if not Mars, then use Earth calendar
+else
+   mon = month_name(mo)
+   write(datestr,11) y,mon(1:3),' ',d,' ',h,':',m,':',s
+11 format (a,i4,1x,a3,4(a1,i2.2))
+endif
+
+if (present(str)) then
+   if (present(outstr)) then
+      write (outstr,  '(A)') trim(str)//trim(datestr)
+   else
+      write (out_unit,'(A)') trim(str)//trim(datestr)
+   endif
+else
+   if (present(outstr)) then
+      write (outstr,  '(A)') 'DATE: '//trim(datestr)
+   else
+      write (out_unit,'(A)') 'DATE: '//trim(datestr)
+   endif
+endif
 
 end subroutine print_date
 

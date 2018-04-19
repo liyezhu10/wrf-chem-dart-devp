@@ -40,7 +40,7 @@ use    utilities_mod, only : open_file, register_module, &
                              initialize_utilities, logfileunit, nmlfileunit,   &
                              find_namelist_in_file, check_namelist_read,       &
                              do_nml_file, do_nml_term, finalize_utilities, &
-                             get_next_filename
+                             get_next_filename, log_it
 use netcdf_utilities_mod, only : nc_check
 use         sort_mod, only : sort
 use   random_seq_mod, only : random_seq_type, init_random_seq, several_random_gaussians
@@ -240,7 +240,7 @@ type(time_type) :: seqT1, seqTN        ! first,last time of obs sequence
 type(time_type) :: obsT1, obsTN        ! first,last time of all observations
 type(time_type) :: obs_time, skip_time
 
-character(len = 129) :: msgstring1, msgstring2
+character(len = 512) :: msgstring1, msgstring2
 character(len = stringlength) :: str1, str2, str3
 
 !-----------------------------------------------------------------------
@@ -341,13 +341,11 @@ enddo Regions
 Nregions = min(Nregions, ireg)
 
 if (verbose) then
-   write(logfileunit,*)
-   write(    *      ,*)
+   call log_it('')
    do i = 1,Nregions
-      write(*,'(''Region '',i02,1x,a32,'' : '',2(f10.4,1x))') &
-             i, reg_names(i), lonlim1(i), lonlim2(i)
-      write(logfileunit,'(''Region '',i02,1x,a32,'' : '',2(f10.4,1x))') &
-             i, reg_names(i), lonlim1(i), lonlim2(i)
+      write(msgstring1,'(''Region '',i02,1x,a32,'' : '',2(f10.4,1x))') &
+                       i, reg_names(i), lonlim1(i), lonlim2(i)
+      call log_it(msgstring1)
    enddo
 endif
 
@@ -391,18 +389,12 @@ ObsFileLoop : do ifile=1, Nfiles
    if (num_copies > 0) allocate( copyvals(num_copies) )
 
    if ( verbose ) then
-      write(logfileunit,*)
-      write(logfileunit,*)'num_copies          is ',num_copies
-      write(logfileunit,*)'num_qc              is ',num_qc
-      write(logfileunit,*)'num_obs             is ',num_obs
-      write(logfileunit,*)'max_num_obs         is ',max_num_obs
-      write(logfileunit,*)'obs_seq_read_format is ',trim(obs_seq_read_format)
-      write(    *      ,*)
-      write(    *      ,*)'num_copies          is ',num_copies
-      write(    *      ,*)'num_qc              is ',num_qc
-      write(    *      ,*)'num_obs             is ',num_obs
-      write(    *      ,*)'max_num_obs         is ',max_num_obs
-      write(    *      ,*)'obs_seq_read_format is ',trim(obs_seq_read_format)
+      write(msgstring1,*)                                                     ; call log_it(msgstring1)
+      write(msgstring1,*)'num_copies          is ',num_copies                 ; call log_it(msgstring1)
+      write(msgstring1,*)'num_qc              is ',num_qc                     ; call log_it(msgstring1)
+      write(msgstring1,*)'num_obs             is ',num_obs                    ; call log_it(msgstring1)
+      write(msgstring1,*)'max_num_obs         is ',max_num_obs                ; call log_it(msgstring1)
+      write(msgstring1,*)'obs_seq_read_format is ',trim(obs_seq_read_format)  ; call log_it(msgstring1)
    endif
 
    ! Read in the entire observation sequence
@@ -428,8 +420,7 @@ ObsFileLoop : do ifile=1, Nfiles
 
    if ( seqTN < TimeMin ) then
       if (verbose) then
-         write(logfileunit,*)'seqTN < TimeMin ... trying next file.'
-         write(    *      ,*)'seqTN < TimeMin ... trying next file.'
+         write(msgstring1,*)'seqTN < TimeMin ... trying next file.' ; call log_it(msgstring1)
       endif
       call destroy_obs(obs1)
       call destroy_obs(obsN)
@@ -441,8 +432,7 @@ ObsFileLoop : do ifile=1, Nfiles
       cycle ObsFileLoop
    else
       if (verbose) then
-         write(logfileunit,*)'seqTN > TimeMin ... using ', trim(obs_seq_filenames(ifile))
-         write(    *      ,*)'seqTN > TimeMin ... using ', trim(obs_seq_filenames(ifile))
+         write(msgstring1,*)'seqTN > TimeMin ... using ', trim(obs_seq_filenames(ifile)) ; call log_it(msgstring1)
       endif
    endif
 
@@ -462,8 +452,7 @@ ObsFileLoop : do ifile=1, Nfiles
       exit ObsFileLoop
    else
       if (verbose) then 
-         write(logfileunit,*)'seqT1 < TimeMax ... using ', trim(obs_seq_filenames(ifile))
-         write(    *      ,*)'seqT1 < TimeMax ... using ', trim(obs_seq_filenames(ifile))
+         write(msgstring1,*)'seqT1 < TimeMax ... using ', trim(obs_seq_filenames(ifile)) ; call log_it(msgstring1)
       endif
    endif
 
@@ -693,15 +682,13 @@ ObsFileLoop : do ifile=1, Nfiles
                                   & '' out of '',i8,'' possible'')') &
                          iepoch, obs_used_in_epoch(iepoch), num_obs_in_epoch
          call error_handler(E_MSG,'obs_diag',msgstring1,source,revision,revdate)
-         write(logfileunit,*)''
-         write(     *     ,*)''
+         call log_it(' ')
       endif
 
    enddo EpochLoop
 
    if (verbose) then
-      write(logfileunit,*)'End of EpochLoop for ',trim(obs_seq_filenames(ifile))
-      write(     *     ,*)'End of EpochLoop for ',trim(obs_seq_filenames(ifile))
+      write(msgstring1,*)'End of EpochLoop for ',trim(obs_seq_filenames(ifile)) ; call log_it(msgstring1)
    endif
 
    call destroy_obs(obs1)
@@ -730,73 +717,42 @@ endif
 ! Print final summary.
 !-----------------------------------------------------------------------
 
-write(*,*)
-write(*,*) '# observations used  : ',sum(obs_used_in_epoch)
-write(*,*) 'Count summary over all regions - obs may count for multiple regions:'
-write(*,*) '# identity           : ',Nidentity
-write(*,*) '# bad DART QC prior  : ',sum(guess%NbadDartQC)
-write(*,*) '# bad DART QC post   : ',sum(analy%NbadDartQC)
-write(*,*) '# TRUSTED            : ',sum(analy%Ntrusted)
-write(*,*)
-write(*,*) '# prior DART QC 0 : ',sum(guess%NDartQC_0)
-write(*,*) '# prior DART QC 1 : ',sum(guess%NDartQC_1)
-write(*,*) '# prior DART QC 2 : ',sum(guess%NDartQC_2)
-write(*,*) '# prior DART QC 3 : ',sum(guess%NDartQC_3)
-write(*,*) '# prior DART QC 4 : ',sum(guess%NDartQC_4)
-write(*,*) '# prior DART QC 5 : ',sum(guess%NDartQC_5)
-write(*,*) '# prior DART QC 6 : ',sum(guess%NDartQC_6)
-write(*,*) '# prior DART QC 7 : ',sum(guess%NDartQC_7)
-write(*,*)
-write(*,*) '# poste DART QC 0 : ',sum(analy%NDartQC_0)
-write(*,*) '# poste DART QC 1 : ',sum(analy%NDartQC_1)
-write(*,*) '# poste DART QC 2 : ',sum(analy%NDartQC_2)
-write(*,*) '# poste DART QC 3 : ',sum(analy%NDartQC_3)
-write(*,*) '# poste DART QC 4 : ',sum(analy%NDartQC_4)
-write(*,*) '# poste DART QC 5 : ',sum(analy%NDartQC_5)
-write(*,*) '# poste DART QC 6 : ',sum(analy%NDartQC_6)
-write(*,*) '# poste DART QC 7 : ',sum(analy%NDartQC_7)
-
-write(logfileunit,*)
-write(logfileunit,*) '# observations used  : ',sum(obs_used_in_epoch)
-write(logfileunit,*) 'Count summary over all regions - obs may count for multiple regions:'
-write(logfileunit,*) '# identity           : ',Nidentity
-write(logfileunit,*) '# bad DART QC prior  : ',sum(guess%NbadDartQC)
-write(logfileunit,*) '# bad DART QC post   : ',sum(analy%NbadDartQC)
-write(logfileunit,*) '# TRUSTED            : ',sum(analy%Ntrusted)
-write(logfileunit,*)
-write(logfileunit,*) '# prior DART QC 0 : ',sum(guess%NDartQC_0)
-write(logfileunit,*) '# prior DART QC 1 : ',sum(guess%NDartQC_1)
-write(logfileunit,*) '# prior DART QC 2 : ',sum(guess%NDartQC_2)
-write(logfileunit,*) '# prior DART QC 3 : ',sum(guess%NDartQC_3)
-write(logfileunit,*) '# prior DART QC 4 : ',sum(guess%NDartQC_4)
-write(logfileunit,*) '# prior DART QC 5 : ',sum(guess%NDartQC_5)
-write(logfileunit,*) '# prior DART QC 6 : ',sum(guess%NDartQC_6)
-write(logfileunit,*) '# prior DART QC 7 : ',sum(guess%NDartQC_7)
-write(logfileunit,*)
-write(logfileunit,*) '# poste DART QC 0 : ',sum(analy%NDartQC_0)
-write(logfileunit,*) '# poste DART QC 1 : ',sum(analy%NDartQC_1)
-write(logfileunit,*) '# poste DART QC 2 : ',sum(analy%NDartQC_2)
-write(logfileunit,*) '# poste DART QC 3 : ',sum(analy%NDartQC_3)
-write(logfileunit,*) '# poste DART QC 4 : ',sum(analy%NDartQC_4)
-write(logfileunit,*) '# poste DART QC 5 : ',sum(analy%NDartQC_5)
-write(logfileunit,*) '# poste DART QC 6 : ',sum(analy%NDartQC_6)
-write(logfileunit,*) '# poste DART QC 7 : ',sum(analy%NDartQC_7)
+call log_it('')
+write(msgstring1,*) '# observations used  : ',sum(obs_used_in_epoch) ; call log_it(msgstring1)
+write(msgstring1,*) 'Count summary over all regions - obs may count for multiple regions:' ; call log_it(msgstring1)
+write(msgstring1,*) '# identity           : ',Nidentity ; call log_it(msgstring1)
+write(msgstring1,*) '# bad DART QC prior  : ',sum(guess%NbadDartQC) ; call log_it(msgstring1)
+write(msgstring1,*) '# bad DART QC post   : ',sum(analy%NbadDartQC) ; call log_it(msgstring1)
+write(msgstring1,*) '# TRUSTED            : ',sum(analy%Ntrusted) ; call log_it(msgstring1)
+write(msgstring1,*) ; call log_it(msgstring1)
+write(msgstring1,*) '# prior DART QC 0 : ',sum(guess%NDartQC_0) ; call log_it(msgstring1)
+write(msgstring1,*) '# prior DART QC 1 : ',sum(guess%NDartQC_1) ; call log_it(msgstring1)
+write(msgstring1,*) '# prior DART QC 2 : ',sum(guess%NDartQC_2) ; call log_it(msgstring1)
+write(msgstring1,*) '# prior DART QC 3 : ',sum(guess%NDartQC_3) ; call log_it(msgstring1)
+write(msgstring1,*) '# prior DART QC 4 : ',sum(guess%NDartQC_4) ; call log_it(msgstring1)
+write(msgstring1,*) '# prior DART QC 5 : ',sum(guess%NDartQC_5) ; call log_it(msgstring1)
+write(msgstring1,*) '# prior DART QC 6 : ',sum(guess%NDartQC_6) ; call log_it(msgstring1)
+write(msgstring1,*) '# prior DART QC 7 : ',sum(guess%NDartQC_7) ; call log_it(msgstring1)
+write(msgstring1,*) ; call log_it(msgstring1)
+write(msgstring1,*) '# poste DART QC 0 : ',sum(analy%NDartQC_0) ; call log_it(msgstring1)
+write(msgstring1,*) '# poste DART QC 1 : ',sum(analy%NDartQC_1) ; call log_it(msgstring1)
+write(msgstring1,*) '# poste DART QC 2 : ',sum(analy%NDartQC_2) ; call log_it(msgstring1)
+write(msgstring1,*) '# poste DART QC 3 : ',sum(analy%NDartQC_3) ; call log_it(msgstring1)
+write(msgstring1,*) '# poste DART QC 4 : ',sum(analy%NDartQC_4) ; call log_it(msgstring1)
+write(msgstring1,*) '# poste DART QC 5 : ',sum(analy%NDartQC_5) ; call log_it(msgstring1)
+write(msgstring1,*) '# poste DART QC 6 : ',sum(analy%NDartQC_6) ; call log_it(msgstring1)
+write(msgstring1,*) '# poste DART QC 7 : ',sum(analy%NDartQC_7) ; call log_it(msgstring1)
 
 ! Print the histogram of innovations as a function of standard deviation. 
-write(     *     ,*)
-write(     *     ,*) 'Table that reflects the outlier_threshold -- '
-write(     *     ,*) 'How are the (good) innovations distributed?'
-write(logfileunit,*)
-write(logfileunit,*) 'Table that reflects the outlier_threshold -- '
-write(logfileunit,*) 'How are the (good) innovations distributed?'
+call log_it('')
+write(msgstring1,*) 'Table that reflects the outlier_threshold -- ' ; call log_it(msgstring1)
+write(msgstring1,*) 'How are the (good) innovations distributed?' ; call log_it(msgstring1)
 do i=0,MaxSigmaBins
    if(nsigma(i) /= 0) then
-      write(     *     ,*)'innovations within ',i+1,' stdev = ',nsigma(i)
-      write(logfileunit,*)'innovations within ',i+1,' stdev = ',nsigma(i)
+      write(msgstring1,*)'innovations within ',i+1,' stdev = ',nsigma(i) ; call log_it(msgstring1)
    endif
 enddo
-write(     *     ,*)
-write(logfileunit,*)
+call log_it('')
 
 !----------------------------------------------------------------------
 ! Open netCDF output file 
@@ -1079,8 +1035,7 @@ TimeLoop : do ifile = 1, size(obs_seq_filenames)
 
    if ( verbose ) then
 
-      write(logfileunit,*)trim(obs_seq_in_file_name),' has ',seqNsteps,' unique times.'
-      write(    *      ,*)trim(obs_seq_in_file_name),' has ',seqNsteps,' unique times.'
+      write(msgstring1,*)trim(obs_seq_in_file_name),' has ',seqNsteps,' unique times.' ; call log_it(msgstring1)
 
       call print_date(seqT1, ' DetermineFilenames: observation 1 date', logfileunit)
       call print_date(seqTN, ' DetermineFilenames: observation N date', logfileunit)
@@ -1107,11 +1062,9 @@ endif
 
 if ( verbose ) then
 
-   write(logfileunit,*)
-   write(    *      ,*)
+   call log_it('')
 
-   write(logfileunit,*)'Have ',nsteps,' unique times.'
-   write(    *      ,*)'Have ',nsteps,' unique times.'
+   write(msgstring1,*)'Have ',nsteps,' unique times.' ; call log_it(msgstring1)
 
    call print_date(time1, ' DetermineFilenames: first bincenter date',logfileunit)
    call print_date(timeN, ' DetermineFilenames: last  bincenter date',logfileunit)
@@ -1199,8 +1152,7 @@ endif
 halfbinwidth = binwidth / 2
 
 if ( verbose ) then
-   write(logfileunit,*)
-   write(     *     ,*)
+   call log_it('')
 
    call print_date(       obsT1,' DefineTimes: start             date',logfileunit)
    call print_date(       obsTN,' DefineTimes: end               date',logfileunit)
@@ -1283,8 +1235,7 @@ enddo BinLoop
 
 if ( verbose ) then
    do iepoch = 1,num_epochs
-      write(logfileunit,*)
-      write(     *     ,*)
+      call log_it('')
       write(str1,'(''epoch '',i6,''  start'')')iepoch
       write(str2,'(''epoch '',i6,'' center'')')iepoch
       write(str3,'(''epoch '',i6,''    end'')')iepoch
@@ -1302,8 +1253,7 @@ if ( verbose ) then
       call print_date(bin_center( iepoch),str2)
       call print_date(bin_edges(2,iepoch),str3)
    enddo
-   write(logfileunit,*)
-   write(     *     ,*)
+   call log_it('')
 endif
 
 end Subroutine SetSchedule
@@ -2196,8 +2146,7 @@ end Function Rank_Histogram
                 dimids=(/ RegionDimID, RankDimID, TimeDimID /), &
                 varid=VarID2), 'WriteTRV', 'rank_hist:def_var')
          else
-            write(logfileunit,*)string1//' has ',ndata,'"rank"able observations.'
-            write(     *     ,*)string1//' has ',ndata,'"rank"able observations.'
+            write(msgstring1,*)string1//' has ',ndata,'"rank"able observations.' ; call log_it(msgstring1)
          endif
 
       endif
@@ -2364,8 +2313,7 @@ Subroutine NormalizeTRV()
 integer :: ivar, iregion, iepoch
 
 if (verbose) then
-   write(logfileunit,*)'Normalizing time-region-variable quantities.'
-   write(     *     ,*)'Normalizing time-region-variable quantities.'
+   write(msgstring1,*)'Normalizing time-region-variable quantities.' ; call log_it(msgstring1)
 endif
 
 do ivar   = 1,num_obs_types

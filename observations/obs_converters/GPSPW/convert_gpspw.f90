@@ -18,8 +18,9 @@ program convert_gpspw
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 use         types_mod, only : r8
-use     utilities_mod, only : nc_check, initialize_utilities, finalize_utilities, &
+use     utilities_mod, only : initialize_utilities, finalize_utilities, &
                               find_namelist_in_file, check_namelist_read 
+use netcdf_utilities_mod, only : nc_check
 use  time_manager_mod, only : time_type, set_calendar_type, set_date, set_time, &
                               increment_time, get_time, get_date, operator(-), GREGORIAN
 use      location_mod, only : VERTISUNDEF 

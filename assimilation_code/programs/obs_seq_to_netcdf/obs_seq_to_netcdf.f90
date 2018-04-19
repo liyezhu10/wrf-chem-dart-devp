@@ -33,9 +33,11 @@ use     schedule_mod, only : schedule_type, set_regular_schedule, get_schedule_l
 use    utilities_mod, only : register_module, &
                              file_exist, error_handler, E_ERR, E_MSG, &
                              initialize_utilities, finalize_utilities, nmlfileunit, &
-                             find_namelist_in_file, check_namelist_read, nc_check, &
-                             next_file, get_next_filename, find_textfile_dims, &
+                             find_namelist_in_file, check_namelist_read, &
+                             get_next_filename, find_textfile_dims, &
                              file_to_text, do_nml_file, do_nml_term
+
+use netcdf_utilities_mod, only : nc_check
 
 use typeSizes
 use netcdf
@@ -232,12 +234,8 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
 
    ! Determine the next input filename ... 
 
-   if (obs_sequence_list == '') then
-      obs_seq_in_file_name = next_file(obs_sequence_name,ifile)
-   else
-      obs_seq_in_file_name = get_next_filename(obs_sequence_list,ifile)
-      if (obs_seq_in_file_name == '') exit ObsFileLoop
-   endif
+   obs_seq_in_file_name = get_next_filename(obs_sequence_list,ifile)
+   if (obs_seq_in_file_name == '') exit ObsFileLoop
 
    if ( file_exist(trim(obs_seq_in_file_name)) ) then
       write(string1,*)'opening ', trim(obs_seq_in_file_name)

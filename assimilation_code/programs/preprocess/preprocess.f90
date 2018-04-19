@@ -19,9 +19,9 @@ program preprocess
 ! NEED TO ADD IN ALL THE ERROR STUFF
 
 use utilities_mod, only : register_module, error_handler, E_ERR, E_MSG,   &
-                          file_exist, open_file, logfileunit,             &
+                          file_exist, open_file,                          &
                           initialize_utilities, finalize_utilities,       &
-                          find_namelist_in_file, check_namelist_read
+                          find_namelist_in_file, check_namelist_read, log_it
 
 
 implicit none
@@ -110,20 +110,24 @@ logical :: file_has_usercode(max_input_files) = .false.
 ! and these files are used to fill in observation kind details in
 ! DEFAULT_obs_def_mod.f90 and DEFAULT_obs_kind_mod.f90.
 character(len = 129) :: input_obs_def_mod_file = &
-                        '../../../obs_def/DEFAULT_obs_def_mod.F90'
+                        '../../../observations/forward_operators/DEFAULT_obs_def_mod.F90'
 character(len = 129) :: output_obs_def_mod_file = &
-                        '../../../obs_def/obs_def_mod.f90'
+                        '../../../observations/forward_operators/obs_def_mod.f90'
 character(len = 129) :: input_obs_kind_mod_file = &
-                        '../../../obs_kind/DEFAULT_obs_kind_mod.F90'
+                        '../../../assimilation_code/modules/observations/DEFAULT_obs_kind_mod.F90'
 character(len = 129) :: output_obs_kind_mod_file = &
-                        '../../../obs_kind/obs_kind_mod.f90'
+                        '../../../assimilation_code/modules/observations/obs_kind_mod.f90'
 character(len = 129) :: input_files(max_input_files) = 'null'
 character(len = 129) :: model_files(max_model_files) = 'null'
 logical              :: overwrite_output = .true.
 
-namelist /preprocess_nml/ input_obs_def_mod_file, input_obs_kind_mod_file,   &
-                          output_obs_def_mod_file, output_obs_kind_mod_file, &
-                          input_files, model_files, overwrite_output
+namelist /preprocess_nml/ input_obs_def_mod_file,    &
+                          input_obs_kind_mod_file,   &
+                          output_obs_def_mod_file,   &
+                          output_obs_kind_mod_file,  &
+                          input_files,               &
+                          model_files,               &
+                          overwrite_output
 
 !---------------------------------------------------------------------------
 ! start of program code
@@ -138,19 +142,19 @@ read(iunit, nml = preprocess_nml, iostat = io)
 call check_namelist_read(iunit, io, "preprocess_nml")
 
 ! Output the namelist file information
-write(logfileunit, *) 'Path names of default obs_def and obs_kind modules'
-write(logfileunit, *) trim(input_obs_def_mod_file)
-write(logfileunit, *) trim(input_obs_kind_mod_file)
-write(*, *) 'Path names of default obs_def and obs_kind modules'
-write(*, *) trim(input_obs_def_mod_file)
-write(*, *) trim(input_obs_kind_mod_file)
+call log_it('Path names of default obs_def and obs_kind modules')
+call log_it(input_obs_def_mod_file)
+call log_it(input_obs_kind_mod_file)
+call log_it('Path names of default obs_def and obs_kind modules')
+call log_it(input_obs_def_mod_file)
+call log_it(input_obs_kind_mod_file)
 
-write(logfileunit, *) 'Path names of output obs_def and obs_kind modules'
-write(logfileunit, *) trim(output_obs_def_mod_file)
-write(logfileunit, *) trim(output_obs_kind_mod_file)
-write(*, *) 'Path names of output obs_def and obs_kind modules'
-write(*, *) trim(output_obs_def_mod_file)
-write(*, *) trim(output_obs_kind_mod_file)
+call log_it('Path names of output obs_def and obs_kind modules')
+call log_it(output_obs_def_mod_file)
+call log_it(output_obs_kind_mod_file)
+call log_it('Path names of output obs_def and obs_kind modules')
+call log_it(output_obs_def_mod_file)
+call log_it(output_obs_kind_mod_file)
 
 ! A path for the default files is required. Have an error if these are null.
 if(input_obs_def_mod_file == 'null') &
@@ -172,23 +176,19 @@ if(output_obs_kind_mod_file == 'null') &
       'Namelist must provide output_obs_kind_mod_file', &
       source, revision, revdate)
 
-write(logfileunit, *) 'INPUT obs_def files follow:'
-write(*, *) 'INPUT obs_def files follow:'
+call log_it('INPUT obs_def files follow:')
 
 do i = 1, max_input_files
    if(input_files(i) == 'null') exit
-   write(logfileunit, *) trim(input_files(i))
-   write(*, *) trim(input_files(i))
+   call log_it(input_files(i))
    num_input_files= i
 end do
 
-write(logfileunit, *) 'INPUT model files follow:'
-write(*, *) 'INPUT model files follow:'
+call log_it('INPUT model files follow:')
 
 do i = 1, max_model_files
    if(model_files(i) == 'null') exit
-   write(logfileunit, *) trim(model_files(i))
-   write(*, *) trim(model_files(i))
+   call log_it(model_files(i))
    num_model_files = i
 end do
 

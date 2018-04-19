@@ -30,9 +30,11 @@ program convert_f16_edr_dsk
 
 use         types_mod, only : r8, MISSING_R8, digits12
 
-use     utilities_mod, only : nc_check, initialize_utilities, finalize_utilities, &
+use     utilities_mod, only : initialize_utilities, finalize_utilities, &
                               find_namelist_in_file, check_namelist_read, do_output, &
                               error_handler, E_ERR, E_MSG
+
+use netcdf_utilities_mod, only : nc_check
 
 use  time_manager_mod, only : time_type, set_calendar_type, set_date, GREGORIAN, &
                               get_time, set_time, print_time, print_date

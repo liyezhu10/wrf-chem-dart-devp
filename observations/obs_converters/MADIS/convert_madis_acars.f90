@@ -28,7 +28,8 @@ program convert_madis_acars
 
 use         types_mod, only : r8, missing_r8
 use      location_mod, only : VERTISPRESSURE
-use     utilities_mod, only : nc_check, initialize_utilities, finalize_utilities
+use     utilities_mod, only : initialize_utilities, finalize_utilities
+use netcdf_utilities_mod, only : nc_check
 use  time_manager_mod, only : time_type, set_calendar_type, set_date, operator(>=), &
                               increment_time, get_time, operator(-), GREGORIAN
 use  obs_sequence_mod, only : obs_sequence_type, obs_type, read_obs_seq, &

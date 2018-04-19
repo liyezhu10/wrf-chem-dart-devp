@@ -32,8 +32,8 @@ use         types_mod, only : r8, i2, i4, missing_r8
 use     utilities_mod, only : initialize_utilities, finalize_utilities, &
                               open_file, close_file, error_handler, E_ERR, &
                               do_nml_file, do_nml_term, nmlfileunit, &
-                              find_namelist_in_file, check_namelist_read, &
-                              nc_check, get_unit
+                              find_namelist_in_file, check_namelist_read, get_unit
+use netcdf_utilities_mod, only : nc_check
 use  time_manager_mod, only : time_type, set_calendar_type, set_date, set_time, &
                               operator(>=), increment_time, get_date, get_time, &
                               operator(-), GREGORIAN, operator(+), print_date

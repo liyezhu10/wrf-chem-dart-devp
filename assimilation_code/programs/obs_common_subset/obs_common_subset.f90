@@ -50,7 +50,7 @@ use    utilities_mod, only : register_module, initialize_utilities,            &
                              find_namelist_in_file, check_namelist_read,       &
                              error_handler, E_ERR, E_MSG, nmlfileunit,         &
                              do_nml_file, do_nml_term, get_next_filename,      &
-                             finalize_utilities, logfileunit
+                             finalize_utilities
 use     location_mod, only : location_type, operator(/=)
 use      obs_def_mod, only : obs_def_type, get_obs_def_time, get_obs_def_type_of_obs,     &
                              get_obs_def_location
@@ -243,12 +243,10 @@ NUMSETS: do j = 1, nsets
       endif
    enddo
 
-   write(     *,      *) 'Starting to process input sequence files: '
-   write(logfileunit, *) 'Starting to process input sequence files: '
+   call error_handler(E_MSG, 'obs_common_subset: ', 'Starting to process input sequence files: ')
 
    do i = 1, atonce
-      write(     *     , *)  trim(filename_in(i))
-      write(logfileunit, *)  trim(filename_in(i))
+      call error_handler(E_MSG, 'obs_common_subset: ', filename_in(i))
 
       call read_obs_seq(filename_in(i), 0, 0, 0, seq_in(i))
    enddo

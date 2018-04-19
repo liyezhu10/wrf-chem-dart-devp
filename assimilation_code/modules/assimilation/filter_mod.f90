@@ -1189,10 +1189,6 @@ endif
 
 call     trace_message('Filter done')
 call timestamp_message('Filter done')
-if(my_task_id() == 0) then
-   write(logfileunit,*)'FINISHED filter.'
-   write(logfileunit,*)
-endif
 
 end subroutine filter_main
 

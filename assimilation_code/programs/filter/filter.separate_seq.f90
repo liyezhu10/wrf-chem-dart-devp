@@ -871,10 +871,6 @@ endif
 
 call     trace_message('Filter done')
 call timestamp_message('Filter done')
-if(my_task_id() == 0) then 
-   write(logfileunit,*)'FINISHED filter.'
-   write(logfileunit,*)
-endif
 
 ! YOU CAN NO LONGER WRITE TO THE LOG FILE BELOW THIS!
 ! After the call to finalize below, you cannot write to

@@ -18,7 +18,7 @@ program dart_to_lmdz
 use       types_mod, only : r8
 use   utilities_mod, only : open_file, close_file, &
                             initialize_utilities, finalize_utilities, &
-                            logfileunit, nmlfileunit, do_nml_file, do_nml_term, &
+                            nmlfileunit, do_nml_file, do_nml_term, &
                             check_namelist_read, find_namelist_in_file
 use       model_mod, only : data_2d_type,data_3d_type, init_model_instance, write_lmdz_init, &
                             vector_to_prog_var, static_init_model, get_model_size

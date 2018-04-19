@@ -32,7 +32,8 @@ use        types_mod, only : r8, i8
 use obs_sequence_mod, only : obs_sequence_type, static_init_obs_sequence, &
                              read_obs_seq_header, destroy_obs_sequence, &
                              get_num_obs, write_obs_seq 
-use    utilities_mod, only : find_namelist_in_file, check_namelist_read, nc_check
+use    utilities_mod, only : find_namelist_in_file, check_namelist_read
+use netcdf_utilities_mod, only : nc_check
 use     obs_kind_mod, only : RADIOSONDE_U_WIND_COMPONENT, ACARS_U_WIND_COMPONENT, &
                              MARINE_SFC_U_WIND_COMPONENT, LAND_SFC_U_WIND_COMPONENT, &
                              METAR_U_10_METER_WIND, GPSRO_REFRACTIVITY, &
@@ -973,7 +974,7 @@ subroutine read_and_parse_input_seq(filename, nx, ny, obs_bdy, siglevel, ptop, &
                                     tc_seq, gpsro_seq, other_seq)
 
 use         types_mod, only : r8
-use     utilities_mod, only : nc_check
+use  netcdf_utilities_mod, only : nc_check
 use  time_manager_mod, only : time_type 
 use      location_mod, only : location_type, get_location, is_vertical
 use  obs_sequence_mod, only : obs_sequence_type, obs_type, init_obs, &

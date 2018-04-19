@@ -40,9 +40,9 @@ use location_io_mod,      only :  nc_write_location_atts, nc_get_location_varids
 use default_model_mod,     only : init_time, init_conditions, adv_1step, &
                                   nc_write_model_vars
 
-use         utilities_mod, only : register_module, error_handler,               &
+use         utilities_mod, only : register_module, error_handler,       &
                                   E_ERR, E_MSG, nmlfileunit, get_unit,  &
-                                  do_output, to_upper, logfileunit,   &
+                                  do_output, to_upper, log_it, &
                                   find_namelist_in_file, check_namelist_read,   &
                                   file_exist, find_textfile_dims, file_to_text, &
                                   do_nml_file, do_nml_term
@@ -427,10 +427,10 @@ call verify_state_variables(model_state_variables, nfields, variable_table, &
 !  e.g. aicen,vicen,vsnon = 256 x 225 x 5
 !  e.g. uvel,vvel = 256 x 225 
 
-if (do_output()) write(logfileunit, *) 'Using grid : Nx, Ny, Ncat = ', &
-                                                     Nx, Ny, Ncat
-if (do_output()) write(     *     , *) 'Using grid : Nx, Ny, Ncat = ', &
-                                                     Nx, Ny, Ncat
+if (do_output()) then
+   write(string1, *) 'Using grid : Nx, Ny, Ncat = ', Nx, Ny, Ncat
+   call log_it(string1)
+endif
 
 ! Initialize the interpolation routines
 call init_interp()
