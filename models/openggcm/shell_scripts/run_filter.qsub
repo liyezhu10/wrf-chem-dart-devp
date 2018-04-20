@@ -238,7 +238,7 @@ while ( 1 )
       foreach FILE ( preassim_*.nc output_*.nc obs_seq.final )
          set BASE = $FILE:r
          set EXT  = $FILE:e
-         \mv -v $FILE ${BASE}_${ModelTime}.${EXT}
+         \mv -v $FILE ${BASE}.${ModelTime}.${EXT}
       end
 
       #------------------------------------------------------------
@@ -268,22 +268,30 @@ while ( 1 )
 
       @ ncycle ++  # debug
 
+      echo "600"                          >! temp_file.txt
+      echo "Assimilation for $TimeString" >> temp_file.txt
+
       foreach FILE ( `cat semaphore_files.txt` )
          set NEWFILE = `echo ${FILE} | sed -e "s/to_dart/from_dart/"`
          echo "making ${NEWFILE} to signal openggcm at cycle $ncycle"
-         ${REMOVE} ${FILE} ${NEWFILE}
-         echo "600"                          >! temp_file.txt
-         echo "Assimilation for $TimeString" >> temp_file.txt
+
+         ${REMOVE} ${FILE}
+#         ${REMOVE} ${FILE} ${NEWFILE}
+
          ${COPY} temp_file.txt ${NEWFILE}
          ${COPY} temp_file.txt ${NEWFILE}.safety
 
-         if ( $ncycle > 3 ) echo "DONE" >! ${NEWFILE}
-         if ( $ncycle > 3 ) echo "DONE" >! ${NEWFILE}.safety
+         if ( $ncycle > 3 ) echo "DONE"
+#        if ( $ncycle > 3 ) echo "DONE" >! ${NEWFILE}
+#        if ( $ncycle > 3 ) echo "DONE" >! ${NEWFILE}.safety
+
       end
       if ( $ncycle > 3 ) then
          echo "${JOBNAME} ($JOBID) finished at "`date`
          exit
       endif
+
+      ${REMOVE} semaphore_files.txt
 
    endif
 

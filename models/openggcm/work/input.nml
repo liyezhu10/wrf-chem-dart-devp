@@ -38,16 +38,16 @@
    last_obs_days            = -1
    last_obs_seconds         = -1
 
-   stages_to_write          = 'preassim', 'analysis'
-   output_members           = .false.
+   stages_to_write          = 'preassim', 'output'
+   output_members           = .true.
    output_mean              = .true.
    output_sd                = .false.
-   write_all_stages_at_end  = .true.
+   write_all_stages_at_end  = .false.
    output_state_file_list   = "output_list.txt"
 
    inf_flavor                  = 2,             0
-   inf_initial_from_restart    = .false.,       .false.
-   inf_sd_initial_from_restart = .false.,       .false.
+   inf_initial_from_restart    = .true.,       .false.
+   inf_sd_initial_from_restart = .true.,       .false.
    inf_initial                 = 1.0,           1.0
    inf_sd_initial              = 0.6,           0.6
    inf_damping                 = 0.9,           0.9
@@ -132,7 +132,7 @@
 
 # maybe later   assimilate_these_obs_types = 'SUPER_DARN_ELECTRIC_POTENTIAL',
 &obs_kind_nml
-   assimilate_these_obs_types = 'GPS_PROFILE'
+   assimilate_these_obs_types = 'COSMIC_ELECTRON_DENSITY'
     evaluate_these_obs_types  = ''
   /
 
@@ -236,15 +236,15 @@
    loc_of_interest       = 54.0, -88.0, 425835.8  ! (40,2,4)   516815258820.758
 &model_mod_check_nml
    verbose               = .true.
-   test1thru             = 4
+   test1thru             = 5
    x_ind                 = 3951
    loc_of_interest       = 54.0, -88.0, 425835.8
    quantity_of_interest  = 'QTY_ELECTRON_DENSITY'
    interp_test_lonrange  = 0.0, 360.0
-   interp_test_dlon      = 1.0
+   interp_test_dlon      = 0.5
    interp_test_latrange  = -90.0, 90.0
-   interp_test_dlat      = 1.0
-   interp_test_vertrange = 1.0,  2.0
+   interp_test_dlat      = 0.5
+   interp_test_vertrange = 200000., 200000.
    interp_test_dvert     = 1.0
    interp_test_vertcoord = 'VERTISHEIGHT'
    input_state_files     = 'DATA.ionos2.nc'
