@@ -54,7 +54,7 @@
 #PBS -e filter.err
 #PBS -o filter.log
 #PBS -l nodes=1:ppn=32
-#PBS -l walltime=2:00:00
+#PBS -l walltime=0:45:00
 
 #----------------------------------------------------------------------
 # Turns out the scripts are a lot more flexible if you don't rely on 
@@ -117,9 +117,8 @@ echo "${JOBNAME} ($JOBID) started      at "`date`
 echo
 
 #----------------------------------------------------------------------
+# actually start doing something ...
 #----------------------------------------------------------------------
-
-set myname = $0          # this is the name of this script
 
 alias die 'echo FATAL: \!*; exit 1'
 
@@ -169,21 +168,26 @@ set OBSERVATIONDIR = $DARTDIR/observations
 set BASETIME = 1966-01-01_00:00:00
 
 #-----------------------------------------------------------------------------
-# Get the DART executables, scripts, and input files
+# Get the DART executables, scripts, and input files.
+# The run-time input (input.nml) must have been staged in $RUNPATH.
+# At some point, maybe all these files should be pre-staged. It would 
+# enable multiple experiments to be carried out at the same time.
 #-----------------------------------------------------------------------------
 
 # executables
 ${COPY} ${DARTDIR}/work/advance_time.exe .  || exit 1
 ${COPY} ${DARTDIR}/work/filter.exe       .  || exit 1
-${COPY} ${DARTDIR}/work/input.nml        .  || exit 1
 
 set SAMP_ERR_FILE = ${DARTROOT}/assimilation_code/programs/gen_sampling_err_table/work/sampling_error_correction_table.nc
-
 ${COPY} ${SAMP_ERR_FILE}  .
 
 # staging inflation files
 ${COPY} ${DARTDIR}/data/output_priorinf_mean.nc  input_priorinf_mean.nc
 ${COPY} ${DARTDIR}/data/output_priorinf_sd.nc    input_priorinf_sd.nc
+
+#-----------------------------------------------------------------------------
+# Start waiting for something to do ...
+#-----------------------------------------------------------------------------
 
 @ ncycle = 0
 while ( 1 ) 
@@ -194,6 +198,7 @@ while ( 1 )
 
       #------------------------------------------------------------
       # Get the time 
+      #------------------------------------------------------------
 
       set semaphore = `head -n 1 semaphore_files.txt`
       set TimeString = `head -n 1 $semaphore | sed -e "s/\..*//"`
@@ -210,14 +215,14 @@ while ( 1 )
 
       #------------------------------------------------------------
       # link the obs
+      #------------------------------------------------------------
 
       ${REMOVE} obs_seq.out
-#     ${LINK} ${OBSERVATIONDIR}/obs_seq.${ModelTime} obs_seq.out || exit 1
-
-      ${LINK} ${OBSERVATIONDIR}/obs_seq201303170100 obs_seq.out || exit 1
+      ${LINK} ${OBSERVATIONDIR}/obs_seq${ModelTime} obs_seq.out || exit 1
 
       #------------------------------------------------------------
       # input.nml presumes 'input_list.txt', 'output_list.txt'
+      #------------------------------------------------------------
 
       ls -1 */target/DATA.ionos2.nc >! input_list.txt
       sed -e "s/DATA.ionos2.nc/dart_posterior.nc/" input_list.txt >! output_list.txt
@@ -227,17 +232,39 @@ while ( 1 )
       ${MPI} ./filter.exe || exit 2
 
       #------------------------------------------------------------
-      # rename output files (inflation, diagnostics, etc)
-     
-      ls -lrt
+      # rename output files (inflation, diagnostics, etc) to be unique
+      #------------------------------------------------------------
+    
+      foreach FILE ( preassim_*.nc output_*.nc obs_seq.final )
+         set BASE = $FILE:r
+         set EXT  = $FILE:e
+         \mv -v $FILE ${BASE}_${ModelTime}.${EXT}
+      end
 
       #------------------------------------------------------------
-      # update inflation files 
+      # Checking for inflation files from the assimilation, use them
+      # as input for the next cycle. Since they are only read - we can link.
+      #------------------------------------------------------------
+
+      (ls -rt1 output_priorinf_mean.*.nc | tail -n 1 >! latestfile) > & /dev/null
+      set nfiles = `cat latestfile | wc -l`
+      if ( $nfiles > 0 ) then
+         set latest = `cat latestfile`
+         ${LINK} $latest input_priorinf_mean.nc
+      endif
+      
+      (ls -rt1 output_priorinf_sd.*.nc | tail -n 1 >! latestfile) > & /dev/null
+      set nfiles = `cat latestfile | wc -l`
+      if ( $nfiles > 0 ) then
+         set latest = `cat latestfile`
+         ${LINK} $latest input_priorinf_sd.nc
+      endif
 
       #------------------------------------------------------------
       # signal that DART is done
       # remove the 'to_dart' semaphore
       # create the 'from_dart' semaphore
+      #------------------------------------------------------------
 
       @ ncycle ++  # debug
 
@@ -253,17 +280,18 @@ while ( 1 )
          if ( $ncycle > 3 ) echo "DONE" >! ${NEWFILE}
          if ( $ncycle > 3 ) echo "DONE" >! ${NEWFILE}.safety
       end
-      if ( $ncycle > 3 ) exit
+      if ( $ncycle > 3 ) then
+         echo "${JOBNAME} ($JOBID) finished at "`date`
+         exit
+      endif
 
    endif
 
    sleep 1
 
-end
+end  # End of 'infinite' wait loop
 
 echo "${JOBNAME} ($JOBID) finished at "`date`
-echo "Listing contents of RUNPATH before archiving"
-ls -l
 
 exit 0
 
