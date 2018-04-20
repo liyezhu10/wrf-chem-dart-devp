@@ -289,7 +289,7 @@ domain_id = add_domain(openggcm_template, nfields, &
                        kind_list   = state_kinds_list(1:nfields), &
                        update_list = update_var_list (1:nfields))
 
-if (debug > 0) call state_structure_info(domain_id)
+if (debug > 10) call state_structure_info(domain_id)
 
 ! order the dimensions according to lat, lon and height
 
@@ -950,8 +950,10 @@ model_time_base = set_date(iyear, imonth, iday)
 
 read_model_time = model_time_base + model_time_offset
 
-call print_date(read_model_time,'read_model_time:netcdf model date')
-call print_time(read_model_time,'read_model_time:DART   model time')
+if (do_output()) then
+   call print_date(read_model_time,'read_model_time:netcdf model date')
+   call print_time(read_model_time,'read_model_time:DART   model time')
+endif
 
 end function read_model_time
 
@@ -1426,7 +1428,7 @@ integer :: ivar, jdim
 character(len=NF90_MAX_NAME) :: dimname
 
 ! initialize list
-dim_order_list(:,:) = 1
+dim_order_list(:,:) = -1
 
 do ivar = 1,ngood
    do jdim = 1,get_num_dims(domain_id, ivar)
@@ -1444,9 +1446,20 @@ do ivar = 1,ngood
             call error_handler(E_ERR,'make_dim_order_table',string1,source,revision,revdate)
       END SELECT
    enddo
+
+   if ( debug > 99 .and. do_output() ) then
+      write(string1,*)'dim_order_list ',dim_order_list(ivar,:)
+
+      write(string2,*)'dim_order_list height,lat,lon ', &
+                       dim_order_list(ivar,VAR_HGT_INDEX), &
+                       dim_order_list(ivar,VAR_LAT_INDEX), &
+                       dim_order_list(ivar,VAR_LON_INDEX)
+      call error_handler(E_MSG,'make_dim_order_table',string1,text2=string2) 
+   endif
+
 enddo
 
-!>@todo what about falling off the list? 
+!>@todo what about falling off the list?  i.e. dim_order_list == 1
 
 end subroutine make_dim_order_table
 

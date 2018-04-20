@@ -1,0 +1,13 @@
+# Configuration file to set environment variables common for all the scripts.
+
+setenv BASERUNDIR /mnt/lustre/lus0/home/dart/dart/rma_openggcm/models/openggcm/test/baserun
+setenv OPENGGCMDIR $HOME/openggcm-2016-04-18
+
+setenv RUNPREFIX hoptest
+setenv RUNPATH /mnt/lustre/lus0/home/dart/dart/rma_openggcm/models/openggcm/$RUNPREFIX
+setenv ENSEMBLE_SIZE 3
+
+setenv DARTROOT /mnt/lustre/lus0/home/dart/dart/rma_openggcm
+setenv OBSERVATIONDIR ${DARTROOT}/models/openggcm/observations
+
+setenv BASETIME "1966-01-01_00:00:00"

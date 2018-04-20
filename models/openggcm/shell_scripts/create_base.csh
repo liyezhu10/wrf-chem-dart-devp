@@ -1,8 +1,5 @@
 #!/bin/csh
 
-setenv OPENGGCMDIR $HOME/openggcm-2016-04-18
-set baserundir=$PWD/baserun
-
 # ----------------------------------------------------------------------
 # create_base.csh
 #
@@ -10,7 +7,7 @@ set baserundir=$PWD/baserun
 #   create similar runs with identical source code.
 #
 # Inputs:
-#   baserundir :: location to create run
+#   BASERUNDIR :: location to create run
 #   runme :: normal runme file
 #   solar wind input files ::
 #     - SWFILE :: usual solar wind input file
@@ -26,18 +23,28 @@ set baserundir=$PWD/baserun
 
 alias die 'echo FATAL: \!*; exit 1'
 
+if ( -e   configuration.txt ) then
+   source configuration.txt
+else
+   die "Must have a 'configuration.txt' file in current directory."
+endif
+
 if ( ! -r runme ) then
   die "runme missing"
 endif
 
-if ( -d $baserundir ) then
-  rm -rf $baserundir
+if ( -d $BASERUNDIR ) then
+  rm -rf $BASERUNDIR
   echo "previous base run removed"
 endif
-mkdir $baserundir
+mkdir $BASERUNDIR
 
 #copy runme
-cp runme $baserundir
+cp runme $BASERUNDIR
+
+cp ${DARTROOT}/models/openggcm/shell_scripts/run_filter.qsub .
+cp ${DARTROOT}/models/openggcm/shell_scripts/create_runs.csh .
+cp ${DARTROOT}/models/openggcm/work/input.nml .
 
 #get solar wind, orbit data file info from runme
 $OPENGGCMDIR/bin/script.includes $OPENGGCMDIR runme $OPENGGCMDIR/include/input.defines 0
@@ -53,34 +60,34 @@ source tmp.csh
 if ( ( $SWFILE == "auto" ) || ( $SWFILE == "minvar" ) ) then
   # if relative path, copy to base run dir
   if ("$IDATA" !~ /*) then
-    if ( ! -d $baserundir/$IDATA ) then
-      mkdir $baserundir/$IDATA
+    if ( ! -d $BASERUNDIR/$IDATA ) then
+      mkdir $BASERUNDIR/$IDATA
     endif
-    cp $IDATA/$SWMON.* $baserundir/$IDATA
+    cp $IDATA/$SWMON.* $BASERUNDIR/$IDATA
   endif
 else
-  cp $SWFILE $baserundir
+  cp $SWFILE $BASERUNDIR
 endif
 if ( $ORBITFILE != "none" ) then
-  cp $ORBITFILE $baserundir
+  cp $ORBITFILE $BASERUNDIR
 endif
 
 # build base run
-cd $baserundir
+cd $BASERUNDIR
 ./runme  #use special target file to prevent submission and set PPN
 
 #re-get runme params (necessary?)
-if ( ! -r $baserundir/tmp.csh ) then
+if ( ! -r $BASERUNDIR/tmp.csh ) then
   die "tmp.csh not found"
 endif
-source $baserundir/tmp.csh
+source $BASERUNDIR/tmp.csh
 
 #if not a swdata file run (auto or minvar), create generated swdata file
-if ( ! -r $baserundir/swdata ) then
-expand $baserundir/tmp.swdata1 |  awk '{ \
+if ( ! -r $BASERUNDIR/swdata ) then
+expand $BASERUNDIR/tmp.swdata1 |  awk '{ \
     printf "%7.2f %7.2f %7.2f %7.2f %7.2f %7.2f %7.2f %7.2f %7.2f ", \
     $1,$2,$3,$4,$5,$6,$7,$8,$9;  \
-    printf "%8.5f %8.5f %8.5f\n",$11,$12,$13; }'  >! $baserundir/swdata
+    printf "%8.5f %8.5f %8.5f\n",$11,$12,$13; }'  >! $BASERUNDIR/swdata
 endif
 
 #save files needed for "copied" runs
@@ -121,25 +128,25 @@ if ( "$SATOUT" == "true" ) then
 endif
 
 #save openggcm.f, ctim.f source files
-mkdir $baserundir/target/src
+mkdir $BASERUNDIR/target/src
 foreach src ( $GGCM_SOURCES )
-    cp -p $GGCMDIR/src/$src $baserundir/target/src
+    cp -p $GGCMDIR/src/$src $BASERUNDIR/target/src
 end
-cp -p $GGCMDIR/src/ctim-core.for $baserundir/target/src
+cp -p $GGCMDIR/src/ctim-core.for $BASERUNDIR/target/src
 
 #save input parameter definitions
-mkdir $baserundir/target/include
-cp -p $GGCMDIR/include/input.defines $baserundir/target/include
+mkdir $BASERUNDIR/target/include
+cp -p $GGCMDIR/include/input.defines $BASERUNDIR/target/include
 
 #save current target-build, ctim-indata, dktable, enchan.dat
-mv $baserundir/target/target-build $baserundir/target/target-build-link
-cp -prL $baserundir/target/target-build-link $baserundir/target/target-build
-mv $baserundir/target/ctim-indata $baserundir/target/ctim-indata-link
-cp -prL $baserundir/target/ctim-indata-link $baserundir/target/ctim-indata
-mv $baserundir/target/dktable $baserundir/target/dktable-link
-cp -prL $baserundir/target/dktable-link $baserundir/target/dktable
-mv $baserundir/target/enchan.dat $baserundir/target/enchan.dat-link
-cp -prL $baserundir/target/enchan.dat-link $baserundir/target/enchan.dat
+mv $BASERUNDIR/target/target-build $BASERUNDIR/target/target-build-link
+cp -prL $BASERUNDIR/target/target-build-link $BASERUNDIR/target/target-build
+mv $BASERUNDIR/target/ctim-indata $BASERUNDIR/target/ctim-indata-link
+cp -prL $BASERUNDIR/target/ctim-indata-link $BASERUNDIR/target/ctim-indata
+mv $BASERUNDIR/target/dktable $BASERUNDIR/target/dktable-link
+cp -prL $BASERUNDIR/target/dktable-link $BASERUNDIR/target/dktable
+mv $BASERUNDIR/target/enchan.dat $BASERUNDIR/target/enchan.dat-link
+cp -prL $BASERUNDIR/target/enchan.dat-link $BASERUNDIR/target/enchan.dat
 
 #create openggcm.f template that points to saved source files
 set HOST=`hostname`
@@ -156,15 +163,15 @@ c++ the following sources were used: ++
 c++++++++++++++++++++++++++++++++++++++
 eeeeee
 foreach src ( $GGCM_SOURCES )
-    echo "c+++++++>>> $baserundir/target/src/$src" >> tmp.pre
+    echo "c+++++++>>> $BASERUNDIR/target/src/$src" >> tmp.pre
 end
 cat >> tmp.pre <<eeeeee
 c++++++++++++++++++++++++++++++++++++++
 .include tmp.h
-.include $baserundir/grid_include.$RUN
+.include $BASERUNDIR/grid_include.$RUN
 eeeeee
 foreach src ( $GGCM_SOURCES )
-    echo ".include $baserundir/target/src/$src" >> tmp.pre
+    echo ".include $BASERUNDIR/target/src/$src" >> tmp.pre
 end
 /bin/mv tmp.$RUN.1.pre tmp.$RUN.1.pre.save #save old version
 /bin/mv tmp.pre tmp.$RUN.1.pre

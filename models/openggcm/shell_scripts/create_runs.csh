@@ -1,11 +1,4 @@
 #!/bin/csh -ef
-
-setenv OPENGGCMDIR $HOME/openggcm-2016-04-18
-#set baserundir=/home/space/dcramer/lustre/dart/cir07_test
-set baserundir=/mnt/lustre/lus0/home/dart/dart/rma_openggcm/models/openggcm/test/baserun
-set runprefix="target"
-set ensemble_size=3
-
 # ----------------------------------------------------------------------
 # create_runs.csh
 #
@@ -13,9 +6,9 @@ set ensemble_size=3
 #   runs will be created in the current directory.
 #
 # Inputs:
-#   baserundir :: path to existing run
-#   ensemble_size :: number of "copies"
-#   runprefix :: what to name "copies" ("target_", etc.)
+#   BASERUNDIR :: path to existing run
+#   ENSEMBLE_SIZE :: number of "copies"
+#   RUNPREFIX :: what to name "copies" ("target_", etc.)
 #   (targetfile) :: special targetfile that sets PPN and doesn't submit
 #   runme (optional) :: for different parameter values (BE CAREFUL!)
 #   swdata (optional) :: to replace base run's version with different values
@@ -39,19 +32,25 @@ set ensemble_size=3
 
 alias die 'echo FATAL: \!*; exit 1'
 
-if ( ! -d $baserundir ) then
-    die "base run directory $baserundir not found!"
+if ( -e   configuration.txt ) then
+   source configuration.txt
+else
+   die "Must have a 'configuration.txt' file in current directory."
 endif
 
-set BASERUN=`basename $baserundir`
+if ( ! -d $BASERUNDIR ) then
+    die "base run directory $BASERUNDIR not found!"
+endif
+
+set BASERUN=`basename $BASERUNDIR`
 
 # ----------------------------------------------------------------------
 # Read all the variables
 
-if ( ! -r $baserundir/tmp.csh ) then
+if ( ! -r $BASERUNDIR/tmp.csh ) then
     die "tmp.csh not found"
 endif
-source $baserundir/tmp.csh
+source $BASERUNDIR/tmp.csh
 
 # ----------------------------------------------------------------------
 # Load per-target defaults and use them if they were not overridden 
@@ -111,10 +110,10 @@ set configure_args=( $configure_args $CONF_ARGS )
 @ CORES = $NODES * $PPN
 
 set INST_NUM=0
-while ($INST_NUM < $ensemble_size)
+while ($INST_NUM < $ENSEMBLE_SIZE)
   @ INST_NUM++
   set INST=`printf "%03d" $INST_NUM`
-  set RUN=$runprefix"_"$INST
+  set RUN=$RUNPREFIX"_"$INST
   echo $RUN
   set RUNDIR=$PWD/$RUN
 
@@ -131,14 +130,14 @@ while ($INST_NUM < $ensemble_size)
   mkdir $RUNDIR/target/$RUN     #workaround for Jimmy's special dart code
 
   #get input parameters
-  cp $baserundir/tmp.csh $RUNDIR
-  cp $baserundir/tmp.h $RUNDIR
-  cp $baserundir/tmp.i $RUNDIR
-  cp $baserundir/BASETIME $RUNDIR
+  cp $BASERUNDIR/tmp.csh $RUNDIR
+  cp $BASERUNDIR/tmp.h $RUNDIR
+  cp $BASERUNDIR/tmp.i $RUNDIR
+  cp $BASERUNDIR/BASETIME $RUNDIR
 
   #solar wind, in.$RUN data
-  cp $baserundir/swdata $RUNDIR
-  cp $baserundir/in.$BASERUN $RUNDIR/in.$RUN
+  cp $BASERUNDIR/swdata $RUNDIR
+  cp $BASERUNDIR/in.$BASERUN $RUNDIR/in.$RUN
   ln -s $RUNDIR/in.$RUN $RUNDIR/target
   #switch swfile to swdata, if necessary (in.$RUN must be recreated)
   if ( ( $SWFILE == "auto" ) || ( $SWFILE == "minvar" ) ) then
@@ -164,7 +163,7 @@ while ($INST_NUM < $ensemble_size)
   #recreate in.$RUN file in include correct run name (and swfile)
   if ( $DOINP ) then
     cd $RUNDIR
-    setenv INPF $baserundir/runme
+    setenv INPF $BASERUNDIR/runme
     $GGCMDIR/bin/input.csh 0
     if ( $status != 0 ) then
         die "input.csh failed."
@@ -173,30 +172,30 @@ while ($INST_NUM < $ensemble_size)
   endif
 
   #copy openggcm.f fortran template file
-  cp $baserundir/tmp.$BASERUN.1.pre $RUNDIR/tmp.$RUN.1.pre
+  cp $BASERUNDIR/tmp.$BASERUN.1.pre $RUNDIR/tmp.$RUN.1.pre
 
   #grid info
-  cp $baserundir/$BASERUN.smf $RUNDIR/$RUN.smf
+  cp $BASERUNDIR/$BASERUN.smf $RUNDIR/$RUN.smf
   ln -s $RUNDIR/$RUN.smf $RUNDIR/target
 
   #satellite orbits
   if ( -f $ORBITFILE ) then
-      ln -s $baserundir/$ORBITFILE $RUNDIR
+      ln -s $BASERUNDIR/$ORBITFILE $RUNDIR
       ln -s $RUNDIR/$ORBITFILE $RUNDIR/target
   endif
 
   #ctim init data
-  ln -s $baserundir/target/ctim-indata $RUNDIR/target
+  ln -s $BASERUNDIR/target/ctim-indata $RUNDIR/target
 
   #rcm input files
   if ( "$RCMCODE" == "rice" ) then
-      ln -s $baserundir/target/enchan.dat $RUNDIR/target
-      ln -s $baserundir/target/dktable $RUNDIR/target
+      ln -s $BASERUNDIR/target/enchan.dat $RUNDIR/target
+      ln -s $BASERUNDIR/target/dktable $RUNDIR/target
   endif
 
   #source and build files from base run
-  ln -s $baserundir/target/target-build $RUNDIR/target
-  ln -s $baserundir/target/build/* $baserundir/target/build/.deps $RUNDIR/target/build
+  ln -s $BASERUNDIR/target/target-build $RUNDIR/target
+  ln -s $BASERUNDIR/target/build/* $BASERUNDIR/target/build/.deps $RUNDIR/target/build
   rm $RUNDIR/target/build/openggcm* $RUNDIR/target/build/ctim*
 
   # ----------------------------------------------------------------------
@@ -264,7 +263,7 @@ if ( -r runme ) then
   cp tmp.csh tmp.csh.old
   cp tmp.h tmp.h.old
   cp tmp.i tmp.i.old
-  \$GGCMDIR/bin/script.includes \$GGCMDIR runme $baserundir/target/include/input.defines 0 #GGCMDIR isn't used in script.includes, thankfully
+  \$GGCMDIR/bin/script.includes \$GGCMDIR runme $BASERUNDIR/target/include/input.defines 0 #GGCMDIR isn't used in script.includes, thankfully
   if ( \$status != 0 ) then
       die "script.includes failed."
   endif
@@ -303,7 +302,7 @@ endif
 cat \$RUN.f > openggcm.f
 
 # recreate ctim.f
-cat tmp.h $baserundir/target/src/ctim-core.for >! tmp.pre
+cat tmp.h $BASERUNDIR/target/src/ctim-core.for >! tmp.pre
 set FPPN="fppn -q"
 \$FPPN -c -- tmp.pre >! ctim.f
 cat ctim.f >> \$RUN.f
@@ -331,11 +330,19 @@ EOF
 
 rm -f submit_all.sh
 
+cat >> submit_all.sh <<EOF
+# this script built by create_runs.csh
+
+\rm \`find . -name "to_dart.semaphore"\`
+\rm \`find . -name "from_dart.semaphore"\`
+
+EOF
+
 set INST_NUM=0
-while ($INST_NUM < $ensemble_size)
+while ($INST_NUM < $ENSEMBLE_SIZE)
   @ INST_NUM++
   set INST=`printf "%03d" $INST_NUM`
-  set RUN=$runprefix"_"$INST
+  set RUN=$RUNPREFIX"_"$INST
   set RUNDIR=$PWD/$RUN
 
 cat >> build_all.sh <<EOF
@@ -353,13 +360,14 @@ EOF
 cat >> submit_all.sh <<EOF
 echo === Submitting job $RUN.qsub
 cd $RUNDIR/target && qsub $RUN.qsub
+
 EOF
 
 end
 
 cat >> submit_all.sh <<EOF
-cd $PWD
-qsub ../shell_scripts/dart_test.qsub
+echo === Submitting job run_filter.qsub
+cd $RUNPATH && qsub run_filter.qsub
 EOF
 
 chmod 755 build_all.sh

@@ -119,10 +119,19 @@ echo
 #----------------------------------------------------------------------
 #----------------------------------------------------------------------
 
-set RUNPATH=/mnt/lustre/lus0/home/dart/dart/rma_openggcm/models/openggcm/timtest
-cd $RUNPATH
-
 set myname = $0          # this is the name of this script
+
+alias die 'echo FATAL: \!*; exit 1'
+
+cd $ORIGINALDIR
+
+if ( -e   configuration.txt ) then
+   source configuration.txt
+else
+   die "Must have a 'configuration.txt' file in current directory."
+endif
+
+cd $RUNPATH
 
 # some systems don't like the -v option to any of the following 
 
@@ -172,25 +181,19 @@ set SAMP_ERR_FILE = ${DARTROOT}/assimilation_code/programs/gen_sampling_err_tabl
 
 ${COPY} ${SAMP_ERR_FILE}  .
 
-# COMPLETE HACK ... for staging inflation files
-
-${COPY} $DARTDIR/data/DATA.ionos2.nc input_prior_inflation_mean.nc
-${COPY} $DARTDIR/data/DATA.ionos2.nc input_prior_inflation_sd.nc
-
-set ens_size = 3
+# staging inflation files
+${COPY} ${DARTDIR}/data/output_priorinf_mean.nc  input_priorinf_mean.nc
+${COPY} ${DARTDIR}/data/output_priorinf_sd.nc    input_priorinf_sd.nc
 
 @ ncycle = 0
 while ( 1 ) 
    
    find . -name to_dart.semaphore >! semaphore_files.txt
    set nfiles = `cat semaphore_files.txt | wc -l`
-   if ($nfiles == $ens_size) then
+   if ($nfiles == $ENSEMBLE_SIZE) then
 
       #------------------------------------------------------------
       # Get the time 
-
-      @ ncycle ++  # debug
-      if ( $ncycle > 3 ) break
 
       set semaphore = `head -n 1 semaphore_files.txt`
       set TimeString = `head -n 1 $semaphore | sed -e "s/\..*//"`
@@ -216,7 +219,7 @@ while ( 1 )
       #------------------------------------------------------------
       # input.nml presumes 'input_list.txt', 'output_list.txt'
 
-      ls -1 $RUNPATH/target_*/target/DATA.ionos2.nc >! input_list.txt
+      ls -1 */target/DATA.ionos2.nc >! input_list.txt
       sed -e "s/DATA.ionos2.nc/dart_posterior.nc/" input_list.txt >! output_list.txt
 
       ${LINK} -s `head -n 1 input_list.txt` .
@@ -236,16 +239,26 @@ while ( 1 )
       # remove the 'to_dart' semaphore
       # create the 'from_dart' semaphore
 
+      @ ncycle ++  # debug
+
       foreach FILE ( `cat semaphore_files.txt` )
-         ${REMOVE} $FILE
-         set FILE = `echo $FILE | sed -e "s/to_dart/from_dart/"`
-         echo "600"                          >! $FILE
-         echo "Assimilation for $TimeString" >> $FILE
+         set NEWFILE = `echo ${FILE} | sed -e "s/to_dart/from_dart/"`
+         echo "making ${NEWFILE} to signal openggcm at cycle $ncycle"
+         ${REMOVE} ${FILE} ${NEWFILE}
+         echo "600"                          >! temp_file.txt
+         echo "Assimilation for $TimeString" >> temp_file.txt
+         ${COPY} temp_file.txt ${NEWFILE}
+         ${COPY} temp_file.txt ${NEWFILE}.safety
+
+         if ( $ncycle > 3 ) echo "DONE" >! ${NEWFILE}
+         if ( $ncycle > 3 ) echo "DONE" >! ${NEWFILE}.safety
       end
+      if ( $ncycle > 3 ) exit
+
    endif
 
    sleep 1
-   
+
 end
 
 echo "${JOBNAME} ($JOBID) finished at "`date`
