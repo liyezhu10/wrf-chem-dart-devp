@@ -20,12 +20,11 @@
 # 6 hour assimilation windows centered on 6,12,18,24Z can be run 
 # from a single input file).   The cycle interval below should be
 # an exact multiple of the length of the input files.
-# (This script is set up for the daily 3Z to 3Z arrangement.)
 
 # set start and end YYYYMMDDHHMM here. 
 # this is the midpoint of each time window.
-set starth = 201303170000
-set   endh = 201303170200
+set starth = 201303140010
+set   endh = 201303140100
 
 # set time window for each output file.  the syntax of these
 # lines must match the valid input formats for the advance_time program
@@ -35,7 +34,8 @@ set last_half      = +5m     # +half interval
 
 
 # set once and should be able to leave as-is
-set output_dir   = ./data
+set input_dir    = ../daily
+set output_dir   = ../10min
 set advance_exec = ./advance_time
 set nml_template = ./input.nml.template
 set COPY         = "/bin/cp -f"
@@ -54,13 +54,17 @@ while ( $dtg <= $endh )
   set end_day = $end_window[1]
   set end_sec = $end_window[2]
 
-  # use time string to construct unique output file names
-  set filn_out = ${output_dir}/obs_seq$dtg
-
-  echo output will go into file $filn_out
-
   # cut off hours
   set ymd = `echo $dtg | cut -c 1-8`
+
+  # get year, month, date for use below
+  set y = `echo $dtg | cut -c 1-4`
+  set m = `echo $dtg | cut -c 5-6`
+  set d = `echo $dtg | cut -c 7-8`
+
+  # set the format of the input and output files
+  set input_file  = \'$input_dir/obs_seq.ion.${y}-${m}-${d}\'
+  set output_file = \'$output_dir/obs_seq.ion.${dtg}\'
 
   # decrement string used for input filename by a day if 
   # interval center is 00 h 
@@ -68,32 +72,31 @@ while ( $dtg <= $endh )
   # the rollover of days is managed, also how files are named
   # (0Z vs 24Z).
   set hh = `echo $dtg | cut -c 9-10`
-  if ( $hh == "00" ) then
-    set ymd = `echo $dtg -24h | $advance_exec | cut -c 1-8`
+  set mm = `echo $dtg | cut -c 11-12`
+  if ( $hh == "00" && $mm == "00") then
+    set dtg2 = `echo $dtg -24h | $advance_exec`
+    set y2 = `echo $dtg2 | cut -c 1-4`
+    set m2 = `echo $dtg2 | cut -c 5-6`
+    set d2 = `echo $dtg2 | cut -c 7-8`
+    set input_file = \'$input_dir/obs_seq.ion.${y2}-${m2}-${d2}\',$input_file
   endif
     
-  # FIXME:
-  #  for input 'filename_seq' file, this could be a list of 
-  #  files if the output file you want spans multiple inputs.
-  #  the specific name also depends on what time range the inputs
-  #  cover -- 0Z to 0Z, or 3Z to 3Z, etc.
+  echo input will come from file $input_file
+  echo output will go into file $output_file
 
   # change the values in the template file and overwrite the
   # old input.nml - this controls what the execution of the
   # obs_sequence_tool will do.
-  sed -e "s/^.*first_obs_days *=.*/first_obs_days\ =\ $start_day\,/g" \
-      -e "s/^.*first_obs_seconds *=.*/first_obs_seconds\ =\ $start_sec\,/g" \
-      -e "s/^.*last_obs_days *=.*/last_obs_days\ =\ $end_day\,/g" \
-      -e "s/^.*last_obs_seconds *=.*/last_obs_seconds\ =\ $end_sec\,/g" \
-      -e "s/^.*filename_seq *=.*/filename_seq=\'obs_seq${ymd}\'\,/g" \
-      -e "s/^.*filename_out *=.*/filename_out=\'obs_seq${dtg}.bin\'\,/g" \
+  sed -e "s/^.*first_obs_days *=.*/first_obs_days\ =\ $start_day\,/" \
+      -e "s/^.*first_obs_seconds *=.*/first_obs_seconds\ =\ $start_sec\,/" \
+      -e "s/^.*last_obs_days *=.*/last_obs_days\ =\ $end_day\,/" \
+      -e "s/^.*last_obs_seconds *=.*/last_obs_seconds\ =\ $end_sec\,/" \
+      -e "s;^.*filename_seq *=.*;filename_seq=\ ${input_file},;" \
+      -e "s;^.*filename_out *=.*;filename_out=\ ${output_file},;" \
       $nml_template > input.nml      
 
   # do the splitting here
   ./obs_sequence_tool
-
-  # copy or move the temporary file to the output location
-  ${MOVE} obs_seq${dtg}.bin $filn_out
 
   # advance to next time
   set dtg = `echo $dtg ${cycle_interval} | $advance_exec`
