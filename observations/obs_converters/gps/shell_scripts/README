@@ -4,6 +4,8 @@
 #
 # DART $Id$
 
+Radio Occultation atmPrf profiles:
+
 Description of the scripts provided to process the COSMIC and 
 CHAMP GPS radio occultation data.
 
@@ -61,6 +63,24 @@ etc) and the script doesn't exit, it can delete the input files before
 the conversion has succeeded.  But if you have file quota concerns
 this allows you to keep the total disk usage lower.
 
+
+Ionospheric obs ionPrf data:
+
+0) run quickbuild.csh as described above
+
+1) get_daily.csh
+
+set the start and stop days.  downloads from the CDAAC and
+untars into 100s of files per day.  runs the converter to
+create a single obs_seq.ion.YYYYMMDD file per day.
+
+2) split_obs_seq.csh
+
+split the daily files into X minute/hour files - set the
+window at the top of the file before running.
+
+
+Set the dates at the top
 
 # <next few lines under version control, do not edit>
 # $URL$

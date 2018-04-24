@@ -8,10 +8,13 @@
 
 # make a single obs_seq file with all the profiles for a single day
 #
-# input is 100s of individual netcdf files, each containing a single profile.
+# downloads the daily tar file from the CDAAC (set your user name
+# and password below), untars it into 100s of individual netcdf files,
+# one profile per file.
 #
-# this assumes you have already downloaded a tar file per day into 
-# the 'raw' directory and unpacked it there.
+# runs the converter to create a single obs_seq.ion.YYYYMMDD file
+# with all the obs for that day.
+#
 
 
 # set start and end YYYYMMDD here. 
