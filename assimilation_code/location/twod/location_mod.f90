@@ -19,7 +19,7 @@ implicit none
 private
 
 public :: location_type, get_location, set_location, &
-          set_location_missing, is_location_in_region, &
+          set_location_missing, is_location_in_region, get_maxdist, &
           write_location, read_location, interactive_location, query_location, &
           LocationDims, LocationName, LocationLName, get_close_obs, &
           get_close_maxdist_init, get_close_obs_init, get_close_type, &
@@ -608,6 +608,17 @@ do i = 1, gc%num
 end do
 
 end subroutine get_close_obs
+
+!---------------------------------------------------------------------------
+
+function get_maxdist(gc, obs_type)
+type(get_close_type), intent(in) :: gc
+integer, optional,    intent(in) :: obs_type
+real(r8) :: get_maxdist
+
+get_maxdist = gc%maxdist
+
+end function get_maxdist
 
 !----------------------------------------------------------------------------
 

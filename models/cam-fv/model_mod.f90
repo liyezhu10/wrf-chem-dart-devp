@@ -27,6 +27,26 @@
 !>
 !>  test with identity obs to make sure get_close_xx() doesn't need
 !>  special code to handle them.
+!>
+!>@todo FIXME: feedback from ramping meeting
+!>
+!>  add a top of ramp namelist item (impact is supposed to go to 0
+!>  before it gets to the model top).  look at making the namelist
+!>  items specified in model levels and not pressures.
+!>
+!>  added a get_maxdist() call to the locations modules to get the
+!>  2*cutoff distance (that's what's stored) which can vary by obs type.
+!>  compute the ramp based on the real cutoff value instead of having
+!>  to guess.
+!>
+!>  don't allow a top ramp if horizontal distance only is set.  in that
+!>  case the vertical normalization factors aren't used and could be 
+!>  set to inappropriate values and it would only mess up the ramp.
+!>  just don't allow this combination.  it's odd anyway.
+!>
+!>  we don't have a good way to ramp obs with "vert is undefined"
+!>  so they'll get to impact the whole column.
+!>
 !----------------------------------------------------------------
 
 module model_mod
@@ -43,7 +63,7 @@ use          location_mod,  only : location_type, set_vertical, set_location, &
                                    set_vertical_localization_coord, get_dist, &
                                    loc_get_close_obs => get_close_obs, &
                                    loc_get_close_state => get_close_state, &
-                                   vertical_localization_on, get_close_type
+                                   vertical_localization_on, get_close_type, get_maxdist
 use         utilities_mod,  only : find_namelist_in_file, check_namelist_read, &
                                    string_to_logical, string_to_real,& 
                                    nmlfileunit, do_nml_file, do_nml_term, &
@@ -71,6 +91,7 @@ use  netcdf_utilities_mod,  only : nc_get_variable, nc_get_variable_size, &
                                    nc_add_attribute_to_variable, &
                                    nc_define_integer_variable, &
                                    nc_define_real_variable, &
+                                   nc_define_real_scalar, &
                                    nc_add_global_creation_time, &
                                    nc_add_global_attribute, &
                                    nc_define_dimension, nc_put_variable, &
@@ -84,8 +105,9 @@ use        quad_utils_mod,  only : quad_interp_handle, init_quad_interp, &
                                    quad_lon_lat_locate, quad_lon_lat_evaluate, &
                                    GRID_QUAD_IRREG_SPACED_REGULAR,  &
                                    QUAD_LOCATED_CELL_CENTERS
-use     default_model_mod,  only : adv_1step, init_time, init_conditions, &
-                                   nc_write_model_vars
+use     default_model_mod,  only : adv_1step, nc_write_model_vars, &
+                                   init_time => fail_init_time,    &
+                                   init_conditions => fail_init_conditions
 
 implicit none
 private
@@ -102,18 +124,18 @@ public :: static_init_model,                   &
           nc_write_model_atts,                 &
           write_model_time,                    & 
           read_model_time,                     &
-          end_model
+          end_model,                           &
+          pert_model_copies,                   & 
+          convert_vertical_obs,                & 
+          convert_vertical_state,              & 
+          get_close_obs,                       &
+          get_close_state
 
 ! code for these routines are in other modules
 public :: nc_write_model_vars,           &
-          pert_model_copies,             & 
           adv_1step,                     &
           init_time,                     &
-          init_conditions,               & 
-          convert_vertical_obs,          & 
-          convert_vertical_state,        & 
-          get_close_obs,                 & ! todo
-          get_close_state                  ! todo
+          init_conditions
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -132,8 +154,13 @@ character(len=32)  :: vertical_localization_coord     = 'PRESSURE'
 integer            :: assimilation_period_days        = 0
 integer            :: assimilation_period_seconds     = 21600
 logical            :: use_log_vertical_scale          = .false.
+! could name this 'no_obs_assim_above_pressure', or could 
+! also specify this in model levels?
 real(r8)           :: no_assim_above_pressure         = -1.0      ! in pascals 
-real(r8)           :: start_damping_ramp_at_pressure  = -1.0      ! pascals??
+real(r8)           :: start_damping_ramp_at_pressure  = -1.0      ! currently pascals
+! proposed:
+!real(r8)           :: damping_ramp_bottom_at_level  = -1          ! model levels
+!real(r8)           :: damping_ramp_top_at_level     = -1          ! model levels
 integer            :: debug_level                     = 0
 logical            :: suppress_grid_info_in_output    = .false.
 logical            :: custom_routine_to_generate_ensemble = .false.
@@ -141,6 +168,13 @@ character(len=32)  :: fields_to_perturb(MAX_PERT)     = "QTY_TEMPERATURE"
 real(r8)           :: perturbation_amplitude(MAX_PERT)= 0.00001_r8
 logical            :: using_chemistry                 = .false.
 logical            :: use_variable_mean_mass          = .false.
+
+! in converting to scale height for the vertical: 
+!  set this to .true. to compute the log of the pressure.  
+!  set this to .false. to additionally normalize by the surface
+!    pressure at this location.  this option is backwards-compatible 
+!    with previous versions of this code.
+logical :: no_normalization_of_scale_heights = .true.
 
 ! state_variables defines the contents of the state vector.
 ! each line of this input should have the form:
@@ -164,12 +198,13 @@ namelist /model_nml/  &
    assimilation_period_days,        &
    assimilation_period_seconds,     &
    use_log_vertical_scale,          &
-   no_assim_above_pressure,         &
+   no_assim_above_pressure,         & 
    start_damping_ramp_at_pressure,  &
    suppress_grid_info_in_output,    &
    custom_routine_to_generate_ensemble, &
    fields_to_perturb,               &
    perturbation_amplitude,          &
+   no_normalization_of_scale_heights, &
    use_variable_mean_mass,          &
    using_chemistry,                 &
    debug_level
@@ -1863,7 +1898,7 @@ call nc_add_attribute_to_variable(ncid, 'hybi', 'long_name', 'hybrid B coefficie
 call nc_define_real_variable(     ncid, 'gw', (/ 'lat' /),                  routine)
 call nc_add_attribute_to_variable(ncid, 'gw', 'long_name', 'gauss weights', routine)
 
-call nc_define_real_variable(ncid, 'P0', 0, routine)
+call nc_define_real_scalar(       ncid, 'P0', routine)
 call nc_add_attribute_to_variable(ncid, 'P0', 'long_name', 'reference pressure', routine)
 call nc_add_attribute_to_variable(ncid, 'P0', 'units',     'Pa',                 routine)
 
@@ -2469,7 +2504,7 @@ character(len=*),   intent(in)    :: phis_filename
 
 character(len=*), parameter :: routine = 'read_cam_phis_array'
 
-integer :: ncid, nsize(2)
+integer :: ncid, nsize(3)   ! lon, lat, time
 
 ncid = nc_open_file_readonly(phis_filename, routine)
 
@@ -2963,7 +2998,7 @@ end subroutine state_vertical_to_height
 
 !--------------------------------------------------------------------
 
-subroutine  state_vertical_to_scaleheight(ens_handle, ens_size, location, location_indx, qty)
+subroutine state_vertical_to_scaleheight(ens_handle, ens_size, location, location_indx, qty)
 type(ensemble_type), intent(in)    :: ens_handle
 integer,             intent(in)    :: ens_size
 type(location_type), intent(inout) :: location
@@ -2974,25 +3009,66 @@ integer  :: iloc, jloc, vloc, level_one, status1, my_status(ens_size)
 real(r8) :: pressure_array(global_nlevels)
 real(r8) :: surface_pressure(1), scaleheight_val
 
-level_one = 1
+!> this is currently only called with an ensemble size of 1 for
+!> vertical conversion.  since it is working only on state variables
+!> we don't expect it to ever fail.
 
-! by definition
-if (query_location(location) == VERTISSURFACE) then
-   call set_vertical(location, -log(1.0_r8), VERTISSCALEHEIGHT)
-   return
+level_one = 1
+scaleheight_val = MISSING_R8
+
+if (no_normalization_of_scale_heights) then
+
+
+   if (query_location(location) == VERTISSURFACE) then
+
+      ! get the surface pressure from the ens_handle
+      call get_values_from_single_level(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
+                                        iloc, jloc, level_one, surface_pressure, status1)
+      if (status1 /= 0) goto 200
+
+      scaleheight_val = log(surface_pressure(1))
+
+   else
+
+      ! build a pressure column and and find the levels
+      call get_model_variable_indices(location_indx, iloc, jloc, vloc)
+
+      call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, global_nlevels, &
+                               qty, pressure_array, my_status)
+      if (any(my_status /= 0)) goto 200
+   
+      scaleheight_val = log(pressure_array(vloc))
+
+   endif
+
+else
+
+   ! handle surface obs separately here.
+   if (query_location(location) == VERTISSURFACE) then
+
+      scaleheight_val = 0.0_r8   ! log(1.0)
+
+   else
+
+      ! build a pressure column and and find the levels
+      call get_model_variable_indices(location_indx, iloc, jloc, vloc)
+
+      call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, global_nlevels, &
+                               qty, pressure_array, my_status)
+      if (any(my_status /= 0)) goto 200
+
+      ! get the surface pressure from the ens_handle
+      call get_values_from_single_level(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
+                                        iloc, jloc, level_one, surface_pressure, status1)
+      if (status1 /= 0) goto 200
+   
+      scaleheight_val = scale_height(surface_pressure(1), pressure_array(vloc))
+
+   endif
+
 endif
    
-! build a height column and a scaleheight column and find the levels?
-call get_model_variable_indices(location_indx, iloc, jloc, vloc)
-
-! get the surface pressure from the ens_handle
-call get_values_from_single_level(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
-                                  iloc, jloc, level_one, surface_pressure, status1)
-   
-call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, global_nlevels, &
-                         qty, pressure_array, my_status)
-   
-scaleheight_val = scale_height(surface_pressure(1), pressure_array(vloc))
+200 continue   ! done
 
 call set_vertical(location, scaleheight_val, VERTISSCALEHEIGHT)
 
@@ -3010,7 +3086,8 @@ integer  :: iloc, jloc, vloc
 
 !>@todo FIXME qty is currently unused.  if we need it, its here.
 !>if we really don't need it, we can remove it.  all the other
-!>corresponding routines like this use it.
+!>corresponding routines like this use it.  (not clear what to
+!>return if field is W or something else with a vertical stagger.)
 
 call get_model_variable_indices(location_indx, iloc, jloc, vloc)
 
@@ -3266,7 +3343,7 @@ type(ensemble_type), intent(in)    :: ens_handle
 type(location_type), intent(inout) :: location
 integer,             intent(out)   :: my_status
 
-integer  :: varid1, varid2, stat1, stat2, ens_size, status(1)
+integer  :: varid1, varid2, ens_size, status(1), ptype
 real(r8) :: pressure_array(1), surface_pressure_array(1)
 real(r8) :: scaleheight_val
 integer :: i
@@ -3275,45 +3352,84 @@ character(len=*), parameter :: routine = 'obs_vertical_to_scaleheight'
 
 ens_size = 1
 
-! by definition this is ok
-if (query_location(location) == VERTISSURFACE) then
-   call set_vertical(location, 0.0_r8, VERTISSCALEHEIGHT)  ! -log(1.0_r8)
-   my_status = 0
-   return
-endif
+! there are 4 cases here.
+
+if (no_normalization_of_scale_heights) then
+
+   ! take log of pressure, either surface pressure or regular pressure
    
-call ok_to_interpolate(QTY_PRESSURE, varid1, stat1)
-call ok_to_interpolate(QTY_SURFACE_PRESSURE, varid2, stat2)
-if (stat1 /= 0 .or. stat2 /= 0) then
-   my_status = 2
-   return
-endif
+   if (query_location(location) == VERTISSURFACE) then
+      ptype = QTY_SURFACE_PRESSURE
+   else
+      ptype = QTY_PRESSURE
+   endif
 
-call interpolate_values(ens_handle, ens_size, location, QTY_SURFACE_PRESSURE, varid2, &
-                        surface_pressure_array(:), status(:))
-if (status(1) /= 0) then
-   my_status = status(1)
-   return
-endif
+   call ok_to_interpolate(ptype, varid1, my_status)
+   if (my_status /= 0) return
+      
+   !>@todo FIXME IFF the obs location is already pressure, we can take it at
+   !> face value here and not interpolate it.  however it won't fail if the
+   !> pressure here is less than the ensemble mean pressure at this point.
+   !> is that ok?
+   
+   if (ptype == QTY_PRESSURE .and. is_vertical(location, "PRESSURE")) then
+      pressure_array(:) = query_location(location, "VLOC")
+      my_status = 0
+   else
+      call interpolate_values(ens_handle, ens_size, location, ptype, varid1, &
+                              pressure_array(:), status(:))
+      if (status(1) /= 0) then
+         my_status = status(1)
+         return
+      endif
+   endif
+   
+   scaleheight_val = log(pressure_array(1))
 
-!>@todo FIXME IFF the obs location is already pressure, we can take it at
-!> face value here and not interpolate it.  however, it can result in negative
-!> scale height values if the pressure is larger than the surface pressure at
-!> that location.  that's what the original cam model_mod did.  is that ok?
-
-if (is_vertical(location, "PRESSURE")) then
-   pressure_array(:) = query_location(location, "VLOC")
-   status(:) = 0
 else
-   call interpolate_values(ens_handle, ens_size, location, QTY_PRESSURE, varid1, &
-                           pressure_array(:), status(:))
+
+   ! handle surface obs separately here.
+   if (query_location(location) == VERTISSURFACE) then
+
+      scaleheight_val = 0.0_r8  ! -log(1.0)
+
+   else
+
+      call ok_to_interpolate(QTY_PRESSURE, varid1, my_status)
+      if (my_status /= 0) return
+   
+      !>@todo FIXME IFF the obs location is already pressure, we can take it at
+      !> face value here and not interpolate it.  however, it can result in negative
+      !> scale height values if the pressure is larger than the surface pressure at
+      !> that location.  that's what the original cam model_mod did.  is that ok?
+   
+      if (ptype == QTY_PRESSURE .and. is_vertical(location, "PRESSURE")) then
+         pressure_array(:) = query_location(location, "VLOC")
+         my_status = 0
+      else
+         call interpolate_values(ens_handle, ens_size, location, QTY_PRESSURE, varid1, &
+                                    pressure_array(:), status(:))
+         if (status(1) /= 0) then
+            my_status = status(1)
+            return
+         endif
+      endif
+                                 
+      call ok_to_interpolate(QTY_SURFACE_PRESSURE, varid2, my_status)
+      if (my_status /= 0) return
+      
+      call interpolate_values(ens_handle, ens_size, location, QTY_SURFACE_PRESSURE, varid2, &
+                                    surface_pressure_array(:), status(:))
+      if (status(1) /= 0) then
+         my_status = status(1)
+         return
+      endif
+      
+      scaleheight_val = scale_height(surface_pressure_array(1), pressure_array(1))
+
+   endif
+
 endif
-if (status(1) /= 0) then
-   my_status = status(1)
-   return
-endif
-                              
-scaleheight_val = scale_height(surface_pressure_array(1), pressure_array(1))
 
 call set_vertical(location, scaleheight_val, VERTISSCALEHEIGHT)
 
@@ -3729,6 +3845,9 @@ end subroutine init_globals
 !--------------------------------------------------------------------
 ! Function to calculate scale height given a surface pressure and a pressure.
 ! Watch out for unusual cases that could crash the log() function
+! Generally if we are not normalizing by the surface pressure we don't
+! want to compute it in the first place.  But if it is already available
+! pass it in here and we'll check to see whether to normalize or not.
 
 function scale_height(p_surface, p_above)
 real(r8), intent(in) :: p_surface
@@ -3738,11 +3857,16 @@ real(r8)             :: scale_height
 real(r8), parameter :: tiny = epsilon(1.0_r8)
 real(r8) :: diff
 
+if (no_normalization_of_scale_heights) then
+   scale_height = log(p_above)
+   return
+endif
+
 diff = p_surface - p_above  ! should be positive
 
 if (abs(diff) < tiny) then
    ! surface obs will have (almost) identical values
-   scale_height = -log(1.0_r8)
+   scale_height = 0.0_r8   ! -log(1.0_r8)
 
 else if (diff <= tiny .or. p_above <= 0.0_r8) then
    ! weed out bad cases

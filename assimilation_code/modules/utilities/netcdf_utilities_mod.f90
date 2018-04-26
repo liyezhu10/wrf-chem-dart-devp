@@ -23,7 +23,7 @@ module netcdf_utilities_mod
 !> intentionally, for array entries.
 
 
-use types_mod, only : r4, r8, digits12, i4, i8, PI, MISSING_R8, MISSING_I
+use types_mod, only : r4, r8, digits12, i2, i4, i8, PI, MISSING_R8, MISSING_I
 use utilities_mod, only : error_handler, E_DBG, E_MSG, E_ALLMSG, E_WARN, E_ERR
            
 use netcdf
@@ -33,12 +33,18 @@ private
 
 public :: nc_check,                       &
           nc_add_global_attribute,        &
+          nc_get_global_attribute,        &
           nc_add_attribute_to_variable,   &
+          nc_get_attribute_from_variable, &
           nc_define_dimension,            &
           nc_define_integer_variable,     &
           nc_define_real_variable,        &
           nc_define_double_variable,      &
+          nc_define_integer_scalar,       &
+          nc_define_real_scalar,          &
+          nc_define_double_scalar,        &
           nc_global_attribute_exists,     &
+          nc_variable_attribute_exists,   &
           nc_dimension_exists,            &
           nc_variable_exists,             &
           nc_put_variable,                &
@@ -62,6 +68,13 @@ interface nc_add_global_attribute
    module procedure nc_add_global_real_array_att
 end interface
 
+interface nc_get_global_attribute
+   module procedure nc_get_global_char_att
+   module procedure nc_get_global_int_att
+   module procedure nc_get_global_real_att
+   module procedure nc_get_global_real_array_att
+end interface
+
 interface nc_add_attribute_to_variable
    module procedure nc_add_char_att_to_var
    module procedure nc_add_int_array_att_to_var
@@ -70,20 +83,25 @@ interface nc_add_attribute_to_variable
    module procedure nc_add_real_array_att_to_var
 end interface
 
+interface nc_get_attribute_from_variable
+   module procedure nc_get_char_att_from_var
+   module procedure nc_get_int_array_att_from_var
+   module procedure nc_get_int_att_from_var
+   module procedure nc_get_real_att_from_var
+   module procedure nc_get_real_array_att_from_var
+end interface
+
 interface nc_define_integer_variable
-   module procedure nc_define_var_int_scalar
    module procedure nc_define_var_int_1d
    module procedure nc_define_var_int_Nd
 end interface
 
 interface nc_define_real_variable
-   module procedure nc_define_var_real_scalar
    module procedure nc_define_var_real_1d
    module procedure nc_define_var_real_Nd
 end interface
 
 interface nc_define_double_variable
-   module procedure nc_define_var_double_scalar
    module procedure nc_define_var_double_1d
    module procedure nc_define_var_double_Nd
 end interface
@@ -101,11 +119,14 @@ end interface
 
 interface nc_get_variable
    module procedure nc_get_single_int_1d
-   module procedure nc_get_int_1d
    module procedure nc_get_single_real_1d
+   module procedure nc_get_short_1d
+   module procedure nc_get_int_1d
    module procedure nc_get_real_1d
+   module procedure nc_get_short_2d
    module procedure nc_get_int_2d
    module procedure nc_get_real_2d
+   module procedure nc_get_short_3d
    module procedure nc_get_int_3d
    module procedure nc_get_real_3d
 end interface
@@ -133,7 +154,7 @@ character(len=512) :: msgstring1
 !> operations on the same task.  which i believe is true for all
 !> our current code.
 
-integer, parameter :: MAX_NCFILES = 10
+integer, parameter :: MAX_NCFILES = 50
 integer, parameter :: FH_EMPTY = -1
 
 type ncinfo_type
@@ -268,8 +289,81 @@ call nc_check(ret, routine, 'adding the global attribute: '//trim(attname), cont
 end subroutine nc_add_global_real_array_att
 
 !------------------------------------------------------------------
+
+subroutine nc_get_global_char_att(ncid, attname, val, context, filename)
+
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: attname
+character(len=*), intent(out) :: val
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_get_global_char_att'
+integer :: ret
+
+ret = nf90_get_att(ncid, NF90_GLOBAL, attname, val)
+call nc_check(ret, routine, 'getting the global attribute: '//trim(attname), context, filename, ncid)
+
+end subroutine nc_get_global_char_att
+
 !--------------------------------------------------------------------
-! adding attributes to variables section
+! querying attributes on variables section
+
+subroutine nc_get_global_int_att(ncid, attname, val, context, filename)
+
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: attname
+integer,          intent(out) :: val
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_get_global_int_att'
+integer :: ret
+
+ret = nf90_get_att(ncid, NF90_GLOBAL, attname, val)
+call nc_check(ret, routine, 'getting the global attribute: '//trim(attname), context, filename, ncid)
+
+end subroutine nc_get_global_int_att
+
+!--------------------------------------------------------------------
+
+subroutine nc_get_global_real_att(ncid, attname, val, context, filename)
+
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: attname
+real(r8),         intent(out) :: val
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_get_global_real_att'
+integer :: ret
+
+ret = nf90_get_att(ncid, NF90_GLOBAL, attname, val)
+call nc_check(ret, routine, 'getting the global attribute: '//trim(attname), context, filename, ncid)
+
+end subroutine nc_get_global_real_att
+
+!--------------------------------------------------------------------
+
+subroutine nc_get_global_real_array_att(ncid, attname, val, context, filename)
+
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: attname
+real(r8),         intent(out) :: val(:)
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_get_global_real_array_att'
+integer :: ret
+
+ret = nf90_get_att(ncid, NF90_GLOBAL, attname, val)
+call nc_check(ret, routine, 'getting the global attribute: '//trim(attname), context, filename, ncid)
+
+end subroutine nc_get_global_real_array_att
+
+!------------------------------------------------------------------
+!--------------------------------------------------------------------
+! attributes on specific variables section
 
 subroutine nc_add_char_att_to_var(ncid, varname, attname, val, context, filename)
 
@@ -380,6 +474,116 @@ call nc_check(ret, routine, 'adding the attribute: '//trim(attname)//' to variab
 end subroutine nc_add_real_array_att_to_var
 
 !--------------------------------------------------------------------
+
+subroutine nc_get_char_att_from_var(ncid, varname, attname, val, context, filename)
+
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: varname
+character(len=*), intent(in)  :: attname
+character(len=*), intent(out) :: val
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_get_char_att_from_var'
+integer :: ret, varid
+
+ret = nf90_inq_varid(ncid, varname, varid)
+call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
+
+ret = nf90_get_att(ncid, varid, attname, val)
+call nc_check(ret, routine, 'getting the attribute: '//trim(attname)//' to variable: '//trim(varname), context, filename, ncid)
+
+end subroutine nc_get_char_att_from_var
+
+!--------------------------------------------------------------------
+
+subroutine nc_get_int_att_from_var(ncid, varname, attname, val, context, filename)
+
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: varname
+character(len=*), intent(in)  :: attname
+integer,          intent(out) :: val
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_get_int_att_from_var'
+integer :: ret, varid
+
+ret = nf90_inq_varid(ncid, varname, varid)
+call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
+
+ret = nf90_get_att(ncid, varid, attname, val)
+call nc_check(ret, routine, 'getting the attribute: '//trim(attname)//' to variable: '//trim(varname), context, filename, ncid)
+
+end subroutine nc_get_int_att_from_var
+
+!--------------------------------------------------------------------
+
+subroutine nc_get_int_array_att_from_var(ncid, varname, attname, val, context, filename)
+
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: varname
+character(len=*), intent(in)  :: attname
+integer,          intent(out) :: val(:)
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_get_int_array_att_from_var'
+integer :: ret, varid
+
+ret = nf90_inq_varid(ncid, varname, varid)
+call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
+
+ret = nf90_get_att(ncid, varid, attname, val)
+call nc_check(ret, routine, 'getting the attribute: '//trim(attname)//' to variable: '//trim(varname), context, filename, ncid)
+
+end subroutine nc_get_int_array_att_from_var
+
+!--------------------------------------------------------------------
+
+subroutine nc_get_real_att_from_var(ncid, varname, attname, val, context, filename)
+
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: varname
+character(len=*), intent(in)  :: attname
+real(r8),         intent(out) :: val
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_get_real_att_from_var'
+integer :: ret, varid
+
+ret = nf90_inq_varid(ncid, varname, varid)
+call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
+
+ret = nf90_get_att(ncid, varid, attname, val)
+call nc_check(ret, routine, 'getting the attribute: '//trim(attname)//' to variable: '//trim(varname), context, filename, ncid)
+
+end subroutine nc_get_real_att_from_var
+
+!--------------------------------------------------------------------
+
+subroutine nc_get_real_array_att_from_var(ncid, varname, attname, val, context, filename)
+
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: varname
+character(len=*), intent(in)  :: attname
+real(r8),         intent(out) :: val(:)
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_get_real_array_att_from_var'
+integer :: ret, varid
+
+ret = nf90_inq_varid(ncid, varname, varid)
+call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
+
+ret = nf90_get_att(ncid, varid, attname, val)
+call nc_check(ret, routine, 'getting the attribute: '//trim(attname)//' to variable: '//trim(varname), context, filename, ncid)
+
+end subroutine nc_get_real_array_att_from_var
+
+!--------------------------------------------------------------------
 !--------------------------------------------------------------------
 ! defining dimensions section
 
@@ -403,27 +607,28 @@ end subroutine nc_define_dimension
 !--------------------------------------------------------------------
 ! defining variables section
 
-!>@todo FIXME: ndim is not required or used here, but without it
-!>the signatures for scalar, 1d, Nd cannot be distinguished.
-!> same for define real, double scalar.  bother.
-!> (the optional string arguments make certain combinations of
-!> arguments identical)
+!--------------------------------------------------------------------
 
-subroutine nc_define_var_int_scalar(ncid, varname, ndim, context, filename)
+!> unfortunately, the scalar versions of these routines cannot be
+!> overloaded with the Nd versions.  the optional arguments make
+!> the signatures (combinations of arguments) inseperable. 
+!> it's less common to define scalars in netcdf files, so those ones 
+!> get a separate entry point.
+
+subroutine nc_define_integer_scalar(ncid, varname, context, filename)
 
 integer,          intent(in) :: ncid
 character(len=*), intent(in) :: varname
-integer,          intent(in) :: ndim ! ignore for now
 character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
 
-character(len=*), parameter :: routine = 'nc_define_var_int_scalar'
+character(len=*), parameter :: routine = 'nc_define_integer_scalar'
 integer :: ret, varid
 
 ret = nf90_def_var(ncid, varname, nf90_int, varid=varid)
-call nc_check(ret, routine, 'define int variable '//trim(varname), context, filename, ncid)
+call nc_check(ret, routine, 'define scalar integer variable '//trim(varname), context, filename, ncid)
 
-end subroutine nc_define_var_int_scalar
+end subroutine nc_define_integer_scalar
 
 !--------------------------------------------------------------------
 
@@ -495,21 +700,20 @@ end subroutine nc_define_var_int_Nd
 
 !--------------------------------------------------------------------
 
-subroutine nc_define_var_real_scalar(ncid, varname, ndim, context, filename)
+subroutine nc_define_real_scalar(ncid, varname, context, filename)
 
 integer,          intent(in) :: ncid
 character(len=*), intent(in) :: varname
-integer,          intent(in) :: ndim ! ignore for now
 character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
 
-character(len=*), parameter :: routine = 'nc_define_var_real_scalar'
+character(len=*), parameter :: routine = 'nc_define_real_scalar'
 integer :: ret, varid
 
 ret = nf90_def_var(ncid, varname, nf90_real, varid=varid)
-call nc_check(ret, routine, 'define real variable '//trim(varname), context, filename, ncid)
+call nc_check(ret, routine, 'define scalar real variable '//trim(varname), context, filename, ncid)
 
-end subroutine nc_define_var_real_scalar
+end subroutine nc_define_real_scalar
 
 !--------------------------------------------------------------------
 
@@ -579,21 +783,20 @@ end subroutine nc_define_var_real_Nd
 
 !--------------------------------------------------------------------
 
-subroutine nc_define_var_double_scalar(ncid, varname, ndim, context, filename)
+subroutine nc_define_double_scalar(ncid, varname, context, filename)
 
 integer,          intent(in) :: ncid
 character(len=*), intent(in) :: varname
-integer,          intent(in) :: ndim ! ignore for now
 character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
 
-character(len=*), parameter :: routine = 'nc_define_var_double_scalar'
+character(len=*), parameter :: routine = 'nc_define_double_scalar'
 integer :: ret, varid
 
 ret = nf90_def_var(ncid, varname, nf90_double, varid=varid)
-call nc_check(ret, routine, 'define double variable '//trim(varname), context, filename, ncid)
+call nc_check(ret, routine, 'define scalar double variable '//trim(varname), context, filename, ncid)
 
-end subroutine nc_define_var_double_scalar
+end subroutine nc_define_double_scalar
 
 !--------------------------------------------------------------------
 
@@ -676,13 +879,30 @@ character(len=*), parameter :: routine = 'nc_global_attribute_exists'
 integer :: ret
 
 ret = nf90_inquire_attribute(ncid, NF90_GLOBAL, attname)
-if (ret == NF90_NOERR) then
-   nc_global_attribute_exists = .true.
-else
-   nc_global_attribute_exists = .false.
-endif
+nc_global_attribute_exists = (ret == NF90_NOERR) 
 
 end function nc_global_attribute_exists
+
+!--------------------------------------------------------------------
+
+function nc_variable_attribute_exists(ncid, varname, attname)
+
+integer,          intent(in) :: ncid
+character(len=*), intent(in) :: varname
+character(len=*), intent(in) :: attname
+logical                      :: nc_variable_attribute_exists
+
+character(len=*), parameter :: routine = 'nc_variable_attribute_exists'
+integer :: varid, ret
+
+ret = nf90_inq_varid(ncid, varname, varid)
+nc_variable_attribute_exists = (ret == NF90_NOERR) 
+if (ret /= NF90_NOERR) return
+
+ret = nf90_inquire_attribute(ncid, varid, attname)
+nc_variable_attribute_exists = (ret == NF90_NOERR) 
+
+end function nc_variable_attribute_exists
 
 !--------------------------------------------------------------------
 
@@ -696,11 +916,7 @@ character(len=*), parameter :: routine = 'nc_dimension_exists'
 integer :: ret, dimid
 
 ret = nf90_inq_dimid(ncid, dimname, dimid)
-if (ret == NF90_NOERR) then
-   nc_dimension_exists = .true.
-else
-   nc_dimension_exists = .false.
-endif
+nc_dimension_exists = (ret == NF90_NOERR)
 
 end function nc_dimension_exists
 
@@ -716,11 +932,7 @@ character(len=*), parameter :: routine = 'nc_variable_exists'
 integer :: ret, varid
 
 ret = nf90_inq_varid(ncid, varname, varid)
-if (ret == NF90_NOERR) then
-   nc_variable_exists = .true.
-else
-   nc_variable_exists = .false.
-endif
+nc_variable_exists = (ret == NF90_NOERR) 
 
 end function nc_variable_exists
 
@@ -899,6 +1111,37 @@ end subroutine nc_put_real_3d
 !--------------------------------------------------------------------
 !--------------------------------------------------------------------
 ! get values from variables
+!
+! check for scale/offset attributes and for now, error out.  eventually
+! we could support in the _get_ routines to scale/offset them - but
+! the return type won't be the same as the input.  e.g. might compute a
+! real from input of short plus offset, scale factors.  maybe we don't
+! ever want to support these - just punt and make the caller drop down
+! into direct calls to the netcdf lib.
+
+subroutine nc_get_short_1d(ncid, varname, varvals, context, filename)
+
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: varname
+integer(i2),      intent(out) :: varvals(:)
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_get_short_1d'
+integer :: ret, varid
+
+ret = nf90_inq_varid(ncid, varname, varid)
+call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
+
+! don't support variables which are supposed to have the values multiplied and shifted.
+if (has_scale_off(ncid, varid)) call no_scale_off(ncid, routine, varname, context, filename)
+
+ret = nf90_get_var(ncid, varid, varvals)
+call nc_check(ret, routine, 'get values for '//trim(varname), context, filename, ncid)
+
+end subroutine nc_get_short_1d
+
+!--------------------------------------------------------------------
 
 subroutine nc_get_single_int_1d(ncid, varname, varval, context, filename)
 
@@ -913,6 +1156,9 @@ integer :: ret, varid
 
 ret = nf90_inq_varid(ncid, varname, varid)
 call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
+
+! don't support variables which are supposed to have the values multiplied and shifted.
+if (has_scale_off(ncid, varid)) call no_scale_off(ncid, routine, varname, context, filename)
 
 ret = nf90_get_var(ncid, varid, varval)
 call nc_check(ret, routine, 'get values for '//trim(varname), context, filename, ncid)
@@ -935,6 +1181,9 @@ integer :: ret, varid
 ret = nf90_inq_varid(ncid, varname, varid)
 call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
 
+! don't support variables which are supposed to have the values multiplied and shifted.
+if (has_scale_off(ncid, varid)) call no_scale_off(ncid, routine, varname, context, filename)
+
 ret = nf90_get_var(ncid, varid, varvals)
 call nc_check(ret, routine, 'get values for '//trim(varname), context, filename, ncid)
 
@@ -955,6 +1204,9 @@ integer :: ret, varid
 
 ret = nf90_inq_varid(ncid, varname, varid)
 call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
+
+! don't support variables which are supposed to have the values multiplied and shifted.
+if (has_scale_off(ncid, varid)) call no_scale_off(ncid, routine, varname, context, filename)
 
 ret = nf90_get_var(ncid, varid, varval)
 call nc_check(ret, routine, 'get values for '//trim(varname), context, filename, ncid)
@@ -977,10 +1229,37 @@ integer :: ret, varid
 ret = nf90_inq_varid(ncid, varname, varid)
 call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
 
+! don't support variables which are supposed to have the values multiplied and shifted.
+if (has_scale_off(ncid, varid)) call no_scale_off(ncid, routine, varname, context, filename)
+
 ret = nf90_get_var(ncid, varid, varvals)
 call nc_check(ret, routine, 'get values for '//trim(varname), context, filename, ncid)
 
 end subroutine nc_get_real_1d
+
+!--------------------------------------------------------------------
+
+subroutine nc_get_short_2d(ncid, varname, varvals, context, filename)
+
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: varname
+integer(i2),      intent(out) :: varvals(:,:)
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_get_short_2d'
+integer :: ret, varid
+
+ret = nf90_inq_varid(ncid, varname, varid)
+call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
+
+! don't support variables which are supposed to have the values multiplied and shifted.
+if (has_scale_off(ncid, varid)) call no_scale_off(ncid, routine, varname, context, filename)
+
+ret = nf90_get_var(ncid, varid, varvals)
+call nc_check(ret, routine, 'get values for '//trim(varname), context, filename, ncid)
+
+end subroutine nc_get_short_2d
 
 !--------------------------------------------------------------------
 
@@ -997,6 +1276,9 @@ integer :: ret, varid
 
 ret = nf90_inq_varid(ncid, varname, varid)
 call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
+
+! don't support variables which are supposed to have the values multiplied and shifted.
+if (has_scale_off(ncid, varid)) call no_scale_off(ncid, routine, varname, context, filename)
 
 ret = nf90_get_var(ncid, varid, varvals)
 call nc_check(ret, routine, 'get values for '//trim(varname), context, filename, ncid)
@@ -1018,10 +1300,37 @@ integer :: ret, varid
 ret = nf90_inq_varid(ncid, varname, varid)
 call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
 
+! don't support variables which are supposed to have the values multiplied and shifted.
+if (has_scale_off(ncid, varid)) call no_scale_off(ncid, routine, varname, context, filename)
+
 ret = nf90_get_var(ncid, varid, varvals)
 call nc_check(ret, routine, 'get values for '//trim(varname), context, filename, ncid)
 
 end subroutine nc_get_real_2d
+
+!--------------------------------------------------------------------
+
+subroutine nc_get_short_3d(ncid, varname, varvals, context, filename)
+
+integer,          intent(in)  :: ncid
+character(len=*), intent(in)  :: varname
+integer(i2),      intent(out) :: varvals(:,:,:)
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+character(len=*), parameter :: routine = 'nc_get_short_3d'
+integer :: ret, varid
+
+ret = nf90_inq_varid(ncid, varname, varid)
+call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
+
+! don't support variables which are supposed to have the values multiplied and shifted.
+if (has_scale_off(ncid, varid)) call no_scale_off(ncid, routine, varname, context, filename)
+
+ret = nf90_get_var(ncid, varid, varvals)
+call nc_check(ret, routine, 'get values for '//trim(varname), context, filename, ncid)
+
+end subroutine nc_get_short_3d
 
 !--------------------------------------------------------------------
 
@@ -1038,6 +1347,9 @@ integer :: ret, varid
 
 ret = nf90_inq_varid(ncid, varname, varid)
 call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
+
+! don't support variables which are supposed to have the values multiplied and shifted.
+if (has_scale_off(ncid, varid)) call no_scale_off(ncid, routine, varname, context, filename)
 
 ret = nf90_get_var(ncid, varid, varvals)
 call nc_check(ret, routine, 'get values for '//trim(varname), context, filename, ncid)
@@ -1060,6 +1372,9 @@ integer :: ret, varid
 ret = nf90_inq_varid(ncid, varname, varid)
 call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
 
+! don't support variables which are supposed to have the values multiplied and shifted.
+if (has_scale_off(ncid, varid)) call no_scale_off(ncid, routine, varname, context, filename)
+
 ret = nf90_get_var(ncid, varid, varvals)
 call nc_check(ret, routine, 'get values for '//trim(varname), context, filename, ncid)
 
@@ -1078,13 +1393,17 @@ character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
 
 character(len=*), parameter :: routine = 'nc_get_variable_size_1d'
-integer :: ret, varid, dimids(NF90_MAX_VAR_DIMS)
+integer :: ret, ndims, varid, dimids(NF90_MAX_VAR_DIMS)
 
 ret = nf90_inq_varid(ncid, varname, varid)
 call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
 
-ret = nf90_inquire_variable(ncid, varid, dimids=dimids)
+ret = nf90_inquire_variable(ncid, varid, dimids=dimids, ndims=ndims)
 call nc_check(ret, routine, 'inquire dimensions for variable '//trim(varname), context, filename, ncid)
+
+if (ndims /= 1) &
+   call nc_check(NF90_EDIMSIZE, routine, 'variable '//trim(varname)//' not 1 dimensional', &
+                 context, filename, ncid)
 
 ret = nf90_inquire_dimension(ncid, dimids(1), len=varsize)
 call nc_check(ret, routine, 'inquire dimension length for dimension 1', context, filename, ncid)
@@ -1102,43 +1421,29 @@ character(len=*), intent(in), optional :: context
 character(len=*), intent(in), optional :: filename
 
 character(len=*), parameter :: routine = 'nc_get_variable_size_Nd'
-integer :: ret, varid, dimids(NF90_MAX_VAR_DIMS)
+integer :: ret, i, ndims, varid, dimids(NF90_MAX_VAR_DIMS)
+
 
 ret = nf90_inq_varid(ncid, varname, varid)
 call nc_check(ret, routine, 'inquire variable id for '//trim(varname), context, filename, ncid)
 
-ret = nf90_inquire_variable(ncid, varid, dimids=dimids)
+ret = nf90_inquire_variable(ncid, varid, dimids=dimids, ndims=ndims)
 call nc_check(ret, routine, 'inquire dimensions for variable '//trim(varname), context, filename, ncid)
 
-if (size(varsize) >= 1) then
-   ret = nf90_inquire_dimension(ncid, dimids(1), len=varsize(1))
-   call nc_check(ret, routine, 'inquire dimension 1 length for variable '//trim(varname), context, filename, ncid)
-endif
-
-if (size(varsize) >= 2) then
-   ret = nf90_inquire_dimension(ncid, dimids(2), len=varsize(2))
-   call nc_check(ret, routine, 'inquire dimension 2 length for variable '//trim(varname), context, filename, ncid)
-endif
-
-if (size(varsize) >= 3) then
-   ret = nf90_inquire_dimension(ncid, dimids(3), len=varsize(3))
-   call nc_check(ret, routine, 'inquire dimension 3 length for variable '//trim(varname), context, filename, ncid)
-endif
-
-if (size(varsize) >= 4) then
-   ret = nf90_inquire_dimension(ncid, dimids(4), len=varsize(4))
-   call nc_check(ret, routine, 'inquire dimension 4 length for variable '//trim(varname), context, filename, ncid)
-endif
-
-if (size(varsize) >= 5) then
-   ret = nf90_inquire_dimension(ncid, dimids(5), len=varsize(5))
-   call nc_check(ret, routine, 'inquire dimension 5 length for variable '//trim(varname), context, filename, ncid)
-endif
+if (ndims /= size(varsize)) &
+   call nc_check(NF90_EDIMSIZE, routine, 'variable '//trim(varname)//' dimension mismatch', &
+                 context, filename, ncid)
 
 if (size(varsize) >= 6) then
    call error_handler(E_ERR, routine, 'only 1d to 5d variables supported', &
                       source, revision, revdate, text2='variable '//trim(varname))
 endif
+
+do i=1, ndims
+   ret = nf90_inquire_dimension(ncid, dimids(i), len=varsize(i))
+   call nc_check(ret, routine, 'inquire dimension length for variable '//trim(varname), &
+                 context, filename, ncid)
+enddo
 
 end subroutine nc_get_variable_size_Nd
 
@@ -1332,6 +1637,46 @@ ret = nf90_sync(ncid)
 call nc_check(ret, routine, 'synchronize file contents', context, filename, ncid)
 
 end subroutine nc_synchronize_file
+
+!------------------------------------------------------------------
+!------------------------------------------------------------------
+
+!------------------------------------------------------------------
+!> check for the existence of either (or both) scale/offset attributes
+
+function has_scale_off(ncid, varid)
+integer, intent(in) :: ncid
+integer, intent(in) :: varid
+logical :: has_scale_off
+
+integer :: ret
+
+ret = nf90_inquire_attribute(ncid, varid, "scale_factor")
+has_scale_off = (ret == NF90_NOERR) 
+if (ret == NF90_NOERR) return
+
+ret = nf90_inquire_attribute(ncid, varid, "add_offset")
+has_scale_off = (ret == NF90_NOERR) 
+
+end function has_scale_off
+
+!------------------------------------------------------------------
+!> don't support reading in that variable with this code
+!> if either or both are found.  caller needs to go straight
+!> to the netcdf interfaces to get the right types
+
+subroutine no_scale_off(ncid, routine, varname, context, filename)
+integer, intent(in) :: ncid
+character(len=*), intent(in) :: routine
+character(len=*), intent(in) :: varname
+character(len=*), intent(in), optional :: context
+character(len=*), intent(in), optional :: filename
+
+call nc_check(NF90_ERANGE, routine, &
+   'variable '//trim(varname)//' attrs "scale_factor","add_offset" unsupported', &
+   context, filename, ncid)
+
+end subroutine no_scale_off
 
 !--------------------------------------------------------------------
 !--------------------------------------------------------------------

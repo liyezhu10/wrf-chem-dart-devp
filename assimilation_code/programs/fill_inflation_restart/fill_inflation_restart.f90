@@ -216,7 +216,6 @@ call read_state(ens_handle, file_info_input, read_time_from_file, model_time)
 
 if(single_file) then
    call nc_insert_variable('filter_input.nc', varname='prior_inf_mean', copynum=1)
-   return
 else
 
 

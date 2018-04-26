@@ -16,7 +16,8 @@ use utilities_mod,         only : register_module, error_handler, E_ERR, E_MSG, 
                                   nmlfileunit, find_namelist_in_file, check_namelist_read, &
                                   do_nml_file, do_nml_term
 
-use netcdf_utilities_mod,  only : nc_add_global_attribute, nc_add_global_creation_time, &
+use netcdf_utilities_mod,  only : nc_add_global_attribute, &
+                                  nc_add_global_creation_time, &
                                   nc_begin_define_mode, nc_end_define_mode
 
 use location_io_mod,       only : nc_write_location_atts, nc_get_location_varids, &
@@ -456,6 +457,7 @@ msize = int(model_size, i4)
 ! Write Global Attributes
 
 call nc_begin_define_mode(ncid)
+
 call nc_add_global_creation_time(ncid)
 
 call nc_add_global_attribute(ncid, "model_source", source )

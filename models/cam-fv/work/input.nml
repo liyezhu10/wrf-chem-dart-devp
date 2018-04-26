@@ -192,15 +192,16 @@
                            'CLDLIQ','QTY_CLOUD_LIQUID_WATER',  'NA', 'NA', 'UPDATE'
                            'CLDICE','QTY_CLOUD_ICE',           'NA', 'NA', 'UPDATE'
                            'PS',    'QTY_SURFACE_PRESSURE',    'NA', 'NA', 'UPDATE'
+   assimilation_period_days    = 0
+   assimilation_period_seconds = 21600
+   vertical_localization_coord       = 'SCALEHEIGHT'
+   no_normalization_of_scale_heights = .true.
+   use_log_vertical_scale            = .true.
+   no_assim_above_pressure           = 2000.0
+   start_damping_ramp_at_pressure    = 6000.0
    custom_routine_to_generate_ensemble = .true.
    fields_to_perturb                   = 'QTY_TEMPERATURE'
    perturbation_amplitude              = 0.0001
-   assimilation_period_days    = 0
-   assimilation_period_seconds = 21600
-   vertical_localization_coord = 'SCALEHEIGHT'
-   use_log_vertical_scale      = .true.
-   no_assim_above_pressure         = 2000.0
-   start_damping_ramp_at_pressure  = 6000.0
    using_chemistry               = .false.
    use_variable_mean_mass        = .false.
    suppress_grid_info_in_output  = .false.
@@ -281,11 +282,11 @@
   output_obs_kind_mod_file = '../../../assimilation_code/modules/observations/obs_kind_mod.f90',
     input_obs_def_mod_file = '../../../observations/forward_operators/DEFAULT_obs_def_mod.F90',
    output_obs_def_mod_file = '../../../observations/forward_operators/obs_def_mod.f90',
-  input_files              = '../../../observations/forward_operators/obs_def_gps_mod.f90',
-                             '../../../observations/forward_operators/obs_def_reanalysis_bufr_mod.f90',
+  input_files              = '../../../observations/forward_operators/obs_def_reanalysis_bufr_mod.f90',
                              '../../../observations/forward_operators/obs_def_altimeter_mod.f90',
-                             '../../../observations/forward_operators/obs_def_upper_atm_mod.f90',
+                             '../../../observations/forward_operators/obs_def_gps_mod.f90',
    /
+                             '../../../observations/forward_operators/obs_def_upper_atm_mod.f90',
 
 ! Not usually assimilated.  No fundamental reason not to. 
 !                               'RADIOSONDE_SPECIFIC_HUMIDITY',
@@ -294,6 +295,9 @@
 ! WACCM can use higher observations than CAM.  
 ! An example can be included via obs_def_SABER_mod.f90.
 !                               'SABER_TEMPERATURE', 
+! obs_def_upper_atm_mod supports this, but is currently incompatible with
+!  the gps forward operator:
+!                                'COSMIC_ELECTRON_DENSITY'
 
 &obs_kind_nml
    assimilate_these_obs_types = 'RADIOSONDE_TEMPERATURE',
@@ -371,6 +375,21 @@
 #   min_copy           = 250.0
 #   max_copy           = 300.0
 #
+
+&fill_inflation_restart_nml
+   write_prior_inf = .true.
+   prior_inf_mean  = 1.01
+   prior_inf_sd    = 0.6
+
+   write_post_inf  = .false.
+   post_inf_mean  = 1.00
+   post_inf_sd    = 0.6
+  
+   input_state_files = 'caminput.nc'
+   single_file = .false.
+                       
+   verbose = .false.
+   /
 
 # The times in the namelist for the obs_diag program are vectors
 # that follow the following sequence:
@@ -471,24 +490,6 @@
   calendar                 = 'Gregorian'
   dart_qc_threshold        = 3
   eval_and_assim_can_match = .false.
-  /
-
-&model_mod_check_nml
-   input_state_files     = 'caminput.nc'
-   output_state_files    = 'mmc_output.nc'
-   test1thru             = 0
-   run_tests             = 1,2,3,4,5,7
-   x_ind                 = 10
-   quantity_of_interest  = 'QTY_U_WIND_COMPONENT'
-   loc_of_interest       = 254.727854, 39.9768545, 50000.0
-   interp_test_vertcoord = 'VERTISPRESSURE'
-   interp_test_lonrange  = 0.0, 359.0
-   interp_test_dlon      = 1.0
-   interp_test_latrange  = -89.0, 89.0
-   interp_test_dlat      = 1.0
-   interp_test_vertrange = 1000.0,  1005.0
-   interp_test_dvert     = 2000.0
-   verbose               = .false.
   /
 
 &obs_impact_tool_nml

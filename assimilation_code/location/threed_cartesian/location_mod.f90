@@ -29,7 +29,7 @@ implicit none
 private
 
 public :: location_type, get_location, set_location, &
-          set_location_missing, is_location_in_region, &
+          set_location_missing, is_location_in_region, get_maxdist, &
           write_location, read_location, interactive_location, query_location, &
           LocationDims, LocationName, LocationLName, LocationStorageOrder, LocationUnits, &
           get_close_type, get_close_init, get_close_obs, get_close_state, get_close_destroy, &
@@ -1460,6 +1460,17 @@ if (debug > 0) write(0,*)  'namelist read, module initialized, loopy filled in'
 if (debug > 0) write(0,*)  'any_periodic = ', any_periodic
 
 end subroutine recompute_periodic
+
+!---------------------------------------------------------------------------
+
+function get_maxdist(gc, obs_type)
+type(get_close_type), intent(in) :: gc
+integer, optional,    intent(in) :: obs_type
+real(r8) :: get_maxdist
+
+get_maxdist = gc%maxdist
+
+end function get_maxdist
 
 !----------------------------------------------------------------------------
 

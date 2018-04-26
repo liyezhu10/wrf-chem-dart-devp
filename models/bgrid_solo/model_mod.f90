@@ -1614,124 +1614,49 @@ logical,             intent(out)   :: interf_provided
 ! perturbing of states.
 
 integer :: j, i
-integer :: temp_ind ! temperature variable position in state_kinds_list
+integer :: temp_id ! temperature variable id
+integer(i8) :: temp_start, temp_end  ! first/last indices in state vector
 type(random_seq_type) :: r
-logical :: trunk_bitwise
+
+!>@todo why aren't we using pert_amp here?
 ! change the amount of perturbation here and recompile
 real(r8), parameter :: model_pert_amp = 0.01 ! This is hard coded in the trunk
-real(r8) :: bob
 
 if ( .not. module_initialized ) call static_init_model
 
-! option 1: let filter do the perturbs
+! Option 1: let filter do the perturbs
 ! (comment this out to select other options below)
 !interf_provided = .false.
 !return
 
-! (debug) option 2: tell filter we are going to perturb, but don't.
+! (debug) Option 2: tell filter we are going to perturb, but don't.
 ! interf_provided = .true.
 ! pert_state = state
 ! return
 
-! option 3: perturb t only
+! Option 3: perturb T only
 interf_provided = .true.
-! Find temperature in kinds list
-do i = 1, size(state_kinds_list)
-   if (state_kinds_list(i) == QTY_TEMPERATURE) then
-      temp_ind = i
-      exit
+
+! Find temperature in kinds list, and then the first
+! first and last index into the state vector for this variable
+temp_id = get_varid_from_kind(QTY_TEMPERATURE)
+
+temp_start = get_index_start(dom_id, temp_id)
+temp_end = get_index_end(dom_id, temp_id)
+
+call init_random_seq(r, my_task_id()+1)
+
+! for any parts of the state on my task which are part of the
+! temperature field, perturb all the ensemble members.
+do i = 1, ens_handle%my_num_vars
+   if (ens_handle%my_vars(i) >= temp_start .and. ens_handle%my_vars(i) <= temp_end) then
+      do j = 1, ens_size
+         ens_handle%copies(j,i) = random_gaussian(r, ens_handle%copies(j,i), model_pert_amp)
+      enddo
    endif
 enddo
 
-trunk_bitwise = .true.
-!trunk_bitwise = .false.
-
-if (trunk_bitwise) then
-
-   ! I think this is the order that a variable is in the state vector.
-   !do k = lbound(global_Var%t, 3), ubound(global_Var%t, 3)
-      !do j = lbound(global_Var%t, 2), ubound(global_Var%t, 2)
-         !do i = lbound(global_Var%t, 1), ubound(global_Var%t, 1)
-            !global_Var%t(i, j, k) = random_gaussian(randtype, global_Var%t(i,j,k), pert_stddev)
-         !end do
-      !end do
-   !end do
-
-   call pert_model_copies_bitwise_trunk(ens_handle, ens_size, model_pert_amp, temp_ind)
-
-else
-
-   call init_random_seq(r, my_task_id()+1)
-
-print *, 'kind index, start/end varindex for temperature: ', temp_ind, &
-           get_index_start(dom_id, temp_ind), get_index_end(dom_id, temp_ind)
-   do i = 1, ens_handle%my_num_vars
-      if (ens_handle%my_vars(i) >= get_index_start(dom_id, temp_ind) .and. ens_handle%my_vars(i) <= get_index_end(dom_id, temp_ind)) then
-         do j = 1, ens_size
-bob = ens_handle%copies(j, i)
-            ens_handle%copies(j, i)  = random_gaussian(r, ens_handle%copies(j,i), model_pert_amp)
-print *, 'model_mod perturb routine: ensnum, varindex, val before/after: ', j, i, bob, ens_handle%copies(j,i)
-
-         enddo
-      endif
-   enddo
-
-endif
-
-
 end subroutine pert_model_copies
-
-!--------------------------------------------------------------------
-! Perturb the state such that the perturbation is bitwise with 
-! a perturbed trunk.
-! Note this is not bitwise with itself (like the trunk) if task_count < ens_size
-!> If a task has more than one copy then the random number
-!> sequence continues from the end of one copy to the start of the other.
-
-subroutine pert_model_copies_bitwise_trunk(ens_handle, ens_size, pert_amp, temp_ind)
-
-type(ensemble_type), intent(inout) :: ens_handle
-integer,             intent(in)    :: ens_size
-real(r8),            intent(in)    :: pert_amp
-integer,             intent(in)    :: temp_ind !>temperature variable position in state_kinds_list
-
-type(random_seq_type) :: r(ens_size)
-integer(i8) :: j ! loop variable
-integer     :: i ! loop variable
-integer     :: num_rand_seq ! number of different random sequences
-integer     :: temp_start, temp_end ! temperature start and end index
-integer     :: owner, owners_index
-real(r8)    :: random_number
-integer     :: copy_owner ! pe that would perturb state in trunk
-integer     :: sequence_to_use
-
-do i = 1, min(ens_size, task_count())
-   call init_random_seq(r(i), map_pe_to_task(ens_handle,i-1) +1) ! my_task_id + 1 in the trunk
-   sequence_to_use = i
-enddo
-
-! Looping around copies because this is what the trunk does. To be 
-! bitwise with the trunk we need to use the random number sequence 
-! in the same order.
-temp_start = get_index_start(dom_id, temp_ind)
-temp_end = get_index_end(dom_id, temp_ind)
-
-do i = 1, ens_size
-
-   call get_copy_owner_index(i, copy_owner, owners_index) ! owners index not used. Distribution type 1
-   sequence_to_use = copy_owner + 1
-   do j = temp_start, temp_end
-
-      random_number = random_gaussian(r(sequence_to_use), 0.0_r8, pert_amp)
-      call get_var_owner_index(j, owner, owners_index)
-      if (ens_handle%my_pe==owner) then
-         ens_handle%copies(i, owners_index) = ens_handle%copies(i, owners_index) + random_number
-      endif
-   enddo
-
-enddo
-
-end subroutine pert_model_copies_bitwise_trunk
 
 !--------------------------------------------------------------------
 

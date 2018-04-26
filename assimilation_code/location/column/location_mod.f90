@@ -17,7 +17,7 @@ implicit none
 private
 
 public :: location_type, get_location, set_location, &
-          set_location_missing, is_location_in_region, &
+          set_location_missing, is_location_in_region, get_maxdist, &
           write_location, read_location, interactive_location, query_location, &
           LocationDims, LocationName, LocationLName, LocationStorageOrder, LocationUnits, &
           get_close_type, get_close_init, get_close_obs, get_close_state, get_close_destroy, &
@@ -532,6 +532,16 @@ end do
 
 end subroutine get_close
 
+!---------------------------------------------------------------------------
+
+function get_maxdist(gc, obs_type)
+type(get_close_type), intent(in) :: gc
+integer, optional,    intent(in) :: obs_type
+
+get_maxdist = gc%maxdist
+
+end function get_maxdist
+
 !----------------------------------------------------------------------------
 
 function is_location_in_region(loc, minl, maxl)
@@ -685,6 +695,7 @@ integer,             intent(out)   :: istatus
 istatus = 0
 
 end subroutine convert_vertical_state
+
 
 !----------------------------------------------------------------------------
 ! end of location/column/location_mod.f90
