@@ -36,27 +36,16 @@
 <H2>Overview</H2>
 
 <P>
-This program is now OBSOLETE since DART inflation files are now in
-NetCDF format.  Use one of the standard NCO utilities like "<em class=program>ncap2</em>"
- on a copy of another restart file to set the initial inflation mean, and another
-for the initial inflation standard deviation.  Inflation mean and sd values
-look exactly like restart values, arranged by variable type like T, U, V, etc.
+Utility program to create inflation restart files with constant values.
+Useful for a multi-step assimilation, so the values
+<em class=code>inf_initial_from_restart</em> and
+<em class=code>inf_sd_initial_from_restart</em> items in the &amp;filter_nml
+namelist can be .TRUE. from the beginning.
 </P>
 <P>
-Depending on your version of the NCO utilities, you can 
-use <em class=program>ncap2</em> to set the T,U and V inf values using one of two syntaxes:
-</P>
-<PRE>
-  ncap2 -s 'T=1.0;U=1.0;V=1.0' wrfinput_d01 input_priorinf_mean.nc
-  ncap2 -s 'T=0.6;U=0.6;V=0.6' wrfinput_d01 input_priorinf_sd.nc
-  -or-
-  ncap2 -s 'T(:,:,:)=1.0;U(:,:,:)=1.0;V(:,:,:)=1.0' wrfinput_d01 input_priorinf_mean.nc
-  ncap2 -s 'T(:,:,:)=0.6;U(:,:,:)=0.6;V(:,:,:)=0.6' wrfinput_d01 input_priorinf_sd.nc
-</PRE>
-<P>
-Some versions of the NCO utilities change the full 3D arrays into a 
-single scalar.  If that's your result (check your output with <tt>ncdump -h</tt>)
-use the alternate syntax or a more recent version of the NCO tools.
+This program uses the information from the model_mod code to determine
+the variables in the state vector.  It must be compiled with the
+right model's model_mod.
 </P>
 
 
@@ -68,17 +57,113 @@ use the alternate syntax or a more recent version of the NCO tools.
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>NAMELIST</H2>
 <P>
-none
+This namelist is read from the file <em class=file>input.nml</em>.
+Namelists start with an ampersand
+'&amp;' and terminate with a slash '/'.
+Character strings that contain a '/' must be
+enclosed in quotes to prevent them from
+prematurely terminating the namelist.
 </P>
+
+<div class=namelist>
+<pre>
+&amp;fill_inflation_restart_nml
+ prior_inf_mean = -88888.0
+ prior_inf_sd = -88888.0
+ post_inf_mean = -88888.0
+ post_inf_sd = -88888.0
+ write_prior_inf = .false.
+ write_post_inf = .false.
+ input_state_files = 'null'
+ single_file = .false.
+ verbose = .false.
+</pre>
+</div>
+
+<br />
+<br />
+
+<div>
+<TABLE border=0 cellpadding=10 width=100% summary='namelist description'>
+<THEAD align=left>
+<TR><TH> Item </TH>
+    <TH> Type </TH>
+    <TH> Description </TH> </TR>
+</THEAD>
+
+<TBODY valign=top>
+<TR><TD>prior_inf_mean</TD>
+    <TD>real(r8)</TD>
+    <TD>Prior inflation mean.
+ </TD></TR>
+
+<TR><TD>prior_inf_sd</TD>
+    <TD>real(r8)</TD>
+    <TD>Prior inflation standard deviation.
+ </TD></TR>
+
+<TR><TD>post_inf_mean</TD>
+    <TD>real(r8)</TD>
+    <TD>Posterior inflation mean.
+ </TD></TR>
+
+<TR><TD>post_inf_sd</TD>
+    <TD>real(r8)</TD>
+    <TD>Posterior inflation standard deviation.
+ </TD></TR>
+
+<TR><TD>write_prior_inf</TD>
+    <TD>logical</TD>
+    <TD>Set true to write the prior inflation restart files.
+ </TD></TR>
+
+<TR><TD>write_post_inf</TD>
+    <TD>logical</TD>
+    <TD>Set true to write the posterior inflation restart files.
+ </TD></TR>
+
+<TR><TD>single_file</TD>
+    <TD>logical</TD>
+    <TD>True means all ensemble members are read from variables inside 
+a single NetCDF file.  False means each member is in a separate file.  
+Single file NOT SUPPORTED as of May, 2018; must be .false.
+ </TD></TR>
+
+<TR><TD>input_state_files</TD>
+    <TD>character(len=256) (:)</TD>
+    <TD>For the single file case a list of input files, one per domain, 
+to add the inflation values into with the proper netcdf variable names.
+Unused for the multiple file case.
+ </TD></TR>
+
+<TR><TD>verbose</TD>
+    <TD>logical</TD>
+    <TD>Set true to get more debugging output.
+ </TD></TR>
+
+
+</TBODY>
+</TABLE>
+</div>
+
+<br />
+<br />
+
+<P><!-- make sure the 'top' is aligned correctly --></P>
 
 <!--==================================================================-->
 
 <A NAME="Modules"></A>
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>MODULES USED</H2>
-<P>
-none
-</P>
+<PRE>
+types_mod
+utilities_mod
+ensemble_manager_mod
+assim_model_mod
+model_mod
+mpi_utilities_mod
+</PRE>
 
 <!--==================================================================-->
 <!-- Describe the Files Used by this module.                          -->
@@ -87,9 +172,9 @@ none
 <A NAME="FilesUsed"></A>
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>FILES</H2>
-<P>
-none
-</P>
+<UL><LI>writes <em class=file>prior_inf_mean.nc, prior_inf_sd.nc,
+posterior_inf_mean.nc, posterior_inf_sd.nc</em>
+</UL>
 
 <!--==================================================================-->
 <!-- Cite references, if need be.                                     -->
@@ -109,9 +194,17 @@ none
 <A NAME="Errors"></A>
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>ERROR CODES and CONDITIONS</H2>
-<P>
-none
-</P>
+<div class=errors>
+<TABLE border=1 cellspacing=1 cellpadding=10 width=100%>
+<TR><TH>Routine</TH><TH>Message</TH><TH>Comment</TH></TR>
+
+<TR><!-- routine --><TD VALIGN=top>write_ensemble_restart</TD>
+<!-- message --><TD VALIGN=top>any</TD>
+<!-- comment --><TD VALIGN=top>reports failure to write the inflation
+                           restart file</TD></TR>
+
+</TABLE>
+</div>
 
 <H2>KNOWN BUGS</H2>
 <P>
