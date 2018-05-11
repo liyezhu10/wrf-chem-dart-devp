@@ -208,32 +208,31 @@ endif
 # If the file does not exist, filter will die and issue a very explicit
 # death message.
 
-rm -f input_priorinf_mean*.nc input_priorinf_sd*.nc
+${REMOVE} input_priorinf_mean*.nc input_priorinf_sd*.nc
 
-foreach DOMAIN ( d01 d02 d03 )
+foreach DOMAIN ( '' _d01 _d02 _d03 )
 
    # Checking for a prior inflation mean file from the previous assimilation.
 
-   (ls -rt1 output_priorinf_mean_${DOMAIN}.* | tail -n 1 >! latestfile) > & /dev/null
+   (ls -rt1 clm_output_priorinf_mean${DOMAIN}.* | tail -n 1 >! latestfile) > & /dev/null
    set nfiles = `cat latestfile | wc -l`
 
    if ( $nfiles > 0 ) then
       set latest = `cat latestfile`
-      ln -vs $latest input_priorinf_mean_${DOMAIN}.nc
+      ${LINK} $latest input_priorinf_mean${DOMAIN}.nc
    endif
 
    # Checking for a prior inflation sd file from the previous assimilation.
 
-   (ls -rt1 output_priorinf_sd_${DOMAIN}.* | tail -n 1 >! latestfile) > & /dev/null
+   (ls -rt1 clm_output_priorinf_sd${DOMAIN}.* | tail -n 1 >! latestfile) > & /dev/null
    set nfiles = `cat latestfile | wc -l`
 
    if ( $nfiles > 0 ) then
       set latest = `cat latestfile`
-      ln -vs $latest input_priorinf_sd_${DOMAIN}.nc
+      ${LINK} $latest input_priorinf_sd${DOMAIN}.nc
    endif
 
 end
-
 
 # Eat the cookie regardless
 ${REMOVE} clm_inflation_cookie
@@ -334,23 +333,11 @@ end
 ${MOVE} obs_seq.final    clm_obs_seq.${LND_DATE_EXT}.final
 ${MOVE} dart_log.out     clm_dart_log.${LND_DATE_EXT}.out
 
-# Accomodate any possible inflation files.
-# Rename file to reflect current date.
-
-#foreach FILE ( output_priorinf_mean.* output_priorinf_sd.* )
-#   if ( -e ${FILE} ) then
-#      set BASE = $FILE:r
-#      set EXTENSION = $FILE:e
-#      ${MOVE} ${FILE} clm_${FILE}.${LND_DATE_EXT}.${EXTENSION}
-#   else
-#      echo "No ${FILE} for ${LND_DATE_EXT}"
-#   endif
-#end
-
 #=========================================================================
 # Block 7: Update the CLM restart files - 
 # required because of the special missing value flags and 
 # possible snow recompaction, etc.
+#>@todo make dart_to_clm run simultaneously ... mpi?
 #=========================================================================
 
 @ instance = 0
@@ -359,8 +346,8 @@ foreach MEMBER ( ${CASE}.clm2_*.r.${LND_DATE_EXT}.nc )
    @ instance ++ 
    set DARTFILE = `head -n $instance restart_output_files.txt | tail -n 1`
 
-   ln -sf $MEMBER clm_restart_file.nc
-   ln -sf $DARTFILE dart_posterior.nc
+   ${LINK} $MEMBER clm_restart_file.nc
+   ${LINK} $DARTFILE dart_posterior.nc
 
    ../bld/dart_to_clm || exit 7
 

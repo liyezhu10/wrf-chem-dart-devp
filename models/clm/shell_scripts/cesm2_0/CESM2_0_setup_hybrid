@@ -27,7 +27,7 @@
 # incorporate any needed changes into this script.
 # ==============================================================================
 
-setenv num_instances  5
+setenv num_instances  40
 setenv CASE           clm5_f09_e${num_instances}
 setenv resolution     f09_f09
 setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
@@ -128,7 +128,7 @@ set stream_year_last  = 2010
 #
 # ==============================================================================
 
-setenv queue        economy
+setenv queue        regular
 setenv timewall     00:20:00
 setenv short_term_archiver off
 

@@ -41,17 +41,22 @@
 
 # This is appropriate for a days worth of flux tower observations
 # the obs in the file end 1 second before the time in the name.
+# 2015-07-23-00000 is DART 151412 00000
 # 2004-01-01-00000 is DART 147192 00000
+# 2001-07-02-00000 is DART 146279 00000
+# day=151412, sec=45204 : 2015 Jul 22 12:33:24
+# day=151412, sec=80424 : 2015 Jul 22 22:20:24
+
 &obs_sequence_tool_nml
-   filename_seq       = ''
-   filename_seq_list  = 'list.merge'
-   filename_out       = 'obs_seq.out'
+   filename_seq       = 'obs_seq.firsthalf','obs_seq.secondhalf'
+   filename_seq_list  = ''
+   filename_out       = 'obs_seq.combined'
    print_only         = .false.
    gregorian_cal      = .true.
-   first_obs_days     = -1
-   first_obs_seconds  = -1
-   last_obs_days      = -1
-   last_obs_seconds   = -1
+   first_obs_days     = 146278 
+   first_obs_seconds  = 43201
+   last_obs_days      = 146279
+   last_obs_seconds   = 43200
    /
 
 &schedule_nml

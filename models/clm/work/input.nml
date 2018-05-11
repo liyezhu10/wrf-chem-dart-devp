@@ -27,7 +27,7 @@
    async                    = 0
    adv_ens_command          = "no_advance_script"
    ens_size                 = 3
-   obs_sequence_in_name     = "obs_seq.1000obs"
+   obs_sequence_in_name     = "obs_seq.out"
    obs_sequence_out_name    = "obs_seq.final"
    input_state_file_list    = "restart_files.txt",
                               "history_files.txt",
@@ -69,18 +69,18 @@
    inf_sd_lower_bound          = 0.6,                     0.6
    /
 
-&quality_control_nml
-   input_qc_threshold       = 1.0
-   outlier_threshold        = 3.0
-/
 
-&clm_to_dart_nml
-   clm_to_dart_output_file = 'clm_missing_r8.nc'
+&quality_control_nml
+   input_qc_threshold = 1.0
+   outlier_threshold  = 3.0
    /
+
 
 &dart_to_clm_nml
-   dart_to_clm_input_file  = 'model_restart.nc'
+   input_dart_file    = 'dart_posterior.nc'
+   clm_file_to_update = 'clm_restart_file.nc'
    /
+
 
 &smoother_nml
    num_lags              = 0
@@ -94,7 +94,7 @@
 # cutoff of 0.03 (radians) is about 200km
 &assim_tools_nml
    filter_kind                     = 1
-   cutoff                          = 0.05
+   cutoff                          = 0.015
    sort_obs_inc                    = .false.
    spread_restoration              = .false.
    sampling_error_correction       = .false.
@@ -185,8 +185,8 @@
    debug                        = 0
    clm_variables  = 'H2OSOI_LIQ',  'QTY_LIQUID_WATER',           '0.0', 'NA', 'restart' , 'UPDATE',
                     'H2OSOI_ICE',  'QTY_ICE',                    '0.0', 'NA', 'restart' , 'UPDATE',
-                    'EFLX_LH_TOT', 'QTY_LATENT_HEAT_FLUX',       'NA',  'NA', 'history' , 'NO_COPY_BACK'
    /
+                    'EFLX_LH_TOT', 'QTY_LATENT_HEAT_FLUX',       'NA',  'NA', 'history' , 'NO_COPY_BACK'
 
 #   clm_variables  = 'frootc',      'QTY_ROOT_CARBON',            '0.0', 'NA', 'restart' , 'UPDATE',
 #                    'leafc',       'QTY_LEAF_CARBON',            '0.0', 'NA', 'restart' , 'UPDATE',
@@ -259,21 +259,22 @@
 
 &obs_diag_nml
    obs_sequence_name = ''
-   obs_sequence_list = 'obs_seq_files.txt'
-   first_bin_center =  2004, 1,  1, 0, 0, 0
-   last_bin_center  =  2004, 1,  8, 0, 0, 0
+   obs_sequence_list = 'diag_file_list.txt'
+   first_bin_center =  2001, 7,  2, 0, 0, 0
+   last_bin_center  =  2001, 7,  6, 0, 0, 0
    bin_separation   =     0, 0,  1, 0, 0, 0
    bin_width        =     0, 0,  1, 0, 0, 0
    time_to_skip     =     0, 0,  0, 0, 0, 0
    max_num_bins     = 1000
    trusted_obs      = 'null'
-   Nregions   = 4
-   lonlim1    =     0.0,     0.0,    0.0,  180.0
-   lonlim2    =   360.0,   360.0,  180.0,  360.0
-   latlim1    =   -90.0,     0.0,  -90.0,  -90.0
-   latlim2    =     0.0,    90.0,   90.0,   90.0
-   reg_names  = 'South', 'North', 'East', 'West'
-   hlevel_edges =  0.0, 1.0, 2.0, 5.0, 10.0, 40.0
+   Nregions   = 1
+   lonlim1    =     0.0
+   lonlim2    =   360.0
+   latlim1    =   -90.0
+   latlim2    =    90.0
+   reg_names  = 'All'
+   hlevel_edges =  0.000000, 0.000025, 0.000065, 0.000125, 0.000210,
+                   0.000330, 0.000490, 0.000690, 0.000930, 0.001210
    print_mismatched_locs = .false.
    create_rank_histogram = .true.
    outliers_in_histogram = .true.
@@ -304,9 +305,10 @@
    /
 
 
+   obs_sequence_name = '/glade2/scratch2/thoar/ctsm/clm5_f09_e40/run/clm_obs_seq.2001-07-02-00000.final'
 &obs_seq_to_netcdf_nml
-   obs_sequence_name = '/glade2/scratch2/thoar/ctsm/clm5bgc-crop_pmo/run/obs_seq.out'
-   obs_sequence_list = ''
+   obs_sequence_name = ''
+   obs_sequence_list = 'netcdf_list.txt'
    append_to_netcdf  = .false.
    lonlim1    =    0.0
    lonlim2    =  360.0
@@ -326,9 +328,9 @@
    loc_of_interest       = 255.0, -88.11518, 0.035  is 205,3 has 2 columns
 
 &model_mod_check_nml
-   num_ens               = 3
-   input_state_files     = 'clm_restart1.nc', 'clm_restart2.nc', 'clm_restart3.nc'
-   output_state_files    = 'mmc_output1.nc', 'mmc_output2.nc', 'mmc_output3.nc'
+   num_ens               = 1
+   input_state_files     = 'clm_restart.nc', 'clm_history.nc'
+   output_state_files    = 'mmc_output1.nc', 'mmc_output2.nc'
    test1thru             = 0
    run_tests             = 1,2,3,4 
    x_ind                 = 6691574
