@@ -1952,23 +1952,16 @@ call get_date(model_time, iyear, imonth, iday, ihour, iminute, isecond)
 cam_date = iyear*10000 + imonth*100 + iday
 cam_tod  = ihour*3600  + iminute*60 + isecond
 
-! if the file doesn't already have a "date" variable, so we make one
+! if the file doesn't already have a "date" variable make one
 if (.not. nc_variable_exists(ncid, "date")) then
-   call error_handler(E_MSG, routine,'"date" variable not found in file, creating one', &
-                      source, revision, revdate)
-
    call nc_begin_define_mode(ncid, routine)
    call nc_define_integer_variable(ncid, 'date', (/ 'time' /), routine)
    call nc_end_define_mode(ncid, routine)
    call nc_put_variable(ncid, 'date', cam_date, routine)
 endif
 
-! if the file doesn't already have a "datesec" variable, so we make one
+! if the file doesn't already have a "datesec" variable make one
 if (.not. nc_variable_exists(ncid, "datesec")) then
-
-   call error_handler(E_MSG, routine,'"datesec" variable not found in file, creating one', &
-                      source, revision, revdate)
-
    call nc_begin_define_mode(ncid, routine)
    call nc_define_integer_variable(ncid, 'datesec', (/ 'time' /), routine)
    call nc_end_define_mode(ncid, routine)
@@ -2082,7 +2075,7 @@ endif
 call init_random_seq(seq, my_task_id())
 
 max_qtys = get_num_quantities()
-allocate(do_these_qtys(max_qtys), perturb_by(max_qtys))
+allocate(do_these_qtys(0:max_qtys), perturb_by(0:max_qtys))
 
 do_these_qtys(:) = .false.
 perturb_by(:)    = 0.0_r8
@@ -2097,8 +2090,8 @@ do i=1, MAX_PERT
       call error_handler(E_ERR,routine,string1,source,revision,revdate)
    endif
 
-   do_these_qtys(i) = .true.
-   perturb_by(i)    = perturbation_amplitude(i)
+   do_these_qtys(myqty) = .true.
+   perturb_by(myqty)    = perturbation_amplitude(i)
 enddo
 
 ! get the global index numbers of the part of the state that 
@@ -2115,7 +2108,7 @@ do i=1, items
    if (.not. do_these_qtys(myqty)) cycle
   
    do j=1, ens_size
-      state_ens_handle%copies(j, i) = random_gaussian(seq, state_ens_handle%copies(j, i), perturb_by(i))
+      state_ens_handle%copies(j, i) = random_gaussian(seq, state_ens_handle%copies(j, i), perturb_by(myqty))
    enddo
 
 enddo
