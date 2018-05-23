@@ -2055,7 +2055,7 @@ type(random_seq_type) :: seq
 integer :: iloc, jloc, vloc, myqty
 integer :: max_qtys, j
 
-integer(i8) :: i, items
+integer(i8) :: i, state_items
 integer(i8), allocatable :: my_vars(:)
 
 logical,  allocatable :: do_these_qtys(:)
@@ -2063,7 +2063,9 @@ real(r8), allocatable :: perturb_by(:)
 
 character(len=*), parameter :: routine = 'pert_model_copies:'
 
-! set by namelist to select using the default routine or the code here
+! set by namelist to select using the default routine in filter
+! (adds the same noise to all parts of the state vector)
+! or the code here that lets you specify which fields get perturbed.
 if (custom_routine_to_generate_ensemble) then
    interf_provided = .true.
 else
@@ -2080,6 +2082,8 @@ allocate(do_these_qtys(0:max_qtys), perturb_by(0:max_qtys))
 do_these_qtys(:) = .false.
 perturb_by(:)    = 0.0_r8
 
+! this loop is over the number of field names/perturb values
+! in the namelist.  it quits when it finds a blank field name.
 do i=1, MAX_PERT
    if (fields_to_perturb(i) == '') exit
  
@@ -2097,16 +2101,22 @@ enddo
 ! get the global index numbers of the part of the state that 
 ! we have in this task.  here is an example of how to work with
 ! just the part of the state that is on the current task.
-items = get_my_num_vars(state_ens_handle)
-allocate(my_vars(items))
+state_items = get_my_num_vars(state_ens_handle)
+allocate(my_vars(state_items))
 call get_my_vars(state_ens_handle, my_vars)
 
-do i=1, items
+! this loop is over all the subset of the state items 
+! that are on this MPI task.
+do i=1, state_items
+
+   ! for each global index number in the state vector find
+   ! what quantity it is. (iloc,jloc,vloc are unused here)
    call get_model_variable_indices(my_vars(i), iloc, jloc, vloc, kind_index=myqty)
 
    ! if myqty is in the namelist, perturb it.  otherwise cycle
    if (.not. do_these_qtys(myqty)) cycle
   
+   ! this loop is over the number of ensembles
    do j=1, ens_size
       state_ens_handle%copies(j, i) = random_gaussian(seq, state_ens_handle%copies(j, i), perturb_by(myqty))
    enddo
