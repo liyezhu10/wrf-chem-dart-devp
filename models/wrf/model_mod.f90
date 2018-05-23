@@ -62,7 +62,7 @@ use netcdf_utilities_mod, only : nc_add_global_attribute, nc_synchronize_file, &
                                  nc_add_global_creation_time, nc_check, &
                                  nc_begin_define_mode, nc_end_define_mode
 
-use  mpi_utilities_mod,  only : my_task_id, task_count
+use  mpi_utilities_mod,  only : my_task_id, task_count, all_reduce_min_max
 
 use     random_seq_mod,  only : random_seq_type, init_random_seq, random_gaussian
 
@@ -89,22 +89,20 @@ use      obs_kind_mod,   only : QTY_U_WIND_COMPONENT, QTY_V_WIND_COMPONENT, &
                                 get_index_for_quantity, get_num_quantities, &
                                 get_name_for_quantity
 
-!HK should model_mod know about the number of copies?
-use ensemble_manager_mod,  only : ensemble_type, map_pe_to_task, get_var_owner_index, &
-                                  get_my_vars, get_copy_owner_index
+use ensemble_manager_mod,  only : ensemble_type, get_my_num_vars, get_my_vars
 
 use sort_mod,              only : sort
 
 use distributed_state_mod, only : get_state
 
-use default_model_mod,   only : adv_1step, init_conditions, init_time, nc_write_model_vars
+use default_model_mod,   only : adv_1step, nc_write_model_vars, &
+                                init_conditions => fail_init_conditions, &
+                                init_time => fail_init_time
 
 use state_structure_mod, only : add_domain, get_model_variable_indices, &
                                 state_structure_info, &
                                 get_index_start, get_index_end, &
                                 get_dart_vector_index
-
-use mpi_utilities_mod,   only : all_reduce_min_max
 
 ! FIXME:
 ! the kinds QTY_CLOUD_LIQUID_WATER should be QTY_CLOUDWATER_MIXING_RATIO, 
@@ -5794,7 +5792,7 @@ interf_provided = .true.
 ! Make space for the state vector index numbers that are
 ! physically located on my task and get the global numbers.
 
-allocate(var_list(ens_handle%my_num_vars))
+allocate(var_list(get_my_num_vars(ens_handle)))
 call get_my_vars(ens_handle, var_list)
 
 ! count up the total number of variables across all domains.
