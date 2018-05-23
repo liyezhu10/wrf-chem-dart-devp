@@ -23,9 +23,9 @@
    cam_template_filename           = 'caminput.nc'
    cam_phis_filename               = 'cam_phis.nc'
    state_variables                 = ''
-   custom_routine_to_generate_ensemble = .false.
-   fields_to_perturb               = "QTY_TEMPERATURE"
-   perturbation_amplitude          = 0.00001_r8
+   custom_routine_to_generate_ensemble = .true.
+   fields_to_perturb               = ''
+   perturbation_amplitude          = 0.0_r8
    assimilation_period_days        = 0
    assimilation_period_seconds     = 21600
    vertical_localization_coord     = 'PRESSURE'

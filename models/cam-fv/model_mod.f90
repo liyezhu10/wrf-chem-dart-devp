@@ -163,9 +163,9 @@ real(r8)           :: start_damping_ramp_at_pressure  = -1.0      ! currently pa
 !real(r8)           :: damping_ramp_top_at_level     = -1          ! model levels
 integer            :: debug_level                     = 0
 logical            :: suppress_grid_info_in_output    = .false.
-logical            :: custom_routine_to_generate_ensemble = .false.
-character(len=32)  :: fields_to_perturb(MAX_PERT)     = "QTY_TEMPERATURE"
-real(r8)           :: perturbation_amplitude(MAX_PERT)= 0.00001_r8
+logical            :: custom_routine_to_generate_ensemble = .true.
+character(len=32)  :: fields_to_perturb(MAX_PERT)     = ""
+real(r8)           :: perturbation_amplitude(MAX_PERT)= 0.0_r8
 logical            :: using_chemistry                 = .false.
 logical            :: use_variable_mean_mass          = .false.
 
