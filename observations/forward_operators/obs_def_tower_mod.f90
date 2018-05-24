@@ -15,8 +15,10 @@
 !MODIS_SNOWCOVER_FRAC,           QTY_SNOWCOVER_FRAC,             COMMON_CODE
 !MODIS_LEAF_AREA_INDEX,          QTY_LEAF_AREA_INDEX,            COMMON_CODE
 !MODIS_FPAR,                     QTY_FRACTION_ABSORBED_PAR,      COMMON_CODE
-!BIOMASS,                        QTY_BIOMASS,                    COMMON_CODE
+!BIOMASS,                        QTY_BIOMASS
 !LEAF_CARBON,                    QTY_LEAF_CARBON,                COMMON_CODE
+!LIVE_STEM_CARBON,               QTY_LIVE_STEM_CARBON,           COMMON_CODE
+!DEAD_STEM_CARBON,               QTY_DEAD_STEM_CARBON,           COMMON_CODE
 !LEAF_AREA_INDEX,                QTY_LEAF_AREA_INDEX,            COMMON_CODE
 !LEAF_NITROGEN,                  QTY_LEAF_NITROGEN,              COMMON_CODE
 !TOWER_AIR_TEMPERATURE,          QTY_TEMPERATURE,                COMMON_CODE
@@ -38,7 +40,8 @@
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
 !  use obs_def_tower_mod, only : get_scalar_from_history, &
-!                                calculate_albedo
+!                                calculate_albedo, &
+!                                calculate_biomass
 ! END DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
 !-----------------------------------------------------------------------------
 
@@ -64,6 +67,8 @@
 !                    copy_indices, location, obs_time, expected_obs, istatus)
 !  case(SURFACE_ALBEDO)
 !     call calculate_albedo(state_handle, ens_size, location, expected_obs, istatus)
+!  case(BIOMASS)
+!     call calculate_biomass(state_handle, ens_size, location, expected_obs, istatus)
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 !-----------------------------------------------------------------------------
 
@@ -75,7 +80,8 @@
 !         TOWER_GPP_FLUX, &
 !         TOWER_ER_FLUX, &
 !         SOIL_RESPIRATION_FLUX, &
-!         SURFACE_ALBEDO)
+!         SURFACE_ALBEDO, &
+!         BIOMASS)
 !       continue
 ! END DART PREPROCESS READ_OBS_DEF
 !-----------------------------------------------------------------------------
@@ -88,7 +94,8 @@
 !         TOWER_GPP_FLUX, &
 !         TOWER_ER_FLUX, &
 !         SOIL_RESPIRATION_FLUX, &
-!         SURFACE_ALBEDO)
+!         SURFACE_ALBEDO, &
+!         BIOMASS)
 !       continue
 ! END DART PREPROCESS WRITE_OBS_DEF
 !-----------------------------------------------------------------------------
@@ -101,7 +108,8 @@
 !         TOWER_GPP_FLUX, &
 !         TOWER_ER_FLUX, &
 !         SOIL_RESPIRATION_FLUX, &
-!         SURFACE_ALBEDO)
+!         SURFACE_ALBEDO, &
+!         BIOMASS)
 !       continue
 ! END DART PREPROCESS INTERACTIVE_OBS_DEF
 !-----------------------------------------------------------------------------
@@ -135,7 +143,10 @@ use    utilities_mod, only : register_module, E_ERR, E_MSG, error_handler, &
 use     obs_kind_mod, only : QTY_RADIATION_VISIBLE_DOWN, &
                              QTY_RADIATION_NEAR_IR_DOWN, &
                              QTY_RADIATION_VISIBLE_UP, &
-                             QTY_RADIATION_NEAR_IR_UP
+                             QTY_RADIATION_NEAR_IR_UP, &
+                             QTY_LIVE_STEM_CARBON, &
+                             QTY_DEAD_STEM_CARBON, &
+                             QTY_LEAF_CARBON
 
 use  assim_model_mod, only : interpolate
 
@@ -148,7 +159,8 @@ implicit none
 private
 
 public :: get_scalar_from_history, &
-          calculate_albedo
+          calculate_albedo, &
+          calculate_biomass
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -571,6 +583,57 @@ if (debug .and. do_output()) then
 endif
 
 end subroutine calculate_albedo
+
+!======================================================================
+
+
+subroutine calculate_biomass(state_handle, ens_size, location, obs_val, istatus)
+
+type(ensemble_type), intent(in)  :: state_handle
+integer,             intent(in)  :: ens_size
+type(location_type), intent(in)  :: location
+real(r8),            intent(out) :: obs_val(ens_size)
+integer,             intent(out) :: istatus(ens_size)
+
+real(r8) ::      leaf_carbon(ens_size)
+real(r8) :: live_stem_carbon(ens_size)
+real(r8) :: dead_stem_carbon(ens_size)
+integer  :: stat(ens_size,3)
+integer  :: imem
+
+istatus = 1           ! 0 == success, anything else is a failure
+obs_val = MISSING_R8
+
+if ( .not. module_initialized ) call initialize_module(state_handle%current_time)
+
+! Intentionally try to compute all required components before failing.
+! The desire is to inform about ALL failed components instead of failing
+! one-by-one.
+
+call interpolate(state_handle, ens_size, location, QTY_LEAF_CARBON,      leaf_carbon,      stat(:,1))
+call interpolate(state_handle, ens_size, location, QTY_LIVE_STEM_CARBON, live_stem_carbon, stat(:,2))
+call interpolate(state_handle, ens_size, location, QTY_DEAD_STEM_CARBON, dead_stem_carbon, stat(:,3))
+
+if (any(stat /= 0)) then
+   istatus = stat(:,1)*100 + stat(:,2)*10 + stat(:,3)
+   return
+endif
+
+obs_val = leaf_carbon + live_stem_carbon + dead_stem_carbon
+
+istatus = 0   ! success
+
+if (debug .and. do_output()) then
+   do imem = 1,ens_size
+      write(string1,*)'biomass for ensemble member ', imem
+      write(string2,*)'carbon: leaf,live_stem,dead_stem', &
+         leaf_carbon(imem), live_stem_carbon(imem), dead_stem_carbon(imem)
+      write(string3,*)'status: leaf,live_stem,dead_stem', stat(imem,:)
+      call error_handler(E_MSG,'calculate_biomass:',string1,text2=string2,text3=string3)
+   enddo
+endif
+
+end subroutine calculate_biomass
 
 
 !======================================================================

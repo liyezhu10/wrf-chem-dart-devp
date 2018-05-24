@@ -68,6 +68,8 @@ use     obs_kind_mod, only : QTY_SOIL_TEMPERATURE,       &
                              QTY_SNOWCOVER_FRAC,         &
                              QTY_SNOW_THICKNESS,         &
                              QTY_LEAF_CARBON,            &
+                             QTY_LIVE_STEM_CARBON,       &
+                             QTY_DEAD_STEM_CARBON,       &
                              QTY_LEAF_AREA_INDEX,        &
                              QTY_WATER_TABLE_DEPTH,      &
                              QTY_GEOPOTENTIAL_HEIGHT,    &
@@ -703,6 +705,8 @@ if (nvars > 0) dom_vector_history = add_domain(clm_vector_history_filename, nvar
 ! The metadata arrays will provide the ability to determine what grid cell is the parent
 ! of the state vector index in question ... as well as the actual surface area.
 ! This MUST stride through the state vector the same way the state vector is filled.
+
+!@todo BAD BAD BAD
 
 allocate(lonixy(model_size), latjxy(model_size), levels(model_size), landarea(model_size))
 
@@ -2059,7 +2063,8 @@ select case( obs_kind )
           QTY_WATER_TABLE_DEPTH, QTY_VEGETATION_TEMPERATURE, &
           QTY_FRAC_PHOTO_AVAIL_RADIATION, &
           QTY_FPAR_SUNLIT_DIRECT, QTY_FPAR_SUNLIT_DIFFUSE, &
-          QTY_FPAR_SHADED_DIRECT, QTY_FPAR_SHADED_DIFFUSE)
+          QTY_FPAR_SHADED_DIRECT, QTY_FPAR_SHADED_DIFFUSE, &
+          QTY_LIVE_STEM_CARBON,   QTY_DEAD_STEM_CARBON)
 
       call compute_gridcell_value(state_handle, ens_size, location, obs_kind, expected_obs, istatus)
 
