@@ -84,8 +84,8 @@ setenv dartroot     /glade/p/work/thoar/DART/cesm_clm
 # ==============================================================================
 
 setenv refcase      clm5_f09_spinup80
-setenv refyear      2000
-setenv refmon       12
+setenv refyear      2001
+setenv refmon       07
 setenv refday       01
 setenv reftod       00000
 setenv refdate      $refyear-$refmon-$refday
@@ -93,7 +93,7 @@ setenv reftimestamp $refyear-$refmon-$refday-$reftod
 
 setenv stagedir /glade/p/image/RDA_strawman/CESM_ensembles/CLM/CLM5BGC-Crop/${reftimestamp}
 
-setenv startdate    2000-12-01
+setenv startdate    2001-07-01
 
 # The forward operators for the flux tower obs _require_ that we predict the name of
 # of the history file. The history file names of interest are time-tagged with the
@@ -394,8 +394,8 @@ while ( $inst <= $num_instances )
 
 #  set finidat_name = "finidat${inst_string}_interp_dest.nc"
 #  echo "finidat_interp_dest = '"$finidat_name"'"            >> ${fname}
-#  echo "use_init_interp = .true."                           >> ${fname}
-#  echo "init_interp_fill_missing_with_natveg = .true."      >> ${fname}
+   echo "use_init_interp = .true."                           >> ${fname}
+   echo "init_interp_fill_missing_with_natveg = .true."      >> ${fname}
    echo "hist_empty_htapes = .true."                         >> ${fname}
 
    @ inst ++
