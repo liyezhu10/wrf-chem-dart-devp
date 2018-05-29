@@ -12,11 +12,11 @@
 #
 # This script integrates DART with a pre-existing CESM multi-instance case.
 # It must be run from a valid CASEROOT directory and some environment variables
-# must be set (as in CESM#_#_setup_YYY). If the case was created
+# must be set (as in cesm#_#/setup_XXX). If the case was created
 # using one of the DART scripts, this script should be staged in the
 # CASEROOT directory automatically, and DARTROOT is set at that time.
 #
-# CAM is the only active model component.
+# CAM is the only model component used for assimilation.
 # CESM starts and stops to allow for CAM to assimilate every 6 hours.
 #
 # This script will build the DART executables if they are not found.
@@ -50,18 +50,13 @@ echo "==================="
 
 if ( ! -e ./xmlquery ) then
    echo "ERROR: $0 must be run from a CASEROOT directory".
-   exit -1
+   exit 1
 endif
 
-setenv CASE          `./xmlquery CASE           -value`
-setenv CASEROOT      `./xmlquery CASEROOT       -value`
-# old; setenv CCSM_COMPSET  `./xmlquery CCSM_COMPSET   -value`
-setenv COMPSET       `./xmlquery COMPSET   -value`
-setenv EXEROOT       `./xmlquery EXEROOT        -value`
-setenv NINST_ATM     `./xmlquery NINST_ATM      -value`
-setenv RUNDIR        `./xmlquery RUNDIR         -value`
-
-set num_instances = $NINST_ATM
+setenv CASE          `./xmlquery CASE           --value`
+setenv CASEROOT      `./xmlquery CASEROOT       --value`
+setenv COMPSET       `./xmlquery COMPSET   --value`
+setenv EXEROOT       `./xmlquery EXEROOT        --value`
 
 # DARTROOT is set by the DART CESM_configure scripts. Under certain
 # situations, you may need to set this manually. It should reference the
@@ -80,7 +75,7 @@ set nonomatch       # suppress "rm" warnings if wildcard does not match anything
 # some systems don't like the -v option to any of the following
 switch ("`hostname`")
    case be*:
-      # NCAR "bluefire"
+      # NCAR "bluefire", an IBM Linux machine.
       set   MOVE = '/usr/local/bin/mv -fv'
       set   COPY = '/usr/local/bin/cp -fv --preserve=timestamps'
       set   LINK = '/usr/local/bin/ln -fvs'
@@ -89,6 +84,11 @@ switch ("`hostname`")
    breaksw
    default:
       # NERSC "hopper", NWSC "yellowstone"
+      # NWSC "cheyenne"; which cp am I getting?  ls -l /bin/cp yields
+      #       /bin/cp --> /usr/bin/cp
+      #    'man cp' yields a choice:
+      #       cp(1) which has --preserve, and 
+      #       cp(1p) which is some POSIX cp which doesn't have --preserve
       set   MOVE = '/bin/mv -fv'
       set   COPY = '/bin/cp -fv --preserve=timestamps'
       set   LINK = '/bin/ln -fvs'
@@ -109,7 +109,7 @@ foreach VAR ( CASEROOT DARTROOT )
    if ( ! -d $DIR ) then
       echo "ERROR: directory '$DIR' not found"
       echo "       In the setup script check the setting of: $VAR"
-      exit -1
+      exit 10
    endif
 end
 
@@ -126,13 +126,14 @@ foreach MODEL ( cam-fv )
       echo "WARNING: executable file 'filter' not found."
       echo "         Looking for: $targetdir/filter "
       echo "         Trying to rebuild all executables for $MODEL now ..."
+      echo "         This will be incorrect, if input.nml:preprocess_nml is not correct."
       (cd $targetdir; ./quickbuild.csh -mpi)
       if ( ! -x $targetdir/filter ) then
          echo "ERROR: executable file 'filter' not found."
          echo "       Unsuccessfully tried to rebuild: $targetdir/filter "
          echo "       Required DART assimilation executables are not found."
          echo "       Stopping prematurely."
-         exit -1
+         exit 20
       endif
    endif
 end
@@ -149,26 +150,24 @@ end
 # This might want to have a conditional around it, to only execute if it's a bsub machine.
 sed -e "/BSUB[ ]*-o/c\#BSUB  -o cesm_st_arch.stdout.%J" \
     -e "/BSUB[ ]*-e/c\#BSUB  -e cesm_st_arch.stderr.%J" \
-    -e "/BSUB[ ]*-J/c\#BSUB  -J ${CASE}.st_arch" case.st_archive >! temp.$$  || exit 20
+    -e "/BSUB[ ]*-J/c\#BSUB  -J ${CASE}.st_arch"        \
+    -e  "/PBS[ ]*-N/c\#PBS  -N cesm_st_arch.stdout"     \
+    -e  "/PBS[ ]*-o/c\#PBS  -o cesm_st_arch.stdouterr"  \
+    case.st_archive >! temp.$$  || exit 30
 ${MOVE} temp.$$ case.st_archive
 chmod 755       case.st_archive
 
 # Same for lt_archive
 # queue and wall_clock can/should be modified via xmlchange in setup_{hybrid,advanced}
 # (see env_batch.xml)
-sed -e "/BSUB[ ]*-o/c\#BSUB  -o cesm_lt_arch.stdout.%J  \n" \
-    -e "/BSUB[ ]*-e/c\#BSUB  -e cesm_lt_arch.stderr.%J  \n" \
-    -e "/BSUB[ ]*-J/c\#BSUB  -J ${CASE}.lt_arch         \n" case.lt_archive >! temp.$$  || exit 21
-${MOVE} temp.$$ case.lt_archive
-chmod 755       case.lt_archive
 
 # BOGUS*, save_every_Mth_day_restarts#, and CESM come from the calling script,
 # setup_{hybrid,advanced,...}.
-${COPY} ${DARTROOT}/models/cam-fv/shell_scripts/no_assimilate.csh > no_assimilate.csh  
+${COPY} ${DARTROOT}/models/cam-fv/shell_scripts/no_assimilate.csh no_assimilate.csh  
 sed -e "s#BOGUSCASEROOT#$CASEROOT#" \
     -e "s#BOGUSBASEOBSDIR#$baseobsdir#"  \
     -e "s#BOGUS_save_every_Mth#$save_every_Mth_day_restarts#" \
-    ${DARTROOT}/models/cam-fv/shell_scripts/${CESM}/assimilate.csh    > assimilate.csh  || exit 23
+    ${DARTROOT}/models/cam-fv/shell_scripts/${CESM}/assimilate.csh    > assimilate.csh  || exit 40
 chmod 755 assimilate.csh
 chmod 755 no_assimilate.csh
 # chmod 755 perfect_model.csh
@@ -206,11 +205,12 @@ elif [[ -e ${DARTROOT}/models/cam-fv/work/input.nml ]]; then
    fi
 else
    echo "ERROR: stage_dart_files could not find an input.nml.  Aborting"
-   exit -99
+   exit 50
 fi
 
-${COPY} ${DARTROOT}/models/cam-fv/work/filter            ${EXEROOT}
-${COPY} ${DARTROOT}/models/cam-fv/work/perfect_model_obs ${EXEROOT}
+${COPY} ${DARTROOT}/models/cam-fv/work/filter                 ${EXEROOT}
+${COPY} ${DARTROOT}/models/cam-fv/work/perfect_model_obs      ${EXEROOT}
+${COPY} ${DARTROOT}/models/cam-fv/work/fill_inflation_restart ${EXEROOT}
 
 exit 0
 
@@ -225,44 +225,44 @@ chmod 0755 stage_dart_files
 # The user is free to update these after setup and before running.
 # ==============================================================================
 
-# multi_cplr: Can't use NINST_ATM because it has been set to the number of 
-#             instances per coupler, 1 for now.
+# multi_drv: Can't use NINST_ATM because it has been set to the number of 
+#            instances per coupler, 1 for now.
+#            Num_instances will be hard-wired from setup_XXX
 
 cat << EndOfText >! update_dart_namelists
 #!/bin/sh
 
-# this script makes certain namelist settings consistent with the number
+# This script makes certain namelist settings consistent with the number
 # of ensemble members built by the setup script.
-# this script was autogenerated by $0
-# using the variables set in that script
+# This script was autogenerated by $0 using the variables set in that script.
 
 # Ensure that the input.nml ensemble size matches the number of instances.
 # WARNING: the output files contain ALL ensemble members ==> BIG
 
 ex input.nml <<ex_end
-g;ens_size ;s;= .*;= ${NINST_ATM};
-g;num_output_state_members ;s;= .*;= ${NINST_ATM};
-g;num_output_obs_members ;s;= .*;= ${NINST_ATM};
+g;ens_size ;s;= .*;= ${num_instances};
+g;num_output_state_members ;s;= .*;= ${num_instances};
+g;num_output_obs_members ;s;= .*;= ${num_instances};
 wq
 ex_end
 
 # If we are using WACCM{-X} (i.e. WCxx or WXxx) we have preferred values
 # $waccm comes from setup*
-if [[ "\$waccm" = "true" ]]; then 
-   list=\`grep '^[ ]*vert_coord' input.nml | sed -e "s#[=,]##g"\`
-   if [[ "\$list[3]" = "log_invP" ]]; then
+if [[ "$waccm" = "true" ]]; then 
+   list=\`grep '^[ ]*vertical_localization_coord' input.nml | sed -e "s#[=,]##g"\`
+   if [[ "\$list[3]" = "SCALEHEIGHT" ]]; then
       list=`grep '^[ ]*vert_normalization_scale_height' input.nml | sed -e "s#[=,]##g"`
       if [[ "\$list[2]" != "1.5" ]]; then
          echo "WARNING!  input.nml is not using 1.5 for vert_normalization_scale_height."
          echo "          Use a different value only if you definitely want to. "
       fi
    else
-      echo "WARNING!  input.nml is not using log_invP for vert_coord."
-      echo "          log_invP is highly recommended for WACCM{-X}"
+      echo "WARNING!  input.nml is not using SCALEHEIGHT for vertical_localization_coord."
+      echo "          SCALEHEIGHT is highly recommended for WACCM{-X}"
    fi
 else
    echo "Apparently not configured for WACCM"
-   echo "COMPSET is \$COMPSET"
+   echo "COMPSET is $COMPSET"
 fi
 
 exit 0
@@ -284,9 +284,7 @@ chmod 0755 update_dart_namelists
 #=========================================================================
 
 if ( $num_instances > 1 ) then
-   set SAMP_ERR_FILE = ${DARTROOT}/system_simulation/final_full_precomputed_tables/final_full.${num_instances}
-# RMA eventually use single comprehensive file:
-#   set SAMP_ERR_FILE = ${DARTROOT}/system_simulation/sampling_error_correction_table.nc
+   set SAMP_ERR_FILE = ${DARTROOT}/system_simulation/sampling_error_correction_table.nc
 
    if (  -e   ${SAMP_ERR_FILE} ) then
       ${COPY} ${SAMP_ERR_FILE} .
