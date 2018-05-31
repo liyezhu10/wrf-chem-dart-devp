@@ -94,6 +94,8 @@ use forward_operator_mod,  only : get_obs_ens_distrib_state
 
 use quality_control_mod,   only : initialize_qc
 
+! Testing
+use mpi
 !------------------------------------------------------------------------------
 
 implicit none
@@ -352,6 +354,9 @@ logical :: ds, all_gone, allow_missing
 ! real(r8), allocatable   :: temp_ens(:) ! for smoother
 real(r8), allocatable   :: prior_qc_copy(:)
 
+! testing(bpd6)
+integer :: iError
+
 call filter_initialize_modules_used() ! static_init_model called in here
 
 ! Read the namelist entry
@@ -517,7 +522,9 @@ call trace_message('Before setting up space for ensembles')
 model_size = get_model_size()
 
 if(distributed_state) then
-   call init_ensemble_manager(state_ens_handle, num_state_ens_copies, model_size)
+   !call init_ensemble_manager(state_ens_handle, num_state_ens_copies, model_size)
+   !call init_ensemble_manager(state_ens_handle, num_state_ens_copies, model_size, graph = .true.) ! bpd6
+   call init_ensemble_manager(state_ens_handle, num_state_ens_copies, model_size, distribution_type_in = 1) ! bpd6 - new way of doing graph dist. (type 2)
 else
    call init_ensemble_manager(state_ens_handle, num_state_ens_copies, model_size, transpose_type_in = 2)
 endif
@@ -774,9 +781,13 @@ AdvanceTime : do
    ! Create an ensemble for the observations from this time plus
    ! obs_error_variance, observed value, key from sequence, global qc,
    ! then mean for each group, then variance for each group
-   call init_ensemble_manager(obs_fwd_op_ens_handle, TOTAL_OBS_COPIES, int(num_obs_in_set,i8), 1, transpose_type_in = 2)
+   !call init_ensemble_manager(obs_fwd_op_ens_handle, TOTAL_OBS_COPIES, int(num_obs_in_set,i8), 1, transpose_type_in = 2)
+   !call init_ensemble_manager(obs_fwd_op_ens_handle, TOTAL_OBS_COPIES, int(num_obs_in_set,i8), 1, transpose_type_in = 2, graph = .false.) ! bpd6
+   call init_ensemble_manager(obs_fwd_op_ens_handle, TOTAL_OBS_COPIES, int(num_obs_in_set,i8), distribution_type_in = 2, transpose_type_in = 2) ! bpd6
    ! Also need a qc field for copy of each observation
-   call init_ensemble_manager(qc_ens_handle, ens_size, int(num_obs_in_set,i8), 1, transpose_type_in = 2)
+   !call init_ensemble_manager(qc_ens_handle, ens_size, int(num_obs_in_set,i8), 1, transpose_type_in = 2) 
+   !call init_ensemble_manager(qc_ens_handle, ens_size, int(num_obs_in_set,i8), 1, transpose_type_in = 2, graph = .false.)  !bpd6
+   call init_ensemble_manager(qc_ens_handle, ens_size, int(num_obs_in_set,i8), distribution_type_in = 2, transpose_type_in = 2)  !bpd6
 
    ! Allocate storage for the keys for this number of observations
    allocate(keys(num_obs_in_set)) ! This is still var size for writing out the observation sequence
@@ -876,6 +887,13 @@ AdvanceTime : do
    ! copy ( + others ) is moved to task 0 so task 0 can update seq.
    ! There is a transpose (all_copies_to_all_vars(obs_fwd_op_ens_handle)) in obs_space_diagnostics
    ! Do prior observation space diagnostics and associated quality control
+   
+   ! bpd6 - error checking:
+   !do iError = 1, obs_fwd_op_ens_handle%my_num_vars
+   !  write(*,*) "ECheck1 : ", iError, sum(obs_fwd_op_ens_handle%copies(:,iError))
+   !end do
+
+
    call obs_space_diagnostics(obs_fwd_op_ens_handle, qc_ens_handle, ens_size, &
       seq, keys, PRIOR_DIAG, num_output_obs_members, in_obs_copy+1, &
       obs_val_index, OBS_KEY_COPY, &                                 ! new
@@ -884,6 +902,10 @@ AdvanceTime : do
       OBS_VAL_COPY, OBS_ERR_VAR_COPY, DART_qc_index)
    call trace_message('After  observation space diagnostics')
 
+   ! bpd6 - error checking:
+   !do iError = 1, obs_fwd_op_ens_handle%my_num_vars
+   !  write(*,*) "ECheck2 : ", iError, sum(obs_fwd_op_ens_handle%copies(:,iError))
+   !end do
 
    ! FIXME:  i believe both copies and vars are equal at the end
    ! of the obs_space diags, so we can skip this.
@@ -895,7 +917,8 @@ AdvanceTime : do
    call     trace_message('Before observation assimilation')
    call timestamp_message('Before observation assimilation')
 
-   call filter_assim_chunks(state_ens_handle, obs_fwd_op_ens_handle, seq, keys, &
+
+   call filter_assim(state_ens_handle, obs_fwd_op_ens_handle, seq, keys, &
       ens_size, num_groups, obs_val_index, prior_inflate, &
       ENS_MEAN_COPY, ENS_SD_COPY, &
       PRIOR_INF_COPY, PRIOR_INF_SD_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY, &
@@ -1018,6 +1041,7 @@ AdvanceTime : do
 
    call trace_message('Before posterior obs space diagnostics')
 
+   
    ! Write posterior observation space diagnostics
    ! There is a transpose (all_copies_to_all_vars(obs_fwd_op_ens_handle)) in obs_space_diagnostics
    call obs_space_diagnostics(obs_fwd_op_ens_handle, qc_ens_handle, ens_size, &
@@ -1097,6 +1121,7 @@ AdvanceTime : do
    endif
 
    call trace_message('Near bottom of main loop, cleaning up obs space')
+   !call task_sync() ! bpd6 - race condition on memory?
    ! Deallocate storage used for keys for each set
    deallocate(keys)
 
@@ -1108,6 +1133,7 @@ AdvanceTime : do
    call end_ensemble_manager(qc_ens_handle)
 
    call trace_message('Bottom of main advance time loop')
+
 
 end do AdvanceTime
 

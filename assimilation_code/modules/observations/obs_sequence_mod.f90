@@ -53,7 +53,7 @@ public :: obs_sequence_type, init_obs_sequence, interactive_obs_sequence, &
    set_qc_meta_data, get_first_obs, get_last_obs, add_copies, add_qc, &
    write_obs_seq, read_obs_seq, set_obs, append_obs_to_seq, &
    get_obs_from_key, get_obs_time_range, get_time_range_keys, &
-   get_num_times, get_num_key_range, &
+   get_num_times, get_num_key_range, get_obs_from_key_debug, &
    static_init_obs_sequence, destroy_obs_sequence, read_obs_seq_header, &
    delete_seq_head, delete_seq_tail, &
    get_next_obs_from_key, get_prev_obs_from_key, delete_obs_by_typelist, &
@@ -455,10 +455,26 @@ integer,                 intent(in) :: key
 
 type(obs_type) :: obs
 
+!write(*,*) "DEBUG: get_obs_from_key - ", key
+
 obs = seq%obs(key)
 
 end subroutine get_obs_from_key
 
+subroutine get_obs_from_key_debug(seq, key, obs, chunk, ob, task)
+
+type(obs_sequence_type), intent(in) :: seq
+integer,                 intent(in) :: key
+integer, intent(in) :: chunk, ob, task ! bpd6
+
+type(obs_type) :: obs
+
+!write(*,*) "DEBUG: get_obs_from_key - ", key
+!write(*,'(A,I,I,I,I)') "DEBUG: get_obs_from_key_debug -> ", task, chunk, ob, key
+
+obs = seq%obs(key)
+
+end subroutine get_obs_from_key_debug
 !-------------------------------------------------
 
 subroutine get_next_obs_from_key(seq, last_key_used, next_obs, is_this_last)

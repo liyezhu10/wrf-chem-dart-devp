@@ -88,7 +88,13 @@ else
    contiguous_fwd = reshape(state_ens_handle%copies(1:data_count, :), (/my_num_vars*data_count/))
 
    ! Expose local memory to RMA operation by other processes in a communicator.
-   call mpi_win_create(contiguous_fwd, window_size, bytesize, MPI_INFO_NULL, get_dart_mpi_comm(), state_win, ierr)
+   write(*,*) "Window: create"
+   if (window_size /= 0) then
+     call mpi_win_create(contiguous_fwd, window_size, bytesize, MPI_INFO_NULL, get_dart_mpi_comm(), state_win, ierr)
+     write(*,*) "Window: size = ", window_size
+   else
+     write(*,*) "Window: size = 0 (not creating)"
+  endif
 endif
 
 ! Set the current window to the state window
@@ -115,7 +121,7 @@ integer               :: my_num_vars !< number of elements a task owns
 use_distributed_mean = distribute_mean
 
 if (use_distributed_mean) then
-   call init_ensemble_manager(mean_ens_handle, 1, state_ens_handle%num_vars) ! distributed ensemble
+   call init_ensemble_manager(mean_ens_handle, 1, state_ens_handle%num_vars, distribution_type_in = state_ens_handle%distribution_type) ! distributed ensemble
    call set_num_extra_copies(mean_ens_handle, 0)
    mean_ens_handle%copies(1,:) = state_ens_handle%copies(mean_copy, :)
    allocate(mean_1d(state_ens_handle%my_num_vars))
@@ -130,7 +136,7 @@ if (use_distributed_mean) then
    ! Expose local memory to RMA operation by other processes in a communicator.
    call mpi_win_create(mean_1d, window_size, bytesize, MPI_INFO_NULL, get_dart_mpi_comm(), mean_win, ierr)
 else
-   call init_ensemble_manager(mean_ens_handle, 1, state_ens_handle%num_vars, transpose_type_in = 3)
+   call init_ensemble_manager(mean_ens_handle, 1, state_ens_handle%num_vars, transpose_type_in = 3, distribution_type_in = state_ens_handle%distribution_type)
    call set_num_extra_copies(mean_ens_handle, 0)
    mean_ens_handle%copies(1,:) = state_ens_handle%copies(mean_copy, :)
    call all_copies_to_all_vars(mean_ens_handle) ! this is a transpose-duplicate

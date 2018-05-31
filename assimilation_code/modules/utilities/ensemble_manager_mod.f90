@@ -18,7 +18,8 @@ use types_mod,         only : r8, i4, i8,  MISSING_R8
 use utilities_mod,     only : register_module, do_nml_file, do_nml_term, &
                               error_handler, E_ERR, E_MSG, do_output, &
                               nmlfileunit, find_namelist_in_file,        &
-                              check_namelist_read, timestamp, set_output
+                              check_namelist_read, timestamp, set_output, &
+                              open_file, close_file
 
 use time_manager_mod,  only : time_type, set_time
 use mpi_utilities_mod, only : task_count, my_task_id, send_to, receive_from, &
@@ -52,6 +53,23 @@ character(len=*), parameter :: source   = &
 character(len=*), parameter :: revision = "$Revision$"
 character(len=*), parameter :: revdate  = "$Date$"
 
+integer, parameter :: max_chunk_size = 8
+type chunk_type
+  integer :: num_obs
+  integer :: owner
+  integer, dimension(max_chunk_size) :: obs_list ! Make allocatable later?
+end type chunk_type
+
+type graph_info_type
+  character(len=240) :: colors_file  ! Filename containing the chunk size & 1:obs colors
+  integer :: chunk_size              ! How many obs per 'chunk'
+  integer :: num_colors              ! Number of colors
+  integer :: num_chunks              ! Number of chunks
+  integer, allocatable, dimension(:)   :: color_of_observation ! array of colors for observations 1->n
+  type(chunk_type), dimension(:), allocatable :: chunks ! Chunks of obs
+  integer, allocatable, dimension(:,:) :: pe_chunk_map ! Map from pe -> list of chunks for that PE (intermediate info, just good for debug)
+end type graph_info_type
+
 type ensemble_type
 
 !>@todo update documentation with regard to 'single_restart_file_[in,out]'
@@ -81,6 +99,9 @@ type ensemble_type
    integer                      :: transpose_type
    integer                      :: num_extras
    type(time_type)              :: current_time ! The current time, constant across the ensemble
+
+  ! Added for graph stuff (bpd6)
+  type(graph_info_type)    :: graph_info
 
 end type ensemble_type
 
@@ -139,23 +160,26 @@ contains
 
 subroutine init_ensemble_manager(ens_handle, num_copies, &
    num_vars, distribution_type_in, layout_type, transpose_type_in)
-
+use mpi
 type(ensemble_type), intent(out)            :: ens_handle
 integer,             intent(in)             :: num_copies
 integer(i8),         intent(in)             :: num_vars
 integer,             intent(in), optional   :: distribution_type_in
 integer,             intent(in), optional   :: layout_type
 integer,             intent(in), optional   :: transpose_type_in  ! no vars, transposable, transpose and duplicate
+!logical, intent(in), optional :: graph
 
 integer :: iunit, io
 integer :: transpose_type
+
+integer :: i
 
 ! Distribution type controls pe layout of storage; Default is 1. 1 is only one implemented.
 if(.not. present(distribution_type_in)) then
    ens_handle%distribution_type = 1
 else
    ! Check for error: only type 1 implemented for now
-   if(distribution_type_in /= 1) call error_handler(E_ERR, 'init_ensemble_manager', &
+   if((distribution_type_in /= 1) .and. (distribution_type_in /= 2)) call error_handler(E_ERR, 'init_ensemble_manager', &
       'only distribution_type 1 is implemented', source, revision, revdate)
    ens_handle%distribution_type = distribution_type_in
 endif
@@ -253,13 +277,205 @@ if(debug .and. my_task_id()==0) then
 endif
 
 ! Figure out how the ensemble copies are partitioned
+if (ens_handle%distribution_type == 2) then
+  call read_graph_info(ens_handle, "colors.txt") ! Switch the filename to a namelist variable later
+endif
 call set_up_ens_distribution(ens_handle)
+
+
 
 ens_handle%num_extras = 0 ! This can be changed by calling set_num_extra_copies
 
 if (debug) call print_ens_handle(ens_handle)
 
 end subroutine init_ensemble_manager
+
+!-----------------------------------------------------------------
+
+subroutine read_graph_info(ens_handle, filename)
+  use mpi
+  type(ensemble_type), intent(inout) :: ens_handle
+  character(len=*), intent(in) :: filename
+
+  ! Local variables:
+  integer :: infile, i
+
+  write(*,*) "GRAPH_DEBUG: num_vars = ", ens_handle%num_vars
+
+  ! Allocate the color map:
+  allocate(ens_handle%graph_info%color_of_observation(ens_handle%num_vars))
+
+  ! Open the file:
+  infile = open_file(filename)
+
+  ! Read in the chunk size:
+  read(infile,*) ens_handle%graph_info%chunk_size
+
+  ! Read in the colors, looping over all the obs:
+  do i = 1, ens_handle%num_vars
+    read(infile,*) ens_handle%graph_info%color_of_observation(i)
+  enddo
+
+  ! Calculate the number of colors: currently assumes that all color values are consecutive
+  ens_handle%graph_info%num_colors  = maxval(ens_handle%graph_info%color_of_observation)
+
+  ! Debug/testing
+  write(*,*) "GRAPH_DEBUG: Colors : ", ens_handle%graph_info%num_colors, ens_handle%num_vars
+
+  ! Now create the set of chunks and their mapping to observations:
+  call create_chunk_list(ens_handle)
+  call create_pe_chunk_map(ens_handle) ! Useful for debugging, not needed at runtime?
+
+  ! Close the file:
+ call  close_file(infile)
+
+end subroutine read_graph_info
+
+!-----------------------------------------------------------------
+
+subroutine create_chunk_list(ens_handle)
+  use mpi
+  type(ensemble_type), intent(inout) :: ens_handle
+
+  ! Local vars:
+  integer :: chunk_count
+  integer :: i,j
+  integer, dimension(:), allocatable :: color_sizes, chunks_per_color
+  integer :: chunk_index 
+  integer :: ob_index
+  integer :: remaining_obs, numRanks
+
+  integer :: num_colors, chunk_size ! For easier use
+
+  chunk_index = 1
+  ob_index = 0
+
+  ! Set the number of colors & chunk size aliases:
+  num_colors = ens_handle%graph_info%num_colors
+  chunk_size = ens_handle%graph_info%chunk_size
+
+  ! Allocate color_sizes (array of sizes for each color)
+  allocate(color_sizes(num_colors))
+  allocate(chunks_per_color(num_colors))
+
+  write(*,*) "Colors -- number of colors & chunk size = ", num_colors, chunk_size
+
+  ! Get the size and # of chunks of each color - this is a bit hackish, maybe ANY can work better?
+  do i = 1, num_colors
+    color_sizes(i) = sum(ens_handle%graph_info%color_of_observation, ens_handle%graph_info%color_of_observation==i) / i
+    chunks_per_color(i) = (color_sizes(i) + chunk_size - 1) / chunk_size
+
+    !write(*,*) "GRAPH: Color sizes (",i,") ",color_sizes(i)
+    !write(*,*) "GRAPH: Color chunks (",i,") ",chunks_per_color(i)
+  enddo
+
+  ! Get the total number of chunks:
+  chunk_count = sum(chunks_per_color)
+
+  ! allocate the chunk list:
+  allocate(ens_handle%graph_info%chunks(chunk_count))
+
+  ! Assign chunks
+  write(*,*) "Assigning chunks : ", num_colors, chunk_size, size(ens_handle%graph_info%chunks)
+
+  numRanks = task_count()
+  do i = 1, num_colors
+    remaining_obs = color_sizes(i)
+
+    do while (remaining_obs > 0)
+      write(*,*) "Remaining obs : ", remaining_obs, color_sizes(i)
+      if (remaining_obs > chunk_size) then
+        ens_handle%graph_info%chunks(chunk_index)%num_obs = chunk_size
+        ens_handle%graph_info%chunks(chunk_index)%owner = MOD(chunk_index-1, numRanks)
+
+        do j = 1, chunk_size
+          ens_handle%graph_info%chunks(chunk_index)%obs_list(j) = ob_index + j
+        enddo
+
+        remaining_obs = remaining_obs - chunk_size
+        chunk_index = chunk_index + 1
+        ob_index = ob_index + chunk_size
+      else
+        ens_handle%graph_info%chunks(chunk_index)%num_obs = remaining_obs
+        ens_handle%graph_info%chunks(chunk_index)%owner = MOD(chunk_index-1, numRanks)
+
+        do j = 1, remaining_obs
+          ens_handle%graph_info%chunks(chunk_index)%obs_list(j) = ob_index + j
+        enddo
+
+        chunk_index = chunk_index + 1
+        ob_index = ob_index + remaining_obs
+        remaining_obs = 0
+      endif
+    enddo
+  enddo
+
+!  ! Debug:
+  write(*,*) "Total of colors, chunks : ", sum(color_sizes), chunk_count
+  write(*,*) "Colors%chunk_size = ", chunk_size
+
+  do i = 1, size(ens_handle%graph_info%chunks)
+    write(*,*) "Chunk Assigment: ",i," -> ",ens_handle%graph_info%chunks(i)%owner, ens_handle%graph_info%chunks(i)%num_obs
+  enddo
+
+end subroutine create_chunk_list
+
+!-----------------------------------------------------------------
+
+subroutine create_pe_chunk_map(ens_handle)
+  type(ensemble_type), intent(inout) :: ens_handle
+
+  ! Local vars:
+  integer :: max_chunks_per_pe
+  integer :: taskloop, chunkloop
+  integer, dimension(:), allocatable :: chunks_per_pe
+  integer :: owner
+  integer :: i
+  integer :: num_tasks
+
+  ! Allocate the chunks_per_pe array
+  allocate(chunks_per_pe(task_count()))
+  chunks_per_pe = 0
+
+  ! Gotta be a better way of doing this, but this is fine for now:
+  do taskloop = 1, task_count()
+    do chunkloop = 1, size(ens_handle%graph_info%chunks)
+      if (ens_handle%graph_info%chunks(chunkloop)%owner == (taskloop-1)) then 
+         chunks_per_pe(taskloop) = chunks_per_pe(taskloop) + 1
+      endif
+    end do
+  end do
+
+  ! Print it all out for debugging:
+  do taskloop = 1, task_count()
+     write(*,*) "DEBUG: TaskLoop = ", taskloop, chunks_per_pe(taskloop)
+  end do
+
+  ! Now allocate the pe_chunk_map
+  max_chunks_per_pe = maxval(chunks_per_pe)
+  num_tasks = task_count()
+  allocate(ens_handle%graph_info%pe_chunk_map(num_tasks,  max_chunks_per_pe))
+
+  ! Now actually create the map - again, bad way of doing this.. clean up once
+  ! working
+  ens_handle%graph_info%pe_chunk_map = 0
+  do chunkloop = 1, size(ens_handle%graph_info%chunks)
+    owner = ens_handle%graph_info%chunks(chunkloop)%owner + 1
+    do i = 1, max_chunks_per_pe
+       if (ens_handle%graph_info%pe_chunk_map(owner, i) == 0) then
+            ens_handle%graph_info%pe_chunk_map(owner, i) = chunkloop
+            exit
+       endif
+    enddo 
+  enddo
+
+  ! Debug
+  write(*,*) "DEBUG: ChunkMap => ", my_task_id(), ens_handle%graph_info%pe_chunk_map(my_task_id()+1, 1:2)
+
+
+
+end subroutine create_pe_chunk_map
+
 
 !-----------------------------------------------------------------
 
@@ -387,6 +603,7 @@ if(ens_handle%my_pe == sending_pe) then
    endif
  
    ! Otherwise, must send vars and possibly time to storing pe
+   write(*,*) "SendTo: ", owner, map_pe_to_task(ens_handle, owner)
    call send_to(map_pe_to_task(ens_handle, owner), vars, mtime)
 
 endif
@@ -585,8 +802,20 @@ subroutine end_ensemble_manager(ens_handle)
 type(ensemble_type), intent(inout) :: ens_handle
 
 ! Free up the allocated storage
-deallocate(ens_handle%my_copies, ens_handle%time, ens_handle%my_vars, &
-           ens_handle%copies, ens_handle%task_to_pe_list, ens_handle%pe_to_task_list)
+!deallocate(ens_handle%my_copies, ens_handle%time, ens_handle%my_vars, &
+!           ens_handle%copies, ens_handle%task_to_pe_list, ens_handle%pe_to_task_list)
+write(*,*) "Deallocate 1..."
+if (allocated(ens_handle%my_copies)) deallocate(ens_handle%my_copies)
+write(*,*) "Deallocate 2..."
+if (allocated(ens_handle%time)) deallocate(ens_handle%time)
+write(*,*) "Deallocate 3..."
+if (allocated(ens_handle%my_vars)) deallocate(ens_handle%my_vars)
+write(*,*) "Deallocate 4..."
+if (allocated(ens_handle%copies)) deallocate(ens_handle%copies)
+write(*,*) "Deallocate 5..."
+if (allocated(ens_handle%task_to_pe_list)) deallocate(ens_handle%task_to_pe_list)
+write(*,*) "Deallocate 6..."
+if (allocated(ens_handle%pe_to_task_list)) deallocate(ens_handle%pe_to_task_list)
 
 if(allocated(ens_handle%vars)) deallocate(ens_handle%vars)
 
@@ -718,59 +947,144 @@ subroutine set_up_ens_distribution(ens_handle)
 ! different options. Only distribution_type 1 is implemented.
 ! This puts every nth var or copy on a given processor where n is the
 ! total number of processes.
-
+use mpi
 type (ensemble_type),  intent(inout)  :: ens_handle
 
-integer :: num_per_pe_below, num_left_over, i
+integer :: num_per_pe_below, num_left_over, i, num_vars, chunk
 
-! Option 1: Maximum separation for both vars and copies
-! Compute the total number of copies I'll get for var complete
-num_per_pe_below = ens_handle%num_copies / num_pes
-num_left_over = ens_handle%num_copies - num_per_pe_below * num_pes
-if(num_left_over >= (ens_handle%my_pe + 1)) then
-   ens_handle%my_num_copies = num_per_pe_below + 1
+if (ens_handle%distribution_type == 2) then
+  write(*,*) "Setup: GRAPH MODE - assigning chunks"
+  ! For now, until we understand this better, just store all:
+  num_per_pe_below = ens_handle%num_copies / num_pes
+  num_left_over = ens_handle%num_copies - num_per_pe_below * num_pes
+  if(num_left_over >= (ens_handle%my_pe + 1)) then
+     ens_handle%my_num_copies = num_per_pe_below + 1
+  else
+     ens_handle%my_num_copies = num_per_pe_below
+  endif
+  write(*,*) "Setup: ens_handle%my_num_copies = ", ens_handle%my_num_copies
+
+  ! Do the same thing for copy complete:
+  !num_per_pe_below = ens_handle%num_vars / num_pes
+  !num_left_over = ens_handle%num_vars - num_per_pe_below * num_pes
+  !if(num_left_over >= (ens_handle%my_pe + 1)) then
+  !   ens_handle%my_num_vars = num_per_pe_below + 1
+  !else
+  !   ens_handle%my_num_vars = num_per_pe_below
+  !endif
+  !if (my_task_id() == 0) then
+  !   ens_handle%my_num_vars = 8
+  !else
+  !   ens_handle%my_num_vars = 0
+  !endif
+  
+  ! Calculate how many vars for this rank
+  num_vars = 0
+  do i = 1, size(ens_handle%graph_info%pe_chunk_map, 2)
+    chunk = ens_handle%graph_info%pe_chunk_map(my_task_id()+1, i)
+    if (chunk /= 0) then
+       num_vars = num_vars + ens_handle%graph_info%chunks(chunk)%num_obs
+       !write(*,*) "CHUNK_VARS: ", chunk, ens_handle%graph_info%chunks(chunk)%num_obs
+    endif
+  end do
+  ens_handle%my_num_vars = num_vars 
+
+
+  write(*,*) "Setup: ens_handle%my_num_vars   = ", ens_handle%my_num_vars
+  write(*,*) "Setup: transpose_type = ", ens_handle%transpose_type
+  write(*,*) "Allocate: ", my_task_id(), ens_handle%num_copies, ens_handle%my_num_vars
+
+
+  !Allocate the storage for copies and vars all at once
+  allocate(ens_handle%my_copies(ens_handle%my_num_copies),              &
+           ens_handle%time     (ens_handle%my_num_copies),                 &
+           ens_handle%my_vars  (ens_handle%my_num_vars),                &
+           ens_handle%copies   (ens_handle%num_copies, ens_handle%my_num_vars))
+           !ens_handle%copies   (ens_handle%num_copies, 8))!ens_handle%my_num_vars))
+
+  if(ens_handle%transpose_type == 2) then
+     allocate(ens_handle%vars(ens_handle%num_vars, ens_handle%my_num_copies))
+  endif
+
+  if(ens_handle%transpose_type == 3) then
+     allocate(ens_handle%vars(ens_handle%num_vars,1))
+  endif
+
+  ! Set everything to missing value
+  ens_handle%copies = MISSING_R8
+
+  ! Fill out the number of my members
+  call get_copy_list(ens_handle%num_copies, ens_handle%my_pe, ens_handle%my_copies, i)
+
+  ! Initialize times to missing
+  ! This is only initializing times for pes that have ensemble copies
+  do i = 1, ens_handle%my_num_copies
+     ens_handle%time(i) = set_time(0, 0)
+  end do
+
+  ! Fill out the number of my vars
+  call get_var_list(ens_handle%num_vars, ens_handle%my_pe, ens_handle%my_vars, i, ens_handle)
+
+  ! Debug only:
+  !call MPI_Finalize(i)
+  !stop
+
+
 else
-   ens_handle%my_num_copies = num_per_pe_below
+
+  ! Option 1: Maximum separation for both vars and copies
+  ! Compute the total number of copies I'll get for var complete
+  num_per_pe_below = ens_handle%num_copies / num_pes
+  num_left_over = ens_handle%num_copies - num_per_pe_below * num_pes
+  if(num_left_over >= (ens_handle%my_pe + 1)) then
+     ens_handle%my_num_copies = num_per_pe_below + 1
+  else
+     ens_handle%my_num_copies = num_per_pe_below
+  endif
+  write(*,*) "Setup: ens_handle%my_num_copies = ", ens_handle%my_num_copies
+
+  ! Do the same thing for copy complete: figure out which vars I get
+  num_per_pe_below = ens_handle%num_vars / num_pes
+  num_left_over = ens_handle%num_vars - num_per_pe_below * num_pes
+  if(num_left_over >= (ens_handle%my_pe + 1)) then
+     ens_handle%my_num_vars = num_per_pe_below + 1
+  else
+     ens_handle%my_num_vars = num_per_pe_below
+  endif
+  write(*,*) "Setup: ens_handle%my_num_vars   = ", ens_handle%my_num_vars
+  write(*,*) "Setup: transpose_type = ", ens_handle%transpose_type
+
+
+  !Allocate the storage for copies and vars all at once
+  allocate(ens_handle%my_copies(ens_handle%my_num_copies),              &
+           ens_handle%time     (ens_handle%my_num_copies),                 &
+           ens_handle%my_vars  (ens_handle%my_num_vars),                &
+           ens_handle%copies   (ens_handle%num_copies, ens_handle%my_num_vars))
+
+
+  if(ens_handle%transpose_type == 2) then
+     allocate(ens_handle%vars(ens_handle%num_vars, ens_handle%my_num_copies))
+  endif
+
+  if(ens_handle%transpose_type == 3) then
+     allocate(ens_handle%vars(ens_handle%num_vars,1))
+  endif
+
+  ! Set everything to missing value
+  ens_handle%copies = MISSING_R8
+
+  ! Fill out the number of my members
+  call get_copy_list(ens_handle%num_copies, ens_handle%my_pe, ens_handle%my_copies, i)
+
+  ! Initialize times to missing
+  ! This is only initializing times for pes that have ensemble copies
+  do i = 1, ens_handle%my_num_copies
+     ens_handle%time(i) = set_time(0, 0)
+  end do
+
+  ! Fill out the number of my vars
+  call get_var_list(ens_handle%num_vars, ens_handle%my_pe, ens_handle%my_vars, i, ens_handle)
 endif
-
-! Do the same thing for copy complete: figure out which vars I get
-num_per_pe_below = ens_handle%num_vars / num_pes
-num_left_over = ens_handle%num_vars - num_per_pe_below * num_pes
-if(num_left_over >= (ens_handle%my_pe + 1)) then
-   ens_handle%my_num_vars = num_per_pe_below + 1
-else
-   ens_handle%my_num_vars = num_per_pe_below
-endif
-
-!Allocate the storage for copies and vars all at once
-allocate(ens_handle%my_copies(ens_handle%my_num_copies),              &
-         ens_handle%time     (ens_handle%my_num_copies),                 &
-         ens_handle%my_vars  (ens_handle%my_num_vars),                &
-         ens_handle%copies   (ens_handle%num_copies, ens_handle%my_num_vars))
-
-
-if(ens_handle%transpose_type == 2) then
-   allocate(ens_handle%vars(ens_handle%num_vars, ens_handle%my_num_copies))
-endif
-
-if(ens_handle%transpose_type == 3) then
-   allocate(ens_handle%vars(ens_handle%num_vars,1))
-endif
-
-! Set everything to missing value
-ens_handle%copies = MISSING_R8
-
-! Fill out the number of my members
-call get_copy_list(ens_handle%num_copies, ens_handle%my_pe, ens_handle%my_copies, i)
-
-! Initialize times to missing
-! This is only initializing times for pes that have ensemble copies
-do i = 1, ens_handle%my_num_copies
-   ens_handle%time(i) = set_time(0, 0)
-end do
-
-! Fill out the number of my vars
-call get_var_list(ens_handle%num_vars, ens_handle%my_pe, ens_handle%my_vars, i)
 
 end subroutine set_up_ens_distribution
 
@@ -854,8 +1168,7 @@ end function get_max_num_copies
 
 !-----------------------------------------------------------------
 
-subroutine get_var_list(num_vars, pe, var_list, pes_num_vars)
-!!!subroutine get_var_list(num_vars, pe, var_list, pes_num_vars, distribution_type)
+subroutine get_var_list(num_vars, pe, var_list, pes_num_vars, ens_handle)
 
 ! Returns a list of the vars stored by process pe when copy complete
 ! and the number of these vars.
@@ -866,26 +1179,64 @@ integer(i8),   intent(in)  :: num_vars
 integer,       intent(in)  :: pe
 integer(i8),   intent(out) :: var_list(:)
 integer,       intent(out) :: pes_num_vars
-!!!integer, intent(in) :: distribution_type
+type(ensemble_type), intent(in) :: ens_handle
 
-integer :: num_per_pe_below, num_left_over, i
 
-! Figure out number of vars stored by pe
-num_per_pe_below = num_vars / num_pes
-num_left_over = num_vars - num_per_pe_below * num_pes
-if(num_left_over >= (pe + 1)) then
-   pes_num_vars = num_per_pe_below + 1
+integer :: num_per_pe_below, num_left_over, i, chunk, num_obs_in_chunk
+integer :: current 
+
+current = 1
+
+if (ens_handle%distribution_type == 2) then
+  do i = 1, size(ens_handle%graph_info%pe_chunk_map, 2)
+    chunk = ens_handle%graph_info%pe_chunk_map(pe + 1, i)
+
+    if (chunk /= 0) then
+      num_obs_in_chunk = ens_handle%graph_info%chunks(chunk)%num_obs
+      var_list(current:current+num_obs_in_chunk) = ens_handle%graph_info%chunks(chunk)%obs_list(1:num_obs_in_chunk)
+      current = current + num_obs_in_chunk 
+      pes_num_vars = current - 1
+    endif
+  end do
 else
-   pes_num_vars = num_per_pe_below
-endif
+  ! Figure out number of vars stored by pe
+  num_per_pe_below = num_vars / num_pes
+  num_left_over = num_vars - num_per_pe_below * num_pes
+  if(num_left_over >= (pe + 1)) then
+     pes_num_vars = num_per_pe_below + 1
+  else
+     pes_num_vars = num_per_pe_below
+  endif
 
-! Fill out the pe's vars
-do i = 1, pes_num_vars
-   var_list(i) = (pe + 1) + (i - 1) * num_pes
-end do
+  ! Fill out the pe's vars
+  do i = 1, pes_num_vars
+     var_list(i) = (pe + 1) + (i - 1) * num_pes
+  end do
+endif
 
 end subroutine get_var_list
 
+!-----------------------------------------------------------------
+!
+!subroutine get_var_list_graph(ens_handle)
+!type(ensemble_type), intent(inout) :: ens_handle
+!
+!integer :: i, chunk, num_obs_in_chunk
+!integer :: current = 1
+!
+!! Fill out the pe's vars
+!do i = 1, size(ens_handle%graph_info%pe_chunk_map, 2)
+!  chunk = ens_handle%graph_info%pe_chunk_map(my_task_id() + 1, i)
+!
+!  if (chunk /= 0) then
+!    num_obs_in_chunk = ens_handle%graph_info%chunks(chunk)%num_obs
+!    var_list(current:current+num_obs_in_chunk) = ens_handle%graph_info%chunks(chunk)%obs_list(1:num_obs_in_chunk)
+!    current = current + num_obs_in_chunk 
+!  endif
+!end do
+!
+!end subroutine get_var_list_graph
+!
 !-----------------------------------------------------------------
 
 subroutine get_copy_list(num_copies, pe, copy_list, pes_num_copies)
@@ -898,6 +1249,7 @@ subroutine get_copy_list(num_copies, pe, copy_list, pes_num_copies)
 integer,   intent(in)    :: num_copies, pe
 integer,   intent(out)   :: copy_list(:), pes_num_copies
 !!!integer, intent(in) :: distribution_type
+
 
 integer :: num_per_pe_below, num_left_over, i
 
@@ -1029,6 +1381,8 @@ integer     :: max_num_vars, max_num_copies, num_copies_to_receive
 integer     :: sending_pe, recv_pe, k, sv, num_vars_to_send, copy
 integer     :: global_ens_index
 
+integer :: debug_pe
+
 ! only output if there is a label
 if (present(label)) then
    call timestamp_message('vars_to_copies start: '//label, alltasks=.true.)
@@ -1099,7 +1453,8 @@ if ( use_var2copy_rec_loop .eqv. .true. ) then ! use updated version
               else
                  if (num_copies_to_receive > 0) then
                     ! Otherwise, receive this part from the sending pe
-                    call receive_from(map_pe_to_task(ens_handle, sending_pe), transfer_temp(1:my_num_vars))
+                    debug_pe = map_pe_to_task(ens_handle, sending_pe)
+                    call receive_from(debug_pe, transfer_temp(1:my_num_vars))
    
                     ! Copy the transfer array to my local storage
                     ens_handle%copies(global_ens_index, :) = transfer_temp(1:my_num_vars)
@@ -1109,14 +1464,16 @@ if ( use_var2copy_rec_loop .eqv. .true. ) then ! use updated version
         end do RECEIVE_FROM_EACH
      else
         ! I'm the sending PE, figure out what vars of my copies I'll send.
-        call get_var_list(num_vars, recv_pe, var_list, num_vars_to_send)
+        call get_var_list(num_vars, recv_pe, var_list, num_vars_to_send, ens_handle)
        
         do k = 1, my_num_copies
            do sv = 1, num_vars_to_send
               ! Have to use temp because %var section is not contiguous storage
               transfer_temp(sv) = ens_handle%vars(var_list(sv), k)
            enddo
-           call send_to(map_pe_to_task(ens_handle, recv_pe), transfer_temp(1:num_vars_to_send))
+           debug_pe = map_pe_to_task(ens_handle, recv_pe)
+           !call send_to(map_pe_to_task(ens_handle, recv_pe), transfer_temp(1:num_vars_to_send))
+           call send_to(debug_pe, transfer_temp(1:num_vars_to_send))
         end do
       
      endif
@@ -1130,7 +1487,7 @@ else ! use older version
     if(my_pe == sending_pe) then
          ! Figure out what piece to send to each other PE and send it
          SEND_TO_EACH: do recv_pe = 0, num_pes - 1
-           call get_var_list(num_vars, recv_pe, var_list, num_vars_to_send)
+           call get_var_list(num_vars, recv_pe, var_list, num_vars_to_send, ens_handle)
 
            if (num_vars_to_send > 0) then
              ! Loop to send these vars for each copy stored on my_pe
@@ -1205,6 +1562,8 @@ integer     :: max_num_vars, max_num_copies, num_vars_to_receive
 integer     :: sending_pe, recv_pe, k, sv, copy, num_copies_to_send
 integer     :: global_ens_index
 
+integer :: debug_pe
+
 ! only output if there is a label
 if (present(label)) then
    call timestamp_message('copies_to_vars start: '//label, alltasks=.true.)
@@ -1265,13 +1624,14 @@ SENDING_PE_LOOP: do sending_pe = 0, num_pes - 1
    if (my_pe /= sending_pe ) then
 
       ! figure out what piece to recieve from each other PE and recieve it
-      call get_var_list(num_vars, sending_pe, var_list, num_vars_to_receive)
+      call get_var_list(num_vars, sending_pe, var_list, num_vars_to_receive, ens_handle)
 
       if( num_vars_to_receive > 0 ) then
          ! Loop to receive these vars for each copy stored on my_pe
          ALL_MY_COPIES_RECV_LOOP: do k = 1, my_num_copies
 
-            call receive_from(map_pe_to_task(ens_handle, sending_pe), transfer_temp(1:num_vars_to_receive))
+            debug_pe = map_pe_to_task(ens_handle, sending_pe) 
+            call receive_from(debug_pe, transfer_temp(1:num_vars_to_receive))
             ! Copy the transfer array to my local storage
             do sv = 1, num_vars_to_receive
                ens_handle%vars(var_list(sv), k) = transfer_temp(sv)
@@ -1291,13 +1651,14 @@ SENDING_PE_LOOP: do sending_pe = 0, num_pes - 1
                if (my_num_vars > 0) then
                   transfer_temp(1:my_num_vars) = ens_handle%copies(copy_list(copy), :)
                   ! Have to  use temp because %copies section is not contiguous storage
-                  call send_to(map_pe_to_task(ens_handle, recv_pe), transfer_temp(1:my_num_vars))
+                  debug_pe = map_pe_to_task(ens_handle, recv_pe)
+                  call send_to(debug_pe, transfer_temp(1:my_num_vars))
                endif
 
             else
 
                ! figure out what piece to recieve from myself and recieve it
-               call get_var_list(num_vars, sending_pe, var_list, num_vars_to_receive)
+               call get_var_list(num_vars, sending_pe, var_list, num_vars_to_receive, ens_handle)
                do k = 1,  my_num_copies
                   ! sending to yourself so just copy
                   global_ens_index = ens_handle%my_copies(k)
@@ -1322,7 +1683,7 @@ RECEIVING_PE_LOOP: do recv_pe = 0, num_pes - 1
 
       ! Figure out what piece to receive from each other PE and receive it
       RECEIVE_FROM_EACH: do sending_pe = 0, num_pes - 1
-         call get_var_list(num_vars, sending_pe, var_list, num_vars_to_receive)
+         call get_var_list(num_vars, sending_pe, var_list, num_vars_to_receive, ens_handle)
 
          ! Loop to receive these vars for each copy stored on my_pe
          ALL_MY_COPIES: do k = 1, my_num_copies
@@ -1648,18 +2009,27 @@ type(ensemble_type), intent(inout)    :: ens_handle
 integer,             intent(in)       :: nEns_members
 integer,             intent(inout)    :: layout_type
 
-if (layout_type /= 1 .and. layout_type /=2) call error_handler(E_ERR,'assign_tasks_to_pes', &
-    'not a valid layout_type, must be 1 (standard) or 2 (round-robin)',source,revision,revdate)
+if (layout_type /= 1 .and. layout_type /=2 .and. layout_type /= 3) call error_handler(E_ERR,'assign_tasks_to_pes', &
+    'not a valid layout_type, must be 1 (standard) or 2 (round-robin) or 3 (chunked-round-robin)',source,revision,revdate)
 
 if (tasks_per_node >= num_pes) then ! all tasks are on one node, don't try to spread them out
-   call simple_layout(ens_handle, num_pes)
+   ! Over-riding for now:
+   !call simple_layout(ens_handle, num_pes)
+   call chunk_round_robin(ens_handle)
    return
 endif
 
 if (layout_type == 1) then 
-   call simple_layout(ens_handle, num_pes)
-else
-   call round_robin(ens_handle)
+   ! Over-riding for now:
+   !call simple_layout(ens_handle, num_pes)
+   call chunk_round_robin(ens_handle)
+elseif (layout_type == 2) then
+   ! NOTE: We're over-riding this for now so that I can run both versions with
+   ! the same namelist.  FIXME.  bpd6
+   !call round_robin(ens_handle)
+   call chunk_round_robin(ens_handle)
+else 
+   call chunk_round_robin(ens_handle)
 endif
 
 end subroutine assign_tasks_to_pes
@@ -1714,6 +2084,55 @@ call create_pe_to_task_list(ens_handle)
 
 end subroutine round_robin
 
+!------------------------------------------------------------------------------
+
+subroutine chunk_round_robin(ens_handle)
+
+! Modification of the round-robin MPI task layout to use chunks of N, rather
+! than single obs
+
+type(ensemble_type), intent(inout)   :: ens_handle
+
+integer                              :: last_node_task_number, num_nodes
+integer                              :: i, j
+integer, allocatable                 :: mycount(:)
+
+! Find number of nodes and find number of tasks on last node
+call calc_tasks_on_each_node(num_nodes, last_node_task_number)
+
+write(*,*) "INFO: CHUNK_ROUND_ROBIN : ", num_nodes, last_node_task_number
+!stop
+
+allocate(mycount(num_nodes))
+
+mycount(:) = 1  ! keep track of the pes assigned to each node
+i = 0         ! keep track of the # of pes assigned
+
+do while (i < num_pes)   ! until you run out of processors
+   do j = 1, num_nodes   ! loop around the nodes
+
+      if(j == num_nodes) then  ! special case for the last node - it could have fewer tasks than the other nodes
+         if(mycount(j) <= last_node_task_number) then
+            ens_handle%task_to_pe_list(tasks_per_node*(j-1) + mycount(j)) = i
+            mycount(j) = mycount(j) + 1
+            i = i + 1
+         endif
+      else
+         if(mycount(j) <= tasks_per_node) then
+            ens_handle%task_to_pe_list(tasks_per_node*(j-1) + mycount(j)) = i
+            mycount(j) = mycount(j) + 1
+            i = i + 1
+         endif
+      endif
+
+   enddo
+enddo
+
+deallocate(mycount)
+
+call create_pe_to_task_list(ens_handle)
+
+end subroutine chunk_round_robin
 !-------------------------------------------------------------------------------
 
 subroutine create_pe_to_task_list(ens_handle)

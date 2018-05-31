@@ -83,7 +83,7 @@ subroutine get_obs_ens_distrib_state(ens_handle, obs_fwd_op_ens_handle, &
    OBS_ERR_VAR_COPY,   OBS_VAL_COPY,   OBS_KEY_COPY, &
    OBS_GLOBAL_QC_COPY, OBS_EXTRA_QC_COPY, OBS_MEAN_COPY, &
    OBS_VAR_COPY, isprior, prior_qc_copy)
-
+use mpi
 type(ensemble_type),     intent(inout) :: ens_handle  !< state ensemble handle
 type(ensemble_type),     intent(inout) :: obs_fwd_op_ens_handle  !< observation forward operator handle
 type(ensemble_type),     intent(inout) :: qc_ens_handle  !< quality control handle
@@ -122,6 +122,8 @@ type(time_type) :: dummy_time
 
 type(obs_def_type) :: obs_def
 type(obs_type)     :: observation
+
+integer :: iError
 
 ! IMPORTANT, IT IS ASSUMED THAT ACTUAL ENSEMBLES COME FIRST
 ! It is also assumed that the ensemble members are in the same
@@ -287,6 +289,8 @@ else ! distributed state
       dummy_time, isprior, istatus, &
       assimilate_this_ob, evaluate_this_ob, ens_handle, num_copies_to_calc, my_copy_indices, expected_obs)
 
+    !write(*,*) "ExpectedObs: ", j, sum(expected_obs)
+
       obs_fwd_op_ens_handle%copies(1:num_copies_to_calc, j) = expected_obs
 
    ! collect dart qc
@@ -379,6 +383,10 @@ end do QC_LOOP
 if (isprior) call get_single_copy(obs_fwd_op_ens_handle, OBS_GLOBAL_QC_COPY, prior_qc_copy)
 
 deallocate(expected_obs, istatus, my_copy_indices)
+
+!do j = 1, obs_fwd_op_ens_handle%my_num_vars
+!  write(*,*) "Checksum (ObsFwd) : ", j, sum(obs_fwd_op_ens_handle%copies(:,j))
+!end do
 
 end subroutine get_obs_ens_distrib_state
 

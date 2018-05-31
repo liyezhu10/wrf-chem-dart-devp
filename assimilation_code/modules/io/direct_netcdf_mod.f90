@@ -2084,6 +2084,8 @@ if (state_ens_handle%distribution_type == 1) then
    ! MPI vector data type or packing should be used here.
    allocate(buffer(finish - start + 1))
    buffer = state_ens_handle%copies(ensemble_member, start:finish)
+   !bpd6
+   write(*,*) "NetCDF DEBUG: ", recv_pe, map_pe_to_task(state_ens_handle,recv_pe)
    call send_to(map_pe_to_task(state_ens_handle, recv_pe), buffer)
    deallocate(buffer)
 

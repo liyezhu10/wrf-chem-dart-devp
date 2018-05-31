@@ -167,6 +167,7 @@ real(r8), parameter :: EDGE_TOLERANCE = 100.0_r8 * epsilon(0.0_r8)
 
 ! Option for verification using exhaustive search
 logical :: COMPARE_TO_CORRECT = .false.    ! normally false
+!logical :: COMPARE_TO_CORRECT = .true.    ! normally false
 
 !-----------------------------------------------------------------
 ! Namelist with default values
@@ -1503,6 +1504,7 @@ if (gc%gtt(bt)%num == 0) return
 
 ! local variable for what the maxdist is in this particular case.
 this_maxdist = gc%gtt(bt)%maxdist
+!write(*,*) "maxdist = ", this_maxdist
 
 !--------------------------------------------------------------
 ! For validation, it is useful to be able to compare against exact
@@ -1510,6 +1512,7 @@ this_maxdist = gc%gtt(bt)%maxdist
 if(COMPARE_TO_CORRECT) then
    cnum_close = 0
    do i = 1, gc%gtt(bt)%num 
+      !write(*,*) "COMPARE_TO_CORRECT(A): ", gc%gtt(bt)%num, i
       if (locs(i)%which_vert /= base_loc%which_vert) then
          this_dist = get_dist(base_loc, locs(i), base_type, loc_qtys(i), &
                      no_vert = .true.)
@@ -1517,10 +1520,13 @@ if(COMPARE_TO_CORRECT) then
          this_dist = get_dist(base_loc, locs(i), base_type, loc_qtys(i))
       endif
       if(this_dist <= this_maxdist) then
+         !write(*,'(A,I,F,F)') "C2C(Close): ", i, this_dist, this_maxdist
          ! Add this location to correct list
          cnum_close = cnum_close + 1
          cclose_ind(cnum_close) = i
          cdist(cnum_close) = this_dist
+       else
+         !write(*,'(A,I,F,F)') "C2C(-----): ", i, this_dist, this_maxdist
       endif
    end do
 endif
@@ -1581,6 +1587,7 @@ do j = 1, nlat
             if(.not. present(dist)) then
                ! Dist isn't present; add this ob to list without computing distance
                num_close = num_close + 1
+               !write(*,*) "Distance Not Present - adding to list : ", t_ind, num_close
                close_ind(num_close) = t_ind
             else
                if(base_loc%which_vert == locs(t_ind)%which_vert) then
@@ -1594,6 +1601,7 @@ do j = 1, nlat
 
                ! If this locations distance is less than cutoff, add it to the list
                if(this_dist <= this_maxdist) then
+                  !write(*,*) "Location comparison : ", this_dist, this_maxdist
                   num_close = num_close + 1
                   close_ind(num_close) = t_ind
                   dist(num_close) = this_dist
@@ -1606,6 +1614,7 @@ end do
 
 !------------------------ Verify by comparing to exhaustive search --------------
 if(COMPARE_TO_CORRECT) then
+   write(*,*) "C2C(Check) : ", num_close, cnum_close
    ! Do comparisons against full search
    if((num_close /= cnum_close) .and. present(dist)) then
       write(msgstring, *) 'get_close (', num_close, ') should equal exhaustive search (', cnum_close, ')'
