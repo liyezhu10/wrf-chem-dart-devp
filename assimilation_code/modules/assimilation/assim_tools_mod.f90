@@ -2460,7 +2460,7 @@ select case (GIGG_type)
  case (2)   ! gamma ens prior, inverse gamma obs likelihood
    !Define type 2 prior and ob relative variance
    T2Pr=prior_var/(prior_mean**2+prior_var)
-   T2Rr=1/(1/T1Rr+1)
+   T2Rr=1/((1/T1Rr)+1)
    !Define the GIG gain
    GIG_gain=T2Pr/(T2Pr+T2Rr)
    inv_prior_mean=1/prior_mean
@@ -2470,41 +2470,29 @@ select case (GIGG_type)
    new_mean=1/wk1;
 
    !Compute obs_inc - the correction to the existing ensemble
-   !First compute mean and type 1 relative variance of gamma distribution from which perturbed obs will be drawn
-   wk1=(1/T2Rr)+2
-   !alpha is the same as k in Bishop (2016)
-   k_gamma=wk1
-   T1Rr_GIG_PO=1/wk1
-   y_GIG_mean_PO=T2Rr*wk1*obs
-   theta=y_GIG_mean_PO/k_gamma
-   y_GIG_var_PO=k_gamma*theta**2
-
-   !Now compute the perturbed observations and the normalized perturbations
+    !first compute required shape parameters   
+   k_prior=(1/T2Pr)-1   !shape parameter for gamma approximation to prior
+   k_gig=(1/T2Rr)+1     !shape parameter for perturbations to be added to forecast
+   k_post=k_prior+k_gig !shape parameter for posterior distribution of gig assumptions satisfied
+    !now compute rescaling factor to ensure perturbed forecasts have posterior mean
+   rescale=(k_prior*new_mean)/(k_post*prior_mean)
+   !Now perturb the forecast perturbations so that their shape parameter would be the same as the posterior
+   theta_gig=prior_mean/k_prior  !note that theta_gig=theta_mean as required by summation theorem
+   wk_samp_mean=0                !summation variable to compute sample mean
    do i=1,ens_size
-if (theta < 0) then
+if (theta_gig < 0) then
    print *, 'correcting negative theta: ', theta
-   theta = -theta
+   theta_gig = 10**(-10)/k_gig
 endif
-       y_GIG_PO(i)=random_gamma(gigg_ran_seq,k_gamma,theta)
+       y_anal_wk(i)=rescale*(ens(i)+random_gamma(gigg_ran_seq,k_gig,theta_gig))
+       wk_samp_mean=wk_samp_mean+y_anal_wk(i)
    enddo
-   wk1=0;
-   do i=1,ens_size
-       wk1=wk1+y_GIG_PO(i)
-   enddo
-
-   y_GIG_sample_mean_PO=wk1/ens_size
-   nobs_GIG=1/sqrt(y_GIG_mean_PO**2-2*y_GIG_var_PO)
-   nfcst=1/sqrt(prior_mean**2+prior_var)
-   !Now create normalized fcst and observation perturbations using equation (8) of Bishop (2016)
-   do i=1,ens_size
-      ny_PO(i)=(y_GIG_PO(i)-y_GIG_sample_mean_PO)*nobs_GIG
-      nfcst_perts(i)=(ens(i)-prior_mean)*nfcst
-      nanal_perts(i)=nfcst_perts(i)+GIG_gain*(ny_PO(i)-nfcst_perts(i))
-   enddo
-
-   !Now create obs_inc=anal_ens-ens for GIG case where anal_ens=nanal_perts*new_mean + new_mean
-
-   obs_inc = (nanal_perts*new_mean + new_mean) - ens
+   !correct degradation in posterior mean associated with sampling
+   wk_samp_mean=wk_samp_mean/ens_size
+   correction_ratio=new_mean/wk_samp_mean
+   y_anal=correction_ratio*y_anal_wk
+   !create the perturbations (obs_inc) that when added to prior turn it into the gig posterior
+   obs_inc = y_anal - ens
 
  case (3)   ! inv gamma ens prior, gamma obs likelihood
    !Define type 2 prior relative variance
