@@ -133,10 +133,11 @@ character(len=*), parameter :: revdate  = "$Date$"
 !      6 = deterministic draw from posterior with fixed kurtosis
 !      8 = Rank Histogram Filter (see Anderson 2011)
 !     (9 = Localized Particle Filter (see Poterjoy 2016), in assim_tools_mod.pf.f90)
-!     10 = GIGG, Craig Bishop.  Can do the following subtypes:
-!          "Gauss_Gauss"     gaussian prior, gaussian observation likelihood (default?)
-!          "Gamma_InvGamma"  gamma prior, inverse-gamma observation likelihood
-!          "InvGamma_Gamma"  inverse-gamma prior, gamma observation likelihood
+!
+!     100 = GIGG, Craig Bishop. Detect interior type from observation quantity (NOT YET IMPLEMENTED) 
+!     101 ="Gauss_Gauss"     gaussian prior, gaussian observation likelihood (default?)
+!     102 ="Gamma_InvGamma"  gamma prior, inverse-gamma observation likelihood
+!     103 ="InvGamma_Gamma"  inverse-gamma prior, gamma observation likelihood
 !      
 !
 !  special_localization_obs_types -> Special treatment for the specified observation types
@@ -1341,11 +1342,11 @@ else
       call obs_increment_boxcar(ens, ens_size, obs, obs_var, obs_inc, rel_weights)
     case (8) 
       call obs_increment_rank_histogram(ens, ens_size, prior_var, obs, obs_var, obs_inc)
-    case (10)
+    case (100, 101, 102, 103)
       call obs_increment_GIGG(ens, ens_size, prior_mean, prior_var, obs, obs_var, quantity, obs_inc)
     case default
       call error_handler(E_ERR,'obs_increment', &
-                 'Unexpected error: Illegal value of filter_kind in assim_tools namelist [1-8,10 OK]', &
+                 'Unexpected error: Illegal value of filter_kind in assim_tools namelist [1-8, 100-103 OK]', &
                  source, revision, revdate)
    end select
 endif
@@ -2426,11 +2427,24 @@ real(r8) :: y_GIG_var_PO,y_IGG_var_PO,T2Rr_IGG_PO
 real(r8) :: alpha,theta,lambda,beta,k_gamma
 real(r8) :: nanal_perts(ens_size),nfcst_perts(ens_size),ny_PO(ens_size),nfcst
 real(r8) :: y_GIG_PO(ens_size),y_IGG_PO(ens_size)
+real(r8) :: k_gig, k_post, k_prior, rescale, theta_gig, wk_samp_mean, correction_ratio
+real(r8) :: y_anal_wk(ens_size), y_anal(ens_size), prior_mean_temp
 
 
 
 ! See comment by other init_random_seq() call.  Will preproduce results
 ! exactly for the same number of mpi tasks; will not if # tasks changes.
+
+! Have three namelist variants for filter_kind that come here
+! 100 means that the choice of filter kind within gigg is a function of quantity (not yet implemented)
+! 101 means just do EAKF
+! 102 means GIG (gamma prior, inverse gamma likelihood)
+! 103 means IGG (inverse gamma prior, gamma likelihood)
+
+if(filter_kind == 100) then
+   call error_handler(E_ERR, 'obs_increment_GIGG:', 'filter_kind 100 not yet implemented', &
+                      source, revision, revdate)
+endif
 
 ! seed the random number generator the first time through this code.
 if(first_ran_gigg) then
@@ -2443,8 +2457,8 @@ endif
 ! prior_var), and the quantity of interest (quantity, e.g. QTY_TEMPERATURE, QTY_U_WIND_COMPONENT, etc)
 ! and set GIGG_type here.  also set T1Rr
 
-GIGG_type = 1 ! or 2 or 3
-T1Rr = 1.0_r8
+GIGG_type = filter_kind - 100 ! or 2 or 3
+T1Rr = obs_var
 
 select case (GIGG_type)
  case (1)  ! gaussian ens prior, gaussian obs likelihood
@@ -2458,6 +2472,7 @@ select case (GIGG_type)
    obs_inc = a * (ens - prior_mean) + new_mean - ens
 
  case (2)   ! gamma ens prior, inverse gamma obs likelihood
+
    !Define type 2 prior and ob relative variance
    T2Pr=prior_var/(prior_mean**2+prior_var)
    T2Rr=1/((1/T1Rr)+1)
@@ -2480,12 +2495,14 @@ select case (GIGG_type)
    theta_gig=prior_mean/k_prior  !note that theta_gig=theta_mean as required by summation theorem
    wk_samp_mean=0                !summation variable to compute sample mean
    do i=1,ens_size
-if (theta_gig < 0) then
-   print *, 'correcting negative theta: ', theta
-   theta_gig = 10**(-10)/k_gig
-endif
-       y_anal_wk(i)=rescale*(ens(i)+random_gamma(gigg_ran_seq,k_gig,theta_gig))
-       wk_samp_mean=wk_samp_mean+y_anal_wk(i)
+      if (prior_mean < 0) then
+         print *, 'correcting negative prior_mean: ', prior_mean
+         !!!theta_gig = 10**(-10)/k_gig
+         prior_mean_temp = 10e-4_r8
+         theta_gig=prior_mean_temp/k_prior  !note that theta_gig=theta_mean as required by summation theorem
+      endif
+      y_anal_wk(i)=rescale*(ens(i)+random_gamma(gigg_ran_seq, k_gig, theta_gig))
+      wk_samp_mean=wk_samp_mean+y_anal_wk(i)
    enddo
    !correct degradation in posterior mean associated with sampling
    wk_samp_mean=wk_samp_mean/ens_size
@@ -2493,6 +2510,7 @@ endif
    y_anal=correction_ratio*y_anal_wk
    !create the perturbations (obs_inc) that when added to prior turn it into the gig posterior
    obs_inc = y_anal - ens
+
 
  case (3)   ! inv gamma ens prior, gamma obs likelihood
    !Define type 2 prior relative variance
@@ -2502,7 +2520,6 @@ endif
 
    !Compute new_mean - the posterior mean. Equation (18) from Bishop (2016)
    new_mean=prior_mean+IGG_gain*(obs-prior_mean)
-
 
    !Compute obs_inc - the correction to the existing ensemble
    !First compute mean and type 1 relative variance of gamma distribution from which perturbed obs will be drawn
@@ -3005,10 +3022,10 @@ select case (filter_kind)
    msgstring = 'Boxcar'
  case (8)
    msgstring = 'Rank Histogram Filter'
- case (10)
+ case (100, 101, 102, 103)
    msgstring = 'GIGG Filter'
  case default 
-   call error_handler(E_ERR, 'assim_tools_init:', 'illegal filter_kind value, valid values are 1-8,10', &
+   call error_handler(E_ERR, 'assim_tools_init:', 'illegal filter_kind value, valid values are 1-8,100-103', &
                       source, revision, revdate)
 end select
 call error_handler(E_MSG, 'assim_tools_init:', 'Selected filter type is '//trim(msgstring))

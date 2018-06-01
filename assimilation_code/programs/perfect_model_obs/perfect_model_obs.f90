@@ -33,7 +33,8 @@ use  assim_model_mod,     only : static_init_assim_model, get_model_size,       
 use mpi_utilities_mod,    only : task_count, task_sync, initialize_mpi_utilities, &
                                  finalize_mpi_utilities
 
-use   random_seq_mod,     only : random_seq_type, init_random_seq, random_gaussian
+use   random_seq_mod,     only : random_seq_type, init_random_seq, random_gaussian, &
+                                 random_gamma, random_inverse_gamma
 use ensemble_manager_mod, only : init_ensemble_manager,               &
                                  end_ensemble_manager, ensemble_type,  &
                                  get_my_num_copies, get_ensemble_time, prepare_to_write_to_vars,      &
@@ -104,6 +105,12 @@ integer  :: tasks_per_model_advance = 1
 integer  :: output_interval = 1
 integer  :: print_every_nth_obs = 0
 
+! Temporary control of the simulated observation uncertainty for testing GIGG filter
+! Value of 1 is default and is standard gaussian
+! Value of 2 means observation pdf given truth is inverse gamma and value in file is type 1 relative error variance
+! Value of 3 means observation pdf given truth is gamma and value in file is type 1 relative error variance
+integer  :: gigg_obs_error_pdf = 1
+
 logical  :: has_cycling     = .false.
 logical  :: single_file_in  = .false.
 logical  :: single_file_out = .false.
@@ -124,7 +131,8 @@ namelist /perfect_model_obs_nml/ read_input_state_from_file, write_output_state_
                                  trace_execution, output_timestamps,                &
                                  print_every_nth_obs, output_forward_op_errors,     &
                                  input_state_files, output_state_files,             &
-                                 single_file_in, single_file_out, distributed_state
+                                 single_file_in, single_file_out, distributed_state,&
+                                 gigg_obs_error_pdf
 
 !------------------------------------------------------------------------------
 
@@ -157,6 +165,8 @@ integer(i8)             :: model_size
 integer                 :: istatus(1)
 
 real(r8)                :: true_obs(1), obs_value(1), qc(1)
+
+real(r8)                :: T1Rr, shape, scale
 
 character(len=metadatalength) :: copy_meta_data(2), qc_meta_data, obs_seq_read_format
 character(len=metadatalength) :: state_meta(1)
@@ -550,8 +560,44 @@ AdvanceTime: do
          ! If observation is not being evaluated or assimilated, skip it
          ! Ends up setting a 1000 qc field so observation is not used again.
          if( qc_ens_handle%vars(i, 1) == 0 ) then
-            obs_value(1) = random_gaussian(random_seq, true_obs(1), &
-               sqrt(get_obs_def_error_variance(obs_def)))
+
+            ! For GIGG filters, need to define different distributions for observation uncertainty
+            ! The obs_err_var in the obs_seq file has different meanings for different optiona
+
+! Set truth to 1 for clean distribution test
+!!!true_obs(1) = 1.0_r8
+
+            if(gigg_obs_error_pdf == 1) then
+               ! Standard gaussian
+               obs_value(1) = random_gaussian(random_seq, true_obs(1), &
+                  sqrt(get_obs_def_error_variance(obs_def)))
+            elseif(gigg_obs_error_pdf == 2) then
+               ! Observation pdf given truth is inverse gamma and value in file is type 1 relative error variance
+               ! Get alpha and beta for the random number generation
+               T1Rr = get_obs_def_error_variance(obs_def)
+               shape = 1.0_r8 / T1Rr + 2.0_r8
+               scale = true_obs(1) * (shape - 1.0_r8)
+               obs_value(1) = random_inverse_gamma(random_seq, shape, scale)
+
+! Output for clean distribution test
+!write(22, *) true_obs(1), T1Rr, shape, scale, obs_value(1)
+
+            elseif(gigg_obs_error_pdf == 3) then
+               ! Observation pdf given truth is gamma and value in file is type 1 relative error variance
+               ! Get alpha and beta for the random number generation
+               T1Rr = get_obs_def_error_variance(obs_def)
+               shape = 1.0_r8 / T1Rr
+               scale = true_obs(1) / shape
+               obs_value(1) = random_gamma(random_seq, shape, scale)
+
+! Output for clean distribution test
+!write(33, *) true_obs(1), T1Rr, shape, scale, obs_value(1)
+
+            else
+               ! Illegal value for gigg_obs_error_pdf
+               msgstring = 'Illegal value for namelist parameter gigg_obs_error_pdf'
+               call error_handler(E_ERR,'perfect_main',msgstring,source,revision,revdate)
+            endif
 
             ! FIX ME SPINT: if the foward operater passed can we directly set the
             ! qc status?
