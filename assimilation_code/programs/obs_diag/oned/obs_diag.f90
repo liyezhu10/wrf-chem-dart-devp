@@ -88,11 +88,11 @@ integer :: num_copies, num_qc, num_obs, max_num_obs, obs_seq_file_id
 integer :: num_obs_types
 
 ! variables used primarily/exclusively for the rank histogram
-integer                :: ens_size, rank_histogram_bin
-type(random_seq_type)  :: ran_seq
-real(r8)               :: obs_err_var
+integer               :: ens_size, rank_histogram_bin
+type(random_seq_type) :: ran_seq
+real(r8)              :: obs_err_var
 
-character(len=129) :: obs_seq_read_format
+character(len=stringlength) :: obs_seq_read_format
 logical :: pre_I_format
 
 integer,  dimension(2) :: key_bounds
@@ -370,7 +370,7 @@ endif
 ! Declares and initializes the prior and poste structures.
 !----------------------------------------------------------------------
 
-call PrepareVariables()
+call InitializeVariables()
 
 !----------------------------------------------------------------------
 ! Open file for histogram of innovations, as a function of standard deviation.
@@ -526,8 +526,11 @@ ObsFileLoop : do ifile=1, Nfiles
    call SetIndices()
 
    !====================================================================
-   EpochLoop : do iepoch = 1, Nepochs
+   ! Loop over all potential time periods ... the observation sequence
+   ! files are not required to be in any particular order.
    !====================================================================
+
+   EpochLoop : do iepoch = 1, Nepochs
 
       call get_obs_time_range(seq, binedges(1,iepoch), binedges(2,iepoch), key_bounds, &
                   num_obs_in_epoch, out_of_range )
@@ -581,12 +584,6 @@ ObsFileLoop : do ifile=1, Nfiles
             trusted = .false.
          endif
 
-         if ( use_zero_error_obs ) then
-            obs_err_var = 0.0_r8
-         else
-            obs_err_var = get_obs_def_error_variance(obs_def)
-         endif
-
          ! Check to see if it is an identity observation.
          ! Redefine identity observations as flavor = RAW_STATE_VARIABLE
          !>@todo use get_state_meta_data() to determine state quantity at the index.
@@ -597,6 +594,12 @@ ObsFileLoop : do ifile=1, Nfiles
          if ( flavor < 0 ) then
             Nidentity = Nidentity + 1
             flavor = RAW_STATE_VARIABLE
+         endif
+
+         if ( use_zero_error_obs ) then
+            obs_err_var = 0.0_r8
+         else
+            obs_err_var = get_obs_def_error_variance(obs_def)
          endif
 
          !--------------------------------------------------------------
@@ -618,7 +621,7 @@ ObsFileLoop : do ifile=1, Nfiles
          ! Convert the DART QC data to an integer and create histogram
          !--------------------------------------------------------------
 
-         call get_qc(observation, qc) ! populates 'qc' with ALL qc values
+         call get_qc(observation, qc)
 
          if ( dart_qc_index > 0 ) then
             qc_integer = min( nint(qc(dart_qc_index)), QC_MAX )
@@ -764,8 +767,8 @@ write(*,*) 'Count summary over all regions - obs may count for multiple regions:
 write(*,*) '# identity           : ',Nidentity
 write(*,*) '# bad DART QC prior  : ',sum(prior%NbadDartQC)
 write(*,*) '# bad DART QC post   : ',sum(poste%NbadDartQC)
-write(*,*) '# TRUSTED            : ',sum(poste%Ntrusted)
 write(*,*)
+write(*,*) '# trusted prior   : ',sum(prior%Ntrusted)
 write(*,*) '# prior DART QC 0 : ',sum(prior%NDartQC_0)
 write(*,*) '# prior DART QC 1 : ',sum(prior%NDartQC_1)
 write(*,*) '# prior DART QC 2 : ',sum(prior%NDartQC_2)
@@ -776,6 +779,7 @@ write(*,*) '# prior DART QC 6 : ',sum(prior%NDartQC_6)
 write(*,*) '# prior DART QC 7 : ',sum(prior%NDartQC_7)
 write(*,*) '# prior DART QC 8 : ',sum(prior%NDartQC_8)
 write(*,*)
+write(*,*) '# trusted poste   : ',sum(poste%Ntrusted)
 write(*,*) '# poste DART QC 0 : ',sum(poste%NDartQC_0)
 write(*,*) '# poste DART QC 1 : ',sum(poste%NDartQC_1)
 write(*,*) '# poste DART QC 2 : ',sum(poste%NDartQC_2)
@@ -785,6 +789,7 @@ write(*,*) '# poste DART QC 5 : ',sum(poste%NDartQC_5)
 write(*,*) '# poste DART QC 6 : ',sum(poste%NDartQC_6)
 write(*,*) '# poste DART QC 7 : ',sum(poste%NDartQC_7)
 write(*,*) '# poste DART QC 8 : ',sum(poste%NDartQC_8)
+write(*,*)
 
 write(logfileunit,*)
 write(logfileunit,*) '# observations used  : ',sum(obs_used_in_epoch)
@@ -792,8 +797,8 @@ write(logfileunit,*) 'Count summary over all regions - obs may count for multipl
 write(logfileunit,*) '# identity           : ',Nidentity
 write(logfileunit,*) '# bad DART QC prior  : ',sum(prior%NbadDartQC)
 write(logfileunit,*) '# bad DART QC post   : ',sum(poste%NbadDartQC)
-write(logfileunit,*) '# TRUSTED            : ',sum(poste%Ntrusted)
 write(logfileunit,*)
+write(logfileunit,*) '# trusted prior   : ',sum(prior%Ntrusted)
 write(logfileunit,*) '# prior DART QC 0 : ',sum(prior%NDartQC_0)
 write(logfileunit,*) '# prior DART QC 1 : ',sum(prior%NDartQC_1)
 write(logfileunit,*) '# prior DART QC 2 : ',sum(prior%NDartQC_2)
@@ -804,6 +809,7 @@ write(logfileunit,*) '# prior DART QC 6 : ',sum(prior%NDartQC_6)
 write(logfileunit,*) '# prior DART QC 7 : ',sum(prior%NDartQC_7)
 write(logfileunit,*) '# prior DART QC 8 : ',sum(prior%NDartQC_8)
 write(logfileunit,*)
+write(logfileunit,*) '# trusted poste   : ',sum(poste%Ntrusted)
 write(logfileunit,*) '# poste DART QC 0 : ',sum(poste%NDartQC_0)
 write(logfileunit,*) '# poste DART QC 1 : ',sum(poste%NDartQC_1)
 write(logfileunit,*) '# poste DART QC 2 : ',sum(poste%NDartQC_2)
@@ -841,9 +847,9 @@ call WriteNetCDF('obs_diag_output.nc')
 !-----------------------------------------------------------------------
 
 call DestroyVariables()
-
-call error_handler(E_MSG,'obs_diag','Finished successfully.')
+call error_handler(E_MSG,'obs_diag','Finished successfully.',source,revision,revdate)
 call finalize_utilities()
+
 
 !======================================================================
 CONTAINS
@@ -853,7 +859,7 @@ CONTAINS
 !======================================================================
 
 
-Subroutine PrepareVariables()
+subroutine InitializeVariables()
 
 allocate(prior%rmse(       Nepochs, Nregions, num_obs_types), &
          prior%bias(       Nepochs, Nregions, num_obs_types), &
@@ -945,13 +951,16 @@ poste%num_times     = Nepochs
 poste%num_regions   = Nregions
 poste%num_variables = num_obs_types
 
-end Subroutine PrepareVariables
+end subroutine InitializeVariables
 
 
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!======================================================================
 
 
-Subroutine DestroyVariables()
+subroutine DestroyVariables()
+
+if (associated(prior%hist_bin)) deallocate(prior%hist_bin)
+if (allocated(ens_copy_index))  deallocate(ens_copy_index)
 
 deallocate(obs_seq_filenames)
 
@@ -961,10 +970,6 @@ deallocate(prior%rmse,        prior%bias,      prior%spread,    prior%totspread,
            prior%NDartQC_0,   prior%NDartQC_1, prior%NDartQC_2, prior%NDartQC_3, &
            prior%NDartQC_4,   prior%NDartQC_5, prior%NDartQC_6, prior%NDartQC_7, &
            prior%NDartQC_8)
-
-if (associated(prior%hist_bin)) deallocate(prior%hist_bin)
-
-if (allocated(ens_copy_index)) deallocate(ens_copy_index)
 
 deallocate(poste%rmse,        poste%bias,      poste%spread,    poste%totspread, &
            poste%observation, poste%ens_mean,  poste%Nposs,     poste%Nused,     &
@@ -976,14 +981,13 @@ deallocate(poste%rmse,        poste%bias,      poste%spread,    poste%totspread,
 deallocate(epoch_center, epoch_edges, bincenter, binedges, obs_used_in_epoch)
 deallocate(obs_type_strings)
 
-end Subroutine DestroyVariables
+end subroutine DestroyVariables
 
 
+!======================================================================
 
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-
-Function InnovZscore(obsval, prmean, prspred, errvar, qcval, qcmaxval)
+function InnovZscore(obsval, prmean, prspred, errvar, qcval, qcmaxval)
 
 ! This function tries to get a handle on the magnitude of the innovations.
 ! If the ratio of the observation to the prior mean is 'big', it is an outlier.
@@ -1005,13 +1009,13 @@ else
    InnovZscore = real(MaxSigmaBins,r8)
 endif
 
-end Function InnovZscore
+end function InnovZscore
 
 
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!======================================================================
 
 
-Function InRegion( lon, lon1, lon2 ) result( keeper )
+function InRegion( lon, lon1, lon2 ) result( keeper )
 ! FIXME ... this does not wrap around the origin ...
 !       ... are all 1D locations periodic
 real(r8), intent(in) :: lon, lon1, lon2
@@ -1021,14 +1025,13 @@ keeper = .false.
 
 if( (lon .ge. lon1) .and. (lon .lt. lon2) ) keeper = .true.
 
-end Function InRegion
+end function InRegion
 
 
+!======================================================================
 
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-
-Subroutine DetermineFilenames( time1, timeN, nsteps, numfiles )
+subroutine DetermineFilenames( time1, timeN, nsteps, numfiles )
 ! This routine reads through all the observation sequence files to determine the
 ! first and last times in the files. Can only do this by reading each and every
 ! observation sequence file.
@@ -1167,13 +1170,13 @@ if ( verbose ) then
 
 endif
 
-end Subroutine DetermineFilenames
+end subroutine DetermineFilenames
 
 
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!======================================================================
 
 
-Subroutine DefineTimes()
+subroutine DefineTimes()
 
 !  Sets the binwidth, halfbinwidth
 
@@ -1262,12 +1265,12 @@ endif
 end subroutine DefineTimes
 
 
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!======================================================================
 
 
 ! TJH FIXME SetSchedule() should really come from the schedule module
 
-Subroutine SetSchedule(bin1time, num_epochs, fullwidth, halfwidth, &
+subroutine SetSchedule(bin1time, num_epochs, fullwidth, halfwidth, &
    bin_center, bin_edges, epoch_center, epoch_edges)
 
 type(time_type),                 intent(in)  :: bin1time
@@ -1348,13 +1351,13 @@ if ( verbose ) then
    write(     *     ,*)
 endif
 
-end Subroutine SetSchedule
+end subroutine SetSchedule
 
 
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!======================================================================
 
 
-Function GetEnsSize()
+function GetEnsSize()
 !
 !  Loop over all the metadata to count the number of ensemble members
 !  available in the observation sequence file. We need this count to
@@ -1378,13 +1381,13 @@ enddo MetaDataLoop
 write(string1,'(''There are '',i4,'' ensemble members.'')') GetEnsSize
 call error_handler(E_MSG,'GetEnsSize',string1,source,revision,revdate)
 
-end Function GetEnsSize
+end function GetEnsSize
 
 
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!======================================================================
 
 
-Subroutine  SetIndices()
+subroutine  SetIndices()
 
 ! integer, intent(out) :: obs_copy_index, org_qc_index, dart_qc_index, &
 !                         prior_mean_index,   posterior_mean_index,    &
@@ -1515,13 +1518,13 @@ if (verbose) then
    endif
 endif
 
-end Subroutine SetIndices
+end subroutine SetIndices
 
 
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!======================================================================
 
 
-Function Rank_Histogram(copyvalues, obs_index, error_variance ) result(rank)
+function Rank_Histogram(copyvalues, obs_index, error_variance ) result(rank)
 
 ! Calculates the bin/rank
 ! We don't care about the QC value. If the ob wasn't assimilated
@@ -1587,28 +1590,28 @@ if ( 2 == 1 )  then ! DEBUG block
    write(*,*)
 endif
 
-end Function Rank_Histogram
+end function Rank_Histogram
 
 
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!======================================================================
 
 
-   Subroutine RPE(x,y)
+   subroutine RPE(x,y)
       real(r8), intent(inout) :: x
       real(r8), intent(in) :: y
       x = x + y
-   end Subroutine RPE
-   Subroutine IPE(x,y)
+   end subroutine RPE
+   subroutine IPE(x,y)
       integer, intent(inout) :: x
       integer, intent(in) :: y
       x = x + y
-   end Subroutine IPE
+   end subroutine IPE
 
 
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!======================================================================
 
 
-  Subroutine Bin3D(iqc, iepoch, iregion, flavor, trusted, &
+  subroutine Bin3D(iqc, iepoch, iregion, flavor, trusted, &
                 obsval,  obserrvar,  prmean,  prsprd,  pomean,  posprd, rank)
    !----------------------------------------------------------------------
    ! The 'prior' and 'poste' structures are globally scoped.
@@ -1751,13 +1754,13 @@ end Function Rank_Histogram
          call IPE(prior%hist_bin(iepoch,iregion,flavor,rank), 1)
    endif
 
-   end Subroutine Bin3D
+   end subroutine Bin3D
 
 
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!======================================================================
 
 
-   Subroutine WriteNetCDF(fname)
+   subroutine WriteNetCDF(fname)
    character(len=*), intent(in) :: fname
 
    integer :: ncid, i, indx1, nobs, typesdimlen
@@ -2135,12 +2138,13 @@ end Function Rank_Histogram
    call nc_check(nf90_sync( ncid), 'WriteNetCDF', 'sync '//trim(fname))
    call nc_check(nf90_close(ncid), 'init_diag_output', 'close '//trim(fname))
 
-   end Subroutine WriteNetCDF
+   end subroutine WriteNetCDF
 
 
+!======================================================================
 
 
-   Function WriteTRV(ncid, vrbl, TimeDimID, CopyDimID, RegionDimID, RankDimID)
+   function WriteTRV(ncid, vrbl, TimeDimID, CopyDimID, RegionDimID, RankDimID)
    integer,           intent(in) :: ncid
    type(TRV_type),    intent(in) :: vrbl
    integer,           intent(in) :: TimeDimID, CopyDimID, RegionDimID
@@ -2261,15 +2265,13 @@ end Function Rank_Histogram
 
    WriteTRV = 0
 
-   end Function WriteTRV
+   end function WriteTRV
 
 
-
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
+!======================================================================
 
 
-   Function DefineTrustedObs()
+   function DefineTrustedObs()
 
    ! Count up the number of 'trusted' observations
    ! Check to make sure trusted observations desired are supported.
@@ -2326,13 +2328,13 @@ end Function Rank_Histogram
 
    DefineTrustedObs = num_trusted
 
-   end Function DefineTrustedObs
+   end function DefineTrustedObs
 
 
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!======================================================================
 
 
-   Function is_observation_trusted(obsname)
+   function is_observation_trusted(obsname)
 
    ! Is the observation one that we 'trust'.
    ! If so, disregard the DART QC ==7 (outlier rejection) and use it to
@@ -2351,13 +2353,13 @@ end Function Rank_Histogram
       endif
    enddo rUtrusted
 
-   end Function is_observation_trusted
+   end function is_observation_trusted
 
 
+!======================================================================
 
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-   Subroutine count_QC_values(iqc,itime,ireg,iflav)
+   subroutine count_QC_values(iqc,itime,ireg,iflav)
 
    integer, intent(in) :: iqc, itime, ireg, iflav
 
@@ -2399,14 +2401,13 @@ end Function Rank_Histogram
 
    endif
 
-   end Subroutine count_QC_values
+   end subroutine count_QC_values
 
 
+!======================================================================
 
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-
-Subroutine NormalizeTRV()
+subroutine NormalizeTRV()
 
 integer :: ivar, iregion, iepoch
 
@@ -2494,10 +2495,11 @@ enddo
 enddo
 enddo
 
-end Subroutine NormalizeTRV
+end subroutine NormalizeTRV
 
 
-!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!======================================================================
+
 
 end program obs_diag
 

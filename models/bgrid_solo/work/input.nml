@@ -307,8 +307,8 @@
    obs_sequence_list = '',
    first_bin_center =  1601, 1, 1, 0, 0, 0 ,
    last_bin_center  =  1601, 1, 1, 3, 0, 0 ,
-   bin_separation   =     0, 0, 0, 0, 3, 0 ,
-   bin_width        =     0, 0, 0, 0, 3, 0 ,
+   bin_separation   =     0, 0, 0, 1, 0, 0 ,
+   bin_width        =     0, 0, 0, 1, 0, 0 ,
    time_to_skip     =     0, 0, 0, 0, 0, 0 ,
    max_num_bins     = 1000,
    trusted_obs      = 'null',
@@ -322,7 +322,7 @@
    create_rank_histogram = .true.,
    outliers_in_histogram = .true.,
    use_zero_error_obs    = .false.,
-   verbose               = .false.
+   verbose               = .true.
    /
 
 
