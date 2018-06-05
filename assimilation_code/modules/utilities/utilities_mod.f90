@@ -17,7 +17,7 @@ private
 ! module local data
 
 integer, parameter :: E_DBG = -2,   E_MSG = -1,  E_ALLMSG = 0, E_WARN = 1, E_ERR = 2
-integer, parameter :: DEBUG = -1, MESSAGE = 0, WARNING = 1, FATAL = 2
+!integer, parameter :: DEBUG = -1, MESSAGE = 0, WARNING = 1, FATAL = 2
 integer, parameter :: NML_NONE = 0, NML_FILE = 1, NML_TERMINAL = 2, NML_BOTH = 3
 
 real(r8), parameter :: TWOPI = PI * 2.0_r8
@@ -53,10 +53,10 @@ public :: get_unit, &
           E_ALLMSG, &
           E_WARN, &
           E_ERR, &
-          DEBUG, &
-          MESSAGE, &
-          WARNING, &
-          FATAL, &
+          !DEBUG, &
+          !MESSAGE, &
+          !WARNING, &
+          !FATAL, &
           is_longitude_between, &
           get_next_filename, &
           ascii_file_format, &
@@ -196,12 +196,7 @@ read(iunit, nml = utilities_nml, iostat = io)
 call check_namelist_read(iunit, io, "utilities_nml", .false.)
 
 ! Open the log file with the name from the namelist 
-logfileunit = nextunit()
-if ( logfileunit < 0 ) then
-   write(*,*)'   unable to get a unit to use for the logfile.'
-   write(*,*)'   stopping.'
-   call exit_all(77)
-endif
+logfileunit = get_unit()
 
 if (present(alternatename)) then
    lname = alternatename
@@ -255,10 +250,7 @@ if (do_nml_file()) then
       if (do_output_flag) &
        write(*,*)'Trying to open namelist log ', trim(nmlfilename)
  
-      nmlfileunit = nextunit()
-      if (nmlfileunit < 0) &
-         call error_handler(E_ERR,'initialize_utilities', &
-           'Cannot get unit for nm log file', source, revision, revdate)
+      nmlfileunit = get_unit()
 
       open(nmlfileunit, file=nmlfilename, form='formatted', &
            position='append', iostat = io )
@@ -303,51 +295,6 @@ if (do_output_flag .and. print_debug) then
    call error_handler(E_DBG, 'initialize_utilities', string1, &
                       source, revision, revdate, text2=string2, text3=string3)
 endif
-
-
-contains
-
-   function nextunit() result(iunit)
-      integer :: iunit
-
-      logical :: open
-      integer :: i
-
-      iunit = -1
-      UnitLoop : do i = 10, 80
-         inquire (i, opened=open)
-         if (.not. open) then
-            iunit = i
-            exit UnitLoop
-         endif
-      enddo UnitLoop
-      if ( iunit < 0 ) then 
-         write(*,*)'FATAL ERROR in initialize_utilities'
-         write(*,*)'  ',trim(source)
-         write(*,*)'  ',trim(revision)
-         write(*,*)'  ',trim(revdate)
-      endif
-   end function nextunit
-
-   subroutine checktermlevel
-      select case (TERMLEVEL)
-          case (E_MSG)
-             ! do nothing
-          case (E_ALLMSG)
-             ! do nothing
-          case (E_WARN)
-             ! do nothing
-          case (E_ERR)
-             ! do nothing
-          case default
-             print *, ' MESSAGE from initialize_utilities'
-             print *, ' namelist input of TERMLEVEL is ',TERMLEVEL
-             print *, ' possible values are ',E_MSG, E_ALLMSG, E_WARN, E_ERR
-             if (TERMLEVEL < E_WARN ) TERMLEVEL = E_WARN
-             if (TERMLEVEL > E_ERR  ) TERMLEVEL = E_ERR
-             print *, ' using ',TERMLEVEL
-      end select
-   end subroutine checktermlevel
 
 end subroutine initialize_utilities
 
