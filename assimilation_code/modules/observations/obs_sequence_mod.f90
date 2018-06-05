@@ -1267,7 +1267,6 @@ logical,           intent(out) :: pre_I_format
 logical, optional, intent(in)  :: close_the_file
 
 character(len=16) :: label(2)
-character(len=12) :: header
 integer :: ios
 
 ! always false now, should be deprecated

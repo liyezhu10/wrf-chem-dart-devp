@@ -350,7 +350,7 @@ integer(i8) :: my_state_indx(ens_handle%my_num_vars)
 integer(i8) :: my_obs_indx(obs_ens_handle%my_num_vars)
 
 integer  :: my_num_obs, i, j, owner, owners_index, my_num_state
-integer  :: this_obs_key, obs_mean_index, obs_var_index
+integer  :: obs_mean_index, obs_var_index
 integer  :: grp_beg(num_groups), grp_end(num_groups), grp_size, grp_bot, grp_top, group
 integer  :: close_obs_ind(obs_ens_handle%my_num_vars)
 integer  :: close_state_ind(ens_handle%my_num_vars)

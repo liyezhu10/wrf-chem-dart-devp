@@ -795,7 +795,9 @@ integer,                     intent(in)    :: ss_inflate_sd_index
 
 real(r8) :: minmax_mean(2), minmax_sd(2), global_val(2)
 
-if (inflation_handle%inflation_flavor >= 0) then
+! if not using inflation, return now
+if (inflation_handle%inflation_flavor <= 0) return
+
 if (inflation_handle%mean_from_restart) then
 
    ! find min and max on each processor
@@ -805,7 +807,9 @@ if (inflation_handle%mean_from_restart) then
    ! collect on pe 0
    call send_minmax_to(minmax_mean, map_pe_to_task(ens_handle, 0), global_val)
    if (ens_handle%my_pe == 0) inflation_handle%minmax_mean = global_val
-
+else
+   if (ens_handle%my_pe == 0) &
+      inflation_handle%minmax_mean = ens_handle%copies(ss_inflate_index, 1)
 endif
 
 if (inflation_handle%sd_from_restart) then
@@ -817,8 +821,10 @@ if (inflation_handle%sd_from_restart) then
    ! collect on task 0
    call send_minmax_to(minmax_sd, map_pe_to_task(ens_handle, 0), global_val)
    if (ens_handle%my_pe == 0) inflation_handle%minmax_sd = minmax_sd
+else
+   if (ens_handle%my_pe == 0) &
+      inflation_handle%minmax_sd = ens_handle%copies(ss_inflate_sd_index, 1)
 
-endif
 endif
 
 end subroutine get_minmax_task_zero
