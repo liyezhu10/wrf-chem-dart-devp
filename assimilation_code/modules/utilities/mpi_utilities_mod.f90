@@ -108,7 +108,7 @@ character(len = 129) :: shell_name = ''   ! if needed, add ksh, tcsh, bash, etc
 integer :: head_task = 0         ! def 0, but N-1 if reverse_task_layout true
 logical :: print4status = .true. ! minimal messages for async4 handshake
 
-character(len = 256) :: errstring, errstring1
+character(len = 256) :: errstring
 
 ! for broadcasts, pack small messages into larger ones.  remember that the
 ! byte size will be this count * 8 because we only communicate r8s.  (unless
@@ -740,26 +740,6 @@ if (verbose) write(*,*) "PE", myrank, ": end of receive_from "
 end subroutine receive_from
 
 
-
-!-----------------------------------------------------------------------------
-! TODO: do i need to overload this for both integer and real?
-!       do i need to handle 1D, 2D, 3D inputs?
-
-subroutine transpose_array
-
-! not implemented here yet.  will have arguments -- several of them.
-
-if ( .not. module_initialized ) then
-   write(errstring, *) 'initialize_mpi_utilities() must be called first'
-   call error_handler(E_ERR,'transpose_array', errstring, source, revision, revdate)
-endif
-
-write(errstring, *) 'not implemented yet'
-call error_handler(E_ERR,'transpose_array', errstring, source, revision, revdate)
-
-end subroutine transpose_array
-
-
 !-----------------------------------------------------------------------------
 ! TODO: do i need to overload this for both integer and real?
 !       do i need to handle 2D inputs?
@@ -847,123 +827,6 @@ if (make_copy_before_broadcast) deallocate(tmpdata)
 
 end subroutine array_broadcast
 
-
-!-----------------------------------------------------------------------------
-! TODO: do i need to overload this for both integer and real?
-!       do i need to handle 2D inputs?
-
-subroutine array_distribute(srcarray, root, dstarray, dstcount, how, which)
- real(r8), intent(in) :: srcarray(:)
- integer, intent(in) :: root
- real(r8), intent(out) :: dstarray(:)
- integer, intent(out) :: dstcount
- integer, intent(in) :: how
- integer, intent(out) :: which(:)
-
-! 'srcarray' on the root task will be distributed across all the tasks
-! into 'dstarray'.  dstarray must be large enough to hold each task's share
-! of the data.  The actual number of values returned on each task will be
-! passed back in the 'count' argument.  'how' is a flag to select how to
-! distribute the data (round-robin, contiguous chunks, etc).  'which' is an
-! integer index array which lists which of the original values were selected
-! and put into 'dstarray'.
-
-real(r8), allocatable :: localchunk(:)
-integer :: srccount, leftover
-integer :: i, tag, errcode
-logical :: iamroot
-integer :: status(MPI_STATUS_SIZE)
-
-if ( .not. module_initialized ) then
-   write(errstring, *) 'initialize_mpi_utilities() must be called first'
-   call error_handler(E_ERR,'array_distribute', errstring, source, revision, revdate)
-endif
-
-! simple idiotproofing
-if ((root < 0) .or. (root >= total_tasks)) then
-   write(errstring, '(a,i8,a,i8)') "root task id ", root, &
-                                   "must be >= 0 and < ", total_tasks
-   call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-endif
-
-iamroot = (root == myrank)
-tag = 1
-
-srccount = size(srcarray)
-
-! TODO: right now this code does contig chunks only
-! TODO: it should select on the 'how' argument
-dstcount = srccount / total_tasks
-leftover = srccount - (dstcount * total_tasks)
-if (myrank == total_tasks-1) dstcount = dstcount + leftover
-
-
-! idiotproofing, continued...
-if (size(dstarray) < dstcount) then
-   write(errstring, '(a,i8,a,i8)') "size of dstarray is", size(dstarray), & 
-                      " but must be >= ", dstcount
-   call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-endif
-if (size(which) < dstcount) then
-   write(errstring, '(a,i8,a,i8)') "size of which is", size(which), & 
-                      " but must be >= ", dstcount
-   call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-endif
-
-! TODO: this code is separate from the 'dstcount' computation because we
-! need to test to be sure the user has passed us in arrays large enough to
-! hold the data, but then this section needs to have a select (how) and set
-! the corresponding index numbers accordingly.
-which(1:dstcount) = (/ (i, i= myrank *dstcount, (myrank+1)*dstcount - 1) /)
-if (size(which) > dstcount) which(dstcount+1:) = -1
-   
-
-if (.not.iamroot) then
-
-   ! my task is receiving data.
-   call MPI_Recv(dstarray, dstcount, datasize, root, MPI_ANY_TAG, &
-                 my_local_comm, status, errcode)
-   if (errcode /= MPI_SUCCESS) then
-      write(errstring, '(a,i8)') 'MPI_Recv returned error code ', errcode
-      call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-   endif
-
-else
-   ! my task must send to everyone else and copy to myself.
-   allocate(localchunk(dstcount), stat=errcode)  
-   if (errcode /= 0) then
-      write(errstring, *) 'allocation error of allocatable array'
-      call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-   endif
-
-   do i=0, total_tasks-1
-      ! copy correct data from srcarray to localchunk for each destination
-      if (i == myrank) then
-         ! this is my task, so do a copy from localchunk to dstarray
-         dstarray(1:dstcount) = localchunk(1:dstcount)
-      else
-         ! call MPI to send the data to the remote task
-         call MPI_Ssend(localchunk, dstcount, datasize, i, tag, &
-                        my_local_comm, errcode)
-         if (errcode /= MPI_SUCCESS) then
-            write(errstring, '(a,i8)') 'MPI_Ssend returned error code ', errcode
-            call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-         endif
-      endif
-      tag = tag + 1
-   enddo
-
-   deallocate(localchunk, stat=errcode)  
-   if (errcode /= 0) then
-      write(errstring, *) 'deallocation error of allocatable array'
-      call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-   endif
-endif
-   
-! set any additional space which wasn't filled with zeros.
-if (size(dstarray) > dstcount) dstarray(dstcount+1:) = 0.0
-
-end subroutine array_distribute
 
 !-----------------------------------------------------------------------------
 ! DART-specific cover utilities

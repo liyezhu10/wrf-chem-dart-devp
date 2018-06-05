@@ -275,23 +275,6 @@ if (present(time)) time = set_time(0, 0)
 end subroutine receive_from
 
 
-
-!-----------------------------------------------------------------------------
-! TODO: do i need to overload this for both integer and real?
-!       do i need to handle 1D, 2D, 3D inputs?
-
-subroutine transpose_array
-
-! not implemented here yet.  will have arguments -- several of them.
-
-if ( .not. module_initialized ) call initialize_mpi_utilities()
-
-write(errstring, *) 'not implemented yet'
-call error_handler(E_ERR,'transpose_array', errstring, source, revision, revdate)
-
-end subroutine transpose_array
-
-
 !-----------------------------------------------------------------------------
 ! TODO: do i need to overload this for both integer and real?
 !       do i need to handle 2D inputs?
@@ -318,43 +301,6 @@ endif
 
 end subroutine array_broadcast
 
-
-!-----------------------------------------------------------------------------
-! TODO: do i need to overload this for both integer and real?
-!       do i need to handle 2D inputs?
-
-subroutine array_distribute(srcarray, root, dstarray, dstcount, how, which)
-real(r8), intent(in)  :: srcarray(:)
-integer,  intent(in)  :: root
-real(r8), intent(out) :: dstarray(:)
-integer,  intent(out) :: dstcount
-integer,  intent(in)  :: how
-integer,  intent(out) :: which(:)
-
-! 'srcarray' on the root task will be distributed across all the tasks
-! into 'dstarray'.  dstarray must be large enough to hold each task's share
-! of the data.  The actual number of values returned on each task will be
-! passed back in the 'count' argument.  'how' is a flag to select how to
-! distribute the data (round-robin, contiguous chunks, etc).  'which' is an
-! integer index array which lists which of the original values were selected
-! and put into 'dstarray'.
-
-integer :: i
-
-if ( .not. module_initialized ) call initialize_mpi_utilities()
-
-! simple idiotproofing
-if ((root < 0) .or. (root >= total_tasks)) then
-   write(errstring, '(a,i8,a,i8)') "root task id ", root, &
-                                   "must be >= 0 and < ", total_tasks
-   call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-endif
-
-dstarray = srcarray
-dstcount = size(srcarray)
-which = (/ ((i), i=1,size(srcarray))  /)
-
-end subroutine array_distribute
 
 !-----------------------------------------------------------------------------
 ! DART-specific cover utilities
@@ -501,7 +447,6 @@ function shell_execute(execute_string, serialize)
 ! is true, do each call serially.
 
 character(len=255) :: doit
-integer :: rc
 
    !print *, "in-string is: ", trim(execute_string)
 
