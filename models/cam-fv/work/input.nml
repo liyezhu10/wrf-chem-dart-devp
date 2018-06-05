@@ -41,15 +41,15 @@
 &filter_nml
    input_state_files            = '',
    input_state_file_list        = 'cam_init_files',
-   init_time_days               = -1
-   init_time_seconds            = -1
+   init_time_days               = -1,
+   init_time_seconds            = -1,
    single_file_in               = .false.,
-   perturb_from_single_instance = .false.
+   perturb_from_single_instance = .true.,
    
    stages_to_write              = 'preassim','output'
    
    output_state_files           = '',
-   output_state_file_list       = 'cam_init_files',
+   output_state_file_list       = 'cam_out_files',
    output_mean                  = .true.
    output_sd                    = .true.
    output_members               = .true.
@@ -86,12 +86,11 @@
    silence                  = .false.
    /
      
-   ! init_time_days             = 150650
-   ! init_time_seconds          = 0,
+   !init_time_days             = 150650,
+   !init_time_seconds          = 0,
+
 &perfect_model_obs_nml
    read_input_state_from_file = .true.,
-   input_state_files          = "caminput.nc",
-   init_time_days             = -1
    input_state_files          = "caminput.nc",
    init_time_days             = -1,
    init_time_seconds          = -1,
@@ -529,7 +528,7 @@
    run_tests             = 1, 2, 4, 5
 
    loc_of_interest       = 359.5, 18.0, 50000.0
-   kind_of_interest      = 'QTY_U_WIND_COMPONENT'
+   quantity_of_interest  = 'QTY_U_WIND_COMPONENT'
 
    x_ind                 = 359435
 
