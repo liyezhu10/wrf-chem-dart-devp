@@ -1057,6 +1057,7 @@ end subroutine find_nearest
 function get_maxdist(gc, obs_type)
 type(get_close_type), intent(in) :: gc
 integer, optional,    intent(in) :: obs_type
+real(r8) :: get_maxdist
 
 get_maxdist = gc%maxdist
 
