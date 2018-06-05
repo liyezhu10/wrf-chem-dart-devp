@@ -98,10 +98,11 @@ interface scalar
    module procedure to_scalar_int8
 end interface
 
-! try making it easy to build standalone executables that
-! don't require a namelist file nor create a namelist file.
-! if this works, i'll figure out how to change it at compile time.
-logical, parameter :: standalone = .false.
+! the default is to use input.nml for namelists and to open
+! log files and output info to stdout and the log.
+! on init if the caller sets this to true, don't do any of
+! those things.
+logical :: standalone = .false.
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -145,10 +146,11 @@ contains
 !-----------------------------------------------------------------------
 !>
 
-subroutine initialize_utilities(progname, alternatename, output_flag)
+subroutine initialize_utilities(progname, alternatename, output_flag, standalone_program)
 character(len=*), intent(in), optional :: progname
 character(len=*), intent(in), optional :: alternatename
-logical, intent(in), optional          :: output_flag
+logical,          intent(in), optional :: output_flag
+logical,          intent(in), optional :: standalone_program
 integer :: iunit, io
 
 character(len=256) :: lname
@@ -158,7 +160,15 @@ if ( module_initialized ) return
 
 module_initialized = .true.
 
-if (standalone) return
+! do this first
+if (present(standalone_program)) standalone = standalone_program
+
+if (standalone) then
+!   print *, 'standalone true, returning early from init'
+   return
+endif
+
+!print *, 'not returning early from init utils'
 
 ! now default to false, and only turn on if i'm task 0
 ! or the caller tells me to turn it on.
@@ -461,7 +471,15 @@ character(len=256) :: nml_string, test_string, string1
 integer            :: io
 logical            :: write_to_logfile
 
-if (standalone) return
+!print *, 'find_namelist_in_file called'
+
+if (standalone) then
+  iunit = -9999
+!  print *, 'standalone true, returning early'
+  return
+endif
+
+!print *, 'not standalone, continuing'
 
 ! Decide if there is a logfile or not
 write_to_logfile = .true.
@@ -544,6 +562,8 @@ logical, optional,  intent(in) :: write_to_logfile_in
 character(len=256) :: nml_string
 integer            :: io
 logical            :: write_to_logfile
+
+!print *, 'check_namelist_read called'
 
 if (standalone) return
 
