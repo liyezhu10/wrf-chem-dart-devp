@@ -2999,17 +2999,17 @@ call get_date (time,y,mo,d,h,m,s)
 if ( calendar_type == GREGORIAN_MARS ) then
    mon = 'sol'
    write(datestr,10) y,mon(1:3),' ',d,' ',h,':',m,':',s
-10 format (a,i4,1x,a3,a1,i3.3,3(a1,i2.2))
+10 format (i4,1x,a3,a1,i3.3,3(a1,i2.2))
 else if (calendar_type == SOLAR_MARS ) then
    mon = 'sol'
    write(datestr,12) y,mon(1:3),' ',d,' ',h,':',m,':',s
-12 format (a,i4,1x,a3,a1,i5.5,3(a1,i2.2))
+12 format (i4,1x,a3,a1,i5.5,3(a1,i2.2))
 
 ! if not Mars, then use Earth calendar
 else
    mon = month_name(mo)
    write(datestr,11) y,mon(1:3),' ',d,' ',h,':',m,':',s
-11 format (a,i4,1x,a3,4(a1,i2.2))
+11 format (i4,1x,a3,4(a1,i2.2))
 endif
 
 if (present(str)) then
