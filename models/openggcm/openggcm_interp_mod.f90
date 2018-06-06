@@ -59,7 +59,7 @@ integer :: ntet, nsearch
 
 real(r8), parameter :: PI  = 4.0_r8*atan(1.0_r8)
 real(r8), parameter :: RAD = PI/180.0_r8
-real(r8), parameter :: RE  = 6372.0e3
+real(r8), parameter :: RE  = 6372.0e3_r8
 
 ! Logical to keep track of if we have initialized g_oplus_int
 logical, save :: module_initialized = .false.
@@ -149,12 +149,8 @@ do iz = 1,nz
 enddo
 enddo
 enddo
-write(0,*)'test ',hx(1),hy(1),hz(1),hx(k),hy(k),hz(k)
-
-6000  format(3i8,3(1x,f12.5))
 
 !...... create tet4 list
-write(0,*)'max points ',k
 ntet = 0
 JTET = 0
 ITET = 0 
@@ -194,10 +190,10 @@ ZLOOP:     do iz = 1,nz-1
       itet(3,ntet)=i8
       itet(4,ntet)=i7 
       !..... tet4 centers
-      tcen_rtp(1,ntet)=0.25*(hx(i1)+hx(i4)+hx(i8)+hx(i7)) 
-      tcen_rtp(2,ntet)=0.25*(hy(i1)+hy(i4)+hy(i8)+hy(i7)) 
-      tcen_rtp(3,ntet)=0.25*(hz(i1)+hz(i4)+hz(i8)+hz(i7)) 
-      if (ip.eq.np) tcen_rtp(3,ntet) = tcen_rtp(3,ntet) + 90.0*RAD
+      tcen_rtp(1,ntet)=0.25_r8*(hx(i1)+hx(i4)+hx(i8)+hx(i7)) 
+      tcen_rtp(2,ntet)=0.25_r8*(hy(i1)+hy(i4)+hy(i8)+hy(i7)) 
+      tcen_rtp(3,ntet)=0.25_r8*(hz(i1)+hz(i4)+hz(i8)+hz(i7)) 
+      if (ip.eq.np) tcen_rtp(3,ntet) = tcen_rtp(3,ntet) + 90.0_r8*RAD
       do l=1,jtet(1,i1)
          if(jtet(l+1,i1).eq.ntet) goto 94971 
       enddo 
@@ -251,9 +247,9 @@ ZLOOP:     do iz = 1,nz-1
       a(3,1)=hz(i4)-hz(i1)
       a(3,2)=hz(i8)-hz(i1)
       a(3,3)=hz(i7)-hz(i1)
-      if (a(3,1).lt.-180.0*RAD) a(3,1)=a(3,1)+360.0*RAD
-      if (a(3,2).lt.-180.0*RAD) a(3,2)=a(3,2)+360.0*RAD
-      if (a(3,3).lt.-180.0*RAD) a(3,3)=a(3,3)+360.0*RAD
+      if (a(3,1).lt.-180.0_r8*RAD) a(3,1)=a(3,1)+360.0_r8*RAD
+      if (a(3,2).lt.-180.0_r8*RAD) a(3,2)=a(3,2)+360.0_r8*RAD
+      if (a(3,3).lt.-180.0_r8*RAD) a(3,3)=a(3,3)+360.0_r8*RAD
       !..... invert for mapping physical --> isoparameteric
       b(1,1) = a(2,2)*a(3,3) - a(3,2)*a(2,3)
       b(1,2) = a(3,2)*a(1,3) - a(1,2)*a(3,3)
@@ -281,10 +277,10 @@ ZLOOP:     do iz = 1,nz-1
       itet(2,ntet)=i5
       itet(3,ntet)=i8
       itet(4,ntet)=i7 
-      tcen_rtp(1,ntet)=0.25*(hx(i1)+hx(i5)+hx(i8)+hx(i7)) 
-      tcen_rtp(2,ntet)=0.25*(hy(i1)+hy(i5)+hy(i8)+hy(i7)) 
-      tcen_rtp(3,ntet)=0.25*(hz(i1)+hz(i5)+hz(i8)+hz(i7)) 
-      if (ip.eq.np) tcen_rtp(3,ntet) = tcen_rtp(3,ntet) + 90.0*RAD
+      tcen_rtp(1,ntet)=0.25_r8*(hx(i1)+hx(i5)+hx(i8)+hx(i7)) 
+      tcen_rtp(2,ntet)=0.25_r8*(hy(i1)+hy(i5)+hy(i8)+hy(i7)) 
+      tcen_rtp(3,ntet)=0.25_r8*(hz(i1)+hz(i5)+hz(i8)+hz(i7)) 
+      if (ip.eq.np) tcen_rtp(3,ntet) = tcen_rtp(3,ntet) + 90.0_r8*RAD
       do l=1,jtet(1,i1)
          if(jtet(l+1,i1).eq.ntet) goto 94911 
       enddo 
@@ -332,9 +328,9 @@ ZLOOP:     do iz = 1,nz-1
       a(3,1)=hz(i5)-hz(i1)
       a(3,2)=hz(i8)-hz(i1)
       a(3,3)=hz(i7)-hz(i1)
-      if (a(3,1).lt.-180.0*RAD) a(3,1)=a(3,1)+360.0*RAD
-      if (a(3,2).lt.-180.0*RAD) a(3,2)=a(3,2)+360.0*RAD
-      if (a(3,3).lt.-180.0*RAD) a(3,3)=a(3,3)+360.0*RAD
+      if (a(3,1).lt.-180.0_r8*RAD) a(3,1)=a(3,1)+360.0_r8*RAD
+      if (a(3,2).lt.-180.0_r8*RAD) a(3,2)=a(3,2)+360.0_r8*RAD
+      if (a(3,3).lt.-180.0_r8*RAD) a(3,3)=a(3,3)+360.0_r8*RAD
       b(1,1) = a(2,2)*a(3,3) - a(3,2)*a(2,3)
       b(1,2) = a(3,2)*a(1,3) - a(1,2)*a(3,3)
       b(1,3) = a(1,2)*a(2,3) - a(1,3)*a(2,2)
@@ -359,10 +355,10 @@ ZLOOP:     do iz = 1,nz-1
       itet(2,ntet)=i5
       itet(3,ntet)=i6
       itet(4,ntet)=i7 
-      tcen_rtp(1,ntet)=0.25*(hx(i1)+hx(i5)+hx(i6)+hx(i7)) 
-      tcen_rtp(2,ntet)=0.25*(hy(i1)+hy(i5)+hy(i6)+hy(i7)) 
-      tcen_rtp(3,ntet)=0.25*(hz(i1)+hz(i5)+hz(i6)+hz(i7)) 
-      if (ip.eq.np) tcen_rtp(3,ntet) = tcen_rtp(3,ntet) + 180.0*RAD
+      tcen_rtp(1,ntet)=0.25_r8*(hx(i1)+hx(i5)+hx(i6)+hx(i7)) 
+      tcen_rtp(2,ntet)=0.25_r8*(hy(i1)+hy(i5)+hy(i6)+hy(i7)) 
+      tcen_rtp(3,ntet)=0.25_r8*(hz(i1)+hz(i5)+hz(i6)+hz(i7)) 
+      if (ip.eq.np) tcen_rtp(3,ntet) = tcen_rtp(3,ntet) + 180.0_r8*RAD
       do l=1,jtet(1,i1)
       if(jtet(l+1,i1).eq.ntet) goto 94851 
       enddo 
@@ -408,9 +404,9 @@ ZLOOP:     do iz = 1,nz-1
       a(3,1)=hz(i5)-hz(i1)
       a(3,2)=hz(i6)-hz(i1)
       a(3,3)=hz(i7)-hz(i1)
-      if (a(3,1).lt.-180.0*RAD) a(3,1)=a(3,1)+360.0*RAD
-      if (a(3,2).lt.-180.0*RAD) a(3,2)=a(3,2)+360.0*RAD
-      if (a(3,3).lt.-180.0*RAD) a(3,3)=a(3,3)+360.0*RAD
+      if (a(3,1).lt.-180.0_r8*RAD) a(3,1)=a(3,1)+360.0_r8*RAD
+      if (a(3,2).lt.-180.0_r8*RAD) a(3,2)=a(3,2)+360.0_r8*RAD
+      if (a(3,3).lt.-180.0_r8*RAD) a(3,3)=a(3,3)+360.0_r8*RAD
       b(1,1) = a(2,2)*a(3,3) - a(3,2)*a(2,3)
       b(1,2) = a(3,2)*a(1,3) - a(1,2)*a(3,3)
       b(1,3) = a(1,2)*a(2,3) - a(1,3)*a(2,2)
@@ -435,10 +431,10 @@ ZLOOP:     do iz = 1,nz-1
       itet(2,ntet)=i4
       itet(3,ntet)=i3
       itet(4,ntet)=i7 
-      tcen_rtp(1,ntet)=0.25*(hx(i1)+hx(i4)+hx(i3)+hx(i7)) 
-      tcen_rtp(2,ntet)=0.25*(hy(i1)+hy(i4)+hy(i3)+hy(i7)) 
-      tcen_rtp(3,ntet)=0.25*(hz(i1)+hz(i4)+hz(i3)+hz(i7)) 
-      if (ip.eq.np) tcen_rtp(3,ntet) = tcen_rtp(3,ntet) + 180.0*RAD
+      tcen_rtp(1,ntet)=0.25_r8*(hx(i1)+hx(i4)+hx(i3)+hx(i7)) 
+      tcen_rtp(2,ntet)=0.25_r8*(hy(i1)+hy(i4)+hy(i3)+hy(i7)) 
+      tcen_rtp(3,ntet)=0.25_r8*(hz(i1)+hz(i4)+hz(i3)+hz(i7)) 
+      if (ip.eq.np) tcen_rtp(3,ntet) = tcen_rtp(3,ntet) + 180.0_r8*RAD
       do l=1,jtet(1,i1)
       if(jtet(l+1,i1).eq.ntet) goto 94791 
       enddo 
@@ -484,9 +480,9 @@ ZLOOP:     do iz = 1,nz-1
       a(3,1)=hz(i4)-hz(i1)
       a(3,2)=hz(i3)-hz(i1)
       a(3,3)=hz(i7)-hz(i1)
-      if (a(3,1).lt.-180.0*RAD) a(3,1)=a(3,1)+360.0*RAD
-      if (a(3,2).lt.-180.0*RAD) a(3,2)=a(3,2)+360.0*RAD
-      if (a(3,3).lt.-180.0*RAD) a(3,3)=a(3,3)+360.0*RAD
+      if (a(3,1).lt.-180.0_r8*RAD) a(3,1)=a(3,1)+360.0_r8*RAD
+      if (a(3,2).lt.-180.0_r8*RAD) a(3,2)=a(3,2)+360.0_r8*RAD
+      if (a(3,3).lt.-180.0_r8*RAD) a(3,3)=a(3,3)+360.0_r8*RAD
       b(1,1) = a(2,2)*a(3,3) - a(3,2)*a(2,3)
       b(1,2) = a(3,2)*a(1,3) - a(1,2)*a(3,3)
       b(1,3) = a(1,2)*a(2,3) - a(1,3)*a(2,2)
@@ -511,10 +507,10 @@ ZLOOP:     do iz = 1,nz-1
       itet(2,ntet)=i2
       itet(3,ntet)=i3
       itet(4,ntet)=i7 
-      tcen_rtp(1,ntet)=0.25*(hx(i1)+hx(i2)+hx(i3)+hx(i7)) 
-      tcen_rtp(2,ntet)=0.25*(hy(i1)+hy(i2)+hy(i3)+hy(i7)) 
-      tcen_rtp(3,ntet)=0.25*(hz(i1)+hz(i2)+hz(i3)+hz(i7)) 
-      if (ip.eq.np) tcen_rtp(3,ntet) = tcen_rtp(3,ntet) + 270.0*RAD
+      tcen_rtp(1,ntet)=0.25_r8*(hx(i1)+hx(i2)+hx(i3)+hx(i7)) 
+      tcen_rtp(2,ntet)=0.25_r8*(hy(i1)+hy(i2)+hy(i3)+hy(i7)) 
+      tcen_rtp(3,ntet)=0.25_r8*(hz(i1)+hz(i2)+hz(i3)+hz(i7)) 
+      if (ip.eq.np) tcen_rtp(3,ntet) = tcen_rtp(3,ntet) + 270.0_r8*RAD
       do l=1,jtet(1,i1)
       if(jtet(l+1,i1).eq.ntet) goto 94731 
       enddo 
@@ -560,9 +556,9 @@ ZLOOP:     do iz = 1,nz-1
       a(3,1)=hz(i2)-hz(i1)
       a(3,2)=hz(i3)-hz(i1)
       a(3,3)=hz(i7)-hz(i1)
-      if (a(3,1).lt.-180.0*RAD) a(3,1)=a(3,1)+360.0*RAD
-      if (a(3,2).lt.-180.0*RAD) a(3,2)=a(3,2)+360.0*RAD
-      if (a(3,3).lt.-180.0*RAD) a(3,3)=a(3,3)+360.0*RAD
+      if (a(3,1).lt.-180.0_r8*RAD) a(3,1)=a(3,1)+360.0_r8*RAD
+      if (a(3,2).lt.-180.0_r8*RAD) a(3,2)=a(3,2)+360.0_r8*RAD
+      if (a(3,3).lt.-180.0_r8*RAD) a(3,3)=a(3,3)+360.0_r8*RAD
       b(1,1) = a(2,2)*a(3,3) - a(3,2)*a(2,3)
       b(1,2) = a(3,2)*a(1,3) - a(1,2)*a(3,3)
       b(1,3) = a(1,2)*a(2,3) - a(1,3)*a(2,2)
@@ -587,10 +583,10 @@ ZLOOP:     do iz = 1,nz-1
       itet(2,ntet)=i2
       itet(3,ntet)=i6
       itet(4,ntet)=i7 
-      tcen_rtp(1,ntet)=0.25*(hx(i1)+hx(i2)+hx(i6)+hx(i7)) 
-      tcen_rtp(2,ntet)=0.25*(hy(i1)+hy(i2)+hy(i6)+hy(i7)) 
-      tcen_rtp(3,ntet)=0.25*(hz(i1)+hz(i2)+hz(i6)+hz(i7)) 
-      if (ip.eq.np) tcen_rtp(3,ntet) = tcen_rtp(3,ntet) + 270.0*RAD
+      tcen_rtp(1,ntet)=0.25_r8*(hx(i1)+hx(i2)+hx(i6)+hx(i7)) 
+      tcen_rtp(2,ntet)=0.25_r8*(hy(i1)+hy(i2)+hy(i6)+hy(i7)) 
+      tcen_rtp(3,ntet)=0.25_r8*(hz(i1)+hz(i2)+hz(i6)+hz(i7)) 
+      if (ip.eq.np) tcen_rtp(3,ntet) = tcen_rtp(3,ntet) + 270.0_r8*RAD
       do l=1,jtet(1,i1)
       if(jtet(l+1,i1).eq.ntet) goto 94671 
       enddo 
@@ -636,9 +632,9 @@ ZLOOP:     do iz = 1,nz-1
       a(3,1)=hz(i2)-hz(i1)
       a(3,2)=hz(i6)-hz(i1)
       a(3,3)=hz(i7)-hz(i1)
-      if (a(3,1).lt.-180.0*RAD) a(3,1)=a(3,1)+360.0*RAD
-      if (a(3,2).lt.-180.0*RAD) a(3,2)=a(3,2)+360.0*RAD
-      if (a(3,3).lt.-180.0*RAD) a(3,3)=a(3,3)+360.0*RAD
+      if (a(3,1).lt.-180.0_r8*RAD) a(3,1)=a(3,1)+360.0_r8*RAD
+      if (a(3,2).lt.-180.0_r8*RAD) a(3,2)=a(3,2)+360.0_r8*RAD
+      if (a(3,3).lt.-180.0_r8*RAD) a(3,3)=a(3,3)+360.0_r8*RAD
       b(1,1) = a(2,2)*a(3,3) - a(3,2)*a(2,3)
       b(1,2) = a(3,2)*a(1,3) - a(1,2)*a(3,3)
       b(1,3) = a(1,2)*a(2,3) - a(1,3)*a(2,2)
@@ -659,8 +655,6 @@ ZLOOP:     do iz = 1,nz-1
 enddo ZLOOP
 enddo THETALOOP
 enddo PHILOOP
-
-write(0,*)'g_oplus_pre generated tet4 mesh, ntet= ',ntet
 
 !...... for each tet4, find its neighbors.  Need this for fast search.
 !       basically invert jtet: the tets belonging to each of one tet's corner points are neighbors.
@@ -714,15 +708,15 @@ do kt=1,ntet                !..... loop tets
                xtmp=hx(cmatch(nn))-hx(ktclow)
                ytmp=hy(cmatch(nn))-hy(ktclow)
                ztmp=hz(cmatch(nn))-hz(ktclow)
-               if (ztmp.lt.-180.0*RAD) ztmp=ztmp+360.0*RAD
+               if (ztmp.lt.-180.0_r8*RAD) ztmp=ztmp+360.0_r8*RAD
                xi=xtmp*tmap(1,1,kt)+ytmp*tmap(1,2,kt)+ztmp*tmap(1,3,kt)
                yi=xtmp*tmap(2,1,kt)+ytmp*tmap(2,2,kt)+ztmp*tmap(2,3,kt)
                zi=xtmp*tmap(3,1,kt)+ytmp*tmap(3,2,kt)+ztmp*tmap(3,3,kt)
-               if (xi.gt.0.9) then
+               if (xi.gt.0.9_r8) then
                  ctot=ctot+2 !(1,0,0)
-               else if (yi.gt.0.9) then
+               else if (yi.gt.0.9_r8) then
                  ctot=ctot+3 !(0,1,0)
-               else if (zi.gt.0.9) then
+               else if (zi.gt.0.9_r8) then
                  ctot=ctot+4 !(0,0,1)
                else
                  ctot=ctot+1 !(0,0,0)
@@ -747,7 +741,6 @@ do kt=1,ntet                !..... loop tets
       enddo 
    enddo
 enddo 
-write(0,*)'max number of neighbors: ',maxnei
 
 return
 end subroutine g_oplus_pre
@@ -796,7 +789,7 @@ subroutine g_oplus_int(state_handle, ens_size, np, nt, nz, x, y, z, output, ista
   r = sqrt(rho**2+z**2)
   t = atan(z,rho)
   p = atan(y,x)
-  if (p.lt.0) p=p+2.*pi
+  if (p.lt.0.0_r8) p=p+2.0_r8*pi
 
   nsearch=0
   output=0.0
@@ -817,7 +810,7 @@ subroutine g_oplus_int(state_handle, ens_size, np, nt, nz, x, y, z, output, ista
     xi=xtmp*tmap(1,1,it)+ytmp*tmap(1,2,it)+ztmp*tmap(1,3,it)
     yi=xtmp*tmap(2,1,it)+ytmp*tmap(2,2,it)+ztmp*tmap(2,3,it)
     zi=xtmp*tmap(3,1,it)+ytmp*tmap(3,2,it)+ztmp*tmap(3,3,it)
-    if ((xi.ge.0.0).and.(yi.ge.0.0).and.(zi.ge.0.0).and.((xi+yi+zi).le.1.0)) then
+    if ((xi.ge.0.0_r8).and.(yi.ge.0.0_r8).and.(zi.ge.0.0_r8).and.((xi+yi+zi).le.1.0_r8)) then
       istatus=0
     else 
       !..... now look at the neighbors of the last itl
@@ -833,7 +826,7 @@ subroutine g_oplus_int(state_handle, ens_size, np, nt, nz, x, y, z, output, ista
         xi=xtmp*tmap(1,1,it)+ytmp*tmap(1,2,it)+ztmp*tmap(1,3,it)
         yi=xtmp*tmap(2,1,it)+ytmp*tmap(2,2,it)+ztmp*tmap(2,3,it)
         zi=xtmp*tmap(3,1,it)+ytmp*tmap(3,2,it)+ztmp*tmap(3,3,it)
-        if ((xi.ge.0.0).and.(yi.ge.0.0).and.(zi.ge.0.0).and.((xi+yi+zi).le.1.0)) then
+        if ((xi.ge.0.0_r8).and.(yi.ge.0.0_r8).and.(zi.ge.0.0_r8).and.((xi+yi+zi).le.1.0_r8)) then
           istatus=0
           itl=it 
           exit
@@ -878,7 +871,7 @@ subroutine g_oplus_int(state_handle, ens_size, np, nt, nz, x, y, z, output, ista
     xi=xtmp*tmap(1,1,it)+ytmp*tmap(1,2,it)+ztmp*tmap(1,3,it)
     yi=xtmp*tmap(2,1,it)+ytmp*tmap(2,2,it)+ztmp*tmap(2,3,it)
     zi=xtmp*tmap(3,1,it)+ytmp*tmap(3,2,it)+ztmp*tmap(3,3,it)
-    if ((xi.ge.0.0).and.(yi.ge.0.0).and.(zi.ge.0.0).and.((xi+yi+zi).le.1.0)) then
+    if ((xi.ge.0.0_r8).and.(yi.ge.0.0_r8).and.(zi.ge.0.0_r8).and.((xi+yi+zi).le.1.0_r8)) then
       istatus=0
     else 
       !       but at least in one of its neighbors, so final search is over all neighbors.
@@ -893,7 +886,7 @@ subroutine g_oplus_int(state_handle, ens_size, np, nt, nz, x, y, z, output, ista
         xi=xtmp*tmap(1,1,it)+ytmp*tmap(1,2,it)+ztmp*tmap(1,3,it)
         yi=xtmp*tmap(2,1,it)+ytmp*tmap(2,2,it)+ztmp*tmap(2,3,it)
         zi=xtmp*tmap(3,1,it)+ytmp*tmap(3,2,it)+ztmp*tmap(3,3,it)
-        if ((xi.ge.0.0).and.(yi.ge.0.0).and.(zi.ge.0.0).and.((xi+yi+zi).le.1.0)) then
+        if ((xi.ge.0.0_r8).and.(yi.ge.0.0_r8).and.(zi.ge.0.0_r8).and.((xi+yi+zi).le.1.0_r8)) then
           istatus=0
           itl=it 
           exit
@@ -957,14 +950,6 @@ subroutine g_oplus_int(state_handle, ens_size, np, nt, nz, x, y, z, output, ista
         call error_handler(E_ERR, routine, 'invalid face condition', source, revision, revdate)
       endif
 
-      !if (it.eq.itp2) then !endless ping-pong between 2 tets
-        !! point must be on edge/face, so say 'close enough'
-        !write(0,*) x,y,z,it,xi,yi,zi,xi+yi+zi
-        !istatus=0
-        !itl=it 
-        !exit
-      !endif
-
       nsearch=nsearch+1 
     enddo
 
@@ -981,8 +966,6 @@ subroutine g_oplus_int(state_handle, ens_size, np, nt, nz, x, y, z, output, ista
 
       domain_id = 1
       var_id    = 1
-
-      !>@todo CHECK THIS THOROUGHLY
 
       do it = 1,4
 
@@ -1007,40 +990,6 @@ subroutine g_oplus_int(state_handle, ens_size, np, nt, nz, x, y, z, output, ista
   return
 end subroutine g_oplus_int
 
-
-!-----------------------------------------------------------------------
-!>todo this routine does not appear to be used ... remove?
-
-subroutine invert3x3(A, Ainv, Adet) 
-! https://software.intel.com/en-us/forums/intel-fortran-compiler-for-linux-and-mac-os-x/topic/269207
-
-real(r8), intent(in)  ::  A(3,3) 
-real(r8), intent(out) ::  Ainv(3,3)
-real(r8), intent(out) ::  Adet 
-
-Ainv(1,1) = A(2,2)*A(3,3) - A(3,2)*A(2,3)
-Ainv(1,2) = A(3,2)*A(1,3) - A(1,2)*A(3,3)
-Ainv(1,3) = A(1,2)*A(2,3) - A(1,3)*A(2,2)
-
-Adet = Ainv(1,1)*A(1,1) + Ainv(1,2)*A(2,1) + Ainv(1,3)*A(3,1)
-
-!>@todo given the Fortran standard, I am not sure Adet can ever be smaller than 'tiny' ...
-if (Adet < tiny(Adet)) &
-   call error_handler(E_ERR,'invert3x3','nope',source,revision,revdate)
-
-Ainv(1,1) = Ainv(1,1)/Adet
-Ainv(1,2) = Ainv(1,2)/Adet
-Ainv(1,3) = Ainv(1,3)/Adet
-
-Ainv(2,1) = (A(2,3)*A(3,1) - A(2,1)*A(3,3))/Adet
-Ainv(2,2) = (A(1,1)*A(3,3) - A(3,1)*A(1,3))/Adet
-Ainv(2,3) = (A(2,1)*A(1,3) - A(1,1)*A(2,3))/Adet
-Ainv(3,1) = (A(2,1)*A(3,2) - A(2,2)*A(3,1))/Adet
-Ainv(3,2) = (A(3,1)*A(1,2) - A(1,1)*A(3,2))/Adet
-Ainv(3,3) = (A(1,1)*A(2,2) - A(1,2)*A(2,1))/Adet
-
-return
-end 
 
 !-----------------------------------------------------------------------
 
