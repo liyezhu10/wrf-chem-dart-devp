@@ -235,7 +235,7 @@ if (do_output_flag) then
 endif
 
 ! Check to make sure termlevel is set to a reasonable value
-call checkTermLevel
+call checkTermLevel(TERMLEVEL)
 
 ! Echo the module information using normal mechanism
 call register_module(source, revision, revdate)
@@ -574,6 +574,26 @@ subroutine log_it(message)
 if (logfileunit >= 0) write(logfileunit, *) trim(message)
 
 end subroutine log_it
+
+!-----------------------------------------------------------------------
+
+subroutine checkTermLevel(level)
+
+integer, intent(in) :: level
+
+select case (level)
+  case (E_MSG, E_ALLMSG, E_WARN, E_ERR, E_DBG)
+    ! ok, do nothing
+  case default
+    write(msgstring1, *) 'bad integer value for "termlevel", must be one of'
+    write(msgstring2, *) '-1 (E_MSG), 0 (E_ALLMSG), 1 (E_WARN), 2 (E_ERR), -2 (E_DBG)'
+    call error_handler(E_ERR,'checkTermLevel', msgstring1, &
+                       source, revision, revdate, text2=msgstring2)
+
+  end select
+
+end subroutine checkTermLevel
+
 
 !-----------------------------------------------------------------------
 !-----------------------------------------------------------------------
