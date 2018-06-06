@@ -75,7 +75,7 @@ use    utilities_mod, only : register_module, initialize_utilities,      &
                              do_nml_file, do_nml_term, logfileunit,      &
                              finalize_utilities 
 
-use  openggcm_interp_mod, only : g_oplus_pre, g_oplus_int, g_oplus_int_pnt, nsearch
+use  openggcm_interp_mod, only : g_oplus_pre, g_oplus_int, nsearch
 
 implicit none
 

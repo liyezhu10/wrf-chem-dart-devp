@@ -34,16 +34,19 @@ integer, parameter :: NPOI_MAX = 128000  !... max num of points
 ! these are not known a-priory, but could be adjusted later
 integer, parameter :: MTET = 80  !... max num of neighbors for each tet
 integer, parameter :: MPOI = 80  !... max num of tets for each point
-integer, parameter :: MAXDIM = 100  !... max of each dimension
+!integer, parameter :: MAXDIM = 100  !... max of each dimension
 
 !..... x,y,z grid point coord
 real(r8) :: hx(NPOI_MAX),hy(NPOI_MAX),hz(NPOI_MAX) 
 
 !..... tet mapping matrix (location of center and first corner, 
 real(r8) :: tcen(3,NTET_MAX),tlow(3,NTET_MAX),tmap(3,3,NTET_MAX)
+real(r8) :: tcen_rtp(3,NTET_MAX)
 
 !..... 4 corners + neicount + neighbors + myself
 integer :: itet(MTET+6,NTET_MAX) 
+!..... 4 face neighbors (1:x<0,y&z>0; 2:y<0,x&z>0; 3:z<0,x&y>0; 4:x,y,z>0)
+integer :: ifacetet(4,NTET_MAX)
 !..... for each point, count, and which tet4 it belongs to
 integer :: jtet(MPOI+1,NPOI_MAX) 
 !..... remember the ip,it,iz indices
@@ -51,8 +54,8 @@ integer :: kpoi(3,NPOI_MAX)
 !..... number of tet4 tetrahedra, search steps
 integer :: ntet, nsearch
 
-!..... corner id for grid indices
-integer :: ii(MAXDIM,MAXDIM,MAXDIM)
+!!..... corner id for grid indices
+!integer :: ii(MAXDIM,MAXDIM,MAXDIM)
 
 real(r8), parameter :: PI  = 4.0_r8*atan(1.0_r8)
 real(r8), parameter :: RAD = PI/180.0_r8
@@ -63,7 +66,7 @@ logical, save :: module_initialized = .false.
 
 public :: g_oplus_pre, &
           g_oplus_int, &
-          g_oplus_int_pnt, &
+          nsearch, &
           convert_to_cartesian
 
 contains
@@ -87,12 +90,14 @@ character(len=*), parameter :: routine = 'g_oplus_pre'
 
 real(r8) :: a(3,3), b(3,3), det
 real(r8) :: r, p, t
+real(r8) :: xi, xtmp, yi, ytmp, zi, ztmp
 
-!!!!integer :: ii(np,nt,nz) 
+integer :: ii(np,nt,nz) 
 
 integer :: ip, ip1, it, it1, iz, iz1, k, mytest
 integer :: i1, i2, i3, i4, i5, i6, i7, i8
 integer :: j, jt, kc, kt, l, ll, maxnei, ni, nj
+integer :: mm, nn, npnt, cmatch(3), ctot, jtc, ktc, ktclow
 
 if ( module_initialized ) then
    return ! only need to do this once.
@@ -128,9 +133,12 @@ do iz = 1,nz
       hy(k)=it
       hz(k)=iz
    else  ! This is the conversion to cartesian coords
-      hx(k) = r*cos(p)*cos(t)
-      hy(k) = r*sin(p)*cos(t)
-      hz(k) = r*sin(t)
+      !hx(k) = r*cos(p)*cos(t)
+      !hy(k) = r*sin(p)*cos(t)
+      !hz(k) = r*sin(t)
+      hx(k) = r
+      hy(k) = t
+      hz(k) = p
    endif
 
    !... save to map grid values later
@@ -186,9 +194,10 @@ ZLOOP:     do iz = 1,nz-1
       itet(3,ntet)=i8
       itet(4,ntet)=i7 
       !..... tet4 centers
-      tcen(1,ntet)=0.25*(hx(i1)+hx(i4)+hx(i8)+hx(i7)) 
-      tcen(2,ntet)=0.25*(hy(i1)+hy(i4)+hy(i8)+hy(i7)) 
-      tcen(3,ntet)=0.25*(hz(i1)+hz(i4)+hz(i8)+hz(i7)) 
+      tcen_rtp(1,ntet)=0.25*(hx(i1)+hx(i4)+hx(i8)+hx(i7)) 
+      tcen_rtp(2,ntet)=0.25*(hy(i1)+hy(i4)+hy(i8)+hy(i7)) 
+      tcen_rtp(3,ntet)=0.25*(hz(i1)+hz(i4)+hz(i8)+hz(i7)) 
+      if (ip.eq.np) tcen_rtp(3,ntet) = tcen_rtp(3,ntet) + 90.0*RAD
       do l=1,jtet(1,i1)
          if(jtet(l+1,i1).eq.ntet) goto 94971 
       enddo 
@@ -242,6 +251,9 @@ ZLOOP:     do iz = 1,nz-1
       a(3,1)=hz(i4)-hz(i1)
       a(3,2)=hz(i8)-hz(i1)
       a(3,3)=hz(i7)-hz(i1)
+      if (a(3,1).lt.-180.0*RAD) a(3,1)=a(3,1)+360.0*RAD
+      if (a(3,2).lt.-180.0*RAD) a(3,2)=a(3,2)+360.0*RAD
+      if (a(3,3).lt.-180.0*RAD) a(3,3)=a(3,3)+360.0*RAD
       !..... invert for mapping physical --> isoparameteric
       b(1,1) = a(2,2)*a(3,3) - a(3,2)*a(2,3)
       b(1,2) = a(3,2)*a(1,3) - a(1,2)*a(3,3)
@@ -269,9 +281,10 @@ ZLOOP:     do iz = 1,nz-1
       itet(2,ntet)=i5
       itet(3,ntet)=i8
       itet(4,ntet)=i7 
-      tcen(1,ntet)=0.25*(hx(i1)+hx(i5)+hx(i8)+hx(i7)) 
-      tcen(2,ntet)=0.25*(hy(i1)+hy(i5)+hy(i8)+hy(i7)) 
-      tcen(3,ntet)=0.25*(hz(i1)+hz(i5)+hz(i8)+hz(i7)) 
+      tcen_rtp(1,ntet)=0.25*(hx(i1)+hx(i5)+hx(i8)+hx(i7)) 
+      tcen_rtp(2,ntet)=0.25*(hy(i1)+hy(i5)+hy(i8)+hy(i7)) 
+      tcen_rtp(3,ntet)=0.25*(hz(i1)+hz(i5)+hz(i8)+hz(i7)) 
+      if (ip.eq.np) tcen_rtp(3,ntet) = tcen_rtp(3,ntet) + 90.0*RAD
       do l=1,jtet(1,i1)
          if(jtet(l+1,i1).eq.ntet) goto 94911 
       enddo 
@@ -319,6 +332,9 @@ ZLOOP:     do iz = 1,nz-1
       a(3,1)=hz(i5)-hz(i1)
       a(3,2)=hz(i8)-hz(i1)
       a(3,3)=hz(i7)-hz(i1)
+      if (a(3,1).lt.-180.0*RAD) a(3,1)=a(3,1)+360.0*RAD
+      if (a(3,2).lt.-180.0*RAD) a(3,2)=a(3,2)+360.0*RAD
+      if (a(3,3).lt.-180.0*RAD) a(3,3)=a(3,3)+360.0*RAD
       b(1,1) = a(2,2)*a(3,3) - a(3,2)*a(2,3)
       b(1,2) = a(3,2)*a(1,3) - a(1,2)*a(3,3)
       b(1,3) = a(1,2)*a(2,3) - a(1,3)*a(2,2)
@@ -343,9 +359,10 @@ ZLOOP:     do iz = 1,nz-1
       itet(2,ntet)=i5
       itet(3,ntet)=i6
       itet(4,ntet)=i7 
-      tcen(1,ntet)=0.25*(hx(i1)+hx(i5)+hx(i6)+hx(i7)) 
-      tcen(2,ntet)=0.25*(hy(i1)+hy(i5)+hy(i6)+hy(i7)) 
-      tcen(3,ntet)=0.25*(hz(i1)+hz(i5)+hz(i6)+hz(i7)) 
+      tcen_rtp(1,ntet)=0.25*(hx(i1)+hx(i5)+hx(i6)+hx(i7)) 
+      tcen_rtp(2,ntet)=0.25*(hy(i1)+hy(i5)+hy(i6)+hy(i7)) 
+      tcen_rtp(3,ntet)=0.25*(hz(i1)+hz(i5)+hz(i6)+hz(i7)) 
+      if (ip.eq.np) tcen_rtp(3,ntet) = tcen_rtp(3,ntet) + 180.0*RAD
       do l=1,jtet(1,i1)
       if(jtet(l+1,i1).eq.ntet) goto 94851 
       enddo 
@@ -391,6 +408,9 @@ ZLOOP:     do iz = 1,nz-1
       a(3,1)=hz(i5)-hz(i1)
       a(3,2)=hz(i6)-hz(i1)
       a(3,3)=hz(i7)-hz(i1)
+      if (a(3,1).lt.-180.0*RAD) a(3,1)=a(3,1)+360.0*RAD
+      if (a(3,2).lt.-180.0*RAD) a(3,2)=a(3,2)+360.0*RAD
+      if (a(3,3).lt.-180.0*RAD) a(3,3)=a(3,3)+360.0*RAD
       b(1,1) = a(2,2)*a(3,3) - a(3,2)*a(2,3)
       b(1,2) = a(3,2)*a(1,3) - a(1,2)*a(3,3)
       b(1,3) = a(1,2)*a(2,3) - a(1,3)*a(2,2)
@@ -415,9 +435,10 @@ ZLOOP:     do iz = 1,nz-1
       itet(2,ntet)=i4
       itet(3,ntet)=i3
       itet(4,ntet)=i7 
-      tcen(1,ntet)=0.25*(hx(i1)+hx(i4)+hx(i3)+hx(i7)) 
-      tcen(2,ntet)=0.25*(hy(i1)+hy(i4)+hy(i3)+hy(i7)) 
-      tcen(3,ntet)=0.25*(hz(i1)+hz(i4)+hz(i3)+hz(i7)) 
+      tcen_rtp(1,ntet)=0.25*(hx(i1)+hx(i4)+hx(i3)+hx(i7)) 
+      tcen_rtp(2,ntet)=0.25*(hy(i1)+hy(i4)+hy(i3)+hy(i7)) 
+      tcen_rtp(3,ntet)=0.25*(hz(i1)+hz(i4)+hz(i3)+hz(i7)) 
+      if (ip.eq.np) tcen_rtp(3,ntet) = tcen_rtp(3,ntet) + 180.0*RAD
       do l=1,jtet(1,i1)
       if(jtet(l+1,i1).eq.ntet) goto 94791 
       enddo 
@@ -463,6 +484,9 @@ ZLOOP:     do iz = 1,nz-1
       a(3,1)=hz(i4)-hz(i1)
       a(3,2)=hz(i3)-hz(i1)
       a(3,3)=hz(i7)-hz(i1)
+      if (a(3,1).lt.-180.0*RAD) a(3,1)=a(3,1)+360.0*RAD
+      if (a(3,2).lt.-180.0*RAD) a(3,2)=a(3,2)+360.0*RAD
+      if (a(3,3).lt.-180.0*RAD) a(3,3)=a(3,3)+360.0*RAD
       b(1,1) = a(2,2)*a(3,3) - a(3,2)*a(2,3)
       b(1,2) = a(3,2)*a(1,3) - a(1,2)*a(3,3)
       b(1,3) = a(1,2)*a(2,3) - a(1,3)*a(2,2)
@@ -487,9 +511,10 @@ ZLOOP:     do iz = 1,nz-1
       itet(2,ntet)=i2
       itet(3,ntet)=i3
       itet(4,ntet)=i7 
-      tcen(1,ntet)=0.25*(hx(i1)+hx(i2)+hx(i3)+hx(i7)) 
-      tcen(2,ntet)=0.25*(hy(i1)+hy(i2)+hy(i3)+hy(i7)) 
-      tcen(3,ntet)=0.25*(hz(i1)+hz(i2)+hz(i3)+hz(i7)) 
+      tcen_rtp(1,ntet)=0.25*(hx(i1)+hx(i2)+hx(i3)+hx(i7)) 
+      tcen_rtp(2,ntet)=0.25*(hy(i1)+hy(i2)+hy(i3)+hy(i7)) 
+      tcen_rtp(3,ntet)=0.25*(hz(i1)+hz(i2)+hz(i3)+hz(i7)) 
+      if (ip.eq.np) tcen_rtp(3,ntet) = tcen_rtp(3,ntet) + 270.0*RAD
       do l=1,jtet(1,i1)
       if(jtet(l+1,i1).eq.ntet) goto 94731 
       enddo 
@@ -535,6 +560,9 @@ ZLOOP:     do iz = 1,nz-1
       a(3,1)=hz(i2)-hz(i1)
       a(3,2)=hz(i3)-hz(i1)
       a(3,3)=hz(i7)-hz(i1)
+      if (a(3,1).lt.-180.0*RAD) a(3,1)=a(3,1)+360.0*RAD
+      if (a(3,2).lt.-180.0*RAD) a(3,2)=a(3,2)+360.0*RAD
+      if (a(3,3).lt.-180.0*RAD) a(3,3)=a(3,3)+360.0*RAD
       b(1,1) = a(2,2)*a(3,3) - a(3,2)*a(2,3)
       b(1,2) = a(3,2)*a(1,3) - a(1,2)*a(3,3)
       b(1,3) = a(1,2)*a(2,3) - a(1,3)*a(2,2)
@@ -559,9 +587,10 @@ ZLOOP:     do iz = 1,nz-1
       itet(2,ntet)=i2
       itet(3,ntet)=i6
       itet(4,ntet)=i7 
-      tcen(1,ntet)=0.25*(hx(i1)+hx(i2)+hx(i6)+hx(i7)) 
-      tcen(2,ntet)=0.25*(hy(i1)+hy(i2)+hy(i6)+hy(i7)) 
-      tcen(3,ntet)=0.25*(hz(i1)+hz(i2)+hz(i6)+hz(i7)) 
+      tcen_rtp(1,ntet)=0.25*(hx(i1)+hx(i2)+hx(i6)+hx(i7)) 
+      tcen_rtp(2,ntet)=0.25*(hy(i1)+hy(i2)+hy(i6)+hy(i7)) 
+      tcen_rtp(3,ntet)=0.25*(hz(i1)+hz(i2)+hz(i6)+hz(i7)) 
+      if (ip.eq.np) tcen_rtp(3,ntet) = tcen_rtp(3,ntet) + 270.0*RAD
       do l=1,jtet(1,i1)
       if(jtet(l+1,i1).eq.ntet) goto 94671 
       enddo 
@@ -607,6 +636,9 @@ ZLOOP:     do iz = 1,nz-1
       a(3,1)=hz(i2)-hz(i1)
       a(3,2)=hz(i6)-hz(i1)
       a(3,3)=hz(i7)-hz(i1)
+      if (a(3,1).lt.-180.0*RAD) a(3,1)=a(3,1)+360.0*RAD
+      if (a(3,2).lt.-180.0*RAD) a(3,2)=a(3,2)+360.0*RAD
+      if (a(3,3).lt.-180.0*RAD) a(3,3)=a(3,3)+360.0*RAD
       b(1,1) = a(2,2)*a(3,3) - a(3,2)*a(2,3)
       b(1,2) = a(3,2)*a(1,3) - a(1,2)*a(3,3)
       b(1,3) = a(1,2)*a(2,3) - a(1,3)*a(2,2)
@@ -633,13 +665,17 @@ write(0,*)'g_oplus_pre generated tet4 mesh, ntet= ',ntet
 !...... for each tet4, find its neighbors.  Need this for fast search.
 !       basically invert jtet: the tets belonging to each of one tet's corner points are neighbors.
 !       however, there are dups and triplets if they share an edge or face.
+ifacetet=-1 ! initialize array of facing tets
 maxnei=0
 do kt=1,ntet                !..... loop tets
+   r = tcen_rtp(1,kt)
+   t = tcen_rtp(2,kt)
+   p = tcen_rtp(3,kt)
+   tcen(1,kt) = r*cos(p)*cos(t)
+   tcen(2,kt) = r*sin(p)*cos(t)
+   tcen(3,kt) = r*sin(t)
    do ll=1,4                !..... loop corners
       kc=itet(ll,kt)        !..... the global number of that corner
-  !if (abs(hx(kc)).lt.1.or.abs(hy(kc)).lt.1.or.abs(hz(kc)).lt.1) then
-  !  write(0,*) kt,hx(kc),hy(kc),hz(kc)
-  !endif
       nj=jtet(1,kc)         !..... number of tets belonging to that corner
       do j=1,nj             !..... loop tets to add
          jt=jtet(j+1,kc)    !..... add tet jt to list, but need to look if it's already there
@@ -656,6 +692,57 @@ do kt=1,ntet                !..... loop tets
 
          maxnei=max(maxnei,ni) !..... we could use that later to adjust dimensions
 
+         !...check if tet and neighbor tet share a face
+         if (kt.ne.jt) then
+           npnt=0
+           do mm=1,4
+             do nn=1,4
+               ktc=itet(mm,kt)
+               jtc=itet(nn,jt)
+               if (ktc.eq.jtc) then
+                 npnt=npnt+1
+                 cmatch(npnt)=ktc  !save common corner
+               endif
+             enddo
+           enddo
+           !...4 face neighbors (1:x<0,y&z>0; 2:y<0,x&z>0; 3:z<0,x&y>0; 4:x,y,z>0)
+           if (npnt.eq.3) then
+             ktclow=itet(1,kt)
+  
+             ctot=0
+             do nn=1,3
+               xtmp=hx(cmatch(nn))-hx(ktclow)
+               ytmp=hy(cmatch(nn))-hy(ktclow)
+               ztmp=hz(cmatch(nn))-hz(ktclow)
+               if (ztmp.lt.-180.0*RAD) ztmp=ztmp+360.0*RAD
+               xi=xtmp*tmap(1,1,kt)+ytmp*tmap(1,2,kt)+ztmp*tmap(1,3,kt)
+               yi=xtmp*tmap(2,1,kt)+ytmp*tmap(2,2,kt)+ztmp*tmap(2,3,kt)
+               zi=xtmp*tmap(3,1,kt)+ytmp*tmap(3,2,kt)+ztmp*tmap(3,3,kt)
+               if (xi.gt.0.9) then
+                 ctot=ctot+2 !(1,0,0)
+               else if (yi.gt.0.9) then
+                 ctot=ctot+3 !(0,1,0)
+               else if (zi.gt.0.9) then
+                 ctot=ctot+4 !(0,0,1)
+               else
+                 ctot=ctot+1 !(0,0,0)
+               endif
+             enddo
+  
+             if (ctot.eq.6) then
+               ifacetet(3,kt)=jt !(1,2,3)
+             else if (ctot.eq.7) then
+               ifacetet(2,kt)=jt !(1,2,4)
+             else if (ctot.eq.8) then
+               ifacetet(1,kt)=jt !(1,3,4)
+             else if (ctot.eq.9) then
+               ifacetet(4,kt)=jt !(2,3,4)
+             else
+               call error_handler(E_ERR, routine, 'ctot error', source, revision, revdate)
+             endif
+           endif
+         endif
+
 100      continue
       enddo 
    enddo
@@ -667,325 +754,226 @@ end subroutine g_oplus_pre
 
 
 !-----------------------------------------------------------------------
-
 !> interpolates grid array u to point (x,y,z)
 !> hint: try to avoid entering points (x,y,z) that are not in the grid.
 !> istat=1 will be properly returned, but searches in vain are more expensive.
-
-subroutine g_oplus_int_pnt(np, nt, nz, u, x, y, z, output, istat)
-
-integer,  intent(in) :: np
-integer,  intent(in) :: nt
-integer,  intent(in) :: nz
-real(r8), intent(in) :: u(nz,nt,np)
-real(r8), intent(in) :: x,y,z
-real(r8), intent(out) :: output
-integer,  intent(out) :: istat
-
-character(len=*), parameter :: routine = 'g_oplus_int_pnt'
-
-!..... the point of the last interpolation
-!      most likely place to find this one
-!      next likely one of the neighbors,
-!      so we'd start searching here
-integer, save :: itl = -1, ipl = -1
-
-real(r8) :: d1, dd 
-
-integer :: i, it, ilook, ni, ip, k
-
-integer  :: tphi, ttheta, tz
-integer  :: iphi, itheta, iz
-integer  :: dphi, dtheta, dz
-integer  :: i1, i2, i3, i4
-real(r8) :: u1, u2, u3, u4
-real(r8) :: xi, xtmp, yi, ytmp, zi, ztmp
-
-! call g_oplus_pre()
-
-!write(0,*)'searching for ',x,y,z
-!write(0,*)'  initial ipl ',ipl
-
-nsearch=0
-output=0.0
-istat=0
-if(itl.lt.0) goto 590 !..... never called before, need full search
-!...... look in itl first
-it=itl
-nsearch=1
-ilook=1 
-xtmp=x-tlow(1,it)
-ytmp=y-tlow(2,it)
-ztmp=z-tlow(3,it)
-xi=xtmp*tmap(1,1,it)+ytmp*tmap(1,2,it)+ztmp*tmap(1,3,it)
-yi=xtmp*tmap(2,1,it)+ytmp*tmap(2,2,it)+ztmp*tmap(2,3,it)
-zi=xtmp*tmap(3,1,it)+ytmp*tmap(3,2,it)+ztmp*tmap(3,3,it)
-if( (xi.ge.0.0) .and. (yi.ge.0.0) .and. (zi.ge.0.0) .and. ((xi+yi+zi).le.1.0) ) goto 700
-!..... now look at the neighbors of the last itl
-ilook=2
-!..... look for point in neighbors of IT, jump to 700 if found
-!write(0,*)'          look for point in neighbors of IT'
-ni=itet(5,itl)+1 !..... number of neighbors, and itself, at the end
-do i=1,ni
-   it=itet(5+i,itl)
-   nsearch=nsearch+1 
-   xtmp=x-tlow(1,it)
-   ytmp=y-tlow(2,it)
-   ztmp=z-tlow(3,it)
-   xi=xtmp*tmap(1,1,it)+ytmp*tmap(1,2,it)+ztmp*tmap(1,3,it)
-   yi=xtmp*tmap(2,1,it)+ytmp*tmap(2,2,it)+ztmp*tmap(2,3,it)
-   zi=xtmp*tmap(3,1,it)+ytmp*tmap(3,2,it)+ztmp*tmap(3,3,it)
-   if(xi.lt.0.0) goto 94971 
-   if(yi.lt.0.0) goto 94971 
-   if(zi.lt.0.0) goto 94971 
-   if((xi+yi+zi).gt.1.0) goto 94971 
-   itl=it 
-!write(0,*)'          itl ',itl,tlow(1,itl),tlow(2,itl),tlow(3,itl)
-   goto 700
-
-94971 continue
-
-enddo
-
-590   continue
-
-!write(0,*)'          no success yet, full search, descending distance'
-      !...... no success yet, full search, descending distance
-      if(ipl.le.0) ipl=1 !...... arbitrary start at the beginning
-!write(0,*)'          ipl ',ipl,hx(ipl),hy(ipl),hz(ipl)
-      ilook=3 
-      !...... establish first distance
-      dd=(x-hx(ipl))**2+(y-hy(ipl))**2+(z-hz(ipl))**2
-600   continue
-      ip=ipl
-      !..... loop over neighbors
-      iz=kpoi(1,ip)
-      itheta=kpoi(2,ip)
-      iphi=kpoi(3,ip)
-      do dphi = -1,1
-        do dtheta = -1,1
-          do dz = -1,1
-            ttheta=itheta+dtheta
-            if (ttheta < 1 .or. ttheta > nt) cycle
-            !if (ttheta < 1) then
-              !ttheta=1
-              !iphi=mod(iphi+np/2,np)
-            !endif
-            !if (ttheta > nt) then
-              !ttheta=nt
-              !iphi=mod(iphi+np/2,np)
-            !endif
-            tz=iz+dz
-            if (tz < 1 .or. tz > nz) cycle
-            tphi=iphi+dphi
-            if (tphi < 1) tphi=np
-            if (tphi > np) tphi=1
-            k=ii(tphi,ttheta,tz)
-            nsearch=nsearch+1 
-            d1=(x-hx(k))**2+(y-hy(k))**2+(z-hz(k))**2
-            if(d1.lt.dd)then
-              dd=d1
-              ip=k
-            endif
-          enddo
-        enddo
-      enddo
-      if(ip.ne.ipl)then
-      ipl=ip !..... we did get closer, so we are not there yet
-!write(0,*)'          ipl ',ipl,hx(ipl),hy(ipl),hz(ipl)
-      goto 600
-      endif 
-!write(0,*)'          we are no longer getting closer'
-      !...... we are no longer getting closer. We may not yet be in it at this point,
-      !       but at least in one of its tets, so final search is over all associated tets.
-      !..... look for point in test belonging to IP, jump to 700 if found
-      ni=jtet(1,ipl) !..... number of neighbors, and itself, at the end
-      do i=1,ni
-      it=jtet(1+i,ipl)
-      nsearch=nsearch+1 
-      xtmp=x-tlow(1,it)
-      ytmp=y-tlow(2,it)
-      ztmp=z-tlow(3,it)
-      xi=xtmp*tmap(1,1,it)+ytmp*tmap(1,2,it)+ztmp*tmap(1,3,it)
-      yi=xtmp*tmap(2,1,it)+ytmp*tmap(2,2,it)+ztmp*tmap(2,3,it)
-      zi=xtmp*tmap(3,1,it)+ytmp*tmap(3,2,it)+ztmp*tmap(3,3,it)
-      if(xi.lt.0.0) goto 94931 
-      if(yi.lt.0.0) goto 94931 
-      if(zi.lt.0.0) goto 94931 
-      if((xi+yi+zi).gt.1.0) goto 94931 
-      itl=it 
-!write(0,*)'          ipl ',ipl,hx(ipl),hy(ipl),hz(ipl)
-!write(0,*)'          itl ',itl,tlow(1,itl),tlow(2,itl),tlow(3,itl)
-      goto 700
-94931 continue
-      enddo
-!write(0,*)'          we could not find it'
-      !...... we could not find it, so (x,y,z) should not be in the grid
-      !       not fatal in many cases, for example out of the domain for LOS integration
-      istat=1
-      output=0.0
-      return 
-
-700   continue
-!write(0,*)'          we found it'
-      !.... we only get here if we found the tet4 for this point
-      istat=0 
-      !........ now interpolate
-      !  see D. Kenwright and D. Lane, Proc. of the 6th IEEE Visualization Conference, 1070-2385/95, 1995, eq. 12
-      !   or any FEM book for basis functions (1. degree Legendre on unit tetrahedron)
-      !..... map index  local in tet4 (1,2,3,4) -->  linear (kpoi) --> iz,ip,it and get corner values
-      i1=itet(1,itl)
-      u1=u(kpoi(1,i1),kpoi(2,i1),kpoi(3,i1)) 
-      i2=itet(2,itl)
-      u2=u(kpoi(1,i2),kpoi(2,i2),kpoi(3,i2)) 
-      i3=itet(3,itl)
-      u3=u(kpoi(1,i3),kpoi(2,i3),kpoi(3,i3)) 
-      i4=itet(4,itl)
-      u4=u(kpoi(1,i4),kpoi(2,i4),kpoi(3,i4)) 
-      output=u1+(u2-u1)*xi+(u3-u1)*yi+(u4-u1)*zi
-      return
-      end
-
 !-----------------------------------------------------------------------
-
 
 subroutine g_oplus_int(state_handle, ens_size, np, nt, nz, x, y, z, output, istat)
 
-type(ensemble_type), intent(in) :: state_handle !< ensemble handle for data to interpolate in
-integer,             intent(in) :: ens_size     !< number of ensembles
+  type(ensemble_type), intent(in) :: state_handle !< ensemble handle for data to interpolate in
+  integer,             intent(in) :: ens_size     !< number of ensembles
 
-integer,  intent(in) :: np
-integer,  intent(in) :: nt
-integer,  intent(in) :: nz
-real(r8), intent(in) :: x,y,z
-real(r8), intent(out) :: output(ens_size)
-integer,  intent(out) :: istat(ens_size)
+  integer,  intent(in) :: np
+  integer,  intent(in) :: nt
+  integer,  intent(in) :: nz
+  real(r8), intent(in) :: x,y,z
+  real(r8), intent(out) :: output(ens_size)
+  integer,  intent(out) :: istat(ens_size)
 
-character(len=*), parameter :: routine = 'g_oplus_int'
+  character(len=*), parameter :: routine = 'g_oplus_int'
 
-integer  :: domain_id, var_id
-integer  :: dim_index(3)
-integer(i8)  :: state_index
+  integer  :: domain_id, var_id
+  integer  :: dim_index(3)
+  integer(i8)  :: state_index
 
-!..... the tet4 of the last interpolation
-!      most likely place to find this one
-!      next likely one of the neighbors,
-!      so we'd start searching here
+  !..... the tet4 of the last interpolation
+  !      most likely place to find this one
+  !      next likely one of the neighbors,
+  !      so we'd start searching here
 
-integer, save :: itl = -1 
+  integer, save :: itl = -1 
 
-real(r8) :: d1, dd
+  real(r8) :: d1, dd
+  real(r8) :: r, t, p, rho
 
-integer :: i, it, ilook, ni, kt, t
+  integer :: istatus, i, it, ilook, ni, kt, xyzloc
 
-real(r8) :: oplus(ens_size,4)
-real(r8) :: xi, xtmp, yi, ytmp, zi, ztmp
+  real(r8) :: oplus(ens_size,4)
+  real(r8) :: xi, xtmp, yi, ytmp, zi, ztmp, xyzi
 
-!write(0,*)'searching for ',x,y,z
-!write(0,*)'  initial itl ',itl
+  rho = sqrt(x**2+y**2)
+  r = sqrt(rho**2+z**2)
+  t = atan(z,rho)
+  p = atan(y,x)
+  if (p.lt.0) p=p+2.*pi
 
-nsearch=0
-output=0.0
-istat=0
-if(itl.lt.0) goto 590 !..... never called before, need full search
-!...... look in itl first
-it=itl
-nsearch=1
-ilook=1 
-xtmp=x-tlow(1,it)
-ytmp=y-tlow(2,it)
-ztmp=z-tlow(3,it)
-xi=xtmp*tmap(1,1,it)+ytmp*tmap(1,2,it)+ztmp*tmap(1,3,it)
-yi=xtmp*tmap(2,1,it)+ytmp*tmap(2,2,it)+ztmp*tmap(2,3,it)
-zi=xtmp*tmap(3,1,it)+ytmp*tmap(3,2,it)+ztmp*tmap(3,3,it)
-if( (xi.ge.0.0) .and. (yi.ge.0.0) .and. (zi.ge.0.0) .and. ((xi+yi+zi).le.1.0) ) goto 700
-!..... now look at the neighbors of the last itl
-ilook=2
-!..... look for point in neighbors of IT, jump to 700 if found
-!write(0,*)'          look for point in neighbors of IT'
-ni=itet(5,itl)+1 !..... number of neighbors, and itself, at the end
-do i=1,ni
-   it=itet(5+i,itl)
-   nsearch=nsearch+1 
-   xtmp=x-tlow(1,it)
-   ytmp=y-tlow(2,it)
-   ztmp=z-tlow(3,it)
-   xi=xtmp*tmap(1,1,it)+ytmp*tmap(1,2,it)+ztmp*tmap(1,3,it)
-   yi=xtmp*tmap(2,1,it)+ytmp*tmap(2,2,it)+ztmp*tmap(2,3,it)
-   zi=xtmp*tmap(3,1,it)+ytmp*tmap(3,2,it)+ztmp*tmap(3,3,it)
-   if(xi.lt.0.0) goto 94971 
-   if(yi.lt.0.0) goto 94971 
-   if(zi.lt.0.0) goto 94971 
-   if((xi+yi+zi).gt.1.0) goto 94971 
-   itl=it 
-!write(0,*)'          itl ',itl,tlow(1,itl),tlow(2,itl),tlow(3,itl)
-   goto 700
+  nsearch=0
+  output=0.0
+  istatus=1    !...default to 'not found'
 
-94971 continue
+  if (itl.lt.0) then
+    !..... never called before
+    itl=1 !...... arbitrary start at the beginning
+    ilook=3 
+  else
+    !...... look in itl first
+    it=itl
+    nsearch=1
+    ilook=1 
+    xtmp=r-tlow(1,it)
+    ytmp=t-tlow(2,it)
+    ztmp=p-tlow(3,it)
+    xi=xtmp*tmap(1,1,it)+ytmp*tmap(1,2,it)+ztmp*tmap(1,3,it)
+    yi=xtmp*tmap(2,1,it)+ytmp*tmap(2,2,it)+ztmp*tmap(2,3,it)
+    zi=xtmp*tmap(3,1,it)+ytmp*tmap(3,2,it)+ztmp*tmap(3,3,it)
+    if ((xi.ge.0.0).and.(yi.ge.0.0).and.(zi.ge.0.0).and.((xi+yi+zi).le.1.0)) then
+      istatus=0
+    else 
+      !..... now look at the neighbors of the last itl
+      ilook=2
+      !..... look for point in neighbors of IT
+      ni=itet(5,itl)+1 !..... number of neighbors, and itself, at the end
+      do i=1,ni
+        it=itet(5+i,itl)
+        nsearch=nsearch+1 
+        xtmp=r-tlow(1,it)
+        ytmp=t-tlow(2,it)
+        ztmp=p-tlow(3,it)
+        xi=xtmp*tmap(1,1,it)+ytmp*tmap(1,2,it)+ztmp*tmap(1,3,it)
+        yi=xtmp*tmap(2,1,it)+ytmp*tmap(2,2,it)+ztmp*tmap(2,3,it)
+        zi=xtmp*tmap(3,1,it)+ytmp*tmap(3,2,it)+ztmp*tmap(3,3,it)
+        if ((xi.ge.0.0).and.(yi.ge.0.0).and.(zi.ge.0.0).and.((xi+yi+zi).le.1.0)) then
+          istatus=0
+          itl=it 
+          exit
+        endif
+      enddo
+    endif
+  endif
+  
+  if (istatus.ne.0) then
+    !...... no success yet, full search, descending distance
 
-enddo
+    !...... establish first distance
+    it=itl
+    dd=(x-tcen(1,itl))**2+(y-tcen(2,itl))**2+(z-tcen(3,itl))**2
 
-590   continue
-
-!write(0,*)'          no success yet, full search, descending distance'
-      !...... no success yet, full search, descending distance
-      if(itl.le.0) itl=1 !...... arbitrary start at the beginning
-!write(0,*)'          itl ',itl,tlow(1,itl),tlow(2,itl),tlow(3,itl)
-      ilook=3 
-      !...... establish first distance
-      dd=(x-tcen(1,itl))**2+(y-tcen(2,itl))**2+(z-tcen(3,itl))**2
-600   continue
-      it=itl
+    do
       ni=itet(5,itl)+1 !...... number of neighbors
       !..... loop over neighbors
       do i=1,ni
-      kt=itet(5+i,itl)
-      nsearch=nsearch+1 
-      d1=(x-tcen(1,kt))**2+(y-tcen(2,kt))**2+(z-tcen(3,kt))**2
-      if(d1.lt.dd)then
-      dd=d1
-      it=kt
-      endif
+        kt=itet(5+i,itl)
+        nsearch=nsearch+1 
+        d1=(x-tcen(1,kt))**2+(y-tcen(2,kt))**2+(z-tcen(3,kt))**2
+        if(d1.lt.dd)then
+          dd=d1
+          it=kt
+        endif
       enddo
       if(it.ne.itl)then
-      itl=it !..... we did get closer, so we are not there yet
-!write(0,*)'          itl ',itl,tlow(1,itl),tlow(2,itl),tlow(3,itl)
-      goto 600
+        itl=it !..... we did get closer, so we are not there yet
+        cycle
+      else 
+        exit
       endif 
-!write(0,*)'          we are no longer getting closer'
-      !...... we are no longer getting closer. We may not yet be in it at this point,
+    enddo
+
+    !...... we are no longer getting closer. We may not yet be in it at this point,
+    !...... look in itl first
+    it=itl
+    xtmp=r-tlow(1,it)
+    ytmp=t-tlow(2,it)
+    ztmp=p-tlow(3,it)
+    xi=xtmp*tmap(1,1,it)+ytmp*tmap(1,2,it)+ztmp*tmap(1,3,it)
+    yi=xtmp*tmap(2,1,it)+ytmp*tmap(2,2,it)+ztmp*tmap(2,3,it)
+    zi=xtmp*tmap(3,1,it)+ytmp*tmap(3,2,it)+ztmp*tmap(3,3,it)
+    if ((xi.ge.0.0).and.(yi.ge.0.0).and.(zi.ge.0.0).and.((xi+yi+zi).le.1.0)) then
+      istatus=0
+    else 
       !       but at least in one of its neighbors, so final search is over all neighbors.
-      !..... look for point in neighbors of IT, jump to 700 if found
+      !..... look for point in neighbors of IT
       ni=itet(5,itl)+1 !..... number of neighbors, and itself, at the end
       do i=1,ni
-      it=itet(5+i,itl)
-      nsearch=nsearch+1 
-      xtmp=x-tlow(1,it)
-      ytmp=y-tlow(2,it)
-      ztmp=z-tlow(3,it)
+        it=itet(5+i,itl)
+        nsearch=nsearch+1 
+        xtmp=r-tlow(1,it)
+        ytmp=t-tlow(2,it)
+        ztmp=p-tlow(3,it)
+        xi=xtmp*tmap(1,1,it)+ytmp*tmap(1,2,it)+ztmp*tmap(1,3,it)
+        yi=xtmp*tmap(2,1,it)+ytmp*tmap(2,2,it)+ztmp*tmap(2,3,it)
+        zi=xtmp*tmap(3,1,it)+ytmp*tmap(3,2,it)+ztmp*tmap(3,3,it)
+        if ((xi.ge.0.0).and.(yi.ge.0.0).and.(zi.ge.0.0).and.((xi+yi+zi).le.1.0)) then
+          istatus=0
+          itl=it 
+          exit
+        endif
+      enddo
+    endif
+  endif
+    
+  if (istatus.ne.0) then
+    ! could not find it, so follow tets that share face
+
+    ! The line from C to P must intersect one of the faces of T. Find that face:
+    !   map P to the unit TET —> P* (you do that anyways to see if P is in T)
+    !   now 4 possibilities, according where P lies relative to T.  
+    !   Let (x,y,z)=P* depending across which face of T lies, either
+    !     1. x<0, y,z>0
+    !     2. y<0, x,z>0
+    !     3. z<0, x,y>0
+    !     4. x,y,z>0 (x+y+z>1, already tested, otherwise it would be inside T)
+    ! Now, that the face is found, it belongs to one and only one neighbor TET.
+    ! Repeat with each new TET until proper TET found
+
+    it=itl
+
+    !itp1=-100
+
+    do while(it.ge.0)
+      xtmp=r-tlow(1,it)
+      ytmp=t-tlow(2,it)
+      ztmp=p-tlow(3,it)
       xi=xtmp*tmap(1,1,it)+ytmp*tmap(1,2,it)+ztmp*tmap(1,3,it)
       yi=xtmp*tmap(2,1,it)+ytmp*tmap(2,2,it)+ztmp*tmap(2,3,it)
       zi=xtmp*tmap(3,1,it)+ytmp*tmap(3,2,it)+ztmp*tmap(3,3,it)
-      if(xi.lt.0.0) goto 94931 
-      if(yi.lt.0.0) goto 94931 
-      if(zi.lt.0.0) goto 94931 
-      if((xi+yi+zi).gt.1.0) goto 94931 
-      itl=it 
-!write(0,*)'          itl ',itl,tlow(1,itl),tlow(2,itl),tlow(3,itl)
-      goto 700
-94931 continue
-      enddo
-!write(0,*)'          we could not find it'
-      !...... we could not find it, so (x,y,z) should not be in the grid
-      !       not fatal in many cases, for example out of the domain for LOS integration
-      istat=1
-      output=0.0
-      return 
+      !if ((xi.ge.0.0).and.(yi.ge.0.0).and.(zi.ge.0.0).and.((xi+yi+zi).le.1.0)) then
+      !more lenient here to deal with rounding, face/edge points
+      if ((xi.ge.-1.0d-10).and.(yi.ge.-1.0d-10).and.(zi.ge.-1.0d-10).and.((xi+yi+zi).le.(1.0d0+1.0d-10))) then
+        istatus=0
+        itl=it 
+        exit
+      endif
 
-700   continue
-!write(0,*)'          we found it'
+      !itp2=itp1 
+      !itp1=it
+
+      xyzi=amin1(xi,yi,zi)
+      if (xyzi.lt.0.0) then
+        xyzloc=minloc( (/ xi,yi,zi /), 1 )
+        select case (xyzloc)
+          case(1)
+            it=ifacetet(1,it)
+          case(2)
+            it=ifacetet(2,it)
+          case(3)
+            it=ifacetet(3,it)
+          case default
+            call error_handler(E_ERR, routine, 'face direction error', source, revision, revdate)
+        end select
+      else if ((xi+yi+zi).gt.1) then
+        it=ifacetet(4,it)
+      else
+        call error_handler(E_ERR, routine, 'invalid face condition', source, revision, revdate)
+      endif
+
+      !if (it.eq.itp2) then !endless ping-pong between 2 tets
+        !! point must be on edge/face, so say 'close enough'
+        !write(0,*) x,y,z,it,xi,yi,zi,xi+yi+zi
+        !istatus=0
+        !itl=it 
+        !exit
+      !endif
+
+      nsearch=nsearch+1 
+    enddo
+
+  endif
+
+  istat(:)=istatus
+
+  if (istatus.eq.0) then
       !.... we only get here if we found the tet4 for this point
-      istat=0 
       !........ now interpolate
       !  see D. Kenwright and D. Lane, Proc. of the 6th IEEE Visualization Conference, 1070-2385/95, 1995, eq. 12
       !   or any FEM book for basis functions (1. degree Legendre on unit tetrahedron)
@@ -1011,9 +999,14 @@ enddo
       output=oplus(:,1) + (oplus(:,2) - oplus(:,1))*xi + &
                           (oplus(:,3) - oplus(:,1))*yi + &
                           (oplus(:,4) - oplus(:,1))*zi
+  endif
 
-      return
-      end
+  !...... if we could not find it, (x,y,z) should not be in the grid
+  !       not fatal in many cases, for example out of the domain for LOS integration
+
+  return
+end
+
 
 !-----------------------------------------------------------------------
 !>todo this routine does not appear to be used ... remove?
