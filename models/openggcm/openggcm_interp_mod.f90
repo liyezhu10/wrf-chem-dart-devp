@@ -984,15 +984,15 @@ subroutine g_oplus_int(state_handle, ens_size, np, nt, nz, x, y, z, output, ista
 
       !>@todo CHECK THIS THOROUGHLY
 
-      do t = 1,4
+      do it = 1,4
 
-         dim_index(1) = kpoi(1, itet(t,itl))    ! dim_index(1) is the index into height
-         dim_index(2) = kpoi(2, itet(t,itl))    ! dim_index(2) is the index into lat
-         dim_index(3) = kpoi(3, itet(t,itl))    ! dim_index(3) is the index into lon
+         dim_index(1) = kpoi(1, itet(it,itl))    ! dim_index(1) is the index into height
+         dim_index(2) = kpoi(2, itet(it,itl))    ! dim_index(2) is the index into lat
+         dim_index(3) = kpoi(3, itet(it,itl))    ! dim_index(3) is the index into lon
   
          state_index = get_dart_vector_index(dim_index(1), dim_index(2), dim_index(3), domain_id, var_id)
 
-         oplus(:,t) = get_state(state_index, state_handle)
+         oplus(:,it) = get_state(state_index, state_handle)
 
       enddo
 
@@ -1005,7 +1005,7 @@ subroutine g_oplus_int(state_handle, ens_size, np, nt, nz, x, y, z, output, ista
   !       not fatal in many cases, for example out of the domain for LOS integration
 
   return
-end
+end subroutine g_oplus_int
 
 
 !-----------------------------------------------------------------------
