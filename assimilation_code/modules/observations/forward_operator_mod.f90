@@ -124,6 +124,7 @@ type(obs_def_type) :: obs_def
 type(obs_type)     :: observation
 
 integer :: iError
+integer :: debug, debug2
 
 ! IMPORTANT, IT IS ASSUMED THAT ACTUAL ENSEMBLES COME FIRST
 ! It is also assumed that the ensemble members are in the same
@@ -251,8 +252,16 @@ else ! distributed state
    ! Loop through all my observations in the set
    MY_OBSERVATIONS: do j = 1,  obs_fwd_op_ens_handle%my_num_vars
 
+   debug = size(obs_fwd_op_ens_handle%my_vars)
+!   write(*,*) "Debug -------- ", obs_fwd_op_ens_handle%my_num_vars
+
    ! convert the local obs number to global obs number
    global_obs_num = obs_fwd_op_ens_handle%my_vars(j) 
+
+   if (global_obs_num > 146125) then
+      debug2 = 1
+   endif
+
    thiskey(1) = keys(global_obs_num)
   
    call get_obs_from_key(seq, keys(global_obs_num), observation)

@@ -58,6 +58,8 @@ type chunk_type
   integer :: num_obs
   integer :: owner
   integer, dimension(max_chunk_size) :: obs_list ! Make allocatable later?
+!  logical, dimension(max_chunk_size) :: ob_is_valid ! Boolean of whether an ob passes the QC check -- this is intended to solve a bug where a chunk has
+!                                                    ! multiple 'bad' obs and we can't simply 'shift' values, since the shifted one could also be bad!
 end type chunk_type
 
 type graph_info_type
@@ -300,7 +302,7 @@ subroutine read_graph_info(ens_handle, filename)
   ! Local variables:
   integer :: infile, i
 
-  write(*,*) "GRAPH_DEBUG: num_vars = ", ens_handle%num_vars
+  !write(*,*) "GRAPH_DEBUG: num_vars = ", ens_handle%num_vars
 
   ! Allocate the color map:
   allocate(ens_handle%graph_info%color_of_observation(ens_handle%num_vars))
@@ -320,7 +322,7 @@ subroutine read_graph_info(ens_handle, filename)
   ens_handle%graph_info%num_colors  = maxval(ens_handle%graph_info%color_of_observation)
 
   ! Debug/testing
-  write(*,*) "GRAPH_DEBUG: Colors : ", ens_handle%graph_info%num_colors, ens_handle%num_vars
+  !write(*,*) "GRAPH_DEBUG: Colors : ", ens_handle%graph_info%num_colors, ens_handle%num_vars
 
   ! Now create the set of chunks and their mapping to observations:
   call create_chunk_list(ens_handle)
@@ -358,7 +360,7 @@ subroutine create_chunk_list(ens_handle)
   allocate(color_sizes(num_colors))
   allocate(chunks_per_color(num_colors))
 
-  write(*,*) "Colors -- number of colors & chunk size = ", num_colors, chunk_size
+  !write(*,*) "Colors -- number of colors & chunk size = ", num_colors, chunk_size
 
   ! Get the size and # of chunks of each color - this is a bit hackish, maybe ANY can work better?
   do i = 1, num_colors
@@ -376,14 +378,14 @@ subroutine create_chunk_list(ens_handle)
   allocate(ens_handle%graph_info%chunks(chunk_count))
 
   ! Assign chunks
-  write(*,*) "Assigning chunks : ", num_colors, chunk_size, size(ens_handle%graph_info%chunks)
+  !write(*,*) "Assigning chunks : ", num_colors, chunk_size, size(ens_handle%graph_info%chunks)
 
   numRanks = task_count()
   do i = 1, num_colors
     remaining_obs = color_sizes(i)
 
     do while (remaining_obs > 0)
-      write(*,*) "Remaining obs : ", remaining_obs, color_sizes(i)
+      !write(*,*) "Remaining obs : ", remaining_obs, color_sizes(i)
       if (remaining_obs > chunk_size) then
         ens_handle%graph_info%chunks(chunk_index)%num_obs = chunk_size
         ens_handle%graph_info%chunks(chunk_index)%owner = MOD(chunk_index-1, numRanks)
@@ -411,12 +413,12 @@ subroutine create_chunk_list(ens_handle)
   enddo
 
 !  ! Debug:
-  write(*,*) "Total of colors, chunks : ", sum(color_sizes), chunk_count
-  write(*,*) "Colors%chunk_size = ", chunk_size
+!  write(*,*) "Total of colors, chunks : ", sum(color_sizes), chunk_count
+!  write(*,*) "Colors%chunk_size = ", chunk_size
 
-  do i = 1, size(ens_handle%graph_info%chunks)
-    write(*,*) "Chunk Assigment: ",i," -> ",ens_handle%graph_info%chunks(i)%owner, ens_handle%graph_info%chunks(i)%num_obs
-  enddo
+!  do i = 1, size(ens_handle%graph_info%chunks)
+!    write(*,*) "Chunk Assigment: ",i," -> ",ens_handle%graph_info%chunks(i)%owner, ens_handle%graph_info%chunks(i)%num_obs
+!  enddo
 
 end subroutine create_chunk_list
 
@@ -447,9 +449,9 @@ subroutine create_pe_chunk_map(ens_handle)
   end do
 
   ! Print it all out for debugging:
-  do taskloop = 1, task_count()
-     write(*,*) "DEBUG: TaskLoop = ", taskloop, chunks_per_pe(taskloop)
-  end do
+  !do taskloop = 1, task_count()
+  !   write(*,*) "DEBUG: TaskLoop = ", taskloop, chunks_per_pe(taskloop)
+  !end do
 
   ! Now allocate the pe_chunk_map
   max_chunks_per_pe = maxval(chunks_per_pe)
@@ -470,7 +472,7 @@ subroutine create_pe_chunk_map(ens_handle)
   enddo
 
   ! Debug
-  write(*,*) "DEBUG: ChunkMap => ", my_task_id(), ens_handle%graph_info%pe_chunk_map(my_task_id()+1, 1:2)
+  !write(*,*) "DEBUG: ChunkMap => ", my_task_id(), ens_handle%graph_info%pe_chunk_map(my_task_id()+1, 1:2)
 
 
 
@@ -804,17 +806,17 @@ type(ensemble_type), intent(inout) :: ens_handle
 ! Free up the allocated storage
 !deallocate(ens_handle%my_copies, ens_handle%time, ens_handle%my_vars, &
 !           ens_handle%copies, ens_handle%task_to_pe_list, ens_handle%pe_to_task_list)
-write(*,*) "Deallocate 1..."
+!write(*,*) "Deallocate 1..."
 if (allocated(ens_handle%my_copies)) deallocate(ens_handle%my_copies)
-write(*,*) "Deallocate 2..."
+!write(*,*) "Deallocate 2..."
 if (allocated(ens_handle%time)) deallocate(ens_handle%time)
-write(*,*) "Deallocate 3..."
+!write(*,*) "Deallocate 3..."
 if (allocated(ens_handle%my_vars)) deallocate(ens_handle%my_vars)
-write(*,*) "Deallocate 4..."
+!write(*,*) "Deallocate 4..."
 if (allocated(ens_handle%copies)) deallocate(ens_handle%copies)
-write(*,*) "Deallocate 5..."
+!write(*,*) "Deallocate 5..."
 if (allocated(ens_handle%task_to_pe_list)) deallocate(ens_handle%task_to_pe_list)
-write(*,*) "Deallocate 6..."
+!write(*,*) "Deallocate 6..."
 if (allocated(ens_handle%pe_to_task_list)) deallocate(ens_handle%pe_to_task_list)
 
 if(allocated(ens_handle%vars)) deallocate(ens_handle%vars)
@@ -953,7 +955,7 @@ type (ensemble_type),  intent(inout)  :: ens_handle
 integer :: num_per_pe_below, num_left_over, i, num_vars, chunk
 
 if (ens_handle%distribution_type == 2) then
-  write(*,*) "Setup: GRAPH MODE - assigning chunks"
+  !write(*,*) "Setup: GRAPH MODE - assigning chunks"
   ! For now, until we understand this better, just store all:
   num_per_pe_below = ens_handle%num_copies / num_pes
   num_left_over = ens_handle%num_copies - num_per_pe_below * num_pes
@@ -962,7 +964,7 @@ if (ens_handle%distribution_type == 2) then
   else
      ens_handle%my_num_copies = num_per_pe_below
   endif
-  write(*,*) "Setup: ens_handle%my_num_copies = ", ens_handle%my_num_copies
+  !write(*,*) "Setup: ens_handle%my_num_copies = ", ens_handle%my_num_copies
 
   ! Do the same thing for copy complete:
   !num_per_pe_below = ens_handle%num_vars / num_pes
@@ -990,9 +992,9 @@ if (ens_handle%distribution_type == 2) then
   ens_handle%my_num_vars = num_vars 
 
 
-  write(*,*) "Setup: ens_handle%my_num_vars   = ", ens_handle%my_num_vars
-  write(*,*) "Setup: transpose_type = ", ens_handle%transpose_type
-  write(*,*) "Allocate: ", my_task_id(), ens_handle%num_copies, ens_handle%my_num_vars
+  !write(*,*) "Setup: ens_handle%my_num_vars   = ", ens_handle%my_num_vars
+  !write(*,*) "Setup: transpose_type = ", ens_handle%transpose_type
+  !write(*,*) "Allocate: ", my_task_id(), ens_handle%num_copies, ens_handle%my_num_vars
 
 
   !Allocate the storage for copies and vars all at once
@@ -1041,7 +1043,7 @@ else
   else
      ens_handle%my_num_copies = num_per_pe_below
   endif
-  write(*,*) "Setup: ens_handle%my_num_copies = ", ens_handle%my_num_copies
+  !write(*,*) "Setup: ens_handle%my_num_copies = ", ens_handle%my_num_copies
 
   ! Do the same thing for copy complete: figure out which vars I get
   num_per_pe_below = ens_handle%num_vars / num_pes
@@ -1051,8 +1053,8 @@ else
   else
      ens_handle%my_num_vars = num_per_pe_below
   endif
-  write(*,*) "Setup: ens_handle%my_num_vars   = ", ens_handle%my_num_vars
-  write(*,*) "Setup: transpose_type = ", ens_handle%transpose_type
+  !write(*,*) "Setup: ens_handle%my_num_vars   = ", ens_handle%my_num_vars
+  !write(*,*) "Setup: transpose_type = ", ens_handle%transpose_type
 
 
   !Allocate the storage for copies and vars all at once
@@ -1145,7 +1147,8 @@ integer                 :: get_max_num_vars
 integer(i8), intent(in) :: num_vars
 !!!integer, intent(in) :: distribution_type
 
-get_max_num_vars = num_vars / num_pes + 1
+!get_max_num_vars = num_vars / num_pes + 1
+get_max_num_vars = num_vars + 400  !! bpd6 - just testing 
 
 end function get_max_num_vars
 
@@ -1421,6 +1424,7 @@ my_num_copies = ens_handle%my_num_copies
 my_pe         = ens_handle%my_pe
 
 ! What is maximum number of vars stored on a copy complete pe?
+!write(*,*) "*** DEBUG ** Calling get_max_num_vars"
 max_num_vars = get_max_num_vars(num_vars)
 
 ! What is maximum number of copies stored on a var complete pe?
@@ -1602,6 +1606,7 @@ my_num_copies = ens_handle%my_num_copies
 my_pe         = ens_handle%my_pe
 
 ! What is maximum number of vars stored on a copy complete pe?
+!write(*,*) "*** DEBUG ** Calling get_max_num_vars"
 max_num_vars = get_max_num_vars(num_vars)
 
 ! What is maximum number of copies stored on a var complete pe?
@@ -2097,38 +2102,47 @@ integer                              :: last_node_task_number, num_nodes
 integer                              :: i, j
 integer, allocatable                 :: mycount(:)
 
+logical ::  direct_mode = .true. ! debug option for bpd6
+
 ! Find number of nodes and find number of tasks on last node
 call calc_tasks_on_each_node(num_nodes, last_node_task_number)
 
-write(*,*) "INFO: CHUNK_ROUND_ROBIN : ", num_nodes, last_node_task_number
+!write(*,*) "INFO: CHUNK_ROUND_ROBIN : ", num_nodes, last_node_task_number
 !stop
 
-allocate(mycount(num_nodes))
+if (direct_mode == .true.) then
+  do i = 1, num_pes
+    ens_handle%task_to_pe_list(i) = i-1
+  enddo
+else
+  allocate(mycount(num_nodes))
 
-mycount(:) = 1  ! keep track of the pes assigned to each node
-i = 0         ! keep track of the # of pes assigned
+  mycount(:) = 1  ! keep track of the pes assigned to each node
+  i = 0         ! keep track of the # of pes assigned
 
-do while (i < num_pes)   ! until you run out of processors
-   do j = 1, num_nodes   ! loop around the nodes
+  do while (i < num_pes)   ! until you run out of processors
+     do j = 1, num_nodes   ! loop around the nodes
 
-      if(j == num_nodes) then  ! special case for the last node - it could have fewer tasks than the other nodes
-         if(mycount(j) <= last_node_task_number) then
-            ens_handle%task_to_pe_list(tasks_per_node*(j-1) + mycount(j)) = i
-            mycount(j) = mycount(j) + 1
-            i = i + 1
-         endif
-      else
-         if(mycount(j) <= tasks_per_node) then
-            ens_handle%task_to_pe_list(tasks_per_node*(j-1) + mycount(j)) = i
-            mycount(j) = mycount(j) + 1
-            i = i + 1
-         endif
-      endif
+        if(j == num_nodes) then  ! special case for the last node - it could have fewer tasks than the other nodes
+           if(mycount(j) <= last_node_task_number) then
+              ens_handle%task_to_pe_list(tasks_per_node*(j-1) + mycount(j)) = i
+              mycount(j) = mycount(j) + 1
+              i = i + 1
+           endif
+        else
+           if(mycount(j) <= tasks_per_node) then
+              ens_handle%task_to_pe_list(tasks_per_node*(j-1) + mycount(j)) = i
+              mycount(j) = mycount(j) + 1
+              i = i + 1
+           endif
+        endif
 
-   enddo
-enddo
+     enddo
+  enddo
 
-deallocate(mycount)
+  deallocate(mycount)
+endif
+
 
 call create_pe_to_task_list(ens_handle)
 

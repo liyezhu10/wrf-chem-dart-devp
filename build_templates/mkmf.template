@@ -136,7 +136,8 @@ GPTL = /glade/p/work/bdobbins/Projects/DART/source/DART.graph_mode/GPTL
 
 INCS = -I$(NETCDF)/include -I$(GPTL)
 LIBS = ${GPTL}/libgptl.a -L$(NETCDF)/lib -lnetcdff -lnetcdf 
-FFLAGS  = -O0 -g -traceback  -assume buffered_io $(INCS)
+#FFLAGS  = -O0 -g -traceback  -assume buffered_io $(INCS)
+FFLAGS  = -O3 -xHost  -assume buffered_io $(INCS)
 LDFLAGS = $(FFLAGS) $(LIBS)
 
 # for development or debugging, use this instead:

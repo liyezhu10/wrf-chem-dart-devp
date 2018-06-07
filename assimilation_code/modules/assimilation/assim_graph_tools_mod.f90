@@ -508,15 +508,21 @@ integer :: debug_loop
 !debug
 real(kind=8) :: checksum, checksum_total
 
+!packed sends (into a buffer)?
+logical :: packed_sends = .true.
+
+! synchronize between timers?
+logical :: sync_between_timers = .false.
+
 ! trace files:
 open(unit=15, file="trace.1")
 open(unit=16, file="trace.2")
 
-checksum = sum(obs_ens_handle%copies(1:ens_size,:))
-call MPI_Reduce(checksum, checksum_total, 1, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, iError)
-if (my_task_id() == 0) then
-   write(*,*) "PreCheck0: ", checksum_total
-endif
+!checksum = sum(obs_ens_handle%copies(1:ens_size,:))
+!call MPI_Reduce(checksum, checksum_total, 1, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, iError)
+!if (my_task_id() == 0) then
+!   write(*,*) "PreCheck0: ", checksum_total
+!endif
 
 !call task_sync()
 call t_startf('ASSIMILATE:Pre.Loop')
@@ -531,7 +537,7 @@ if (.not. module_initialized) call assim_tools_init()
 !HK make window for mpi one-sided communication
 ! used for vertical conversion in get_close_obs
 ! Need to give create_mean_window the mean copy
-write(*,*) "Setup: Calling create_mean_window w/ ens_handle"
+!write(*,*) "Setup: Calling create_mean_window w/ ens_handle"
 !call create_mean_window(ens_handle, ENS_MEAN_COPY, distribute_mean, graph=.true.)
 call create_mean_window(ens_handle, ENS_MEAN_COPY, distribute_mean)  ! Just use ens_handle%distribution type?
 
@@ -620,6 +626,9 @@ call init_obs(observation, get_num_copies(obs_seq), get_num_qc(obs_seq))
 ! overwrite the vertical location with the required localization vertical coordinate when you 
 ! do the forward operator calculation
 call get_my_obs_loc(ens_handle, obs_ens_handle, obs_seq, keys, my_obs_loc, my_obs_kind, my_obs_type, obs_time)
+!do iError = 1, obs_ens_handle%my_num_vars
+!  write(*,*) "Loc : ", obs_ens_handle%my_vars(iError), my_obs_loc(iError)%lon, my_obs_loc(iError)%lat
+!enddo
 
 if (convert_all_obs_verticals_first .and. is_doing_vertical_conversion) then
    ! convert the vertical of all my observations to the localization coordinate
@@ -737,36 +746,50 @@ call t_startf('tmp_loop')
 !  write(*,*) "ECheck3 : ", iError, sum(obs_ens_handle%copies(:,iError))
 !end do
 
-checksum = sum(obs_ens_handle%copies(1:ens_size,:))
-call MPI_Reduce(checksum, checksum_total, 1, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, iError)
-if (my_task_id() == 0) then
-   !write(*,*) "PreCheck1: ", checksum_total
-endif
+!checksum = sum(obs_ens_handle%copies(1:ens_size,:))
+!call MPI_Reduce(checksum, checksum_total, 1, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, iError)
+!if (my_task_id() == 0) then
+!   !write(*,*) "PreCheck1: ", checksum_total
+!endif
 
 ! bpd6 - error checking:
-do iError = 1, obs_ens_handle%my_num_vars
-  write(*,*) "Debug1: ", iError, sum(obs_ens_handle%copies(:,iError))
-end do
+!do iError = 1, obs_ens_handle%my_num_vars
+!  write(*,*) "Debug1: ", iError, sum(obs_ens_handle%copies(:,iError))
+!end do
 
 ! Loop through all the chunks:
+!write(*,*) "[Info] Number of Chunks = ", size(chunks)
+nth_obs = size(chunks) / 100
+if (nth_obs == 0) then 
+  nth_obs = 1
+endif
+
+if (my_task_id() == 0) then
+   write(*,*) "Number of chunks : ", size(chunks)
+endif
 CHUNK_LOOP: do i = 1, size(chunks)
-   write(*,*) "----------------------------------"
+   !write(*,*) "----------------------------------"
    !write(*,*) "Chunk loop : ", i, size(chunks) 
    !write(*,*) "Loop start/end -> ", chunks(i)%obs_list(1), chunks(i)%obs_list(chunks(i)%num_obs)
 
-   !write(*,'(A5,I4,A3,I4,A4,I4,A3,I7,A3,I7)'), "Rank",my_task_id(),"C#",i,"Own",chunks(i)%owner,"St",chunks(i)%obs_list(1),"En",chunks(i)%obs_list(chunks(i)%num_obs)
+   if (mod(i,nth_obs) == 0) then
+       if (my_task_id() == 0) then
+        write(*,'(A5,I6,A7,I6,A4,I6,A3,I9,A3,I9)'), "Rank",my_task_id(),"C#",i,"Own",chunks(i)%owner,"St",chunks(i)%obs_list(1),"En",chunks(i)%obs_list(chunks(i)%num_obs)
+       endif
+   endif
 
     chunk_data%num_obs = chunks(i)%num_obs
    ! This section is only done by one process - the 'owner' of this chunk:
    if (ens_handle%my_pe == chunks(i)%owner) then
       call t_startf('ASSIMILATE:Owned(Compute)')
 
-      write(*,'(A5,I4,A3,I4,A4,I4,A3,I7,A3,I7)'), "Rank",my_task_id(),"C#",i,"Own",chunks(i)%owner,"St",chunks(i)%obs_list(1),"En",chunks(i)%obs_list(chunks(i)%num_obs)
+      !write(*,'(A5,I6,A6,I4,A4,I4,A3,I7,A3,I7)'), "Rank",my_task_id(),"C#",i,"Own",chunks(i)%owner,"St",chunks(i)%obs_list(1),"En",chunks(i)%obs_list(chunks(i)%num_obs)
 
       OBS_LOOP: do j = 1, chunk_data%num_obs
          !write(*,*) "Ob loop : ", j, chunk_data%num_obs
         ! Get the index of this ob into the main sequence:
         ob_index = chunks(i)%obs_list(j)
+
         !write(*,*) "ob_index = ", ob_index, i, j
 
 
@@ -790,7 +813,7 @@ CHUNK_LOOP: do i = 1, size(chunks)
          !write(*,'(A,I,I,I,I,I,G,40G)') "FULL: ", chunks(i)%owner, i, j, owners_index, get_ob_id(chunks, i, j),  sum(obs_ens_handle%copies), obs_ens_handle%copies(:,:)
          !write(*,'(A,I,I,I,I,I,G,40G)') "FULL2: ", chunks(i)%owner, i, j, owners_index, get_ob_id(chunks, i, j),  sum(obs_ens_handle%copies(1:ens_size, owners_index)), obs_ens_handle%copies(1:ens_size, owners_index)
         ! Only value of 0 for DART QC field should be assimilated
-        IF_QC_IS_OKAY: if(nint(obs_qc) ==0) then
+        IF_QC_IS_OKAY: if(nint(chunk_data%obs_qc(j)) ==0 ) then
            chunk_data%obs_prior(j,:) = obs_ens_handle%copies(1:ens_size, owners_index)
             !write(*,*) "CHECKSUM0a : " , sum(chunk_data%obs_prior)
 
@@ -832,58 +855,101 @@ CHUNK_LOOP: do i = 1, size(chunks)
      !!!call broadcast_send(map_pe_to_task(ens_handle, owner), obs_prior, obs_inc, net_a, scalar1=obs_qc, scalar2=vertvalue_obs_in_localization_coord, scalar3=whichvert_real)
 
     call t_stopf('ASSIMILATE:Owned(Compute)')
-    call task_sync()
+    if (sync_between_timers) then
+      call task_sync()
+    endif
     call t_startf('ASSIMILATE:Owned(Broadcast)')
 
      !write(*,*) "Calling broadcast_send_chunk on owner", chunks(i)%owner
-     call broadcast_send_chunk(map_pe_to_task(ens_handle, chunks(i)%owner), chunk_data)
-    call task_sync()
+    if (packed_sends) then
+      call broadcast_send_chunk_packed(map_pe_to_task(ens_handle, chunks(i)%owner), chunk_data)
+    else
+      call broadcast_send_chunk(map_pe_to_task(ens_handle, chunks(i)%owner), chunk_data)
+    endif
+    if (sync_between_timers) then
+      call task_sync()
+   endif
 
    else ! (not the owner):
-     call task_sync()
+     if (sync_between_timers) then
+       call task_sync()
+     endif
      call t_startf('ASSIMILATE:NotOwned(Broadcast)')
      !write(*,*) "Calling broadcast_recv_chunk on ", ens_handle%my_pe, map_pe_to_task(ens_handle, chunks(i)%owner)
-     call broadcast_recv_chunk(map_pe_to_task(ens_handle, chunks(i)%owner), chunk_data)
+     if (packed_sends) then
+       call broadcast_recv_chunk_packed(map_pe_to_task(ens_handle, chunks(i)%owner), chunk_data)
+     else
+       call broadcast_recv_chunk(map_pe_to_task(ens_handle, chunks(i)%owner), chunk_data)
+     endif
      call t_stopf('ASSIMILATE:NotOwned(Broadcast)')
-     call task_sync()
+     if (sync_between_timers) then
+       call task_sync()
+     endif
      call t_startf('ASSIMILATE:NotOwned(Compute)')
      call t_stopf('ASSIMILATE:NotOwned(Compute)')
   endif
 
-  call task_sync()
+  if (sync_between_timers) then
+    call task_sync()
+  endif
 
 ! bpd6 - error checking:
-do iError = 1, obs_ens_handle%my_num_vars
-  write(*,*) "ECheck4 : ", iError, sum(obs_ens_handle%copies(:,iError))
-end do
+!do iError = 1, obs_ens_handle%my_num_vars
+!  write(*,*) "ECheck4 : ", iError, sum(obs_ens_handle%copies(:,iError))
+!end do
 
   QC_CHECK: do j = 1, chunk_data%num_obs
      if (nint(chunk_data%obs_qc(j)) /= 0) then
         qcd = qcd + 1
-        write(*,*) "DEBUG: QC_CHECK /= 0", my_task_id(), j, chunk_data%num_obs
-        ! This is a hack - we're going to swap the current value with the last
-        ! value, then decrement the count, effectively removing this one.  If
-        ! we're at the last one, we cycle to the next chunk:
+        !write(*,*) "DEBUG: QC_CHECK /= 0", my_task_id(), j, chunk_data%num_obs
+        !!!! ! This is a hack - we're going to swap the current value with the last
+        !!!! ! value, then decrement the count, effectively removing this one.  If
+        !!!! ! we're at the last one, we cycle to the next chunk:
         if (j == chunk_data%num_obs) then
-           cycle CHUNK_LOOP
-        else
-           chunk_data%obs_prior(j,:) = chunk_data%obs_prior(chunk_data%num_obs,:)
-           chunk_data%obs_inc(j,:) = chunk_data%obs_inc(chunk_data%num_obs,:)
-           chunk_data%net_a(j,:) = chunk_data%net_a(chunk_data%num_obs,:)
-           chunk_data%obs_qc(j) = chunk_data%obs_qc(chunk_data%num_obs)
-           chunk_data%vertvalue_obs_in_localization_coord(j) = chunk_data%vertvalue_obs_in_localization_coord(chunk_data%num_obs)
-           chunk_data%whichvert_real(j) = chunk_data%whichvert_real(chunk_data%num_obs)
-           ! Also change the chunks(i)%obs_list, since that'll be used for
-           ! indexing later -- maybe this should be done with a logical var
-           ! instead?  Eg, 'process', and skip false ones?
-           chunks(i)%obs_list(j) = chunks(i)%obs_list(chunk_data%num_obs)
-
-           ! Decrement the number of obs in this chunk
            chunk_data%num_obs = chunk_data%num_obs - 1
-           !j = j -1
+        else
+           ! Can't just swap with last one since last might be bad; so we have
+           ! to search backwards:
+           do k = chunk_data%num_obs, j+1, -1
+             if (nint(chunk_data%obs_qc(k)) == 0) then ! Valid QC, so swap with this ob
+              chunk_data%obs_prior(j,:) = chunk_data%obs_prior(k,:)
+              chunk_data%obs_inc(j,:) = chunk_data%obs_inc(k,:)
+              chunk_data%net_a(j,:) = chunk_data%net_a(k,:)
+              chunk_data%obs_qc(j) = chunk_data%obs_qc(k)
+              chunk_data%vertvalue_obs_in_localization_coord(j) = chunk_data%vertvalue_obs_in_localization_coord(k)
+              chunk_data%whichvert_real(j) = chunk_data%whichvert_real(k)
+              ! Also change the chunks(i)%obs_list, since that'll be used for
+              ! indexing later -- maybe this should be done with a logical var
+              ! instead?  Eg, 'process', and skip false ones?
+              chunks(i)%obs_list(j) = chunks(i)%obs_list(k)
 
-           write(*,*) "QC_CHECK fail on ", i, j
+              ! We now have a max possible 'k - 1' obs in this chunk, with
+              ! potentially fewer if others are bad:
+              chunk_data%num_obs = k - 1
+            endif
+          enddo 
+
+
+!           chunk_data%obs_prior(j,:) = chunk_data%obs_prior(chunk_data%num_obs,:)
+!           chunk_data%obs_inc(j,:) = chunk_data%obs_inc(chunk_data%num_obs,:)
+!           chunk_data%net_a(j,:) = chunk_data%net_a(chunk_data%num_obs,:)
+!           chunk_data%obs_qc(j) = chunk_data%obs_qc(chunk_data%num_obs)
+!           chunk_data%vertvalue_obs_in_localization_coord(j) = chunk_data%vertvalue_obs_in_localization_coord(chunk_data%num_obs)
+!           chunk_data%whichvert_real(j) = chunk_data%whichvert_real(chunk_data%num_obs)
+!           ! Also change the chunks(i)%obs_list, since that'll be used for
+!           ! indexing later -- maybe this should be done with a logical var
+!           ! instead?  Eg, 'process', and skip false ones?
+!           chunks(i)%obs_list(j) = chunks(i)%obs_list(chunk_data%num_obs)
+!
+!           ! Decrement the number of obs in this chunk
+!           chunk_data%num_obs = chunk_data%num_obs - 1
+!           !j = j -1
+
+           !write(*,*) "QC_CHECK fail on ", i, j
            cycle QC_CHECK
+       endif
+       if (j == 0) then
+         !cycle CHUNK_LOOP
        endif
     endif
   enddo QC_CHECK
@@ -931,8 +997,8 @@ end do
    !if (chunks(i)%obs_list(j) > 192895) then
    !    write(*,*) "Trace: ", i, j
    ! endif
-   !write(*,*) "DEBUG: get_obs_from_key : ", keys(chunks(i)%obs_list(j)), observation
    call get_obs_from_key(obs_seq, keys(chunks(i)%obs_list(j)), observation)
+   !write(*,*) "DEBUG: get_obs_from_key : ", keys(chunks(i)%obs_list(j))
    call get_obs_def(observation, obs_def)
    base_obs_loc = get_obs_def_location(obs_def)
    obs_err_var = get_obs_def_error_variance(obs_def)
@@ -962,6 +1028,7 @@ end do
          num_close_obs_cached = num_close_obs_cached + 1
       else
          if (timing .and. i < 100) call start_mpi_timer(base)
+         !write(*,*) "Entering get_close_obs : ", chunks(i)%obs_list(j), base_obs_loc%lon, base_obs_loc%lat
          call get_close_obs(gc_obs, base_obs_loc, base_obs_type, &
                             my_obs_loc, my_obs_kind, my_obs_type, &
                             num_close_obs, close_obs_ind, close_obs_dist, ens_handle)
@@ -1025,6 +1092,8 @@ end do
       endif
    endif
 
+!  num_close_states = 0
+
    if (base_obs_type > 0) then
       cutoff_orig = cutoff_list(base_obs_type)
    else
@@ -1032,12 +1101,14 @@ end do
    endif
   cutoff_rev = cutoff_orig
 
-   call MPI_Reduce(num_close_states, num_close_states_total, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, iError)
-   call MPI_Reduce(num_close_obs,    num_close_obs_total,    1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, iError)
+   !checksum = sum(obs_ens_handle%copies(1:ens_size,:))
+   !call MPI_Reduce(num_close_states, num_close_states_total, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, iError)
+   !call MPI_Reduce(num_close_obs,    num_close_obs_total,    1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, iError)
+   !call MPI_Reduce(checksum, checksum_total, 1, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, iError)
 
-   if (my_task_id() == 0) then
-    write(*,*) "DEBUG: Close States / Obs : ", num_close_states_total, num_close_obs_total, cutoff_rev
-   endif
+   !if (my_task_id() == 0) then
+   ! write(*,'(A,I,I,A,F,I)') "DEBUG: Close States / Obs : ", num_close_states_total, num_close_obs_total, "     ", checksum_total, chunks(i)%obs_list(j)
+   !endif
 
    !num_close_states = 0
 
@@ -1052,12 +1123,11 @@ end do
 !  write(*,*) "ECheck5b: ", iError, sum(chunk_data%obs_prior(iError,:))
 !end do
 
-checksum = sum(obs_ens_handle%copies(1:ens_size,:))
-call MPI_Reduce(num_close_states, num_close_states_total, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, iError)
-call MPI_Reduce(checksum, checksum_total, 1, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, iError)
-if (my_task_id() == 0) then
+!call MPI_Reduce(num_close_states, num_close_states_total, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, iError)
+!call MPI_Reduce(checksum, checksum_total, 1, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, iError)
+!if (my_task_id() == 0) then
 !   write(*,*) "PreCheck2: ", checksum_total, num_close_states_total
-endif
+!endif
 
 !write(*,*) "CHECKSUM2a : " , sum(chunk_data%obs_prior)
 !if (get_ob_id(chunks, i, j) == 5) then
@@ -1250,29 +1320,29 @@ endif
 
    end do STATE_UPDATE
 
-checksum = sum(obs_ens_handle%copies(1:ens_size,:))
-call MPI_Reduce(num_close_obs, num_close_obs_total, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, iError)
-call MPI_Reduce(checksum, checksum_total, 1, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, iError)
-if (my_task_id() == 0) then
-!   write(*,*) "PreCheck3: ", checksum_total, num_close_obs_total
-endif
+!checksum = sum(obs_ens_handle%copies(1:ens_size,:))
+!call MPI_Reduce(num_close_obs, num_close_obs_total, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, iError)
+!call MPI_Reduce(checksum, checksum_total, 1, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, iError)
+!if (my_task_id() == 0) then
+!!   write(*,*) "PreCheck3: ", checksum_total, num_close_obs_total
+!endif
 
-   call MPI_Reduce(stateindex_sum, stateindex_total, 1, MPI_INTEGER8, MPI_SUM, 0, MPI_COMM_WORLD, iError)
-   call MPI_Reduce(regfactor_sum, regfactor_total,   1, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, iError)
-   call MPI_Reduce(increment_sum, increment_total,   1, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, iError)
-
-   call MPI_Reduce(skipped_missing, skipped_missing_total, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, iError)
-   call MPI_Reduce(skipped_covfactor, skipped_covfactor_total, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, iError)
+!   call MPI_Reduce(stateindex_sum, stateindex_total, 1, MPI_INTEGER8, MPI_SUM, 0, MPI_COMM_WORLD, iError)
+!   call MPI_Reduce(regfactor_sum, regfactor_total,   1, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, iError)
+!   call MPI_Reduce(increment_sum, increment_total,   1, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, iError)
+!
+!   call MPI_Reduce(skipped_missing, skipped_missing_total, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, iError)
+!   call MPI_Reduce(skipped_covfactor, skipped_covfactor_total, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, iError)
 !write(*,*) "CHECKSUM3a : " , sum(chunk_data%obs_prior)
 
     !write(*,*) "StateUpdate_SI = ", stateindex_sum
 
-   if (my_task_id() == 0) then
+!   if (my_task_id() == 0) then
       !write(*,*) "DEBUG: StateUpdate2 = ", skipped_missing_total, skipped_covfactor_total
       !write(*,*) "DEBUG: StateUpdateA = ", stateindex_total
       !write(*,*) "DEBUG: StateUpdateB = ", regfactor_total
       !write(*,*) "DEBUG: StateUpdateC = ", increment_total
-  endif 
+!  endif 
 
    !write(*,*) "DEBUG : cov_factor sum = ", testval, chunks(i)%obs_list(j)
    !write(*,*) "DEBUG : sum_increment = ", testval2, chunks(i)%obs_list(j)
@@ -1321,7 +1391,7 @@ endif
          if (any(obs_ens_handle%copies(1:ens_size, obs_index) == MISSING_R8)) cycle OBS_UPDATE
 
          ! Compute the distance and the covar_factor
-         cov_factor = comp_cov_factor(close_obs_dist(j), cutoff_rev, base_obs_loc, base_obs_type, my_obs_loc(obs_index), my_obs_kind(obs_index))
+         cov_factor = comp_cov_factor(close_obs_dist(k), cutoff_rev, base_obs_loc, base_obs_type, my_obs_loc(obs_index), my_obs_kind(obs_index))
 
          ! if external impact factors supplied, factor them in here
          ! FIXME: this would execute faster for 0.0 impact factors if
@@ -1371,6 +1441,7 @@ endif
               obs_ens_handle%copies(1:ens_size, obs_index) + reg_factor * increment
          endif
       endif
+      !write(*,*) "Obs Update Checksum : ", sum(chunk_data%obs_prior(j,:)), my_obs_indx(obs_index), chunks(i)%obs_list(j)
    end do OBS_UPDATE
 !write(*,*) "CHECKSUM4a : " , sum(chunk_data%obs_prior)
 !!   if (timing .and. i < 1000) then
@@ -1597,7 +1668,7 @@ subroutine create_chunks(colors, chunks)
   allocate(color_sizes(colors%num_colors))
   allocate(chunks_per_color(colors%num_colors))
 
-  write(*,*) "Colors -- number of colors & chunk size = ", colors%num_colors, colors%chunk_size
+  !write(*,*) "Colors -- number of colors & chunk size = ", colors%num_colors, colors%chunk_size
 
   ! Get the size and # of chunks of each color - this is a bit hackish, maybe ANY can work better?
   do i = 1, colors%num_colors
@@ -1615,7 +1686,7 @@ subroutine create_chunks(colors, chunks)
   allocate(chunks(chunk_count))
 
   ! Assign chunks
-  write(*,*) "Assigning chunks..."
+  !write(*,*) "Assigning chunks..."
   numRanks = task_count()
   do i = 1, colors%num_colors
     remaining_obs = color_sizes(i)
@@ -1648,12 +1719,12 @@ subroutine create_chunks(colors, chunks)
   enddo 
 
   ! Debug:
-  write(*,*) "Total of colors, chunks : ", sum(color_sizes), chunk_count
-  write(*,*) "Colors%chunk_size = ", colors%chunk_size
+  !write(*,*) "Total of colors, chunks : ", sum(color_sizes), chunk_count
+  !write(*,*) "Colors%chunk_size = ", colors%chunk_size
   
-  do i = 1, size(chunks)
-    write(*,*) "Chunk Assigment: ",i," -> ",chunks(i)%owner, chunks(i)%num_obs
-  enddo
+  !do i = 1, size(chunks)
+  !  write(*,*) "Chunk Assigment: ",i," -> ",chunks(i)%owner, chunks(i)%num_obs
+  !enddo
 
 end subroutine create_chunks
 
@@ -1675,11 +1746,12 @@ subroutine initialize_chunk_data(chunk_size, ens_size, num_groups, chunk_data)
   allocate(chunk_data%vertvalue_obs_in_localization_coord(chunk_size))
   allocate(chunk_data%whichvert_real(chunk_size))
 
- write(*,*) "Size obs_prior : ", size(chunk_data%obs_prior)
+ !write(*,*) "Size obs_prior : ", size(chunk_data%obs_prior)
 
   !allocate(chunk_data%base_obs_loc(chunk_size))
 
-  buffer_size = (chunk_size * ens_size * 2) + (chunk_size * num_groups) + (chunk_size * 3) ! Plus base_obs_loc?
+  buffer_size = (chunk_size * ens_size * 2) + (chunk_size * num_groups) + (chunk_size * 3) + 1 ! Plus base_obs_loc?
+  !buffer_size = (chunk_size * ens_size * 2) + (chunk_size * num_groups) + (chunk_size * 3) + 0 ! no num_obs yet ... Plus base_obs_loc?
   allocate(chunk_data%bcast_buffer(buffer_size))
 
 end subroutine initialize_chunk_data
@@ -1692,8 +1764,10 @@ subroutine broadcast_send_chunk(from, chunk_data)
    integer, intent(in) :: from
    type(chunk_data_type) :: chunk_data
 
-   integer :: start_offset = 1
+   integer :: start_offset
    integer :: iError
+
+  start_offset = 1
 
 !   chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_prior)) = reshape(chunk_data%obs_prior, [ size(chunk_data%obs_prior) ])
 !   start_offset = start_offset + size(chunk_data%obs_prior)
@@ -1707,6 +1781,65 @@ subroutine broadcast_send_chunk(from, chunk_data)
   call MPI_Bcast(chunk_data%whichvert_real,   size(chunk_data%whichvert_real),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
 
 end subroutine broadcast_send_chunk
+
+!-------------------------------------------------------------
+
+subroutine broadcast_send_chunk_packed(from, chunk_data)
+    use mpi
+   integer, intent(in) :: from
+   type(chunk_data_type) :: chunk_data
+
+   integer :: start_offset
+   integer :: iError
+
+   integer :: buffer_size
+
+  start_offset = 1 
+   buffer_size  = size(chunk_data%bcast_buffer)
+
+   ! obs_prior
+   chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_prior)) = reshape(chunk_data%obs_prior, [ size(chunk_data%obs_prior) ])
+   start_offset = start_offset + size(chunk_data%obs_prior)
+
+   ! obs_inc
+   chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_inc)) = reshape(chunk_data%obs_inc, [ size(chunk_data%obs_inc) ])
+   start_offset = start_offset + size(chunk_data%obs_inc)
+
+   ! net_a
+   chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%net_a)) = reshape(chunk_data%net_a, [ size(chunk_data%net_a) ])
+   start_offset = start_offset + size(chunk_data%net_a)
+
+   ! obs_qc
+   chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_qc)) = reshape(chunk_data%obs_qc, [ size(chunk_data%obs_qc) ])
+   start_offset = start_offset + size(chunk_data%obs_qc)
+
+   ! vertvalue_obs_in_localization_coord
+   chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%vertvalue_obs_in_localization_coord)) = reshape(chunk_data%vertvalue_obs_in_localization_coord, [ size(chunk_data%vertvalue_obs_in_localization_coord) ])
+   start_offset = start_offset + size(chunk_data%vertvalue_obs_in_localization_coord)
+
+   ! whichvert_real
+   chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%whichvert_real)) = reshape(chunk_data%whichvert_real, [ size(chunk_data%whichvert_real) ])
+   start_offset = start_offset + size(chunk_data%whichvert_real)
+
+  ! Num obs:
+  chunk_data%bcast_buffer(start_offset) = chunk_data%num_obs
+
+!   buffer_size = (chunk_size * ens_size * 2) + (chunk_size * num_groups) +
+!   (chunk_size * 3) + 1
+
+!  call MPI_Bcast(chunk_data%num_obs, 1, MPI_INTEGER, from, MPI_COMM_WORLD, iError)
+!  call MPI_Bcast(chunk_data%obs_prior, size(chunk_data%obs_prior), MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+!  call MPI_Bcast(chunk_data%obs_inc,   size(chunk_data%obs_inc),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+!  call MPI_Bcast(chunk_data%net_a,   size(chunk_data%net_a),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+!  call MPI_Bcast(chunk_data%obs_qc,   size(chunk_data%obs_qc),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+!  call MPI_Bcast(chunk_data%vertvalue_obs_in_localization_coord,   size(chunk_data%vertvalue_obs_in_localization_coord),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+!  call MPI_Bcast(chunk_data%whichvert_real,   size(chunk_data%whichvert_real),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+
+  call MPI_Bcast(chunk_data%bcast_buffer, size(chunk_data%bcast_buffer), MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+  !call MPI_Bcast(chunk_data%num_obs, 1, MPI_INTEGER, from, MPI_COMM_WORLD, iError)
+
+
+end subroutine broadcast_send_chunk_packed
 
 !-------------------------------------------------------------
 
@@ -1735,6 +1868,66 @@ end subroutine broadcast_recv_chunk
 
 !-------------------------------------------------------------
 
+subroutine broadcast_recv_chunk_packed(from, chunk_data)
+    use mpi
+   integer, intent(in) :: from
+   type(chunk_data_type) :: chunk_data
+
+   integer :: iError
+   integer :: start_offset
+
+   integer :: buffer_size 
+   
+   buffer_size = size(chunk_data%bcast_buffer)
+   start_offset = 1
+   
+   call MPI_Bcast(chunk_data%bcast_buffer, size(chunk_data%bcast_buffer), MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+   !call MPI_Bcast(chunk_data%num_obs, 1, MPI_INTEGER, from, MPI_COMM_WORLD, iError)
+
+   ! obs_prior
+   chunk_data%obs_prior = reshape(chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_prior)), [ size(chunk_data%obs_prior, 1), size(chunk_data%obs_prior, 2) ])
+   start_offset = start_offset + size(chunk_data%obs_prior)
+
+   ! obs_inc
+   chunk_data%obs_inc = reshape(chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_inc)), [ size(chunk_data%obs_inc, 1), size(chunk_data%obs_inc, 2) ])
+   start_offset = start_offset + size(chunk_data%obs_inc)
+
+   ! net_a
+   chunk_data%net_a = reshape(chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%net_a)), [ size(chunk_data%net_a, 1), size(chunk_data%net_a, 2) ])
+   start_offset = start_offset + size(chunk_data%net_a)
+
+   ! obs_qc
+   chunk_data%obs_qc = reshape(chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_qc)), [ size(chunk_data%obs_qc, 1) ])
+   start_offset = start_offset + size(chunk_data%obs_qc)
+
+   ! vertvalue_obs_in_localization_coord
+   chunk_data%vertvalue_obs_in_localization_coord = reshape(chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%vertvalue_obs_in_localization_coord)), [ size(chunk_data%vertvalue_obs_in_localization_coord, 1) ])
+   start_offset = start_offset + size(chunk_data%vertvalue_obs_in_localization_coord)
+
+   ! whichvert_real
+   chunk_data%whichvert_real = reshape(chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%whichvert_real)), [ size(chunk_data%whichvert_real, 1) ])
+   start_offset = start_offset + size(chunk_data%whichvert_real)
+
+  ! Num obs:
+  chunk_data%num_obs = chunk_data%bcast_buffer(start_offset)
+
+!   write(*,*) "broadcast_recv_chunk - from = ", from
+!  chunk_data%obs_prior = reshape(chunk_data%bcast_buffer(1:9), [ 3,3 ])
+
+!  call MPI_Bcast(chunk_data%num_obs, 1, MPI_INTEGER, from, MPI_COMM_WORLD, iError)
+!  call MPI_Bcast(chunk_data%obs_prior, size(chunk_data%obs_prior), MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+!  call MPI_Bcast(chunk_data%obs_inc,   size(chunk_data%obs_inc),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+!  call MPI_Bcast(chunk_data%net_a,   size(chunk_data%net_a),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+!  call MPI_Bcast(chunk_data%obs_qc,   size(chunk_data%obs_qc),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+!  call MPI_Bcast(chunk_data%vertvalue_obs_in_localization_coord,   size(chunk_data%vertvalue_obs_in_localization_coord),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+!  call MPI_Bcast(chunk_data%whichvert_real,   size(chunk_data%whichvert_real),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+
+   !call broadcast_recv_seqobs(from, chunk_data%obs_prior, chunk_data%obs_inc, chunk_data%net_a)
+   !call broadcast_recv_seqobs(from, chunk_data%obs_qc, chunk_data%vertvalue_obs_in_localization_coord, chunk_data%whichvert_real)
+
+end subroutine broadcast_recv_chunk_packed
+
+!-------------------------------------------------------------
 subroutine get_obs_from_color(colors, i, obs_list, last_rank)
   type(colors_type), intent(in) :: colors
   integer,           intent(in) :: i
@@ -1827,8 +2020,8 @@ subroutine get_obs_from_color(colors, i, obs_list, last_rank)
 
 
 
-  write(*,*) "C(",i,") Rank# ",mpiRank," Start/End => ",start_ob,end_ob,last_rank
-  write(*,*) "C(",i,") Rank# ",mpiRank," LIST => ",obs_list(:)
+  !write(*,*) "C(",i,") Rank# ",mpiRank," Start/End => ",start_ob,end_ob,last_rank
+  !write(*,*) "C(",i,") Rank# ",mpiRank," LIST => ",obs_list(:)
 
 end subroutine get_obs_from_color
 

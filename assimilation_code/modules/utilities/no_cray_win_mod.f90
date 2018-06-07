@@ -88,12 +88,12 @@ else
    contiguous_fwd = reshape(state_ens_handle%copies(1:data_count, :), (/my_num_vars*data_count/))
 
    ! Expose local memory to RMA operation by other processes in a communicator.
-   write(*,*) "Window: create"
+   !write(*,*) "Window: create", shape(contiguous_fwd), window_size
    if (window_size /= 0) then
      call mpi_win_create(contiguous_fwd, window_size, bytesize, MPI_INFO_NULL, get_dart_mpi_comm(), state_win, ierr)
-     write(*,*) "Window: size = ", window_size
+     !write(*,*) "Window: size = ", window_size
    else
-     write(*,*) "Window: size = 0 (not creating)"
+     !write(*,*) "Window: size = 0 (not creating)"
   endif
 endif
 

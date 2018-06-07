@@ -73,7 +73,7 @@ integer, parameter :: VERTISHEIGHT      =  3  ! by height (in meters)
 integer, parameter :: VERTISSCALEHEIGHT =  4  ! by scale height (unitless)
 
 type location_type
-   private
+   !private
    real(r8) :: lon, lat        ! lon, lat are stored in radians
    real(r8) :: vloc            ! units vary based on value of which_vert
    integer  :: which_vert      ! determines if vert is level, height, pressure, ...
@@ -1583,6 +1583,7 @@ do j = 1, nlat
             ! SHOULD ADD IN OPTIONAL ARGUMENT FOR DOING THIS!!!
             ! Could avoid adding any that have nums lower than base_ob???
             t_ind = gc%gtt(bt)%loc_box(st - 1 + k)
+            !write(*,*) "n_in_box = ", n_in_box, i, j, t_ind
 
             if(.not. present(dist)) then
                ! Dist isn't present; add this ob to list without computing distance
@@ -1614,7 +1615,7 @@ end do
 
 !------------------------ Verify by comparing to exhaustive search --------------
 if(COMPARE_TO_CORRECT) then
-   write(*,*) "C2C(Check) : ", num_close, cnum_close
+   !write(*,*) "C2C(Check) : ", num_close, cnum_close
    ! Do comparisons against full search
    if((num_close /= cnum_close) .and. present(dist)) then
       write(msgstring, *) 'get_close (', num_close, ') should equal exhaustive search (', cnum_close, ')'

@@ -1998,7 +1998,9 @@ integer :: errcode
 ! => Don't do anything with x in between mpi_get and mpi_win_lock
 
 
+
 target_disp = (mindex - 1)*num_rows
+!write(*,'(A,I,I,I,I,I,I,I)') "DBG: get_from_fwd", my_task_id(), owner, window, mindex, target_disp, num_rows, datasize
 call mpi_win_lock(MPI_LOCK_SHARED, owner, 0, window, errcode)
 call mpi_get(x, num_rows, datasize, owner, target_disp, num_rows, datasize, window, errcode)
 call mpi_win_unlock(owner, window, errcode)
