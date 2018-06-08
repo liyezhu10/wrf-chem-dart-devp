@@ -242,6 +242,13 @@ logical  :: distribute_mean  = .false.
 ! Only use for when testing against the non-rma trunk.
 logical  :: lanai_bitwise = .false.
 
+
+! Changes by bpd6
+logical :: sync_between_timers = .false.
+logical :: packed_sends = .true.
+logical :: detailed_timers = .false.
+logical :: debug_mode = .false.
+
 namelist / assim_tools_nml / filter_kind, cutoff, sort_obs_inc, &
    spread_restoration, sampling_error_correction,                          & 
    adaptive_localization_threshold, adaptive_cutoff_floor,                 &
@@ -251,6 +258,7 @@ namelist / assim_tools_nml / filter_kind, cutoff, sort_obs_inc, &
    allow_missing_in_clm, distribute_mean, close_obs_caching,               &
    adjust_obs_impact, obs_impact_filename, allow_any_impact_values,        &
    convert_all_state_verticals_first, convert_all_obs_verticals_first,     &
+   sync_between_timers, packed_sends, detailed_timers, debug_mode, &  ! Modifications by bpd6
    lanai_bitwise ! don't document this one -- only used for regression tests
 
 !============================================================================
@@ -509,10 +517,10 @@ integer :: debug_loop
 real(kind=8) :: checksum, checksum_total
 
 !packed sends (into a buffer)?
-logical :: packed_sends = .true.
+!logical :: packed_sends = .true.
 
 ! synchronize between timers?
-logical :: sync_between_timers = .false.
+!logical :: sync_between_timers = .false.
 
 ! trace files:
 open(unit=15, file="trace.1")
@@ -525,6 +533,7 @@ open(unit=16, file="trace.2")
 !endif
 
 !call task_sync()
+call task_sync()
 call t_startf('ASSIMILATE:Pre.Loop')
 
 ! we are going to read/write the copies array
@@ -734,28 +743,8 @@ call initialize_chunk_data(colors%chunk_size, ens_size, num_groups, chunk_data)
 ! timing
 if (my_task_id() == 0 .and. timing) allocate(elapse_array(obs_ens_handle%num_vars))
 
+
 call t_stopf('ASSIMILATE:Pre.Loop')
-call task_sync()
-call t_startf('tmp_loop')
-
-!write(*,*) "DEBUG2: About to enter loop 1 -> ", colors%num_colors
-!write(*,*) "Ensemble Size : ", ens_size
-
-! bpd6 - error checking:
-!do iError = 1, obs_ens_handle%my_num_vars
-!  write(*,*) "ECheck3 : ", iError, sum(obs_ens_handle%copies(:,iError))
-!end do
-
-!checksum = sum(obs_ens_handle%copies(1:ens_size,:))
-!call MPI_Reduce(checksum, checksum_total, 1, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, iError)
-!if (my_task_id() == 0) then
-!   !write(*,*) "PreCheck1: ", checksum_total
-!endif
-
-! bpd6 - error checking:
-!do iError = 1, obs_ens_handle%my_num_vars
-!  write(*,*) "Debug1: ", iError, sum(obs_ens_handle%copies(:,iError))
-!end do
 
 ! Loop through all the chunks:
 !write(*,*) "[Info] Number of Chunks = ", size(chunks)
@@ -767,10 +756,18 @@ endif
 if (my_task_id() == 0) then
    write(*,*) "Number of chunks : ", size(chunks)
 endif
+
+if (sync_between_timers) then
+  call task_sync()
+endif
+call t_startf('Full Loop')
+
 CHUNK_LOOP: do i = 1, size(chunks)
-   !write(*,*) "----------------------------------"
-   !write(*,*) "Chunk loop : ", i, size(chunks) 
-   !write(*,*) "Loop start/end -> ", chunks(i)%obs_list(1), chunks(i)%obs_list(chunks(i)%num_obs)
+   if (debug_mode) then
+      if (my_task_id() == 0) then
+        write(*,'(A5,I6,A7,I6,A4,I6,A3,I9,A3,I9)'), "Rank",my_task_id(),"C#",i,"Own",chunks(i)%owner,"St",chunks(i)%obs_list(1),"En",chunks(i)%obs_list(chunks(i)%num_obs)
+      endif
+   endif
 
    if (mod(i,nth_obs) == 0) then
        if (my_task_id() == 0) then
@@ -780,10 +777,11 @@ CHUNK_LOOP: do i = 1, size(chunks)
 
     chunk_data%num_obs = chunks(i)%num_obs
    ! This section is only done by one process - the 'owner' of this chunk:
+   if (sync_between_timers) then
+       call task_sync()
+   endif
    if (ens_handle%my_pe == chunks(i)%owner) then
       call t_startf('ASSIMILATE:Owned(Compute)')
-
-      !write(*,'(A5,I6,A6,I4,A4,I4,A3,I7,A3,I7)'), "Rank",my_task_id(),"C#",i,"Own",chunks(i)%owner,"St",chunks(i)%obs_list(1),"En",chunks(i)%obs_list(chunks(i)%num_obs)
 
       OBS_LOOP: do j = 1, chunk_data%num_obs
          !write(*,*) "Ob loop : ", j, chunk_data%num_obs
@@ -805,17 +803,11 @@ CHUNK_LOOP: do i = 1, size(chunks)
         !write(*,*) "DEBUG: Ob_Index  = ", int(ob_index,i8), owner, owners_index
 
         ! Get the QC value for this ob:
-        !write(*,*) "Checking QC : ", j
         chunk_data%obs_qc(j) = obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, owners_index)
-        !write(*,*) "Info : ", my_task_id(), j, OBS_GLOBAL_QC_COPY
-        !write(*,*) "DEBUG: Ob_QC     = ", my_task_id(), j, chunk_data%obs_qc(j)
 
-         !write(*,'(A,I,I,I,I,I,G,40G)') "FULL: ", chunks(i)%owner, i, j, owners_index, get_ob_id(chunks, i, j),  sum(obs_ens_handle%copies), obs_ens_handle%copies(:,:)
-         !write(*,'(A,I,I,I,I,I,G,40G)') "FULL2: ", chunks(i)%owner, i, j, owners_index, get_ob_id(chunks, i, j),  sum(obs_ens_handle%copies(1:ens_size, owners_index)), obs_ens_handle%copies(1:ens_size, owners_index)
         ! Only value of 0 for DART QC field should be assimilated
         IF_QC_IS_OKAY: if(nint(chunk_data%obs_qc(j)) ==0 ) then
            chunk_data%obs_prior(j,:) = obs_ens_handle%copies(1:ens_size, owners_index)
-            !write(*,*) "CHECKSUM0a : " , sum(chunk_data%obs_prior)
 
            do group = 1, num_groups
               grp_bot = grp_beg(group)
@@ -840,9 +832,7 @@ CHUNK_LOOP: do i = 1, size(chunks)
            do group = 1, num_groups
               grp_bot = grp_beg(group)
               grp_top = grp_end(group)
-              !!!call obs_increment(obs_prior(grp_bot:grp_top), grp_size, obs(1), obs_err_var, obs_inc(grp_bot:grp_top), inflate, my_inflate, my_inflate_sd, net_a(group))
               call obs_increment(chunk_data%obs_prior(j,grp_bot:grp_top), grp_size, obs(1), obs_err_var, chunk_data%obs_inc(j,grp_bot:grp_top), inflate, my_inflate, my_inflate_sd, chunk_data%net_a(j,group))
-              !write(*,*) "Obs_Prior(B) : ", j,sum(chunk_data%obs_prior(j,grp_bot:grp_top)), sum(chunk_data%obs_inc(j,grp_bot:grp_top))
            end do
 
            ! ------- NOTE: Skipping SINGLE_SS_INFLATE section for now -------
@@ -866,6 +856,7 @@ CHUNK_LOOP: do i = 1, size(chunks)
     else
       call broadcast_send_chunk(map_pe_to_task(ens_handle, chunks(i)%owner), chunk_data)
     endif
+    call t_stopf('ASSIMILATE:Owned(Broadcast)')
     if (sync_between_timers) then
       call task_sync()
    endif
@@ -875,7 +866,6 @@ CHUNK_LOOP: do i = 1, size(chunks)
        call task_sync()
      endif
      call t_startf('ASSIMILATE:NotOwned(Broadcast)')
-     !write(*,*) "Calling broadcast_recv_chunk on ", ens_handle%my_pe, map_pe_to_task(ens_handle, chunks(i)%owner)
      if (packed_sends) then
        call broadcast_recv_chunk_packed(map_pe_to_task(ens_handle, chunks(i)%owner), chunk_data)
      else
@@ -893,11 +883,7 @@ CHUNK_LOOP: do i = 1, size(chunks)
     call task_sync()
   endif
 
-! bpd6 - error checking:
-!do iError = 1, obs_ens_handle%my_num_vars
-!  write(*,*) "ECheck4 : ", iError, sum(obs_ens_handle%copies(:,iError))
-!end do
-
+  call t_startf('ASSIMILATE:QC_CHECK')
   QC_CHECK: do j = 1, chunk_data%num_obs
      if (nint(chunk_data%obs_qc(j)) /= 0) then
         qcd = qcd + 1
@@ -953,14 +939,11 @@ CHUNK_LOOP: do i = 1, size(chunks)
        endif
     endif
   enddo QC_CHECK
+  call t_stopf('ASSIMILATE:QC_CHECK')
 
-!write(*,*) "CHECKSUM1a : " , sum(chunk_data%obs_prior)
-
-
-!do iError = 1, chunk_data%num_obs
-!  write(*,*) "ECheck4b: ", iError, sum(chunk_data%obs_prior(iError,:))
-!end do
-
+  if (sync_between_timers) then
+       call task_sync()
+  endif
 
   !write(*,*) "DEBUG: Num_groups = ", num_groups, chunk_data%num_obs
   do j = 1, chunk_data%num_obs
@@ -980,6 +963,9 @@ CHUNK_LOOP: do i = 1, size(chunks)
 
 
    call t_stopf('ASSIMILATE:ComputePriors')
+   if (sync_between_timers) then
+      call task_sync()
+   endif
    !call task_sync()
    ! -------------- NOTE: Skipping all adaptive localization stuff for now ---------
    ! ------- NOTE: Turns out, get_close_state was in the            ----
@@ -1141,6 +1127,9 @@ CHUNK_LOOP: do i = 1, size(chunks)
  !write(*,*) "ObID5 : ", sum(chunk_data%obs_prior(5,:)), sum(obs_ens_handle%copies(5:,:))
 !endif
 
+  if (sync_between_timers) then
+     call task_sync()
+  endif
 
    call t_startf('ASSIMILATE:UpdateState')
 
@@ -1361,7 +1350,10 @@ CHUNK_LOOP: do i = 1, size(chunks)
 !!   !call write_obdata(obdata_unit, i, num_close_states, skipped_missing, skipped_covfactor, stateupdate_time)
 !!
    call t_stopf('ASSIMILATE:UpdateState')
-   !call task_sync()
+
+   if (sync_between_timers) then
+      call task_sync()
+   endif
 
    !write(*,*) "DEBUG: num_close_obs = ", num_close_obs
 
@@ -1379,6 +1371,8 @@ CHUNK_LOOP: do i = 1, size(chunks)
 !num_close_obs = 0 !! ERROR - put here to fix some issue in the OBS_UPDATE loop
                   !! that's giving incorrect answers in parallel /graph mode
                   !! .. And we shouldn't have any dependent obs anyway.
+
+   call t_startf('ASSIMILATE:UpdateObs')
 
    OBS_UPDATE: do k = 1, num_close_obs
       obs_index = close_obs_ind(k)
@@ -1443,7 +1437,8 @@ CHUNK_LOOP: do i = 1, size(chunks)
       endif
       !write(*,*) "Obs Update Checksum : ", sum(chunk_data%obs_prior(j,:)), my_obs_indx(obs_index), chunks(i)%obs_list(j)
    end do OBS_UPDATE
-!write(*,*) "CHECKSUM4a : " , sum(chunk_data%obs_prior)
+   call t_stopf('ASSIMILATE:UpdateObs')
+
 !!   if (timing .and. i < 1000) then
 !!      elapsed = read_mpi_timer(base)
 !!      print*, 'obs_update time :', elapsed, 'rank ', my_task_id()
@@ -1474,8 +1469,11 @@ end do CHUNK_LOOP
 !stop
 
 write(*,*) "QC'd obs: ", qcd
+if (sync_between_timers) then
+  call task_sync()
+endif
 
-call t_stopf('tmp_loop')
+call t_stopf('Full Loop')
 call task_sync()
 call t_startf('ASSIMILATE:Post.Loop')
 
@@ -1751,6 +1749,9 @@ subroutine initialize_chunk_data(chunk_size, ens_size, num_groups, chunk_data)
   !allocate(chunk_data%base_obs_loc(chunk_size))
 
   buffer_size = (chunk_size * ens_size * 2) + (chunk_size * num_groups) + (chunk_size * 3) + 1 ! Plus base_obs_loc?
+  if (my_task_id() == 0) then
+    write(*,*) "Buffer size : ", buffer_size
+  endif
   !buffer_size = (chunk_size * ens_size * 2) + (chunk_size * num_groups) + (chunk_size * 3) + 0 ! no num_obs yet ... Plus base_obs_loc?
   allocate(chunk_data%bcast_buffer(buffer_size))
 
@@ -1794,6 +1795,14 @@ subroutine broadcast_send_chunk_packed(from, chunk_data)
 
    integer :: buffer_size
 
+  if (sync_between_timers) then
+     call task_sync()
+  endif
+
+  if (detailed_timers) then
+     call t_startf('DETAIL:bcast_send_chunk_pack')
+  endif
+
   start_offset = 1 
    buffer_size  = size(chunk_data%bcast_buffer)
 
@@ -1824,6 +1833,10 @@ subroutine broadcast_send_chunk_packed(from, chunk_data)
   ! Num obs:
   chunk_data%bcast_buffer(start_offset) = chunk_data%num_obs
 
+  if (detailed_timers) then
+     call t_stopf('DETAIL:bcast_send_chunk_pack')
+  endif
+
 !   buffer_size = (chunk_size * ens_size * 2) + (chunk_size * num_groups) +
 !   (chunk_size * 3) + 1
 
@@ -1835,8 +1848,16 @@ subroutine broadcast_send_chunk_packed(from, chunk_data)
 !  call MPI_Bcast(chunk_data%vertvalue_obs_in_localization_coord,   size(chunk_data%vertvalue_obs_in_localization_coord),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
 !  call MPI_Bcast(chunk_data%whichvert_real,   size(chunk_data%whichvert_real),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
 
+  if (detailed_timers) then
+    call t_startf('DETAIL:bcast_send_chunk_call')
+  endif
+
   call MPI_Bcast(chunk_data%bcast_buffer, size(chunk_data%bcast_buffer), MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
   !call MPI_Bcast(chunk_data%num_obs, 1, MPI_INTEGER, from, MPI_COMM_WORLD, iError)
+
+  if (detailed_timers) then
+    call t_stopf('DETAIL:bcast_send_chunk_call')
+  endif
 
 
 end subroutine broadcast_send_chunk_packed
@@ -1877,12 +1898,28 @@ subroutine broadcast_recv_chunk_packed(from, chunk_data)
    integer :: start_offset
 
    integer :: buffer_size 
-   
+  
+   if (sync_between_timers) then
+     call task_sync()
+   endif
+
    buffer_size = size(chunk_data%bcast_buffer)
    start_offset = 1
    
+  if (detailed_timers) then
+    call t_startf('DETAIL:bcast_recv_chunk_call')
+  endif
+
    call MPI_Bcast(chunk_data%bcast_buffer, size(chunk_data%bcast_buffer), MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
    !call MPI_Bcast(chunk_data%num_obs, 1, MPI_INTEGER, from, MPI_COMM_WORLD, iError)
+
+  if (detailed_timers) then
+    call t_stopf('DETAIL:bcast_recv_chunk_call')
+  endif
+
+  if (detailed_timers) then
+     call t_startf('DETAIL:bcast_recv_chunk_unpack')
+  endif
 
    ! obs_prior
    chunk_data%obs_prior = reshape(chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_prior)), [ size(chunk_data%obs_prior, 1), size(chunk_data%obs_prior, 2) ])
@@ -1910,6 +1947,10 @@ subroutine broadcast_recv_chunk_packed(from, chunk_data)
 
   ! Num obs:
   chunk_data%num_obs = chunk_data%bcast_buffer(start_offset)
+
+  if (detailed_timers) then
+     call t_stopf('DETAIL:bcast_recv_chunk_unpack')
+  endif
 
 !   write(*,*) "broadcast_recv_chunk - from = ", from
 !  chunk_data%obs_prior = reshape(chunk_data%bcast_buffer(1:9), [ 3,3 ])

@@ -26,6 +26,8 @@ use utilities_mod, only : register_module, error_handler, &
 
 use time_manager_mod, only : time_type, get_time, set_time
 
+use perf_mod
+
 ! BUILD TIP 1
 ! Many MPI installations have an MPI module; if one is present, use it.
 ! ('use mpi')
@@ -485,6 +487,8 @@ subroutine task_sync()
 
 integer :: errcode
 
+call t_startf('MPI:task_sync')
+
 if ( .not. module_initialized ) then
    write(errstring, *) 'initialize_mpi_utilities() must be called first'
    call error_handler(E_ERR,'task_sync', errstring, source, revision, revdate)
@@ -498,6 +502,9 @@ if (errcode /= MPI_SUCCESS) then
 endif
 
 if (verbose) write(*,*) "PE", myrank, ": MPI Barrier released"
+
+call t_stopf('MPI:task_sync')
+
 
 end subroutine task_sync
 
