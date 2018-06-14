@@ -106,10 +106,11 @@ character(len=100) :: init_ts_file ! length consistent with POP
 character(len=100) :: init_ts_outfile
 character(len= 64) :: init_ts_option, init_ts_suboption
 character(len= 64) :: init_ts_file_fmt, init_ts_outfile_fmt
+real  (r8)         :: init_ts_perturb
 
 namelist /init_ts_nml/ init_ts_option, init_ts_suboption, &
                        init_ts_file, init_ts_file_fmt, &
-                       init_ts_outfile, init_ts_outfile_fmt
+                       init_ts_outfile, init_ts_outfile_fmt, init_ts_perturb
 
 !------------------------------------------------------------------
 ! The POP domain namelist
@@ -856,7 +857,7 @@ call nc_check(io, 'read_mean_dynamic_topography', &
                   'get_var "mdt" from "'//trim(fname)//'"')
 
 ! Replace _FillValue with something
-!>@todo CHECK ... does it xtype of the variable matter when getting a _FillValue attribute. 
+!>@todo CHECK ... does it xtype of the variable matter when getting a _FillValue attribute.
 !> If it does not, these lines could collapse into something cleaner.
 
 if (xtype == NF90_REAL) then
@@ -898,8 +899,8 @@ call nc_check(nf90_close(ncid), &
 
 ! Just something to do a basic check.
 
-dmin = minval(mdt, mdt /= MISSING_R8) 
-dmax = maxval(mdt, mdt /= MISSING_R8) 
+dmin = minval(mdt, mdt /= MISSING_R8)
+dmax = maxval(mdt, mdt /= MISSING_R8)
 write(string1,*)'..  mdt sizes are ',size(mdt,1),size(mdt,2)
 write(string2,*)'_FillValue was ',dmiss,' original units "'//trim(unitsstring)//'"'
 write(string3,*)'min,max (meters) ',dmin, dmax
