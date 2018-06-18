@@ -77,9 +77,9 @@ switch ("`hostname`")
    case be*:
       # NCAR "bluefire", an IBM Linux machine.
       set   MOVE = '/usr/local/bin/mv -fv'
-      set   COPY = '/usr/local/bin/cp -fv --preserve=timestamps'
+      set   COPY = '/usr/local/bin/cp -v --preserve=timestamps'
       set   LINK = '/usr/local/bin/ln -fvs'
-      set REMOVE = '/usr/local/bin/rm -fr'
+      set REMOVE = '/usr/local/bin/rm -f'
 
    breaksw
    default:
@@ -90,9 +90,9 @@ switch ("`hostname`")
       #       cp(1) which has --preserve, and 
       #       cp(1p) which is some POSIX cp which doesn't have --preserve
       set   MOVE = '/bin/mv -fv'
-      set   COPY = '/bin/cp -fv --preserve=timestamps'
+      set   COPY = '/bin/cp -v --preserve=timestamps'
       set   LINK = '/bin/ln -fvs'
-      set REMOVE = '/bin/rm -fr'
+      set REMOVE = '/bin/rm -f'
 
    breaksw
 endsw
@@ -126,7 +126,7 @@ foreach MODEL ( cam-fv )
       echo "WARNING: executable file 'filter' not found."
       echo "         Looking for: $targetdir/filter "
       echo "         Trying to rebuild all executables for $MODEL now ..."
-      echo "         This will be incorrect, if input.nml:preprocess_nml is not correct."
+      echo "         Confirm that cam-fv/work/input.nml:preprocess_nml incorporates the desired observations types."
       (cd $targetdir; ./quickbuild.csh -mpi)
       if ( ! -x $targetdir/filter ) then
          echo "ERROR: executable file 'filter' not found."
@@ -142,28 +142,9 @@ end
 # Stage the required parts of DART in the CASEROOT directory.
 # ==============================================================================
 
-# The new case.st_archive job script calls st_archive.  It runs after the case.run job.
-# It submits the next case.run job, if RESUBMIT > 0.
-# Fix some pieces.
-# /X/ means search for lines with X in them.
-# 'c' means replace the line with the following.
-# This might want to have a conditional around it, to only execute if it's a bsub machine.
-sed -e "/BSUB[ ]*-o/c\#BSUB  -o cesm_st_arch.stdout.%J" \
-    -e "/BSUB[ ]*-e/c\#BSUB  -e cesm_st_arch.stderr.%J" \
-    -e "/BSUB[ ]*-J/c\#BSUB  -J ${CASE}.st_arch"        \
-    -e  "/PBS[ ]*-N/c\#PBS  -N cesm_st_arch.stdout"     \
-    -e  "/PBS[ ]*-o/c\#PBS  -o cesm_st_arch.stdouterr"  \
-    case.st_archive >! temp.$$  || exit 30
-${MOVE} temp.$$ case.st_archive
-chmod 755       case.st_archive
-
-# Same for lt_archive
-# queue and wall_clock can/should be modified via xmlchange in setup_{hybrid,advanced}
-# (see env_batch.xml)
-
 # BOGUS*, save_every_Mth_day_restarts#, and CESM come from the calling script,
 # setup_{hybrid,advanced,...}.
-${COPY} ${DARTROOT}/models/cam-fv/shell_scripts/no_assimilate.csh no_assimilate.csh  
+${COPY} -f ${DARTROOT}/models/cam-fv/shell_scripts/no_assimilate.csh no_assimilate.csh  
 sed -e "s#BOGUSCASEROOT#$CASEROOT#" \
     -e "s#BOGUSBASEOBSDIR#$baseobsdir#"  \
     -e "s#BOGUS_save_every_Mth#$save_every_Mth_day_restarts#" \
@@ -195,11 +176,11 @@ if [[ -e input.nml ]]; then
    if [[ -e input.nml.original ]]; then
       echo "input.nml.original already exists - not making another"
    else
-      ${COPY} input.nml input.nml.original
+      ${COPY} -f input.nml input.nml.original
    fi
 
 elif [[ -e ${DARTROOT}/models/cam-fv/work/input.nml ]]; then
-   ${COPY} ${DARTROOT}/models/cam-fv/work/input.nml  input.nml
+   ${COPY} -f ${DARTROOT}/models/cam-fv/work/input.nml  input.nml
    if [[ -x update_dart_namelists ]]; then
           ./update_dart_namelists
    fi
@@ -208,9 +189,9 @@ else
    exit 50
 fi
 
-${COPY} ${DARTROOT}/models/cam-fv/work/filter                 ${EXEROOT}
-${COPY} ${DARTROOT}/models/cam-fv/work/perfect_model_obs      ${EXEROOT}
-${COPY} ${DARTROOT}/models/cam-fv/work/fill_inflation_restart ${EXEROOT}
+${COPY} -f ${DARTROOT}/models/cam-fv/work/filter                 ${EXEROOT}
+${COPY} -f ${DARTROOT}/models/cam-fv/work/perfect_model_obs      ${EXEROOT}
+${COPY} -f ${DARTROOT}/models/cam-fv/work/fill_inflation_restart ${EXEROOT}
 
 exit 0
 
