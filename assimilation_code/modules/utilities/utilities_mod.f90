@@ -6,12 +6,13 @@
 
 module utilities_mod
 
-use types_mod, only : r4, r8, digits12, i4, i8, PI, MISSING_R8, MISSING_I
+!> general purpose lower level utility routines.  
+!>
+!> probably large enough now this file should be split with the 
+!> logging and error handing here, maybe the file routines in 
+!> another util module?
 
-!>@todo FIXME  netcdf is only needed for the nc_check() routine.
-!>when it moves to the netcdf_utilities_mod module remove the 'use'
-!>from here to simplify things.
-use netcdf
+use types_mod, only : r4, r8, digits12, i4, i8, PI, MISSING_R8, MISSING_I
 
 implicit none
 private
@@ -23,13 +24,13 @@ integer, parameter :: NML_NONE = 0, NML_FILE = 1, NML_TERMINAL = 2, NML_BOTH = 3
 
 real(r8), parameter :: TWOPI = PI * 2.0_r8
 
-logical :: do_output_flag = .false.
-integer :: nml_flag       = NML_FILE
-logical :: single_task    = .true.
-integer :: task_number    = 0
+logical :: do_output_flag     = .false.
+integer :: nml_flag           = NML_FILE
+logical :: single_task        = .true.
+integer :: task_number        = 0
 logical :: module_initialized = .false.
-integer :: logfileunit = -1
-integer :: nmlfileunit = -1
+integer :: logfileunit        = -1
+integer :: nmlfileunit        = -1
 
 
 public :: get_unit, &
@@ -95,7 +96,7 @@ end interface
 ! if so, make to_scalar_int explicitly I4, i guess.)
 interface scalar
    module procedure to_scalar_real
-   module procedure to_scalar_int
+   module procedure to_scalar_int4
    module procedure to_scalar_int8
 end interface
 
@@ -103,6 +104,7 @@ interface array_dump
    module procedure array_1d_dump
    module procedure array_2d_dump
    module procedure array_3d_dump
+   module procedure array_4d_dump
 end interface
 
 ! version controlled file description for error handling, do not edit
@@ -160,7 +162,6 @@ character(len=512) :: string1,string2,string3
 if ( module_initialized ) return
 
 module_initialized = .true.
-
 
 
 ! now default to false, and only turn on if i'm task 0
@@ -222,7 +223,7 @@ if (do_output_flag) then
 endif
 
 ! Check to make sure termlevel is set to a reasonable value
-call checkTermLevel(TERMLEVEL)
+call check_term_level(TERMLEVEL)
 
 ! Echo the module information using normal mechanism
 call register_module(source, revision, revdate)
@@ -418,12 +419,8 @@ if (.not. module_initialized) call fatal_not_initialized('find_namelist_in_file'
 if(.not. file_exist(trim(namelist_file_name))) then
 
    write(msgstring1, *) 'Namelist input file: ', namelist_file_name, ' must exist.'
-   if(logfileunit >= 0) then
-      call error_handler(E_ERR, 'find_namelist_in_file', msgstring1, &
-                         source, revision, revdate)
-   else
-      call fatal_error_w_no_log('find_namelist_in_file', msgstring1)
-   endif
+   call error_handler(E_ERR, 'find_namelist_in_file', msgstring1, &
+                      source, revision, revdate)
 
 endif
 
@@ -444,12 +441,8 @@ do
       ! Reached end of file and didn't find this namelist
       write(msgstring1, *) 'Namelist entry &', trim(nml_name), &
                            ' must exist in file ', trim(namelist_file_name)
-      if(logfileunit >= 0) then
-         call error_handler(E_ERR, 'find_namelist_in_file', msgstring1, &
-                            source, revision, revdate)
-      else
-         call fatal_error_w_no_log('find_namelist_in_file', msgstring1)
-      endif
+      call error_handler(E_ERR, 'find_namelist_in_file', msgstring1, &
+                         source, revision, revdate)
    else
       ! see if this line starts the namelist we are asking for
       string1 = adjustl(next_nml_string)
@@ -478,6 +471,8 @@ character(len=*), intent(in) :: nml_name
 character(len=256) :: nml_string
 integer            :: io
 
+if (.not. module_initialized) call fatal_not_initialized('check_namelist_read')
+
 ! If the namelist read was successful, close the namelist file and we're done.
 if(iostat_in == 0) then
    call close_file(iunit)
@@ -497,12 +492,8 @@ else
    write(msgstring1, *) 'INVALID NAMELIST ENTRY: ', trim(nml_string), ' in namelist ', trim(nml_name)
 endif
 
-if(logfileunit >= 0) then
-   call error_handler(E_ERR, 'check_namelist_read', msgstring1, &
-                      source, revision, revdate)
-else
-   call fatal_error_w_no_log('check_namelist_read', msgstring1)
-endif
+call error_handler(E_ERR, 'check_namelist_read', msgstring1, &
+                   source, revision, revdate)
 
 end subroutine check_namelist_read
 
@@ -564,15 +555,17 @@ end subroutine fatal_not_initialized
 !> call this routine if you find an error before the logfile
 !> has been opened.
 
-subroutine fatal_error_w_no_log(from_routine, msgstring1, msgstring2)
+subroutine fatal_error_w_no_log(from_routine, msg1, msg2, msg3)
 
 character(len=*), intent(in) :: from_routine
-character(len=*), intent(in), optional :: msgstring1
-character(len=*), intent(in), optional :: msgstring2
+character(len=*), intent(in), optional :: msg1
+character(len=*), intent(in), optional :: msg2
+character(len=*), intent(in), optional :: msg3
 
 write(*,*)'FATAL ERROR in '//trim(from_routine)
-if (present(msgstring1)) write(*,*) trim(msgstring1)
-if (present(msgstring2)) write(*,*) trim(msgstring2)
+if (present(msg1)) write(*,*) trim(msg1)
+if (present(msg2)) write(*,*) trim(msg2)
+if (present(msg2)) write(*,*) trim(msg3)
 write(*,*)'  ',trim(source)
 write(*,*)'  ',trim(revision)
 write(*,*)'  ',trim(revdate)
@@ -583,9 +576,11 @@ end subroutine fatal_error_w_no_log
 
 !-----------------------------------------------------------------------
 
-subroutine checkTermLevel(level)
+subroutine check_term_level(level)
 
 integer, intent(in) :: level
+
+if (.not. module_initialized) call fatal_not_initialized('check_term_level')
 
 select case (level)
   case (E_MSG, E_ALLMSG, E_WARN, E_ERR, E_DBG)
@@ -593,12 +588,12 @@ select case (level)
   case default
     write(msgstring1, *) 'bad integer value for "termlevel", must be one of'
     write(msgstring2, *) '-1 (E_MSG), 0 (E_ALLMSG), 1 (E_WARN), 2 (E_ERR), -2 (E_DBG)'
-    call error_handler(E_ERR,'checkTermLevel', msgstring1, &
+    call error_handler(E_ERR,'check_term_level', msgstring1, &
                        source, revision, revdate, text2=msgstring2)
 
   end select
 
-end subroutine checkTermLevel
+end subroutine check_term_level
 
 
 !-----------------------------------------------------------------------
@@ -646,11 +641,7 @@ enddo
 
 ! if you get here it is an error
 write(msgstring1, *) 'Unable to find an available unit number between 10 and 80'
-if (logfileunit >= 0) then
-   call error_handler(E_ERR,'get_unit', msgstring1, source, revision, revdate)
-else
-   call fatal_error_w_no_log('get_unit', msgstring1)
-endif
+call error_handler(E_ERR,'get_unit', msgstring1, source, revision, revdate)
 
 end function get_unit
 
@@ -669,7 +660,12 @@ character(len=*), intent(in), optional :: src, rev, rdate, aut, text2, text3
 character(len=16) :: taskstr, msgtype
 character(len=246) :: wherefrom, wherecont
 
-if ( .not. module_initialized ) call initialize_utilities
+! the init code uses the error_handler so no trying to call init from here.
+if ( .not. module_initialized ) call fatal_not_initialized('error_handler')
+
+! handle the case where we have an error without an open log file.
+
+if (logfileunit < 0) call fatal_error_w_no_log(routine, text, text2, text3)
 
 ! early returns:
 
@@ -682,15 +678,15 @@ if (level == E_DBG .and. .not. print_debug)    return
 ! if we get here, we're printing something.  set up some strings
 ! to make the code below simpler.
 
-      if ( single_task ) then
+if ( single_task ) then
    taskstr = ''
-      else
-        if (task_number == 0) then
+else
+   if (task_number == 0) then
       write(taskstr, '(a)' ) "PE 0: "
-        else
+   else
       write(taskstr, '(a,i5,a)' ) "PE ", task_number, ": "
-        endif
-      endif
+   endif
+endif
 
 ! these are going to get used a lot below.  make them
 ! single strings so the code is easier to parse.  but can't
@@ -922,8 +918,8 @@ if ( .not. module_initialized ) call initialize_utilities
 
 inquire (unit=iunit, opened=open, iostat=ios)
 if ( ios /= 0 ) then
-write(msgstring1,*)'Unable to determine status of file unit ', iunit
-call error_handler(E_MSG, 'close_file: ', msgstring1, source, revision, revdate)
+   write(msgstring1,*)'Unable to determine status of file unit ', iunit
+   call error_handler(E_MSG, 'close_file: ', msgstring1, source, revision, revdate)
 endif
 
 if (open) close(iunit)
@@ -1205,34 +1201,35 @@ end subroutine set_tasknum
 
 !-----------------------------------------------------------------------
 
-!>@todo FIXME: move this to the netcdf utilities module
+!>@todo FIXME: remove this once all other code is calling
+!>this from the netcdf_utilities_mod instead.
 
 subroutine nc_check(istatus, subr_name, context)
-   integer, intent (in)                   :: istatus
-   character(len=*), intent(in)           :: subr_name
-   character(len=*), intent(in), optional :: context
+
+use netcdf
+
+integer, intent (in)                   :: istatus
+character(len=*), intent(in)           :: subr_name
+character(len=*), intent(in), optional :: context
   
-   character(len=512) :: error_msg
-  
-   ! if no error, nothing to do here.  we are done.
-   if( istatus == nf90_noerr) return
+! if no error, nothing to do here.  we are done.
+if(istatus == nf90_noerr) return
 
 
-   ! something wrong.  construct an error string and call the handler.
+! something wrong.  construct an error string and call the handler.
 
-   ! context is optional, but is very useful if specified.
-   ! if context + error code > 512, the assignment will truncate.
-   if (present(context) ) then
-       error_msg = trim(context) // ': ' // trim(nf90_strerror(istatus))
-   else
-       error_msg = nf90_strerror(istatus)
-   endif
+! context is optional, but is very useful if specified.
+! if context + error code > 512, the assignment will truncate.
+if (present(context) ) then
+   msgstring1 = trim(context) // ': ' // trim(nf90_strerror(istatus))
+else
+   msgstring1 = nf90_strerror(istatus)
+endif
 
-   ! this does not return 
-   call error_handler(E_ERR, 'nc_check', error_msg, source, revision, revdate, &
+! this does not return 
+call error_handler(E_ERR, 'nc_check', msgstring1, source, revision, revdate, &
                       text2=subr_name)
   
-
 end subroutine nc_check
 
 
@@ -1914,13 +1911,13 @@ end function to_scalar_real
 !-----------------------------------------------------------------------
 !>
 
-pure function to_scalar_int(x)
- integer, intent(in) :: x(1)
- integer :: to_scalar_int
+pure function to_scalar_int4(x)
+ integer(i4), intent(in) :: x(1)
+ integer(i4) :: to_scalar_int4
  
-to_scalar_int = x(1)
+to_scalar_int4 = x(1)
 
-end function to_scalar_int
+end function to_scalar_int4
 
 !-----------------------------------------------------------------------
 !>
@@ -2148,6 +2145,62 @@ do k=1, asize_k
 enddo
 
 end subroutine array_3d_dump
+
+!-----------------------------------------------------------------------
+!> dump the contents of a 4d array with a max of N items per line.
+!> optional arguments allow the caller to restrict the output to 
+!> no more than X items, to write to an open file unit, and to
+!> write a text label before the numerical dump.
+!>
+
+subroutine array_4d_dump(array, nper_line, max_i_items, max_j_items, max_k_items, max_l_items, funit, label)
+real(r8),         intent(in)           :: array(:,:,:,:)
+integer,          intent(in), optional :: nper_line
+integer,          intent(in), optional :: max_i_items
+integer,          intent(in), optional :: max_j_items
+integer,          intent(in), optional :: max_k_items
+integer,          intent(in), optional :: max_l_items
+integer,          intent(in), optional :: funit
+character(len=*), intent(in), optional :: label
+
+integer :: i, j, k, l, per_line, ounit, asize_i, asize_j, asize_k, asize_l
+logical :: has_label
+
+! set defaults and override if arguments are present
+
+per_line = 4
+if (present(nper_line)) per_line = nper_line
+
+asize_i = size(array, 1)
+asize_j = size(array, 2)
+asize_k = size(array, 3)
+asize_l = size(array, 4)
+if (present(max_i_items)) asize_i = min(asize_i, max_i_items)
+if (present(max_j_items)) asize_j = min(asize_j, max_j_items)
+if (present(max_k_items)) asize_k = min(asize_k, max_k_items)
+if (present(max_l_items)) asize_l = min(asize_l, max_l_items)
+
+ounit = 0
+if (present(funit)) ounit = funit
+
+has_label = .false.
+if (present(label)) has_label = .true.
+
+! output section
+
+if (has_label) write(ounit, *) trim(label)
+
+do l=1, asize_l
+   do k=1, asize_k
+      do j=1, asize_j
+         do i=1, asize_i, per_line
+            write(ounit, *) i, j, k, l, ' : ', array(i:min(asize_i,i+per_line-1), j, k, l)
+         enddo
+      enddo
+   enddo
+enddo
+
+end subroutine array_4d_dump
 
 !-----------------------------------------------------------------------
 !> given an array of sorted values and a value to find, return the
