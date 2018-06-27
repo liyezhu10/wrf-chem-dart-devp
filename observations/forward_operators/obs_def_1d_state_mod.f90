@@ -465,7 +465,7 @@ real(r8),            intent(out) :: val(ens_size)
 integer,             intent(out) :: istatus(ens_size)
 
 integer :: i
-real(r8) :: pval(ens_size)
+real(r8) :: pval(ens_size), pow
 
 ! The forward operator interface for this type of observation.  It is
 ! called with a state vector, a location, and a key to identify which
@@ -475,6 +475,13 @@ real(r8) :: pval(ens_size)
 ! The call to 'interpolate()' below calls the forward operator in
 ! whatever model this code has been compiled with.
 
+! The power expected operator raises the interpolated state variable to the power specified as the
+! additional metadata value in the obs_seq file. For a non-integer power, this operation is not 
+! defined for negative state variable values. Here, the forward operator for negative values of
+! the observation with non-integer power is instead defined as 
+! ob = -(-state^power). This allows exploration of a variety of 
+! qualitatively different functional relations between the observation and the state.
+
 if ( .not. module_initialized ) call initialize_module
 
 ! Make sure key is within valid range
@@ -483,22 +490,25 @@ call check_valid_key_power(powkey, 'GIVEN', 'get_expected_power')
 ! Interpolate the raw state to the location for each ensemble member
 call interpolate(state_handle, ens_size, location, QTY_STATE_VARIABLE, pval, istatus)
 
-if(power(powkey) == int(power(powkey))) then
+pow = power(powkey)
+
+! NOTE: WORRY ABOUT SMALL ROUND_OFF AWAY FROM INTEGER IN FILES?
+if(pow == int(pow)) then
    ! Integer power, just use standard definition
-   val = pval ** power(powkey)
+   val = pval ** pow
 else
    ! For non-integer powers, fix up values for negative bases
    do i = 1, ens_size
       if(pval(i) >= 0.0_r8) then
-         val(i) = pval(i) ** power(powkey)
+         val(i) = pval(i) ** pow
       else
-         val(i) = -1.0_r8 * (-1.0_r8 * pval(i)) ** power(powkey)
+         val(i) = -1.0_r8 * (-1.0_r8 * pval(i)) ** pow
       endif
    end do
 endif
 
 if(debug) print*, 'get_expected_power key is ', powkey
-if(debug) print*, 'metadata value is: ', power(powkey)
+if(debug) print*, 'metadata value is: ', pow
 if(debug) print*, 'return value for forward operator is ', val
 if(debug) print*, 'return status (0 good; >0 error; <0 reserved for system use) is ', istatus
 

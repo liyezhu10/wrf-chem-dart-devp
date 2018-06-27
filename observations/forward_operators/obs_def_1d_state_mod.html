@@ -62,7 +62,11 @@ that use the 1D location module and can be thought of as having a state
 vector that is equally spaced on a 1D cyclic domain. The three observation types
 are: a straight linear interpolation to a point on a [0,1] domain called
 a RAW_STATE_VARIABLE; the RAW_STATE_VAR_POWER is the interpolated
-RAW_STATE_VARIABLE raised to a real-valued power; 
+RAW_STATE_VARIABLE raised to a real-valued power (see the description of the
+public interface
+<TR><TD>&nbsp;</TD><TD><A HREF="#get_expected_power">get_expected_power</A></TD></TR>
+for details on what this forward operator does
+for non-integer powers and negative interpolated state variables); 
 an area-weighted 'integral' of the state variable
 over some part of the cyclic 1D domain called RAW_STATE_1D_INTEGRAL. 
 The second type is convenient for studying non-gaussian, non-linear
@@ -600,6 +604,9 @@ Computes the forward observation operator for a power observation.
 Calls the <em class="code">interpolate()</em> routine 
 to invoke the forward operator code in whatever model this has been 
 compiled with, then raises the result to the specified power associated with this powkey.
+For non-integer values of powkey, this operation would be undefined for negative values
+of the interpolated state variable. In this case, the forward operator becomes
+-[(-state)^powkey].
 </P>
 
 <TABLE width=100% border=0 summary="" cellpadding=3>
