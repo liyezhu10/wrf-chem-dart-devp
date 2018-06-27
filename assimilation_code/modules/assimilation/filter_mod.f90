@@ -70,8 +70,7 @@ use smoother_mod,          only : smoother_read_restart, advance_smoother,      
                                   smoother_assim,                                             &
                                   smoother_ss_diagnostics, smoother_end, set_smoother_trace
 
-use random_seq_mod,        only : random_seq_type, init_random_seq, random_gaussian,          &
-                                  random_gamma, random_inverse_gamma
+use random_seq_mod,        only : random_seq_type, init_random_seq, random_gaussian
 
 use state_vector_io_mod,   only : state_vector_io_init, read_state, write_state, &
                                   set_stage_to_write, get_stage_to_write
@@ -1199,8 +1198,7 @@ call set_copy_meta_data(seq, num_obs_copies, posterior_meta_data)
 posterior_obs_spread_index = num_obs_copies
 
 ! Make sure there are not too many copies requested
-! JLA: Had to output more than 10000 obs for Craig's analytical test
-if(num_output_obs_members > 1000000) then
+if(num_output_obs_members > 10000) then
    write(msgstring, *)'output metadata in filter needs obs ensemble size < 10000, not ',&
                       num_output_obs_members
    call error_handler(E_ERR,'filter_generate_copy_meta_data',msgstring,source,revision,revdate)
@@ -1936,35 +1934,6 @@ type(random_seq_type) :: r(ens_size)
 real(r8)              :: random_array(ens_size) ! array of random numbers
 integer               :: local_index
 
-real(r8)              :: shape, scale
-
-call init_random_seq(r(1), 14)
-
-write(*, *) 'THIS CODE IS A TESTING HARNESS AND SHOULD NOT BE USED: PERTURB_COPIES_TASK_BITWISE in FILTER_MOD'
-
-! First test for Craig, his case 2
-if(1 == 2) then
-   do i = 1, ens_size
-        ! For Craig single variable tests want to generate an initial ensemble with gamma distribution
-        shape = 1.0_r8
-        scale = 5.31_r8 / shape
-        ens_handle%copies(i, 7) = random_gamma(r(1), shape, scale)
-   end do
-else
-! Second test for Craig, his case 3
-   do i = 1, ens_size
-        ! For Craig single variable tests want to generate an initial ensemble with gamma distribution
-        shape = 4.0_r8
-        scale = 5.31_r8 * (shape - 1.0_r8)
-        ens_handle%copies(i, 7) = random_inverse_gamma(r(1), shape, scale)
-   end do
-  
-endif
-
-
-
-if(1 == 1) return
-
 ! Need ens_size random number sequences.
 do i = 1, ens_size
    call init_random_seq(r(i), i)
@@ -1978,28 +1947,11 @@ do i = 1, ens_handle%num_vars
    do j = 1, ens_size
      ! Can use %copies here because the random number
      ! is only relevant to the task than owns element i.
-     !!!random_array(j)  =  random_gaussian(r(j), ens_handle%copies(j, local_index), perturbation_amplitude)
-
-     ! For Craig single variable tests want to generate an initial ensemble with gamma distribution
-     shape = 1.0_r8
-     scale = 1.0_r8 / shape
-     scale = abs(scale)
-     random_array(j) = random_gamma(r(j), shape, scale)
-     if(random_array(j) < 0.0_r8) then
-        write(*, *) 'negative random_gamma ', j, random_array(j)
-        stop
-     endif
-
-!!!write(*, *) 'random ', j, random_array(j)
-
+     random_array(j)  =  random_gaussian(r(j), ens_handle%copies(j, local_index), perturbation_amplitude)
    enddo
 
    if (ens_handle%my_vars(local_index) == i) then
       ens_handle%copies(1:ens_size, local_index) = random_array(:)
-if(minval(ens_handle%copies(1:ens_size, local_index)) < 0.0_r8) then
-   write(*, *) 'found NEG'
-   stop
-endif
       local_index = local_index + 1 ! task is ready for the next random number
       local_index = min(local_index, ens_handle%my_num_vars)
    endif
