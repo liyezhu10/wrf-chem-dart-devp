@@ -105,7 +105,7 @@ integer  :: tasks_per_model_advance = 1
 integer  :: output_interval = 1
 integer  :: print_every_nth_obs = 0
 
-! Temporary control of the simulated observation uncertainty for testing GIGG filter
+! Control of the simulated observation uncertainty for testing GIGG filters
 ! Value of 1 is default and is standard gaussian
 ! Value of 2 means observation pdf given truth is inverse gamma and value in file is type 1 relative error variance
 ! Value of 3 means observation pdf given truth is gamma and value in file is type 1 relative error variance
@@ -166,6 +166,7 @@ integer                 :: istatus(1)
 
 real(r8)                :: true_obs(1), obs_value(1), qc(1)
 
+! Next declarations are for GIGG filter from Craig Bishop
 real(r8)                :: T1Rr, shape, scale
 
 character(len=metadatalength) :: copy_meta_data(2), qc_meta_data, obs_seq_read_format
@@ -563,10 +564,6 @@ AdvanceTime: do
 
             ! For GIGG filters, need to define different distributions for observation uncertainty
             ! The obs_err_var in the obs_seq file has different meanings for different optiona
-
-! Set truth to 1 for clean distribution test
-!!!true_obs(1) = 1.0_r8
-
             if(gigg_obs_error_pdf == 1) then
                ! Standard gaussian
                obs_value(1) = random_gaussian(random_seq, true_obs(1), &
@@ -578,10 +575,6 @@ AdvanceTime: do
                shape = 1.0_r8 / T1Rr + 2.0_r8
                scale = true_obs(1) * (shape - 1.0_r8)
                obs_value(1) = random_inverse_gamma(random_seq, shape, scale)
-
-! Output for clean distribution test
-!write(22, *) true_obs(1), T1Rr, shape, scale, obs_value(1)
-
             elseif(gigg_obs_error_pdf == 3) then
                ! Observation pdf given truth is gamma and value in file is type 1 relative error variance
                ! Get alpha and beta for the random number generation
@@ -589,10 +582,6 @@ AdvanceTime: do
                shape = 1.0_r8 / T1Rr
                scale = true_obs(1) / shape
                obs_value(1) = random_gamma(random_seq, shape, scale)
-
-! Output for clean distribution test
-!write(33, *) true_obs(1), T1Rr, shape, scale, obs_value(1)
-
             else
                ! Illegal value for gigg_obs_error_pdf
                msgstring = 'Illegal value for namelist parameter gigg_obs_error_pdf'
