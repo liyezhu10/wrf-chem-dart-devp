@@ -257,6 +257,7 @@ if (scale <= 0.0_r8) then
    call error_handler(E_ERR, 'random_inverse_gamma', errstring, source, revision, revdate)
 endif
 
+! Note that the reciprocal of the scale from the inverse gamma is required as the scale input for the gamma here
 g = ran_gamma(r, shape, 1.0_r8 / scale)
 
 ! ran_gamma can't return 0 so its safe to divide by it
