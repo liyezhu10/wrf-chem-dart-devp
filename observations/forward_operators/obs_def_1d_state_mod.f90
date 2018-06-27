@@ -203,7 +203,9 @@ if(debug) print*, 'write_power: ascii format = ', is_ascii
 ! for tracking/debug use if needed.
 
 if (is_ascii) then
-   write(ifile, *) power(powkey)
+   write(ifile, 11) power(powkey)
+   ! Avoid having an integer entered value get truncated to non-integer which would be disastrous for power
+   11 format(G25.16)
    write(ifile, *) powkey
 else
    write(ifile)    power(powkey)
@@ -394,7 +396,7 @@ integer               :: i
 real(r8)              :: range, loc, bottom, dx, x
 integer               :: j !< loop variable
 integer               :: point_istatus(ens_size)
-logical               :: return_now ! used to return early if an interpoaltion fails
+logical               :: return_now ! used to return early if an interpolation fails
 real(r8), dimension(ens_size) :: sum, dist, weight, weight_sum
 
 if ( .not. module_initialized ) call initialize_module
@@ -492,17 +494,24 @@ call interpolate(state_handle, ens_size, location, QTY_STATE_VARIABLE, pval, ist
 
 pow = power(powkey)
 
-! NOTE: WORRY ABOUT SMALL ROUND_OFF AWAY FROM INTEGER IN FILES?
 if(pow == int(pow)) then
    ! Integer power, just use standard definition
-   val = pval ** pow
+   where(istatus == 0) 
+      val = pval ** pow
+   elsewhere
+      val = missing_r8
+   endwhere
 else
    ! For non-integer powers, fix up values for negative bases
    do i = 1, ens_size
-      if(pval(i) >= 0.0_r8) then
-         val(i) = pval(i) ** pow
+      if(istatus(i) == 0) then
+         if(pval(i) >= 0.0_r8) then
+            val(i) = pval(i) ** pow
+         else
+            val(i) = - (- pval(i)) ** pow
+         endif
       else
-         val(i) = -1.0_r8 * (-1.0_r8 * pval(i)) ** pow
+         val(i) = missing_r8
       endif
    end do
 endif
