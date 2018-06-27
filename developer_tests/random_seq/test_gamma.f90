@@ -26,7 +26,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 type (random_seq_type) :: r
 integer :: i, j, n, f
-real(r8) :: r1, sum, sumsq, k, h
+real(r8) :: r1, sum, sumsq, shape, scale
 real(r8) :: mean, var, sd, compmean, compvar, compsd, compdiffm, compdiffsd
 logical  :: write_this_one
 character(len=50) :: formf = '(I12,2(F8.3),4(F12.5),2(F16.10),2(F12.5))'
@@ -36,9 +36,9 @@ logical :: write_me = .true.       ! if true, write each distribution into a fil
 integer :: write_limit = 1000000   ! but only if rep count is not greater than this limit
 
 type t_inputs
- real(r8) :: t_kappa
- real(r8) :: t_theta
- integer  :: t_nreps
+   real(r8) :: t_shape
+   real(r8) :: t_scale
+   integer  :: t_nreps
 end type
 
 
@@ -80,35 +80,35 @@ call initialize_utilities('test_gamma')
 call register_module(source,revision,revdate)
 
 write(*, *) ''
-write(*, *) 'sample size     input k & t       computed mean, sd         actual mean, sd       diff mean         diff sd        % diff mean,  sd'
+write(*, *) 'sample size   shape & scale     computed mean, sd       actual mean, sd       diff mean         diff sd        % diff mean,  sd'
 write(*, *) ''
 
 do j=1, ntests
 
    call init_random_seq(r, 5)
 
-   k = t(j)%t_kappa
-   h = t(j)%t_theta
+   shape = t(j)%t_shape
+   scale = t(j)%t_scale
    n = t(j)%t_nreps
 
    ! save all values in a file for post-plotting?
    write_this_one = (write_me .and. n <= write_limit)
 
    if (write_this_one) then
-      write(temp, "(A,F8.3,A,F8.3,A,I10)"), "gamma_", k, "_", h, "_", n
+      write(temp, "(A,F8.3,A,F8.3,A,I10)") "gamma_", shape, "_", scale, "_", n
       call squeeze_out_blanks(temp, fname)
       f = open_file(fname)
    endif
 
    ! analytical values:
-   mean = k * h  
-   sd = sqrt(k * (h*h))
+   mean = shape * scale
+   sd = sqrt(shape * (scale*scale))
 
    sum = 0.0_r8
    sumsq = 0.0_r8
 
    do i = 1, n
-      r1 = random_gamma(r, k, h)
+      r1 = random_gamma(r, shape, scale)
 
       if (write_this_one) write(f,*) r1
 
@@ -126,7 +126,7 @@ do j=1, ntests
    compdiffm  = compmean - mean
    compdiffsd = compsd - sd
 
-   write(*, formf) n, k, h, mean, sd, compmean, compsd, compdiffm, compdiffsd, &
+   write(*, formf) n, shape, scale, mean, sd, compmean, compsd, compdiffm, compdiffsd, &
                       abs(compdiffm/mean) * 100._r8, abs(compdiffsd/sd) * 100._r8
    
 

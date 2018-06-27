@@ -26,7 +26,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 type (random_seq_type) :: r
 integer :: i, j, n, f
-real(r8) :: r1, sum, sumsq, a, b, l
+real(r8) :: r1, sum, sumsq, shape, scale
 real(r8) :: mean, var, sd, compmean, compvar, compsd, compdiffm, compdiffsd
 logical  :: write_this_one
 character(len=256) :: fname, temp
@@ -36,8 +36,8 @@ logical :: write_me = .true.       ! if true, write each distribution into a fil
 integer :: write_limit = 1000000   ! but only if rep count is not greater than this limit
 
 type t_inputs
- real(r8) :: t_alpha
- real(r8) :: t_beta
+ real(r8) :: t_shape
+ real(r8) :: t_scale
  integer  :: t_nreps
 end type
 
@@ -80,40 +80,37 @@ call initialize_utilities('test_inv_gamma')
 call register_module(source,revision,revdate)
 
 write(*, *) ''
-write(*, *) 'sample size     input a & b       computed mean, sd         actual mean, sd       diff mean         diff sd        % diff mean,  sd'
+write(*, *) 'sample size   shape & scale     computed mean, sd       actual mean, sd       diff mean         diff sd        % diff mean,  sd'
 write(*, *) ''
 
 do j=1, ntests
 
    call init_random_seq(r, 5)
 
-   a = t(j)%t_alpha
-   b = t(j)%t_beta
+   shape = t(j)%t_shape
+   scale = t(j)%t_scale
    n = t(j)%t_nreps
 
    ! save all values in a file for post-plotting?
    write_this_one = (write_me .and. n <= write_limit)
 
    if (write_this_one) then
-      write(temp, "(A,F8.3,A,F8.3,A,I10)"), "invgamma_", a, "_", b, "_", n
+      write(temp, "(A,F8.3,A,F8.3,A,I10)") "invgamma_", shape, "_", scale, "_", n
       call squeeze_out_blanks(temp, fname)
       f = open_file(fname)
    endif
 
    ! analytical values:
    
-   ! lambda = scale, beta = rate
-   l = 1.0_r8 / b
-
-   if (a > 1.0_r8) then
-      mean  = b / (a - 1.0_r8)
+   if (shape > 1.0_r8) then
+      mean  = scale / (shape - 1.0_r8)
    else
-      mean  = b  ! ??
+      mean  = scale  !  undefined
    endif
-   if (a > 2.0_r8) then
-      sd  = sqrt((b*b) / ((a - 1.0)**2 * (a - 2.0_r8)))
+   if (shape > 2.0_r8) then
+      sd  = sqrt((scale*scale) / ((shape - 1.0)**2 * (shape - 2.0_r8)))
    else
-      sd  = b    ! ??
+      sd  = scale    ! Undefined
    endif
 
    sum = 0.0_r8
@@ -121,7 +118,7 @@ do j=1, ntests
 
    ! inverse gamma wants shape and scale. 
    do i = 1, n
-      r1 = random_inverse_gamma(r, a, l)
+      r1 = random_inverse_gamma(r, shape, scale)
 
       if (write_this_one) write(f,*) r1
 
@@ -139,7 +136,7 @@ do j=1, ntests
    compdiffm  = compmean - mean
    compdiffsd = compsd - sd
 
-   write(*, formf) n, a, b, mean, sd, compmean, compsd, compdiffm, compdiffsd, &
+   write(*, formf) n, shape, scale, mean, sd, compmean, compsd, compdiffm, compdiffsd, &
                       abs(compdiffm/mean) * 100._r8, abs(compdiffsd/sd) * 100._r8
    
 
