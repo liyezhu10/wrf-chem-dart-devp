@@ -563,21 +563,19 @@ AdvanceTime: do
          if( qc_ens_handle%vars(i, 1) == 0 ) then
 
             ! For GIGG filters, need to define different distributions for observation uncertainty
-            ! The obs_err_var in the obs_seq file has different meanings for different optiona
+            ! The obs_err_var in the obs_seq file has different meanings for different option
             if(gigg_obs_error_pdf == 1) then
                ! Standard gaussian
                obs_value(1) = random_gaussian(random_seq, true_obs(1), &
                   sqrt(get_obs_def_error_variance(obs_def)))
             elseif(gigg_obs_error_pdf == 2) then
                ! Observation pdf given truth is inverse gamma and value in file is type 1 relative error variance
-               ! Get alpha and beta for the random number generation
                T1Rr = get_obs_def_error_variance(obs_def)
                shape = 1.0_r8 / T1Rr + 2.0_r8
                scale = true_obs(1) * (shape - 1.0_r8)
                obs_value(1) = random_inverse_gamma(random_seq, shape, scale)
             elseif(gigg_obs_error_pdf == 3) then
                ! Observation pdf given truth is gamma and value in file is type 1 relative error variance
-               ! Get alpha and beta for the random number generation
                T1Rr = get_obs_def_error_variance(obs_def)
                shape = 1.0_r8 / T1Rr
                scale = true_obs(1) / shape
