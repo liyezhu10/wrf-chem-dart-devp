@@ -135,7 +135,7 @@ character(len=*), parameter :: revdate  = "$Date$"
 !     (9 = Localized Particle Filter (see Poterjoy 2016), in assim_tools_mod.pf.f90)
 !
 !     100 = GIGG, Craig Bishop. Detect interior type from observation quantity (NOT YET IMPLEMENTED) 
-!     101 ="Gauss_Gauss"     gaussian prior, gaussian observation likelihood (default?)
+!     101 ="Gauss_Gauss"     gaussian prior, gaussian observation likelihood
 !     102 ="Gamma_InvGamma"  gamma prior, inverse-gamma observation likelihood
 !     103 ="InvGamma_Gamma"  inverse-gamma prior, gamma observation likelihood
 !      
@@ -2420,13 +2420,13 @@ integer  :: i, GIGG_type
 real(r8) :: new_mean, var_ratio, a
 real(r8) :: temp_mean, temp_var, new_ens(ens_size), new_var
 real(r8) :: T1Rr, T2Rr
-real(r8) :: wk1,wk2,T2Pr,inv_prior_mean
-real(r8) :: GIG_gain,T1Rr_GIG_PO,y_GIG_mean_PO,y_GIG_sample_mean_PO,nobs_GIG
-real(r8) :: IGG_gain,T1Rr_IGG_PO,y_IGG_mean_PO,y_IGG_sample_mean_PO,nobs_IGG,nanal_var_IGG,anal_var_IGG
-real(r8) :: y_GIG_var_PO,y_IGG_var_PO,T2Rr_IGG_PO
-real(r8) :: alpha,theta,lambda,beta,k_gamma
-real(r8) :: nanal_perts(ens_size),nfcst_perts(ens_size),ny_PO(ens_size),nfcst
-real(r8) :: y_GIG_PO(ens_size),y_IGG_PO(ens_size)
+real(r8) :: wk1, wk2, T2Pr, inv_prior_mean
+real(r8) :: GIG_gain, T1Rr_GIG_PO, y_GIG_mean_PO, y_GIG_sample_mean_PO, nobs_GIG
+real(r8) :: IGG_gain, T1Rr_IGG_PO, y_IGG_mean_PO, y_IGG_sample_mean_PO, nobs_IGG, nanal_var_IGG, anal_var_IGG
+real(r8) :: y_GIG_var_PO, y_IGG_var_PO, T2Rr_IGG_PO
+real(r8) :: alpha, theta, lambda, beta, k_gamma, scale
+real(r8) :: nanal_perts(ens_size), nfcst_perts(ens_size), ny_PO(ens_size), nfcst
+real(r8) :: y_GIG_PO(ens_size), y_IGG_PO(ens_size)
 real(r8) :: k_gig, k_post, k_prior, rescale, theta_gig, wk_samp_mean, correction_ratio
 real(r8) :: y_anal_wk(ens_size), y_anal(ens_size), prior_mean_temp
 
@@ -2455,7 +2455,8 @@ endif
 ! FIXME: compute something based on the obs value (obs), the obs variance (obs_var),
 ! the prior ensemble distribution (ens(ens_size), the prior mean and variance (prior_mean,
 ! prior_var), and the quantity of interest (quantity, e.g. QTY_TEMPERATURE, QTY_U_WIND_COMPONENT, etc)
-! and set GIGG_type here.  also set T1Rr
+! and set GIGG_type here. 
+! The value of the type 1 relative error variance is assumed to be in the obs_seq file at this point
 
 GIGG_type = filter_kind - 100 ! or 2 or 3
 T1Rr = obs_var
@@ -2474,92 +2475,94 @@ select case (GIGG_type)
  case (2)   ! gamma ens prior, inverse gamma obs likelihood
 
    !Define type 2 prior and ob relative variance
-   T2Pr=prior_var/(prior_mean**2+prior_var)
-   T2Rr=1/((1/T1Rr)+1)
+   T2Pr = prior_var / (prior_mean**2 + prior_var)
+   T2Rr = 1.0_r8 / ((1.0_r8 / T1Rr) + 1.0_r8)
    !Define the GIG gain
-   GIG_gain=T2Pr/(T2Pr+T2Rr)
-   inv_prior_mean=1/prior_mean
+   GIG_gain = T2Pr / (T2Pr + T2Rr)
+   inv_prior_mean = 1.0_r8 / prior_mean
 
    !Compute new_mean - the posterior mean. Equation (6) from Bishop (2016)
-   wk1=inv_prior_mean+GIG_gain*((1/obs)-(T2Rr+1)*inv_prior_mean)
-   new_mean=1/wk1;
+   wk1 = inv_prior_mean + GIG_gain * ((1.0_r8 / obs) - (T2Rr + 1) * inv_prior_mean)
+   new_mean = 1.0_r8 /wk1
 
    !Compute obs_inc - the correction to the existing ensemble
-    !first compute required shape parameters   
-   k_prior=(1/T2Pr)-1   !shape parameter for gamma approximation to prior
-   k_gig=(1/T2Rr)+1     !shape parameter for perturbations to be added to forecast
-   k_post=k_prior+k_gig !shape parameter for posterior distribution of gig assumptions satisfied
-    !now compute rescaling factor to ensure perturbed forecasts have posterior mean
-   rescale=(k_prior*new_mean)/(k_post*prior_mean)
+   !first compute required shape parameters   
+   k_prior = (1.0_r8 / T2Pr) - 1.0_r8   ! shape parameter for gamma approximation to prior
+   k_gig = (1.0_r8 / T2Rr) + 1.0_r8     ! shape parameter for perturbations to be added to forecast
+   k_post = k_prior + k_gig             ! shape parameter for posterior distribution of gig assumptions satisfied
+   ! Compute rescaling factor to ensure perturbed forecasts have posterior mean
+   rescale = (k_prior*new_mean) / (k_post*prior_mean)
    !Now perturb the forecast perturbations so that their shape parameter would be the same as the posterior
-   theta_gig=prior_mean/k_prior  !note that theta_gig=theta_mean as required by summation theorem
-   wk_samp_mean=0                !summation variable to compute sample mean
-   do i=1,ens_size
-      if (prior_mean < 0) then
-         print *, 'correcting negative prior_mean: ', prior_mean
-         !!!theta_gig = 10**(-10)/k_gig
+   theta_gig = prior_mean / k_prior  ! note that theta_gig=theta_mean as required by summation theorem
+   wk_samp_mean = 0.0_r8                ! summation variable to compute sample mean
+   do i = 1, ens_size
+      if (prior_mean < 0.0_r8) then
          prior_mean_temp = 10e-4_r8
-         theta_gig=prior_mean_temp/k_prior  !note that theta_gig=theta_mean as required by summation theorem
+         msgstring =  'Correcting negative prior_mean for GIG filter '
+         call error_handler(E_MSG, 'obs_increment_gigg:', msgstring)
+         theta_gig = prior_mean_temp / k_prior  !note that theta_gig=theta_mean as required by summation theorem
       endif
-      y_anal_wk(i)=rescale*(ens(i)+random_gamma(gigg_ran_seq, k_gig, theta_gig))
-      wk_samp_mean=wk_samp_mean+y_anal_wk(i)
+      y_anal_wk(i) = rescale * (ens(i) + random_gamma(gigg_ran_seq, k_gig, theta_gig))
+      wk_samp_mean = wk_samp_mean+y_anal_wk(i)
    enddo
    !correct degradation in posterior mean associated with sampling
-   wk_samp_mean=wk_samp_mean/ens_size
-   correction_ratio=new_mean/wk_samp_mean
-   y_anal=correction_ratio*y_anal_wk
-   !create the perturbations (obs_inc) that when added to prior turn it into the gig posterior
+   wk_samp_mean = wk_samp_mean / ens_size
+   correction_ratio = new_mean / wk_samp_mean
+   y_anal = correction_ratio * y_anal_wk
+   ! Create the perturbations (obs_inc) that when added to prior turn it into the gig posterior
    obs_inc = y_anal - ens
 
 
  case (3)   ! inv gamma ens prior, gamma obs likelihood
-   !Define type 2 prior relative variance
-   T2Pr=prior_var/(prior_mean**2+prior_var)
-   !Define the IGG gain
-   IGG_gain=T2Pr/(T2Pr+T1Rr)
+   ! Define type 2 prior relative variance
+   T2Pr = prior_var / (prior_mean**2 + prior_var)
+   ! Define the IGG gain
+   IGG_gain = T2Pr / (T2Pr + T1Rr)
 
    !Compute new_mean - the posterior mean. Equation (18) from Bishop (2016)
-   new_mean=prior_mean+IGG_gain*(obs-prior_mean)
+   new_mean = prior_mean + IGG_gain * (obs - prior_mean)
 
-   !Compute obs_inc - the correction to the existing ensemble
-   !First compute mean and type 1 relative variance of gamma distribution from which perturbed obs will be drawn
-   wk1=(1/T1Rr)+2
-   T2Rr_IGG_PO=1/wk1
-   y_IGG_mean_PO=obs
-   alpha=(1/T1Rr)+3
-   beta=obs*(alpha-1)
-   y_IGG_var_PO=(y_IGG_mean_PO**2)/(alpha-2)
+   ! Compute obs_inc - the correction to the existing ensemble
+   ! First compute mean and type 1 relative variance of gamma distribution from which perturbed obs will be drawn
+   wk1 = (1.0_r8 / T1Rr) + 2.0_r8
+   T2Rr_IGG_PO = 1.0_r8 / wk1
+   y_IGG_mean_PO = obs
+   alpha = (1.0_r8 / T1Rr) + 3.0_r8
+   beta = obs * (alpha - 1.0_r8)
+   y_IGG_var_PO = (y_IGG_mean_PO**2) / (alpha - 2.0_r8)
 
-   !Now compute the perturbed observations and the normalized perturbations
-   do i=1,ens_size
-      if (beta < 0) then
-         print *, 'correcting negative beta: ', beta
+   ! Now compute the perturbed observations and the normalized perturbations
+   do i = 1, ens_size
+      if (beta < 0.0_r8) then
+         msgstring =  'Correcting negative beta for IGG filter '
+         call error_handler(E_MSG, 'obs_increment_gigg:', msgstring)
          beta = -beta
       endif
-      y_IGG_PO(i)=random_inverse_gamma(gigg_ran_seq,alpha,beta)
+      ! For inverse gamma, beta is the scale parameter which is what random_inverse_gamma takes as input
+      y_IGG_PO(i) = random_inverse_gamma(gigg_ran_seq, alpha, beta)
    enddo
 
-   wk1=0;
-   do i=1,ens_size
-       wk1=wk1+y_IGG_PO(i)
+   wk1 = 0.0_r8;
+   do i = 1, ens_size
+       wk1 = wk1 + y_IGG_PO(i)
    enddo
-   y_IGG_sample_mean_PO=wk1/ens_size
+   y_IGG_sample_mean_PO = wk1 / ens_size
 
-   !Now create normalized fcst and observation perturbations using equation (8) of Bishop (2016)
-   nobs_IGG=1/sqrt(y_IGG_mean_PO**2-y_IGG_var_PO)
-   nfcst=1/sqrt(prior_mean**2+prior_var)
-   do i=1,ens_size
-      ny_PO(i)=(y_IGG_PO(i)-y_IGG_sample_mean_PO)*nobs_IGG
-      nfcst_perts(i)=(ens(i)-prior_mean)*nfcst
-      nanal_perts(i)=nfcst_perts(i)+IGG_gain*(ny_PO(i)-nfcst_perts(i))
+   ! Now create normalized fcst and observation perturbations using equation (8) of Bishop (2016)
+   nobs_IGG = 1.0_r8 / sqrt(y_IGG_mean_PO**2 - y_IGG_var_PO)
+   nfcst = 1.0_r8 / sqrt(prior_mean**2 + prior_var)
+   do i= 1, ens_size
+      ny_PO(i) = (y_IGG_PO(i) - y_IGG_sample_mean_PO) * nobs_IGG
+      nfcst_perts(i) = (ens(i) - prior_mean) * nfcst
+      nanal_perts(i) = nfcst_perts(i) + IGG_gain * (ny_PO(i) - nfcst_perts(i))
    enddo
-   !Compute type 2 relative variance of posterior see equation (28) of Bishop (2016)
-   nanal_var_IGG=T2Pr-T2Pr**2/(T2Pr+T1Rr);
-   !Compute posterior variance using eq (29) of Bishop (2016)
-   anal_var_IGG=(new_mean**2)*nanal_var_IGG/(1-nanal_var_IGG)
-   !Now create obs_inc=anal_ens-ens for IGG case where anal_ens=nanal_perts*new_mean + new_mean
+   ! Compute type 2 relative variance of posterior see equation (28) of Bishop (2016)
+   nanal_var_IGG = T2Pr - T2Pr**2 / (T2Pr + T1Rr)
+   ! Compute posterior variance using eq (29) of Bishop (2016)
+   anal_var_IGG = (new_mean**2) * nanal_var_IGG / (1.0_r8 - nanal_var_IGG)
+   ! Now create obs_inc=anal_ens-ens for IGG case where anal_ens=nanal_perts*new_mean + new_mean
 
-   obs_inc = (nanal_perts*sqrt(new_mean**2+anal_var_IGG) + new_mean) - ens
+   obs_inc = (nanal_perts * sqrt(new_mean**2 + anal_var_IGG) + new_mean) - ens
 
  case default
    call error_handler(E_ERR, 'obs_increment_GIGG:', 'unexpected error, illegal GIGG_kind value', &
@@ -3022,8 +3025,14 @@ select case (filter_kind)
    msgstring = 'Boxcar'
  case (8)
    msgstring = 'Rank Histogram Filter'
- case (100, 101, 102, 103)
-   msgstring = 'GIGG Filter'
+ case (100)
+   msgstring = 'GIGG Filter for Selected Variables'
+ case (101)
+   msgstring = 'GIGG Filter version of gaussian gaussian standard EAKF'
+ case (102)
+   msgstring = 'GIG Filter'
+ case (103)
+   msgstring = 'IGG Filter'
  case default 
    call error_handler(E_ERR, 'assim_tools_init:', 'illegal filter_kind value, valid values are 1-8,100-103', &
                       source, revision, revdate)
