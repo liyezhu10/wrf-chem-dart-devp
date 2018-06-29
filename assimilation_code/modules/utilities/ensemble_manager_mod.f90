@@ -53,7 +53,7 @@ character(len=*), parameter :: source   = &
 character(len=*), parameter :: revision = "$Revision$"
 character(len=*), parameter :: revdate  = "$Date$"
 
-integer, parameter :: max_chunk_size = 8
+integer, parameter :: max_chunk_size =128 
 type chunk_type
   integer :: num_obs
   integer :: owner

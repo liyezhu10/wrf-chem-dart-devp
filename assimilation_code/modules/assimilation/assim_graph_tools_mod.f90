@@ -51,7 +51,7 @@ use ensemble_manager_mod, only : ensemble_type, get_my_num_vars, get_my_vars,   
 
 use mpi_utilities_mod,    only : my_task_id, broadcast_send, broadcast_recv,              & 
                                  sum_across_tasks, task_count, start_mpi_timer,           &
-                                 read_mpi_timer, task_sync
+                                 read_mpi_timer, task_sync, task_sync_filter, task_sync_final
 
 use adaptive_inflate_mod, only : do_obs_inflate,  do_single_ss_inflate,                   &
                                  do_varying_ss_inflate,                                   &
@@ -131,10 +131,12 @@ type colors_type
 !   integer, dimension(:), allocatable :: owner       ! Rank that owns this observation (computed from data)
 end type colors_type
 
-integer, parameter :: max_chunk_size = 8! for now
+integer, parameter :: max_chunk_size = 128! for now
 type chunk_type
     integer :: num_obs
     integer :: owner
+    integer :: comm_obs
+    integer :: comm_size
 
     integer, dimension(max_chunk_size) :: obs_list
 end type chunk_type
@@ -151,6 +153,8 @@ type chunk_data_type
    !type(location_type), dimension(:), allocatable  :: base_obs_loc
 
    real(r8), dimension(:), allocatable :: bcast_buffer
+   integer :: comm_obs
+   integer :: comm_size
 end type chunk_data_type
 
 !============================================================================
@@ -507,6 +511,8 @@ integer :: num_close_states_total, num_close_obs_total
 !integer, dimension(:), allocatable :: obs_list
 type(chunk_type), dimension(:), allocatable :: chunks
 
+integer :: original_chunk_size
+
 
 type(chunk_data_type) chunk_data
 
@@ -760,6 +766,27 @@ endif
 if (sync_between_timers) then
   call task_sync()
 endif
+
+  !! New functionality - compute the num obs on ALL procs, outside the loop
+  call t_startf('QC_Prep_Loop')
+  do i = 1, size(chunks)
+    original_chunk_size = chunks(i)%num_obs
+    chunks(i)%comm_obs = chunks(i)%num_obs
+    do j = 1, original_chunk_size
+       ob_index = chunks(i)%obs_list(j)
+       owner = chunks(i)%owner
+       owners_index = graph_owners_index(chunks, i, j) 
+       obs_qc = obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, owners_index)
+       call MPI_Bcast(obs_qc, 1, MPI_DOUBLE_PRECISION, owner, MPI_COMM_WORLD, iError) 
+       ! Now everyone has the QC value
+       if (nint(obs_qc) /= 0) then
+           chunks(i)%comm_obs = chunks(i)%comm_obs - 1
+       endif
+     end do
+     chunks(i)%comm_size = (chunks(i)%comm_obs * ens_size * 2) + (chunks(i)%comm_obs * num_groups) + (chunks(i)%comm_obs * 3) + 1 
+  end do
+  call t_stopf('QC_Prep_Loop')
+
 call t_startf('Full Loop')
 
 CHUNK_LOOP: do i = 1, size(chunks)
@@ -776,9 +803,11 @@ CHUNK_LOOP: do i = 1, size(chunks)
    endif
 
     chunk_data%num_obs = chunks(i)%num_obs
+    chunk_data%comm_obs = chunks(i)%comm_obs
+    chunk_data%comm_size = chunks(i)%comm_size
    ! This section is only done by one process - the 'owner' of this chunk:
    if (sync_between_timers) then
-       call task_sync()
+       call task_sync_filter()
    endif
    if (ens_handle%my_pe == chunks(i)%owner) then
       call t_startf('ASSIMILATE:Owned(Compute)')
@@ -807,7 +836,7 @@ CHUNK_LOOP: do i = 1, size(chunks)
 
         ! Only value of 0 for DART QC field should be assimilated
         IF_QC_IS_OKAY: if(nint(chunk_data%obs_qc(j)) ==0 ) then
-           chunk_data%obs_prior(j,:) = obs_ens_handle%copies(1:ens_size, owners_index)
+           chunk_data%obs_prior(:,j) = obs_ens_handle%copies(1:ens_size, owners_index)
 
            do group = 1, num_groups
               grp_bot = grp_beg(group)
@@ -832,7 +861,7 @@ CHUNK_LOOP: do i = 1, size(chunks)
            do group = 1, num_groups
               grp_bot = grp_beg(group)
               grp_top = grp_end(group)
-              call obs_increment(chunk_data%obs_prior(j,grp_bot:grp_top), grp_size, obs(1), obs_err_var, chunk_data%obs_inc(j,grp_bot:grp_top), inflate, my_inflate, my_inflate_sd, chunk_data%net_a(j,group))
+              call obs_increment(chunk_data%obs_prior(grp_bot:grp_top,j), grp_size, obs(1), obs_err_var, chunk_data%obs_inc(grp_bot:grp_top,j), inflate, my_inflate, my_inflate_sd, chunk_data%net_a(group,j))
            end do
 
            ! ------- NOTE: Skipping SINGLE_SS_INFLATE section for now -------
@@ -846,45 +875,47 @@ CHUNK_LOOP: do i = 1, size(chunks)
 
     call t_stopf('ASSIMILATE:Owned(Compute)')
     if (sync_between_timers) then
-      call task_sync()
+      call task_sync_filter()
     endif
     call t_startf('ASSIMILATE:Owned(Broadcast)')
 
      !write(*,*) "Calling broadcast_send_chunk on owner", chunks(i)%owner
     if (packed_sends) then
-      call broadcast_send_chunk_packed(map_pe_to_task(ens_handle, chunks(i)%owner), chunk_data)
+      call broadcast_send_chunk_packed_opt(map_pe_to_task(ens_handle, chunks(i)%owner), chunk_data, ens_size, num_groups)
     else
       call broadcast_send_chunk(map_pe_to_task(ens_handle, chunks(i)%owner), chunk_data)
     endif
     call t_stopf('ASSIMILATE:Owned(Broadcast)')
+
     if (sync_between_timers) then
-      call task_sync()
+      call task_sync_filter()
    endif
 
    else ! (not the owner):
      if (sync_between_timers) then
-       call task_sync()
+       call task_sync_filter()
      endif
      call t_startf('ASSIMILATE:NotOwned(Broadcast)')
      if (packed_sends) then
-       call broadcast_recv_chunk_packed(map_pe_to_task(ens_handle, chunks(i)%owner), chunk_data)
+       call broadcast_recv_chunk_packed_opt(map_pe_to_task(ens_handle, chunks(i)%owner), chunk_data, ens_size, num_groups)
      else
        call broadcast_recv_chunk(map_pe_to_task(ens_handle, chunks(i)%owner), chunk_data)
      endif
      call t_stopf('ASSIMILATE:NotOwned(Broadcast)')
      if (sync_between_timers) then
-       call task_sync()
+       call task_sync_filter()
      endif
      call t_startf('ASSIMILATE:NotOwned(Compute)')
      call t_stopf('ASSIMILATE:NotOwned(Compute)')
   endif
 
   if (sync_between_timers) then
-    call task_sync()
+    call task_sync_filter()
   endif
 
   call t_startf('ASSIMILATE:QC_CHECK')
-  QC_CHECK: do j = 1, chunk_data%num_obs
+  !QC_CHECK: do j = 1, chunk_data%num_obs
+  QC_CHECK: do j = 1, chunk_data%comm_obs
      if (nint(chunk_data%obs_qc(j)) /= 0) then
         qcd = qcd + 1
         !write(*,*) "DEBUG: QC_CHECK /= 0", my_task_id(), j, chunk_data%num_obs
@@ -898,9 +929,9 @@ CHUNK_LOOP: do i = 1, size(chunks)
            ! to search backwards:
            do k = chunk_data%num_obs, j+1, -1
              if (nint(chunk_data%obs_qc(k)) == 0) then ! Valid QC, so swap with this ob
-              chunk_data%obs_prior(j,:) = chunk_data%obs_prior(k,:)
-              chunk_data%obs_inc(j,:) = chunk_data%obs_inc(k,:)
-              chunk_data%net_a(j,:) = chunk_data%net_a(k,:)
+              chunk_data%obs_prior(:,j) = chunk_data%obs_prior(:,k)
+              chunk_data%obs_inc(:,j) = chunk_data%obs_inc(:,k)
+              chunk_data%net_a(:,j) = chunk_data%net_a(:,k)
               chunk_data%obs_qc(j) = chunk_data%obs_qc(k)
               chunk_data%vertvalue_obs_in_localization_coord(j) = chunk_data%vertvalue_obs_in_localization_coord(k)
               chunk_data%whichvert_real(j) = chunk_data%whichvert_real(k)
@@ -942,19 +973,20 @@ CHUNK_LOOP: do i = 1, size(chunks)
   call t_stopf('ASSIMILATE:QC_CHECK')
 
   if (sync_between_timers) then
-       call task_sync()
+       call task_sync_filter()
   endif
 
   !write(*,*) "DEBUG: Num_groups = ", num_groups, chunk_data%num_obs
-  do j = 1, chunk_data%num_obs
+  !do j = 1, chunk_data%num_obs
+  do j = 1, chunk_data%comm_obs
     call t_startf('ASSIMILATE:ComputePriors')
    ! Can compute prior mean and variance of obs for each group just once here
     do group = 1, num_groups
       grp_bot = grp_beg(group)
       grp_top = grp_end(group)
 !      write(*,*) "DEBUG : obs_prior_sum(2) = ", sum(chunk_data%obs_prior(j,grp_bot:grp_top)), get_ob_id(chunks, i, j)
-      obs_prior_mean(group) = sum(chunk_data%obs_prior(j,grp_bot:grp_top)) / grp_size
-      obs_prior_var(group) = sum((chunk_data%obs_prior(j,grp_bot:grp_top) - obs_prior_mean(group))**2) / &
+      obs_prior_mean(group) = sum(chunk_data%obs_prior(grp_bot:grp_top,j)) / grp_size
+      obs_prior_var(group) = sum((chunk_data%obs_prior(grp_bot:grp_top,j) - obs_prior_mean(group))**2) / &
          (grp_size - 1)
       if (obs_prior_var(group) < 0.0_r8) obs_prior_var(group) = 0.0_r8
       !write(*,*) "DEBUG : obs_prior_mean = ", obs_prior_mean(group), chunks(i)%obs_list(j)
@@ -964,7 +996,7 @@ CHUNK_LOOP: do i = 1, size(chunks)
 
    call t_stopf('ASSIMILATE:ComputePriors')
    if (sync_between_timers) then
-      call task_sync()
+      call task_sync_filter()
    endif
    !call task_sync()
    ! -------------- NOTE: Skipping all adaptive localization stuff for now ---------
@@ -1128,7 +1160,7 @@ CHUNK_LOOP: do i = 1, size(chunks)
 !endif
 
   if (sync_between_timers) then
-     call task_sync()
+     call task_sync_filter()
   endif
 
    call t_startf('ASSIMILATE:UpdateState')
@@ -1206,8 +1238,8 @@ CHUNK_LOOP: do i = 1, size(chunks)
 !!               ens_handle%copies(grp_bot:grp_top, state_index), grp_size, &
 !!               increment(grp_bot:grp_top), reg_coef(group), net_a(group), correl(group))
 !!         else
-            call update_from_obs_inc(chunk_data%obs_prior(j,grp_bot:grp_top), obs_prior_mean(group), &
-               obs_prior_var(group), chunk_data%obs_inc(j,grp_bot:grp_top), &
+            call update_from_obs_inc(chunk_data%obs_prior(grp_bot:grp_top,j), obs_prior_mean(group), &
+               obs_prior_var(group), chunk_data%obs_inc(grp_bot:grp_top,j), &
                ens_handle%copies(grp_bot:grp_top, state_index), grp_size, &
                increment(grp_bot:grp_top), reg_coef(group), net_a(group))
            !write(*,*) "Inc: ", increment(1)
@@ -1352,7 +1384,7 @@ CHUNK_LOOP: do i = 1, size(chunks)
    call t_stopf('ASSIMILATE:UpdateState')
 
    if (sync_between_timers) then
-      call task_sync()
+      call task_sync_filter()
    endif
 
    !write(*,*) "DEBUG: num_close_obs = ", num_close_obs
@@ -1408,8 +1440,8 @@ CHUNK_LOOP: do i = 1, size(chunks)
          do group = 1, num_groups
             grp_bot = grp_beg(group)
             grp_top = grp_end(group)
-            call update_from_obs_inc(chunk_data%obs_prior(j,grp_bot:grp_top), obs_prior_mean(group), &
-               obs_prior_var(group), chunk_data%obs_inc(j,grp_bot:grp_top), &
+            call update_from_obs_inc(chunk_data%obs_prior(grp_bot:grp_top,j), obs_prior_mean(group), &
+               obs_prior_var(group), chunk_data%obs_inc(grp_bot:grp_top,j), &
                 obs_ens_handle%copies(grp_bot:grp_top, obs_index), grp_size, &
                 increment(grp_bot:grp_top), reg_coef(group), net_a(group))
          end do
@@ -1468,9 +1500,9 @@ end do CHUNK_LOOP
 !write(*,*) "Exiting.."
 !stop
 
-write(*,*) "QC'd obs: ", qcd
+!write(*,*) "QC'd obs: ", qcd
 if (sync_between_timers) then
-  call task_sync()
+  call task_sync_final()
 endif
 
 call t_stopf('Full Loop')
@@ -1736,10 +1768,11 @@ subroutine initialize_chunk_data(chunk_size, ens_size, num_groups, chunk_data)
 
   integer :: buffer_size
 
+  integer :: i
 
-  allocate(chunk_data%obs_prior(chunk_size, ens_size))
-  allocate(chunk_data%obs_inc(chunk_size, ens_size))
-  allocate(chunk_data%net_a(chunk_size, num_groups))
+  allocate(chunk_data%obs_prior(ens_size, chunk_size))
+  allocate(chunk_data%obs_inc(ens_size, chunk_size))
+  allocate(chunk_data%net_a(num_groups, chunk_size))
   allocate(chunk_data%obs_qc(chunk_size))
   allocate(chunk_data%vertvalue_obs_in_localization_coord(chunk_size))
   allocate(chunk_data%whichvert_real(chunk_size))
@@ -1773,13 +1806,13 @@ subroutine broadcast_send_chunk(from, chunk_data)
 !   chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_prior)) = reshape(chunk_data%obs_prior, [ size(chunk_data%obs_prior) ])
 !   start_offset = start_offset + size(chunk_data%obs_prior)
 
-  call MPI_Bcast(chunk_data%num_obs, 1, MPI_INTEGER, from, MPI_COMM_WORLD, iError)
-  call MPI_Bcast(chunk_data%obs_prior, size(chunk_data%obs_prior), MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
-  call MPI_Bcast(chunk_data%obs_inc,   size(chunk_data%obs_inc),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
-  call MPI_Bcast(chunk_data%net_a,   size(chunk_data%net_a),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
-  call MPI_Bcast(chunk_data%obs_qc,   size(chunk_data%obs_qc),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
-  call MPI_Bcast(chunk_data%vertvalue_obs_in_localization_coord,   size(chunk_data%vertvalue_obs_in_localization_coord),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
-  call MPI_Bcast(chunk_data%whichvert_real,   size(chunk_data%whichvert_real),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+  !call MPI_Bcast(chunk_data%num_obs, 1, MPI_INTEGER, from, MPI_COMM_WORLD, iError)
+  !call MPI_Bcast(chunk_data%obs_prior, size(chunk_data%obs_prior), MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+  !call MPI_Bcast(chunk_data%obs_inc,   size(chunk_data%obs_inc),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+  !call MPI_Bcast(chunk_data%net_a,   size(chunk_data%net_a),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+  !call MPI_Bcast(chunk_data%obs_qc,   size(chunk_data%obs_qc),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+  !call MPI_Bcast(chunk_data%vertvalue_obs_in_localization_coord,   size(chunk_data%vertvalue_obs_in_localization_coord),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+  !call MPI_Bcast(chunk_data%whichvert_real,   size(chunk_data%whichvert_real),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
 
 end subroutine broadcast_send_chunk
 
@@ -1794,6 +1827,7 @@ subroutine broadcast_send_chunk_packed(from, chunk_data)
    integer :: iError
 
    integer :: buffer_size
+   integer :: i
 
   if (sync_between_timers) then
      call task_sync()
@@ -1806,32 +1840,55 @@ subroutine broadcast_send_chunk_packed(from, chunk_data)
   start_offset = 1 
    buffer_size  = size(chunk_data%bcast_buffer)
 
+
    ! obs_prior
-   chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_prior)) = reshape(chunk_data%obs_prior, [ size(chunk_data%obs_prior) ])
-   start_offset = start_offset + size(chunk_data%obs_prior)
+   !chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_prior)) = reshape(chunk_data%obs_prior, [ size(chunk_data%obs_prior) ])
+   !start_offset = start_offset + size(chunk_data%obs_prior)
 
    ! obs_inc
-   chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_inc)) = reshape(chunk_data%obs_inc, [ size(chunk_data%obs_inc) ])
-   start_offset = start_offset + size(chunk_data%obs_inc)
+   !chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_inc)) = reshape(chunk_data%obs_inc, [ size(chunk_data%obs_inc) ])
+   !start_offset = start_offset + size(chunk_data%obs_inc)
 
    ! net_a
-   chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%net_a)) = reshape(chunk_data%net_a, [ size(chunk_data%net_a) ])
-   start_offset = start_offset + size(chunk_data%net_a)
+   !chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%net_a)) = reshape(chunk_data%net_a, [ size(chunk_data%net_a) ])
+   !start_offset = start_offset + size(chunk_data%net_a)
 
    ! obs_qc
-   chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_qc)) = reshape(chunk_data%obs_qc, [ size(chunk_data%obs_qc) ])
-   start_offset = start_offset + size(chunk_data%obs_qc)
+   !chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_qc)) = reshape(chunk_data%obs_qc, [ size(chunk_data%obs_qc) ])
+   !start_offset = start_offset + size(chunk_data%obs_qc)
 
    ! vertvalue_obs_in_localization_coord
-   chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%vertvalue_obs_in_localization_coord)) = reshape(chunk_data%vertvalue_obs_in_localization_coord, [ size(chunk_data%vertvalue_obs_in_localization_coord) ])
-   start_offset = start_offset + size(chunk_data%vertvalue_obs_in_localization_coord)
+   !chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%vertvalue_obs_in_localization_coord)) = reshape(chunk_data%vertvalue_obs_in_localization_coord, [ size(chunk_data%vertvalue_obs_in_localization_coord) ])
+   !start_offset = start_offset + size(chunk_data%vertvalue_obs_in_localization_coord)
 
    ! whichvert_real
-   chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%whichvert_real)) = reshape(chunk_data%whichvert_real, [ size(chunk_data%whichvert_real) ])
-   start_offset = start_offset + size(chunk_data%whichvert_real)
+   !chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%whichvert_real)) = reshape(chunk_data%whichvert_real, [ size(chunk_data%whichvert_real) ])
+   !start_offset = start_offset + size(chunk_data%whichvert_real)
 
   ! Num obs:
   chunk_data%bcast_buffer(start_offset) = chunk_data%num_obs
+  start_offset = start_offset + 1
+
+  !do i = 1, chunk_data%num_obs
+  !   chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs(i)%obs_prior)-1) = chunk_data%obs(i)%obs_prior
+  !   start_offset = start_offset + size(chunk_data%obs(i)%obs_prior)
+  !   chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs(i)%obs_inc)-1)   = chunk_data%obs(i)%obs_inc
+  !   start_offset = start_offset + size(chunk_data%obs(i)%obs_inc)
+  !   chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs(i)%net_a)-1)     = chunk_data%obs(i)%net_a
+  !   start_offset = start_offset + size(chunk_data%obs(i)%net_a)
+  !   !chunk_data%bcast_buffer(start_offset:start_offset+sizeof(chunk_data%obs(i)%qc))   = chunk_data%obs(i)%qc
+  !   !start_offset = start_offset + sizeof(chunk_data%obs(i)%qc)
+  !   !chunk_data%bcast_buffer(start_offset:start_offset+sizeof(chunk_data%obs(i)%vertvalue_obs_in_localization_coord))     = chunk_data%obs(i)%vertvalue_obs_in_localization_coord
+  !   !start_offset = start_offset + sizeof(chunk_data%obs(i)%vertvalue_obs_in_localization_coord)
+  !   !chunk_data%bcast_buffer(start_offset:start_offset+sizeof(chunk_data%obs(i)%whichvert_real))     = chunk_data%obs(i)%whichvert_real
+  !   !start_offset = start_offset + sizeof(chunk_data%obs(i)%whichvert_real)
+  !   chunk_data%bcast_buffer(start_offset) = chunk_data%obs(i)%qc
+  !   start_offset = start_offset + 1
+  !   chunk_data%bcast_buffer(start_offset) = chunk_data%obs(i)%vertvalue_obs_in_localization_coord
+  !   start_offset = start_offset + 1
+  !   chunk_data%bcast_buffer(start_offset) = chunk_data%obs(i)%whichvert_real
+  !   start_offset = start_offset + 1
+  !end do
 
   if (detailed_timers) then
      call t_stopf('DETAIL:bcast_send_chunk_pack')
@@ -1864,6 +1921,79 @@ end subroutine broadcast_send_chunk_packed
 
 !-------------------------------------------------------------
 
+subroutine broadcast_send_chunk_packed_opt(from, chunk_data, ens_size, num_groups)
+    use mpi
+   integer, intent(in) :: from
+   type(chunk_data_type) :: chunk_data
+
+   integer :: start_offset
+   integer :: iError
+   integer :: num_obs
+   integer, intent(in) :: ens_size
+   integer, intent(in) :: num_groups
+   integer :: i
+
+   !integer :: buffer_size, comm_size
+  
+  if (sync_between_timers) then
+     call task_sync()
+  endif
+
+   !comm_size = chunk_data%comm_obs
+   !buffer_size = (comm_size * ens_size * 2) + (comm_size * num_groups) + (comm_size * 3) + 1 
+
+
+  if (detailed_timers) then
+     call t_startf('DETAIL:bcast_send_chunk_pack')
+  endif
+
+  start_offset = 1 
+  num_obs = chunk_data%comm_obs
+   !buffer_size  = size(chunk_data%bcast_buffer)
+
+   ! obs_prior
+   !chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_prior)) = reshape(chunk_data%obs_prior, [ size(chunk_data%obs_prior) ])
+   !start_offset = start_offset + size(chunk_data%obs_prior)
+   do i = 1, num_obs
+     chunk_data%bcast_buffer(start_offset:start_offset + ens_size) = chunk_data%obs_prior(:,i)
+     start_offset = start_offset + ens_size
+     chunk_data%bcast_buffer(start_offset:start_offset + ens_size) = chunk_data%obs_inc(:,i)
+     start_offset = start_offset + ens_size
+     chunk_data%bcast_buffer(start_offset:start_offset + num_groups) = chunk_data%net_a(:,i)
+     start_offset = start_offset + num_groups
+     chunk_data%bcast_buffer(start_offset+0) = chunk_data%obs_qc(i)
+     chunk_data%bcast_buffer(start_offset+1) = chunk_data%vertvalue_obs_in_localization_coord(i)
+     chunk_data%bcast_buffer(start_offset+2) = chunk_data%whichvert_real(i)
+     start_offset = start_offset + 3 ! FIXME - use +4 to align data?
+   end do
+   chunk_data%bcast_buffer(start_offset) = num_obs ! If aligning, use -1 here
+
+   !write(*,*) "MPIComms: Sending ", chunk_data%comm_size, size(chunk_data%bcast_buffer), start_offset, chunk_data%bcast_buffer(start_offset)
+
+  !if ((start_offset+1) /= chunk_data%comm_size) then
+  !  write(*,*) "BCast sizes : ", start_offset, chunk_data%comm_size
+  !endif 
+
+  if (detailed_timers) then
+     call t_stopf('DETAIL:bcast_send_chunk_pack')
+  endif
+
+  if (detailed_timers) then
+    call t_startf('DETAIL:bcast_send_chunk_call')
+  endif
+
+  call MPI_Bcast(chunk_data%bcast_buffer, chunk_data%comm_size, MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+  !call MPI_Bcast(chunk_data%num_obs, 1, MPI_INTEGER, from, MPI_COMM_WORLD, iError)
+
+  if (detailed_timers) then
+    call t_stopf('DETAIL:bcast_send_chunk_call')
+  endif
+
+
+end subroutine broadcast_send_chunk_packed_opt
+
+!-------------------------------------------------------------
+
 subroutine broadcast_recv_chunk(from, chunk_data)
     use mpi
    integer, intent(in) :: from
@@ -1874,13 +2004,13 @@ subroutine broadcast_recv_chunk(from, chunk_data)
 !   write(*,*) "broadcast_recv_chunk - from = ", from
 !  chunk_data%obs_prior = reshape(chunk_data%bcast_buffer(1:9), [ 3,3 ])
 
-  call MPI_Bcast(chunk_data%num_obs, 1, MPI_INTEGER, from, MPI_COMM_WORLD, iError)
-  call MPI_Bcast(chunk_data%obs_prior, size(chunk_data%obs_prior), MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
-  call MPI_Bcast(chunk_data%obs_inc,   size(chunk_data%obs_inc),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
-  call MPI_Bcast(chunk_data%net_a,   size(chunk_data%net_a),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
-  call MPI_Bcast(chunk_data%obs_qc,   size(chunk_data%obs_qc),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
-  call MPI_Bcast(chunk_data%vertvalue_obs_in_localization_coord,   size(chunk_data%vertvalue_obs_in_localization_coord),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
-  call MPI_Bcast(chunk_data%whichvert_real,   size(chunk_data%whichvert_real),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+  !call MPI_Bcast(chunk_data%num_obs, 1, MPI_INTEGER, from, MPI_COMM_WORLD, iError)
+  !call MPI_Bcast(chunk_data%obs_prior, size(chunk_data%obs_prior), MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+  !call MPI_Bcast(chunk_data%obs_inc,   size(chunk_data%obs_inc),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+  !call MPI_Bcast(chunk_data%net_a,   size(chunk_data%net_a),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+  !call MPI_Bcast(chunk_data%obs_qc,   size(chunk_data%obs_qc),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+  !call MPI_Bcast(chunk_data%vertvalue_obs_in_localization_coord,   size(chunk_data%vertvalue_obs_in_localization_coord),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+  !call MPI_Bcast(chunk_data%whichvert_real,   size(chunk_data%whichvert_real),   MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
 
    !call broadcast_recv_seqobs(from, chunk_data%obs_prior, chunk_data%obs_inc, chunk_data%net_a)
    !call broadcast_recv_seqobs(from, chunk_data%obs_qc, chunk_data%vertvalue_obs_in_localization_coord, chunk_data%whichvert_real)
@@ -1898,6 +2028,7 @@ subroutine broadcast_recv_chunk_packed(from, chunk_data)
    integer :: start_offset
 
    integer :: buffer_size 
+   integer :: i
   
    if (sync_between_timers) then
      call task_sync()
@@ -1921,32 +2052,51 @@ subroutine broadcast_recv_chunk_packed(from, chunk_data)
      call t_startf('DETAIL:bcast_recv_chunk_unpack')
   endif
 
-   ! obs_prior
-   chunk_data%obs_prior = reshape(chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_prior)), [ size(chunk_data%obs_prior, 1), size(chunk_data%obs_prior, 2) ])
-   start_offset = start_offset + size(chunk_data%obs_prior)
-
-   ! obs_inc
-   chunk_data%obs_inc = reshape(chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_inc)), [ size(chunk_data%obs_inc, 1), size(chunk_data%obs_inc, 2) ])
-   start_offset = start_offset + size(chunk_data%obs_inc)
-
-   ! net_a
-   chunk_data%net_a = reshape(chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%net_a)), [ size(chunk_data%net_a, 1), size(chunk_data%net_a, 2) ])
-   start_offset = start_offset + size(chunk_data%net_a)
-
-   ! obs_qc
-   chunk_data%obs_qc = reshape(chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_qc)), [ size(chunk_data%obs_qc, 1) ])
-   start_offset = start_offset + size(chunk_data%obs_qc)
-
-   ! vertvalue_obs_in_localization_coord
-   chunk_data%vertvalue_obs_in_localization_coord = reshape(chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%vertvalue_obs_in_localization_coord)), [ size(chunk_data%vertvalue_obs_in_localization_coord, 1) ])
-   start_offset = start_offset + size(chunk_data%vertvalue_obs_in_localization_coord)
-
-   ! whichvert_real
-   chunk_data%whichvert_real = reshape(chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%whichvert_real)), [ size(chunk_data%whichvert_real, 1) ])
-   start_offset = start_offset + size(chunk_data%whichvert_real)
-
   ! Num obs:
   chunk_data%num_obs = chunk_data%bcast_buffer(start_offset)
+  start_offset = start_offset + 1
+
+  !do i = 1, chunk_data%num_obs
+  !   chunk_data%obs(i)%obs_prior = chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs(i)%obs_prior)-1)
+  !   start_offset = start_offset + size(chunk_data%obs(i)%obs_prior)
+  !   chunk_data%obs(i)%obs_inc = chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs(i)%obs_inc)-1)
+  !   start_offset = start_offset + size(chunk_data%obs(i)%obs_inc)
+  !   chunk_data%obs(i)%net_a = chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs(i)%net_a)-1)
+  !   start_offset = start_offset + size(chunk_data%obs(i)%net_a)
+  !   chunk_data%obs(i)%qc = chunk_data%bcast_buffer(start_offset)
+  !   start_offset = start_offset + 1
+  !   chunk_data%obs(i)%vertvalue_obs_in_localization_coord = chunk_data%bcast_buffer(start_offset)
+  !   start_offset = start_offset + 1
+  !   chunk_data%obs(i)%whichvert_real = chunk_data%bcast_buffer(start_offset)
+  !   start_offset = start_offset + 1
+  !end do
+
+   ! obs_prior
+   !chunk_data%obs_prior = reshape(chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_prior)), [ size(chunk_data%obs_prior, 1), size(chunk_data%obs_prior, 2) ])
+   !start_offset = start_offset + size(chunk_data%obs_prior)
+
+   ! obs_inc
+   !chunk_data%obs_inc = reshape(chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_inc)), [ size(chunk_data%obs_inc, 1), size(chunk_data%obs_inc, 2) ])
+   !start_offset = start_offset + size(chunk_data%obs_inc)
+
+   ! net_a
+   !chunk_data%net_a = reshape(chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%net_a)), [ size(chunk_data%net_a, 1), size(chunk_data%net_a, 2) ])
+   !start_offset = start_offset + size(chunk_data%net_a)
+
+   ! obs_qc
+   !chunk_data%obs_qc = reshape(chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_qc)), [ size(chunk_data%obs_qc, 1) ])
+   !start_offset = start_offset + size(chunk_data%obs_qc)
+
+   ! vertvalue_obs_in_localization_coord
+   !chunk_data%vertvalue_obs_in_localization_coord = reshape(chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%vertvalue_obs_in_localization_coord)), [ size(chunk_data%vertvalue_obs_in_localization_coord, 1) ])
+   !start_offset = start_offset + size(chunk_data%vertvalue_obs_in_localization_coord)
+
+   ! whichvert_real
+   !chunk_data%whichvert_real = reshape(chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%whichvert_real)), [ size(chunk_data%whichvert_real, 1) ])
+   !start_offset = start_offset + size(chunk_data%whichvert_real)
+
+  ! Num obs:
+  !chunk_data%num_obs = chunk_data%bcast_buffer(start_offset)
 
   if (detailed_timers) then
      call t_stopf('DETAIL:bcast_recv_chunk_unpack')
@@ -1967,6 +2117,67 @@ subroutine broadcast_recv_chunk_packed(from, chunk_data)
    !call broadcast_recv_seqobs(from, chunk_data%obs_qc, chunk_data%vertvalue_obs_in_localization_coord, chunk_data%whichvert_real)
 
 end subroutine broadcast_recv_chunk_packed
+
+!-------------------------------------------------------------
+subroutine broadcast_recv_chunk_packed_opt(from, chunk_data, ens_size, num_groups)
+    use mpi
+   integer, intent(in) :: from
+   type(chunk_data_type) :: chunk_data
+
+   integer :: iError
+   integer :: start_offset
+   integer, intent(in) :: ens_size
+   integer, intent(in) :: num_groups
+   integer :: i
+
+   integer :: buffer_size, num_obs
+  
+   if (sync_between_timers) then
+     call task_sync()
+   endif
+
+   buffer_size = size(chunk_data%bcast_buffer)
+   start_offset = 1
+   
+  if (detailed_timers) then
+    call t_startf('DETAIL:bcast_recv_chunk_call')
+  endif
+
+   call MPI_Bcast(chunk_data%bcast_buffer, chunk_data%comm_size, MPI_DOUBLE_PRECISION, from, MPI_COMM_WORLD, iError)
+   !call MPI_Bcast(chunk_data%num_obs, 1, MPI_INTEGER, from, MPI_COMM_WORLD, iError)
+
+  if (detailed_timers) then
+    call t_stopf('DETAIL:bcast_recv_chunk_call')
+  endif
+
+  if (detailed_timers) then
+     call t_startf('DETAIL:bcast_recv_chunk_unpack')
+  endif
+
+  num_obs = chunk_data%bcast_buffer(chunk_data%comm_size)
+  !write(*,*) "Receive : num_obs = ", num_obs, chunk_data%comm_size, ens_size
+   do i = 1, num_obs
+     chunk_data%obs_prior(:,i) = chunk_data%bcast_buffer(start_offset:start_offset + ens_size)
+     start_offset = start_offset + ens_size
+
+     chunk_data%obs_inc(:,i) = chunk_data%bcast_buffer(start_offset:start_offset + ens_size)
+     start_offset = start_offset + ens_size
+
+     chunk_data%net_a(:,i) = chunk_data%bcast_buffer(start_offset:start_offset + num_groups)
+     start_offset = start_offset + num_groups
+
+     chunk_data%obs_qc(i) = chunk_data%bcast_buffer(start_offset+0)
+     chunk_data%vertvalue_obs_in_localization_coord(i) = chunk_data%bcast_buffer(start_offset+1)
+     chunk_data%whichvert_real(i) = chunk_data%bcast_buffer(start_offset+2) 
+     start_offset = start_offset + 3 ! FIXME - use +4 to align data?
+   end do
+   !chunk_data%num_obs = chunk_data%bcast_buffer(start_offset) ! If aligning, use -1 here
+
+  if (detailed_timers) then
+     call t_stopf('DETAIL:bcast_recv_chunk_unpack')
+  endif
+end subroutine broadcast_recv_chunk_packed_opt
+
 
 !-------------------------------------------------------------
 subroutine get_obs_from_color(colors, i, obs_list, last_rank)

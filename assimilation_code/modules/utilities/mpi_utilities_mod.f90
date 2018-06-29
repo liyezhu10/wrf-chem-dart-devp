@@ -105,7 +105,7 @@ integer :: longinttype   =  0  ! create an MPI type corresponding to our i8 defi
 
 public :: initialize_mpi_utilities, finalize_mpi_utilities,                  &
           task_count, my_task_id, block_task, restart_task,                  &
-          task_sync, array_broadcast, send_to, receive_from, iam_task0,      &
+          task_sync, task_sync_filter, task_sync_final, array_broadcast, send_to, receive_from, iam_task0,      &
           broadcast_send, broadcast_recv, shell_execute, sleep_seconds,      &
           sum_across_tasks, get_dart_mpi_comm, datasize, send_minmax_to,     &
           get_from_fwd, get_from_mean, broadcast_minmax, broadcast_flag,     &
@@ -508,6 +508,61 @@ call t_stopf('MPI:task_sync')
 
 end subroutine task_sync
 
+subroutine task_sync_filter()
+
+! Synchronize all tasks.  This subroutine does not return until all tasks
+! execute this line of code.
+
+integer :: errcode
+
+call t_startf('MPI:task_sync_filter')
+
+if ( .not. module_initialized ) then
+   write(errstring, *) 'initialize_mpi_utilities() must be called first'
+   call error_handler(E_ERR,'task_sync', errstring, source, revision, revdate)
+endif
+
+if (verbose) write(*,*) "PE", myrank, ": waiting at MPI Barrier"
+call MPI_Barrier(my_local_comm, errcode)
+if (errcode /= MPI_SUCCESS) then
+   write(errstring, '(a,i8)') 'MPI_Barrier returned error code ', errcode
+   call error_handler(E_ERR,'task_sync', errstring, source, revision, revdate)
+endif
+
+if (verbose) write(*,*) "PE", myrank, ": MPI Barrier released"
+
+call t_stopf('MPI:task_sync_filter')
+
+
+end subroutine task_sync_filter
+
+subroutine task_sync_final()
+
+! Synchronize all tasks.  This subroutine does not return until all tasks
+! execute this line of code.
+
+integer :: errcode
+
+call t_startf('MPI:task_sync_final')
+
+if ( .not. module_initialized ) then
+   write(errstring, *) 'initialize_mpi_utilities() must be called first'
+   call error_handler(E_ERR,'task_sync', errstring, source, revision, revdate)
+endif
+
+if (verbose) write(*,*) "PE", myrank, ": waiting at MPI Barrier"
+call MPI_Barrier(my_local_comm, errcode)
+if (errcode /= MPI_SUCCESS) then
+   write(errstring, '(a,i8)') 'MPI_Barrier returned error code ', errcode
+   call error_handler(E_ERR,'task_sync', errstring, source, revision, revdate)
+endif
+
+if (verbose) write(*,*) "PE", myrank, ": MPI Barrier released"
+
+call t_stopf('MPI:task_sync_final')
+
+
+end subroutine task_sync_final
 
 !-----------------------------------------------------------------------------
 
