@@ -11,41 +11,14 @@
 !>
 !----------------------------------------------------------------
 !>@todo FIXME: consistent directions for interpolation/fractions
-!>  still to change: we should always pass top level first, then bottom level.
+!>
+!>  still to verify: we should always pass top level first, then bottom level.
 !>  fraction should be computed and interpreted as 0 = top, 1 = bottom.
 !>  in the code below, there are !x! marks on some lines.  the meanings are:
-!>   !$! - where top and bottom need to be swapped in call or subroutine
-!>         interfaces.
+!>   !$! - where top and bottom might need to be swapped in call or 
+!>         subroutine interfaces.
 !>   !*! - where fraction is used and may need the sense to be switched 
 !>         (may be using 1 = top and 0 = bottom)
-!>
-!>@todo FIXME: feedback from WACCM-X meeting
-!>
-!>  test if the constants can be used from types_mod.f90 instead of
-!>  having gravity and r redefined here?  PROBABLY NOT - every model
-!   uses a slightly different value so what would we put in types?
-!>
-!>  test with identity obs to make sure get_close_xx() doesn't need
-!>  special code to handle them.
-!>
-!>@todo FIXME: feedback from ramping meeting
-!>
-!>  add a top of ramp namelist item (impact is supposed to go to 0
-!>  before it gets to the model top).  look at making the namelist
-!>  items specified in model levels and not pressures.
-!>
-!>  added a get_maxdist() call to the locations modules to get the
-!>  2*cutoff distance (that's what's stored) which can vary by obs type.
-!>  compute the ramp based on the real cutoff value instead of having
-!>  to guess.
-!>
-!>  don't allow a top ramp if horizontal distance only is set.  in that
-!>  case the vertical normalization factors aren't used and could be 
-!>  set to inappropriate values and it would only mess up the ramp.
-!>  just don't allow this combination.  it's odd anyway.
-!>
-!>  we don't have a good way to ramp obs with "vert is undefined"
-!>  so they'll get to impact the whole column.
 !>
 !----------------------------------------------------------------
 
@@ -149,18 +122,15 @@ integer, parameter :: MAX_PERT = 100
 
 ! model_nml namelist variables and default values
 character(len=256) :: cam_template_filename           = 'caminput.nc'
-character(len=256) :: cam_phis_filename               = 'camphis.nc'
+character(len=256) :: cam_phis_filename               = 'cam_phis.nc'
 character(len=32)  :: vertical_localization_coord     = 'PRESSURE'
+logical            :: use_log_vertical_scale          = .false.
 integer            :: assimilation_period_days        = 0
 integer            :: assimilation_period_seconds     = 21600
-logical            :: use_log_vertical_scale          = .false.
-! could name this 'no_obs_assim_above_pressure', or could 
-! also specify this in model levels?
-real(r8)           :: no_assim_above_pressure         = -1.0      ! in pascals 
-real(r8)           :: start_damping_ramp_at_pressure  = -1.0      ! currently pascals
-! proposed:
-!real(r8)           :: damping_ramp_bottom_at_level  = -1          ! model levels
-!real(r8)           :: damping_ramp_top_at_level     = -1          ! model levels
+! proposed changes:
+integer            :: no_obs_assim_above_level       = -1      ! model levels
+integer            :: model_damping_ends_at_level    = -1      ! model levels
+! end proposed changes
 integer            :: debug_level                     = 0
 logical            :: suppress_grid_info_in_output    = .false.
 logical            :: custom_routine_to_generate_ensemble = .true.
@@ -191,22 +161,22 @@ character(len=vtablenamelength) :: state_variables(MAX_STATE_VARIABLES * &
                                                    num_state_table_columns ) = ' '
 
 namelist /model_nml/  &
-   cam_template_filename,           &
-   cam_phis_filename,               &
-   vertical_localization_coord,     &
-   state_variables,                 &
-   assimilation_period_days,        &
-   assimilation_period_seconds,     &
-   use_log_vertical_scale,          &
-   no_assim_above_pressure,         & 
-   start_damping_ramp_at_pressure,  &
-   suppress_grid_info_in_output,    &
+   cam_template_filename,               &
+   cam_phis_filename,                   &
+   vertical_localization_coord,         &
+   state_variables,                     &
+   assimilation_period_days,            &
+   assimilation_period_seconds,         &
+   use_log_vertical_scale,              &
+   no_obs_assim_above_level,            & 
+   model_damping_ends_at_level,         &
+   suppress_grid_info_in_output,        &
    custom_routine_to_generate_ensemble, &
-   fields_to_perturb,               &
-   perturbation_amplitude,          &
-   no_normalization_of_scale_heights, &
-   use_variable_mean_mass,          &
-   using_chemistry,                 &
+   fields_to_perturb,                   &
+   perturbation_amplitude,              &
+   no_normalization_of_scale_heights,   &
+   use_variable_mean_mass,              &
+   using_chemistry,                     &
    debug_level
 
 ! global variables
@@ -217,10 +187,8 @@ logical, save      :: module_initialized = .false.
 ! info and is require for getting state variables.
 integer :: domain_id
 
-!> Everything needed to describe a variable. Basically all the metadata from
-!> a netCDF file is stored here as well as all the information about where
-!> the variable is stored in the DART state vector.
-!>
+!> Metadata from the template netCDF file that describes 
+!> where the variable data is located and what size it is.
 
 type cam_1d_array
    integer  :: nsize
@@ -264,12 +232,13 @@ real(r8), allocatable :: phis(:, :)
 integer :: vertical_localization_type = VERTISPRESSURE
 
 ! commonly used numbers that we'll set in static_init_model
-real(r8) :: global_model_top 
-real(r8) :: global_ref_pressure
-integer  :: global_nlevels
+real(r8) :: ref_model_top_pressure
+real(r8) :: ref_surface_pressure
+integer  :: ref_nlevels
 
-!>@todo FIXME ask kevin if this is small enough to handle
-! all the possible cam configurations?
+!>@todo FIXME ask kevin if this threshold value is small enough
+! to distinguish cam from waccm configurations?
+
 ! an arbitrary value to test the model top against to see
 ! if we're running cam vs waccm or waccm-x.  it changes the
 ! standard atmosphere table we use to convert pressure to height, 
@@ -278,21 +247,27 @@ real(r8), parameter :: high_top_threshold = 0.3_r8  ! pascals
 
 ! things related to damping at the model top
 logical  :: are_damping = .false.
-real(r8) :: damp_weight = 1.0_r8
-real(r8) :: ramp_start
-type(location_type) :: ramp_start_loc 
+real(r8) :: ramp_end         ! fixed top of ramp; the start (bottom) varies
 logical  :: discarding_high_obs = .false.
-real(r8) :: no_assim_above_height = -1.0_r8 
-real(r8) :: no_assim_above_level  = -1.0_r8 
+real(r8) :: no_assim_above_height    = -1.0_r8 
+real(r8) :: no_assim_above_level     = -1.0_r8 
+real(r8) :: no_assim_above_pressure  = -1.0_r8 
 
 !> build a pressure/height conversion column based on a
 !> standard atmosphere.  this can only be used when we
 !> don't have a real ensemble to use, or we don't care
 !> about absolute accuracy.
 
+interface single_pressure_value
+ module procedure single_pressure_value_int
+ module procedure single_pressure_value_real
+end interface
+
 ! Precompute pressure <-> height map once based on either a low-top or
 ! high-top table depending on what the model top is.
 ! Used only to discard obs on heights above the user-defined top threshold.
+integer, parameter :: HIGH_TOP_TABLE = 1
+integer, parameter ::  LOW_TOP_TABLE = 2
 integer :: std_atm_table_len
 real(r8), allocatable :: std_atm_hgt_col(:)
 real(r8), allocatable :: std_atm_pres_col(:)
@@ -326,6 +301,8 @@ subroutine static_init_model()
 
 integer :: iunit, io
 integer :: nfields
+
+character(len=*), parameter :: routine = 'static_init_model'
 
 if ( module_initialized ) return
 
@@ -362,15 +339,25 @@ call set_vert_localization(vertical_localization_coord)
 ! this namelist variable so we can initialize the proper tables
 if (using_chemistry) call init_chem_tables()
 
-! set top limit where obs impacts start to be diminished
-! only useful if doing vertical localization.
-if (start_damping_ramp_at_pressure > 0.0_r8 .and. vertical_localization_on()) then
-   call init_damping_ramp_info()
-   are_damping = .true.
+! set top limit where obs impacts are diminished to 0.
+! only allowed if doing vertical localization.  error if
+! computing horizontal distances only (odd case, intentionally
+! choosing not to support this.)
+if (model_damping_ends_at_level > 0) then
+   if (vertical_localization_on()) then
+      call init_damping_ramp_info()
+      are_damping = .true.
+   else
+      string1='cannot support model top damping unless also using vertical localization'
+      string2='set "model_damping_ends_at_level = -1" in &model_nml, OR' 
+      string3='set "horiz_dist_only = .false." in &location_nml'
+      call error_handler(E_ERR, routine, string1, source, revision, revdate, &
+                         text2=string2, text3=string3)
+   endif
 endif
 
 ! set top limit where obs are discarded.  -1 to disable.
-if (no_assim_above_pressure > 0.0_r8) then
+if (no_obs_assim_above_level > 0) then
    call init_discard_high_obs()
    discarding_high_obs = .true.
 endif
@@ -594,7 +581,6 @@ character(len=*), parameter :: routine = 'get_values_from_single_level:'
 
 integer :: varid
 integer(i8) :: state_indx
-real(r8) :: tmp(ens_size)
 
 varid = get_varid_from_kind(domain_id, qty)
 if (varid < 0) then
@@ -701,7 +687,7 @@ real(r8),             intent(out) :: vals(ens_size)
 integer,              intent(out) :: my_status(ens_size)
 
 integer  :: imember
-real(r8) :: vals_array(global_nlevels,ens_size)
+real(r8) :: vals_array(ref_nlevels,ens_size)
 
 character(len=*), parameter :: routine = 'get_values_from_nonstate_fields:'
 
@@ -711,7 +697,7 @@ my_status(:) = 99
 select case (obs_quantity) 
    case (QTY_PRESSURE)
       call cam_pressure_levels(ens_handle, ens_size, &
-                               lon_index, lat_index, global_nlevels, &
+                               lon_index, lat_index, ref_nlevels, &
                                obs_quantity, vals_array, my_status)
       if (any(my_status /= 0)) return
 
@@ -1325,8 +1311,8 @@ character(len=*), parameter :: routine = 'find_vertical_levels:'
 integer  :: bot1, top1, imember, level_one, status1, k
 real(r8) :: fract1
 real(r8) :: surf_pressure (  ens_size )
-real(r8) :: pressure_array( global_nlevels, ens_size )
-real(r8) :: height_array  ( global_nlevels, ens_size )
+real(r8) :: pressure_array( ref_nlevels, ens_size )
+real(r8) :: height_array  ( ref_nlevels, ens_size )
 
 ! assume the worst
 bot_levs(:)    = MISSING_I
@@ -1334,7 +1320,7 @@ top_levs(:)    = MISSING_I
 vert_fracts(:) = MISSING_R8
 my_status(:)   = 98
 
-! global_nlevels is the number of vertical levels (midlayer points)
+! ref_nlevels is the number of vertical levels (midlayer points)
 
 level_one = 1
 
@@ -1351,10 +1337,10 @@ select case (which_vert)
          return
       endif
 
-      call build_cam_pressure_columns(ens_size, surf_pressure, global_nlevels, pressure_array)
+      call build_cam_pressure_columns(ens_size, surf_pressure, ref_nlevels, pressure_array)
 
       do imember=1, ens_size
-         call pressure_to_level(global_nlevels, pressure_array(:, imember), vert_val, & 
+         call pressure_to_level(ref_nlevels, pressure_array(:, imember), vert_val, & 
                                 bot_levs(imember), top_levs(imember), &       !$!
                                 vert_fracts(imember), my_status(imember))
 
@@ -1370,18 +1356,18 @@ select case (which_vert)
    case(VERTISHEIGHT)
       ! construct a height column here and find the model levels
       ! that enclose this value
-      call cam_height_levels(ens_handle, ens_size, lon_index, lat_index, global_nlevels, obs_qty, &
+      call cam_height_levels(ens_handle, ens_size, lon_index, lat_index, ref_nlevels, obs_qty, &
                              height_array, my_status)
       if (any(my_status /= 0)) return   !>@todo FIXME let successful members continue?
 
       if (debug_level > 400) then
-         do k = 1,global_nlevels
+         do k = 1,ref_nlevels
             print*, 'ISHEIGHT: ', k, height_array(k,1)
          enddo
       endif
 
       do imember=1, ens_size
-         call height_to_level(global_nlevels, height_array(:, imember), vert_val, & 
+         call height_to_level(ref_nlevels, height_array(:, imember), vert_val, & 
                              bot_levs(imember), top_levs(imember), vert_fracts(imember), &       !$!
                              my_status(imember))
       enddo
@@ -1396,7 +1382,7 @@ select case (which_vert)
       
    case(VERTISLEVEL)
       ! this routine returns false if the level number is out of range.
-      if (check_good_levels(vert_val, global_nlevels, bot1, top1, fract1)) then      !$!
+      if (check_good_levels(vert_val, ref_nlevels, bot1, top1, fract1)) then      !$!
          my_status(:) = 8
          return
       endif
@@ -1418,8 +1404,8 @@ select case (which_vert)
    ! 2d fields
    case(VERTISUNDEF, VERTISSURFACE)
       if (get_dims_from_qty(obs_qty, var_id) == 2) then      !$!
-         bot_levs(:) = global_nlevels
-         top_levs(:) = global_nlevels - 1
+         bot_levs(:) = ref_nlevels
+         top_levs(:) = ref_nlevels - 1
          vert_fracts(:) = 1.0_r8
          my_status(:) = 0
       else
@@ -1545,8 +1531,8 @@ integer :: j, k
 
 do j=1, ens_size
    do k=1,n_levels
-      pressure_array(k, j) = global_ref_pressure * grid_data%hyam%vals(k) + &
-                             surface_pressure(j) * grid_data%hybm%vals(k) 
+      pressure_array(k, j) = ref_surface_pressure    * grid_data%hyam%vals(k) + &
+                                 surface_pressure(j) * grid_data%hybm%vals(k) 
    enddo
 enddo
 
@@ -1556,11 +1542,6 @@ end subroutine build_cam_pressure_columns
 !-----------------------------------------------------------------------
 !> Compute column of pressures at the layer midpoints for the given 
 !> surface pressure.  
-!>
-!>@todo FIXME unlike some other things - you could pass in an upper and lower
-!>level number and compute the pressure only at the levels between those.
-!>this isn't a column that has to be built from the surface up or top down.
-!>each individual pressure can be computed independently given the surface pressure.
 !>
 !> to get pressure on layer interfaces, the computation would be identical
 !> but use hyai, hybi.  (also have n_levels+1)
@@ -1577,11 +1558,55 @@ integer :: k
 ! cam model levels: 1 is the model top, N is the bottom.
 
 do k=1, n_levels
-   pressure_array(k) = global_ref_pressure * grid_data%hyam%vals(k) + &
-                          surface_pressure * grid_data%hybm%vals(k)
+   pressure_array(k) = ref_surface_pressure * grid_data%hyam%vals(k) + &
+                           surface_pressure * grid_data%hybm%vals(k)
 enddo
 
 end subroutine single_pressure_column
+
+!-----------------------------------------------------------------------
+!> Compute pressure at one level given the surface pressure
+!> cam model levels: 1 is the model top, N is the bottom.
+!> in this version of the routine level is integer/whole value
+
+function single_pressure_value_int(surface_pressure, level)
+
+real(r8), intent(in)  :: surface_pressure   ! in pascals
+integer,  intent(in)  :: level
+real(r8) :: single_pressure_value_int
+
+! cam model levels: 1 is the model top, N is the bottom.
+
+single_pressure_value_int = ref_surface_pressure * grid_data%hyam%vals(level) + &
+                                surface_pressure * grid_data%hybm%vals(level)
+
+end function single_pressure_value_int
+
+!-----------------------------------------------------------------------
+!> Compute pressure at one level given the surface pressure
+!> cam model levels: 1 is the model top, N is the bottom.
+!> fraction = 0 is full top level, fraction = 1 is full bottom level
+!> level is real/fractional value
+
+
+function single_pressure_value_real(surface_pressure, level)
+
+real(r8), intent(in)  :: surface_pressure   ! in pascals
+real(r8), intent(in)  :: level
+real(r8) :: single_pressure_value_real
+
+integer :: k
+real(r8) :: fract, bot_pres, top_pres
+
+k = int(level)
+fract = level - int(level)
+
+top_pres = single_pressure_value_int(surface_pressure, k)
+bot_pres = single_pressure_value_int(surface_pressure, k+1)
+
+single_pressure_value_real = fract * bot_pres + (1.0_r8 - fract) * top_pres  !*!
+
+end function single_pressure_value_real
 
 !-----------------------------------------------------------------------
 !> return the level indices and fraction across the level.
@@ -1600,16 +1625,16 @@ integer,  intent(out) :: top_lev
 real(r8), intent(out) :: fract  
 integer,  intent(out) :: my_status
 
-!>@todo FIXME this routine expects the lower numbered index first, larger second.
+!> watch the order here.  top_lev is first, bot_lev is second because
+!> this routine expects the lower numbered index first, larger second.
 call find_enclosing_indices(nlevels, pressures, p_val, top_lev, bot_lev, fract, my_status, &      !$!
-                            inverted = .false., log_scale = .true.)
+                            inverted = .false., log_scale = use_log_vertical_scale)
 
 if (my_status /= 0) my_status = 10
 
 end subroutine pressure_to_level
 
 !-----------------------------------------------------------------------
-!>
 !> return the level indices and fraction across the level.
 !> index 1 is model top, N is model bottom.  botvals will be the
 !> smaller index number, botvals will be the lower one
@@ -1666,8 +1691,6 @@ fract_level = vert_value - integer_level
 
 ! cam levels start at the top so level 1 is
 ! the highest level and increase on the way down.
-
-!>@todo FIXME might want to add debugging print
 
 !>might want to allow extrapolation - which means
 !>allowing out of range values here and handling
@@ -2152,13 +2175,13 @@ integer,          intent(out) :: nfields
 character(len=*), parameter :: routine = 'set_cam_variable_info:'
 
 integer :: i
+integer, parameter :: MAX_STRING_LEN = 128
 
-!>@todo FIXME what should these be?  hardcode to 128 just for a hack.
-character(len=128) :: varname    ! column 1, NetCDF variable name
-character(len=128) :: dartstr    ! column 2, DART Quantity
-character(len=128) :: minvalstr  ! column 3, Clamp min val
-character(len=128) :: maxvalstr  ! column 4, Clamp max val
-character(len=128) :: updatestr  ! column 5, Update output or not
+character(len=MAX_STRING_LEN) :: varname    ! column 1, NetCDF variable name
+character(len=MAX_STRING_LEN) :: dartstr    ! column 2, DART Quantity
+character(len=MAX_STRING_LEN) :: minvalstr  ! column 3, Clamp min val
+character(len=MAX_STRING_LEN) :: maxvalstr  ! column 4, Clamp max val
+character(len=MAX_STRING_LEN) :: updatestr  ! column 5, Update output or not
 
 character(len=vtablenamelength) :: var_names(MAX_STATE_VARIABLES) = ' '
 logical  :: update_list(MAX_STATE_VARIABLES)   = .FALSE.
@@ -2342,8 +2365,6 @@ character(len=*),   intent(in)    :: varname
 type(cam_1d_array), intent(inout) :: grid_array
 
 character(len=*), parameter :: routine = 'fill_cam_1d_array'
-
-integer :: i, per_line
 
 !>@todo do we need to check that this exists?  if all cam input
 !> files will have all the arrays we are asking for, then no.
@@ -2678,7 +2699,7 @@ real(r8), parameter :: const_r = 287.04_r8    ! Different than model_heights (dr
 real(r8), parameter :: universal_gas_constant = 8314.0_r8 ! [J/K/kmol]
 real(r8), parameter :: g0 = 9.80616_r8        ! Different than model_heights (gph2gmh:G) !
 
-integer  :: i,k,l
+integer  :: k,l
 
 ! an array now: real(r8), parameter :: rbyg=r/g0
 real(r8) :: pterm(nlevels)   ! vertical scratch space, to improve computational efficiency
@@ -2846,13 +2867,13 @@ end subroutine gph2gmh
 !> "Geophysical Geodesy, Kurt Lambeck, 1988".
 !>
 !>  input:    xlat, latitude in radians
-!>  output:   galt, gravity at the given lat, m/sec**2
+!>  output:   galt, gravity at the given lat, km/sec**2
 !>
 !> taken from code from author Bill Schreiner, 5/95
 !>
 !>
 
-subroutine compute_surface_gravity(xlat,galt)
+subroutine compute_surface_gravity(xlat, galt)
 real(r8), intent(in)  :: xlat
 real(r8), intent(out) :: galt
 
@@ -2863,8 +2884,8 @@ real(r8),parameter :: xm  = 0.003468_r8            !
 real(r8),parameter :: f2  = 5.3481622134089e-03_r8 ! f2 = -f + 5.0* 0.50*xm - 17.0/14.0*f*xm + 15.0/4.0*xm**2
 real(r8),parameter :: f4  = 2.3448248012911e-05_r8 ! f4 = -f**2* 0.50 + 5.0* 0.50*f*xm
 
-real(r8) :: alt = 0.0_r8
 real(r8) :: g
+!real(r8) :: alt = 0.0_r8
 
 ! gravity at the equator, km/s2
 real(r8), parameter :: ge = xmu/ae**2/(1.0_r8 - f + 1.5_r8*xm - 15.0_r8/14.0_r8*xm*f)
@@ -2873,18 +2894,24 @@ real(r8), parameter :: ge = xmu/ae**2/(1.0_r8 - f + 1.5_r8*xm - 15.0_r8/14.0_r8*
 ! compute gravity at any latitude, km/s2
 g = ge*(1.0_r8 + f2*(sin(xlat))**2 - 1.0_r8/4.0_r8*f4*(sin(2.0_r8*xlat))**2)
 
-! compute gravity at any latitude and at any height, km/s2
-galt = g - 2.0_r8*ge*alt/ae*(1.0_r8 + f + xm + (-3.0_r8*f + 5.0_r8* 0.50_r8*xm)*  &
-                          (sin(xlat))**2) + 3.0_r8*ge*alt**2/ae**2
+! at a fixed altitude of 0.0, g and galt are the same
+galt = g
 
-if (g /= galt) print *, 'g, galt: ', g, galt
-
-!! compute gravity at any latitude, km/s2
-!galt = ge*(1.0_r8 + f2*(sin(xlat))**2 - 1.0_r8/4.0_r8*f4*(sin(2.0_r8*xlat))**2)
-
-! FIXME!!  km/s2 for now
-! convert to meters/s2
-!galt = galt*1000.0_r8
+! FIXME: if alt is hardcoded to 0.0, none of this code is needed.
+!
+! keep it for now in case we want gravity to vary with height.
+!
+!! compute gravity at any latitude and at any height, km/s2
+!galt = g - 2.0_r8*ge*alt/ae*(1.0_r8 + f + xm + (-3.0_r8*f + 5.0_r8* 0.50_r8*xm)*  &
+!                          (sin(xlat))**2) + 3.0_r8*ge*alt**2/ae**2
+!
+!if (g /= galt) print *, 'g, galt: ', g, galt
+!
+!!! compute gravity at any latitude, km/s2
+!!galt = ge*(1.0_r8 + f2*(sin(xlat))**2 - 1.0_r8/4.0_r8*f4*(sin(2.0_r8*xlat))**2)
+!
+!! convert to meters/s2
+!!galt = galt*1000.0_r8
 
 end subroutine compute_surface_gravity
 
@@ -2952,7 +2979,7 @@ integer,             intent(in)    :: qty
 
 integer  :: iloc, jloc, vloc, myqty, level_one, status1
 integer  :: my_status(ens_size)
-real(r8) :: pressure_array(global_nlevels), surface_pressure(ens_size)
+real(r8) :: pressure_array(ref_nlevels), surface_pressure(ens_size)
 
 
 call get_model_variable_indices(location_indx, iloc, jloc, vloc, kind_index=myqty)
@@ -2968,7 +2995,7 @@ if (is_surface_field(myqty)) then
    endif
    call set_vertical(location, surface_pressure(1), VERTISPRESSURE)
 else
-   call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, global_nlevels, &
+   call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, ref_nlevels, &
                             qty, pressure_array, my_status)
 
    call set_vertical(location, pressure_array(vloc), VERTISPRESSURE)
@@ -2986,12 +3013,12 @@ integer(i8),         intent(in)    :: location_indx
 integer,             intent(in)    :: qty
 
 integer  :: iloc, jloc, vloc, my_status(ens_size)
-real(r8) :: height_array(global_nlevels, ens_size)
+real(r8) :: height_array(ref_nlevels, ens_size)
 
 ! build a height column and a pressure column and find the levels
 call get_model_variable_indices(location_indx, iloc, jloc, vloc)
 
-call cam_height_levels(ens_handle, ens_size, iloc, jloc, global_nlevels, &
+call cam_height_levels(ens_handle, ens_size, iloc, jloc, ref_nlevels, &
                        qty, height_array, my_status) 
 
 !>@todo FIXME this can only be used if ensemble size is 1
@@ -3009,7 +3036,7 @@ integer(i8),         intent(in)    :: location_indx
 integer,             intent(in)    :: qty
 
 integer  :: iloc, jloc, vloc, level_one, status1, my_status(ens_size)
-real(r8) :: pressure_array(global_nlevels)
+real(r8) :: pressure_array(ref_nlevels)
 real(r8) :: surface_pressure(1), scaleheight_val
 
 !> this is currently only called with an ensemble size of 1 for
@@ -3025,6 +3052,8 @@ if (no_normalization_of_scale_heights) then
    if (query_location(location) == VERTISSURFACE) then
 
       ! get the surface pressure from the ens_handle
+      call get_model_variable_indices(location_indx, iloc, jloc, vloc)
+
       call get_values_from_single_level(ens_handle, ens_size, QTY_SURFACE_PRESSURE, &
                                         iloc, jloc, level_one, surface_pressure, status1)
       if (status1 /= 0) goto 200
@@ -3036,7 +3065,7 @@ if (no_normalization_of_scale_heights) then
       ! build a pressure column and and find the levels
       call get_model_variable_indices(location_indx, iloc, jloc, vloc)
 
-      call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, global_nlevels, &
+      call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, ref_nlevels, &
                                qty, pressure_array, my_status)
       if (any(my_status /= 0)) goto 200
    
@@ -3056,7 +3085,7 @@ else
       ! build a pressure column and and find the levels
       call get_model_variable_indices(location_indx, iloc, jloc, vloc)
 
-      call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, global_nlevels, &
+      call cam_pressure_levels(ens_handle, ens_size, iloc, jloc, ref_nlevels, &
                                qty, pressure_array, my_status)
       if (any(my_status /= 0)) goto 200
 
@@ -3153,13 +3182,13 @@ real(r8) :: generic_cam_pressure_to_cam_level
 
 integer :: bot_lev, top_lev
 real(r8) :: fract
-real(r8) :: pressure_array(global_nlevels)
+real(r8) :: pressure_array(ref_nlevels)
 
 generic_cam_pressure_to_cam_level = MISSING_R8
 
-call single_pressure_column(global_ref_pressure, global_nlevels, pressure_array)
+call single_pressure_column(ref_surface_pressure, ref_nlevels, pressure_array)
 
-call pressure_to_level(global_nlevels, pressure_array, pressure, &
+call pressure_to_level(ref_nlevels, pressure_array, pressure, &
                        bot_lev, top_lev, fract, status)                  !$!
 if (status /= 0) return
 
@@ -3198,7 +3227,7 @@ if (status1 /= 0) then
    return
 endif
 
-call build_cam_pressure_columns(ens_size, surface_pressure, global_nlevels, &
+call build_cam_pressure_columns(ens_size, surface_pressure, ref_nlevels, &
                                pressure_array)
 my_status(:) = 0
 
@@ -3253,7 +3282,7 @@ type(location_type), intent(inout) :: location
 integer,             intent(out)   :: my_status
 
 integer  :: varid, ens_size, status(1), qty
-real(r8) :: pressure_array(global_nlevels)
+real(r8) :: pressure_array(ref_nlevels)
 
 character(len=*), parameter :: routine = 'obs_vertical_to_pressure'
 
@@ -3290,7 +3319,6 @@ type(location_type), intent(inout) :: location
 integer,             intent(out)   :: my_status
 
 integer  :: varid, ens_size, status(1)
-real(r8) :: pressure_array(global_nlevels)
 real(r8) :: height_array(1)
 
 character(len=*), parameter :: routine = 'obs_vertical_to_height'
@@ -3349,7 +3377,6 @@ integer,             intent(out)   :: my_status
 integer  :: varid1, varid2, ens_size, status(1), ptype
 real(r8) :: pressure_array(1), surface_pressure_array(1)
 real(r8) :: scaleheight_val
-integer :: i
 
 character(len=*), parameter :: routine = 'obs_vertical_to_scaleheight'
 
@@ -3481,20 +3508,31 @@ subroutine init_discard_high_obs()
 character(len=*), parameter :: routine = 'init_discard_high_obs'
 integer :: my_status
 
-character(len=16) :: fmt_lo = '(A,F12.5,2A)'
-character(len=16) :: fmt_hi = '(A,E12.5,2A)'
-character(len=16) :: use_fmt
+integer :: table_type
+character(len=16) :: out_fmt, pres_fmt
+real(r8) :: no_assim_above_scaleh
 
-if (global_model_top < high_top_threshold) then
-   use_fmt = fmt_hi
-else
-   use_fmt = fmt_lo
-endif
+! pick the better table: 
+!  one is more accurate for the lower atmosphere, 
+!  and the other has a very high top.
+table_type = store_std_atm_tables(ref_model_top_pressure)
 
-call store_std_atm_tables(global_model_top)
+! set formatting which is easiest to read in the log.
+! the very high top table has very small numbers that need
+! exponential notation.
+out_fmt = '(A,F12.5,A)'
+pres_fmt = out_fmt
+if (table_type == HIGH_TOP_TABLE) pres_fmt = '(A,E12.5,A)'
 
-write(string1, use_fmt) 'Discarding observations above a pressure level of ', &
-                   no_assim_above_pressure, ' Pascals' 
+! be consistent in our variable types.  obs could have vert w/fractional levels.
+no_assim_above_level = real(no_obs_assim_above_level, r8)
+write(string1, out_fmt) &
+   'Discarding observations higher than model level      ', no_assim_above_level
+call error_handler(E_MSG, 'init_discard_high_obs', string1, source, revision, revdate)
+
+no_assim_above_pressure = single_pressure_value(ref_surface_pressure, no_obs_assim_above_level)
+write(string1, pres_fmt) &
+   'Discarding observations higher than pressure level ', no_assim_above_pressure, ' Pascals' 
 call error_handler(E_MSG, 'init_discard_high_obs', string1, source, revision, revdate)
 
 no_assim_above_height = generic_pressure_to_height(no_assim_above_pressure, my_status)
@@ -3503,160 +3541,283 @@ if (my_status /= 0) then
                       source, revision, revdate, text2='"no_assim_above_pressure" invalid value')
 endif
  
-write(string1, use_fmt) 'Discarding observations above a height of         ', &
-                   no_assim_above_height, ' meters' 
+write(string1, out_fmt) &
+   'Discarding observations higher than               ', no_assim_above_height, ' meters' 
 call error_handler(E_MSG, 'init_discard_high_obs', string1, source, revision, revdate)
 
-no_assim_above_level = generic_cam_pressure_to_cam_level(no_assim_above_pressure, my_status)
-if (my_status /= 0) then
-   call error_handler(E_ERR, routine, 'error converting pressure to model level', &
-                      source, revision, revdate, text2='"no_assim_above_pressure" invalid value')
-endif
- 
-write(string1, fmt_lo) 'Discarding observations above a model level of      ', &
-                   no_assim_above_level
+no_assim_above_scaleh = scale_height(ref_surface_pressure, no_assim_above_pressure)
+write(string1, out_fmt) &
+   'Discarding observations higher than scale height ', no_assim_above_scaleh, ' (unitless)' 
 call error_handler(E_MSG, 'init_discard_high_obs', string1, source, revision, revdate)
 
 end subroutine init_discard_high_obs
 
 !--------------------------------------------------------------------
-! initialize the info needed to damp the assimilation increments at
-! the model top.  compute where the damping ramp starts and save that
-! info in 2 globals: ramp_start and ramp_start_loc 
-! so they don't have to be recomputed over and over
-! these values will be in the appropriate vertical localization type
-! already so will need no conversion.
+! initialize what we can here.  the highest end of the ramp is fixed;
+! the start depends on the cutoff distance which can be observation
+! type dependent.  at the time the ramping adjustment is applied all
+! vertical coordinates will have already been converted to the
+! vertical localization type.
 
 subroutine init_damping_ramp_info()
 
-type(location_type) :: model_top_loc
-real(r8) :: valid_region_start, model_top
-integer  :: status
+real(r8) :: model_top
 
 character(len=*), parameter :: routine = 'init_damping_ramp_info'
 
-character(len=16) :: fmt_lo = '(A,F12.5,2A)'
-character(len=16) :: fmt_hi = '(A,E12.5,2A)'
-character(len=16) :: use_fmt
+integer :: table_type
+character(len=16) :: out_fmt
 
-if (global_model_top < high_top_threshold) then
-   use_fmt = fmt_hi
-else
-   use_fmt = fmt_lo
-endif
+! pick the better table: 
+!  one is more accurate for the lower atmosphere, 
+!  and the other has a very high top.
+table_type = store_std_atm_tables(ref_model_top_pressure)
 
-call store_std_atm_tables(global_model_top)
+! set formatting which is easiest to read in the log.
+! the very high top table has very small numbers that need
+! exponential notation.
+out_fmt = '(A,F12.5,A)'
+if (table_type == HIGH_TOP_TABLE .and. &
+    vertical_localization_type == VERTISPRESSURE) out_fmt = '(A,E12.5,A)'
 
-! these start out as pressure and are converted, if needed, into
-! the right values in the vertical localization coordinate type.
-ramp_start = start_damping_ramp_at_pressure 
-valid_region_start = find_lowest_pure_pressure()
-
-! do the error checking up front because it is the same
-! for all cases.  if ramp start is above model top warn and return.
-! if it's below the pure pressure region, error out.
-if (ramp_start <= global_model_top) then
-
-   write(string1, use_fmt) 'no damping to do. "start_damping_ramp_at_pressure" = ', ramp_start
-   write(string2, use_fmt) 'highest useful value:     model top is ', global_model_top, ' Pa.' 
-   write(string3, use_fmt) 'lowest   valid value: region starts at ', valid_region_start, ' Pa.'
-   call error_handler(E_MSG, routine, string1, source, revision, revdate, &
-                      text2=string2, text3=string3)
-   return
-endif
-if (ramp_start > valid_region_start) then
-   write(string1, use_fmt) 'unable to damp starting that low. "start_damping_ramp_at_pressure" = ', ramp_start
-   write(string2, use_fmt) 'highest useful value:     model top is ', global_model_top, ' Pa.' 
-   write(string3, use_fmt) 'lowest   valid value: region starts at ', valid_region_start, ' Pa.'
-   call error_handler(E_ERR, routine, string1, source, revision, revdate, &
-                      text2=string2, text3=string3)
-   return
-endif
-
-! convert to the right vertical units
-select case (vertical_localization_type)
-  case (VERTISPRESSURE)
-    ! top, bottom vals already in pressure units
-    model_top = global_model_top
-    string3 = 'pascals'
-
-  case (VERTISSCALEHEIGHT)
-    ramp_start = scale_height(global_ref_pressure, ramp_start)
-    model_top  = scale_height(global_ref_pressure, global_model_top)
-    string3 = 'scale heights'
-
-  case (VERTISHEIGHT)
-    ramp_start = generic_pressure_to_height(ramp_start, status)
-    model_top =  generic_pressure_to_height(model_top, status)
-    string3 = 'meters'
-
-  case (VERTISLEVEL)
-    ramp_start = generic_cam_pressure_to_cam_level(ramp_start, status)
-    model_top =  generic_cam_pressure_to_cam_level(model_top, status)
-    string3 = 'levels'
-
-  case default
-    write(string1, *) 'unknown vertical localization type ', vertical_localization_type
-    call error_handler(E_MSG, routine, 'unexpected error', &
-                       source, revision, revdate, text2=string1)
-end select
+! convert to vertical localization units
+call convert_vertical_level_generic(real(model_damping_ends_at_level, r8), &
+                                         vertical_localization_type, ramp_end, string3)
 
 ! check for conversion errors
-if (ramp_start == MISSING_R8 .or. model_top == MISSING_R8) then
-   write(string1, *) 'error converting to right vertical localization units'
+if (ramp_end == MISSING_R8) then
+   write(string1, *) 'error converting ramp_end to vertical localization units'
    call error_handler(E_MSG, routine, 'unexpected error', &
                       source, revision, revdate, text2=string1)
 endif
 
-! at this point, ramp_start and model_top are in the localization units
-ramp_start_loc = set_location(0.0_r8, 0.0_r8, ramp_start, vertical_localization_type)
-model_top_loc  = set_location(0.0_r8, 0.0_r8, model_top,  vertical_localization_type)
+! FIXME: not sure we actually need model_top - remove if unused.
+call convert_vertical_level_generic(1.0_r8, vertical_localization_type, &
+                                    model_top, string3)
 
-damp_weight = 1.0_r8/get_dist(ramp_start_loc, model_top_loc)
+! check for conversion errors
+if (model_top == MISSING_R8) then
+   write(string1, *) 'error converting model_top to vertical localization units'
+   call error_handler(E_MSG, routine, 'unexpected error', &
+                      source, revision, revdate, text2=string1)
+endif
 
-! and let the log know what we're doing
-write(string1, use_fmt) 'Decreasing increments on state starting at', ramp_start, ' ', trim(string3)
-write(string2, use_fmt) 'Increments will be 0 at model top, ', model_top, ' ', trim(string3)
-call error_handler(E_MSG, routine, string1, source, revision, revdate, text2=string2)
+! at this point, ramp_end and model_top are in the localization units
+
+! let the log know what we're doing
+write(string1, '(A,I5)') 'Increments will go to 0 at model level ', model_damping_ends_at_level
+write(string2, out_fmt) 'which is ', ramp_end, ' '//trim(string3)
+call error_handler(E_MSG, routine, &
+   'Decreasing increments on state near the damped area at the model top', &
+   string1, source, revision, revdate, text2=string2, text3=string1)
+
+write(string1, out_fmt) 'For reference, model top is ', model_top, ' '//trim(string3)
+call error_handler(E_MSG, routine, string1, source, revision, revdate)
 
 end subroutine init_damping_ramp_info
 
 !--------------------------------------------------------------------
-! pressure gets smaller as you go up, everything else gets larger.
-! return true or false if this value is above the start of the ramp.
+!> pressure gets smaller as you go up, everything else gets larger.
+!> return true if this value is above the start of the ramp.
+!> test_value and ramp_end need to already be in vert localization units
 
-function above_ramp_start(test_value)
-real(r8), intent(in) :: test_value
+! FIXME: test this new code section carefully.
+!
+! right now the calling code is expecting extra_dist to be added
+! to the original get_dist() value, so any scaling or modifications
+! should happen in this routine.
+!
+! do we need the 2 locations here to compute the horizontal distance?
+! or is having the total dist and the vertical separation enough?
+
+function above_ramp_start(test_value, gc, obs_type, ramp_end, total_dist, extra_dist)
+real(r8),             intent(in)  :: test_value
+type(get_close_type), intent(in)  :: gc
+integer,              intent(in)  :: obs_type
+real(r8),             intent(in)  :: ramp_end
+real(r8),             intent(in)  :: total_dist
+real(r8),             intent(out) :: extra_dist
 logical :: above_ramp_start
 
-if (vertical_localization_type == VERTISPRESSURE) then
-   above_ramp_start = (test_value < ramp_start)
+real(r8) :: cutoff, ramp_start, norm, vert_norm, vert_only_dist
+real(r8) :: horiz_dist, ramp_dist, ramp_width
+type(location_type) :: this_loc, ramp_start_loc, loc1, loc2
+logical, save :: onetime = .true.
+
+
+! do the easy cases first - either above the ramp end
+! or below the ramp start.  leave the middle ground for
+! last because we have to then compute a damping factor.
+
+! FIXME: test this!!!
+! is it above the ramp end? set damp dist to something
+! large enough to turn off all impacts.  is cutoff enough?
+cutoff = get_maxdist(gc, obs_type)
+if (.false. .and. onetime) then
+   print *, 'cutoff = ', cutoff
+   onetime = .false.
+endif
+
+if (v_above(test_value, ramp_end)) then
+   extra_dist = cutoff
+   above_ramp_start = .true.
+   return
+endif
+
+! compute ramp start and see if we're lower than that.
+
+! vert norm for this obs type
+loc1 = set_location(0.0_r8, 0.0_r8, 0.0_r8, vertical_localization_type)
+loc2 = set_location(0.0_r8, 0.0_r8, 1.0_r8, vertical_localization_type)
+norm = get_dist(loc1, loc2, obs_type)   ! units: rad/loc units
+vert_norm = 1.0_r8 / norm               ! units now: loc units/rad
+
+ramp_start = v_minus(ramp_end, vert_norm * cutoff)
+
+!print *, 'computing ramp start: ramp_end, vert_norm, cutoff', &
+!                    ramp_start, ramp_end, vert_norm, cutoff
+
+if (.not. v_above(test_value, ramp_start)) then
+   extra_dist = 0.0_r8
+   above_ramp_start = .false.
+   return
+endif
+
+
+! ok, we're somewhere inbetween.  compute horiz and vert distances
+! and see what the ramping factor needs to be.
+
+!print *, 'test value within ramp range: ', ramp_start, test_value, ramp_end
+above_ramp_start = .true.
+
+! see what the vertical separation is from obs to start of ramp
+this_loc       = set_location(0.0_r8, 0.0_r8, test_value, vertical_localization_type)
+ramp_start_loc = set_location(0.0_r8, 0.0_r8, ramp_start, vertical_localization_type)
+
+! do we need this?  i think so.   radians
+vert_only_dist = get_dist(ramp_start_loc, this_loc, obs_type)
+
+! we need this to compute what?
+if (vert_only_dist > total_dist) then
+ print *, 'unexpected, vert larger than total:  ', vert_only_dist, total_dist
+ print *, 'obs_type, vert_norm = ', obs_type, vert_norm
+ horiz_dist = 0.0_r8
 else
-   above_ramp_start = (test_value > ramp_start)
+horiz_dist = sqrt(total_dist**2 - vert_only_dist**2)
+endif
+
+ramp_dist  = v_difference(test_value, ramp_start)
+ramp_width = v_difference(ramp_end,   ramp_start)
+extra_dist = (ramp_dist / ramp_width) * cutoff
+
+! DEBUG - disable for now
+if (.false. .and. above_ramp_start) then
+   print *, 'ramp s/v/e: ', ramp_start, test_value, ramp_end
+   print *, 'v, h:       ', vert_only_dist, horiz_dist
+   print *, 'rampd, tot: ', ramp_dist, ramp_width
+   print *, 'ed, return: ', extra_dist, above_ramp_start
 endif
 
 end function above_ramp_start
 
 !--------------------------------------------------------------------
-! returns the pressure at the largest model level number (therefore the 
-! lowest in the atmosphere) that still has no input from the surface elevation.
+! vertical functions - these deal with the fact that pressure,
+! scale height, and model levels all get larger as you go from 
+! higher in the atmosphere to lower in the atmosphere, but height 
+! is the opposite.  these all depend on the global setting of the
+! vertical localization type.
 
-function find_lowest_pure_pressure()
-real(r8) :: find_lowest_pure_pressure
+!--------------------------------------------------------------------
+! returns true if a is above b (higher in the atmosphere, 
+! further from the surface of the earth).  
+! depends on the vertical_localization_type
 
-integer :: k
+pure function v_above(a, b)
+real(r8), intent(in) :: a, b
+logical :: v_above
 
-do k=1, global_nlevels-1
-   if (grid_data%hybm%vals(k+1) == 0.0_r8) cycle
+if (vertical_localization_type == VERTISHEIGHT) then
+   v_above = (a > b)
+else
+   v_above = (a < b)
+endif
 
-   find_lowest_pure_pressure = global_ref_pressure * grid_data%hyam%vals(k)  ! hymb == 0
-   return
-enddo
+end function v_above
 
-call error_handler(E_ERR, 'find_lowest_pure_pressure', 'unexpected error, contact dart developers', &
-                   source, revision, revdate)
+!--------------------------------------------------------------------
+! returns a minus b, where a is higher, b is lower, and the result is
+! yet lower in the atmosphere.
+! depends on the vertical_localization_type
 
-end function find_lowest_pure_pressure
+pure function v_minus(a, b)
+real(r8), intent(in) :: a, b
+real(r8) :: v_minus
+
+if (vertical_localization_type == VERTISHEIGHT) then
+   v_minus = (a - b)
+else
+   v_minus = (a + b)
+endif
+
+end function v_minus
+
+!--------------------------------------------------------------------
+! returns difference of a and b
+! (doesn't depend on the vertical_localization_type)
+
+pure function v_difference(a, b)
+real(r8), intent(in) :: a, b
+real(r8) :: v_difference
+
+v_difference = abs(a - b)
+
+end function v_difference
+
+!--------------------------------------------------------------------
+!> this should only be used for converting vertical values which
+!> are the same for all ensemble members at all locations. 
+!> it uses generic values to do a vertical conversion.
+
+subroutine convert_vertical_level_generic(level_value, want_vert_type, out_value, out_label)
+real(r8),         intent(in)            :: level_value
+integer,          intent(in)            :: want_vert_type
+real(r8),         intent(out)           :: out_value
+character(len=*), intent(out), optional :: out_label
+
+character(len=*), parameter :: routine = 'convert_vertical_level_generic'
+
+integer :: status
+real(r8) :: tmp_val
+
+if (want_vert_type == VERTISLEVEL) then
+    out_value = level_value
+    if (present(out_label)) out_label = 'levels'
+else
+   ! convert to the requested units.  start by going to pressure
+   tmp_val = single_pressure_value(ref_surface_pressure, level_value)
+
+   select case (want_vert_type)
+     case (VERTISPRESSURE)
+       out_value = tmp_val
+       if (present(out_label)) out_label = 'pascals'
+   
+     case (VERTISSCALEHEIGHT)
+       out_value = scale_height(ref_surface_pressure, tmp_val)
+       if (present(out_label)) out_label = 'scale heights'
+   
+     case (VERTISHEIGHT)
+       out_value = generic_pressure_to_height(tmp_val, status)
+       if (status /= 0) out_value = MISSING_R8
+       if (present(out_label)) out_label = 'meters'
+   
+     case default
+       write(string1, *) 'unknown requested vertical type ', want_vert_type
+       call error_handler(E_MSG, routine, 'unexpected error', &
+                          source, revision, revdate, text2=string1)
+   end select
+endif
+
+end subroutine convert_vertical_level_generic
 
 !--------------------------------------------------------------------
 
@@ -3677,9 +3838,7 @@ type(ensemble_type), optional, intent(in)  :: ens_handle
 character(len=*), parameter :: routine = 'get_close_obs'
 
 integer :: i, status(1), this, vert_type
-real(r8) :: vert_value, damping_dist
-type(location_type) :: this_loc, bl(1)
-integer :: bq(1), bt(1)
+real(r8) :: vert_value, extra_damping_dist
 real(r8), parameter :: LARGE_DIST = 999999.0  ! positive and large
 
 ! if absolute distances aren't needed, or vertical localization isn't on,
@@ -3709,6 +3868,12 @@ if (vert_type /= vertical_localization_type) then
    endif
 endif
 
+! FIXME: is here where we need to compute start of ramp for this
+! obs type?  should we cache these?  start with doing the computation
+! each time, then make an array indexed by obs types with the
+! start of the ramp and fill it in on demand.  have to call for
+! maxdist(obs_type) and do the math, but just once per type.
+
 ! ok, distance is needed and we are localizing in the vertical.
 ! call default get close to get potentically close locations
 ! but call without distance so it doesn't do extra work.
@@ -3720,6 +3885,7 @@ do i=1, num_close
    this = close_ind(i)
 
    vert_type = query_location(locs(this))
+!print *, 'close_o, vval, vtype = ', i, query_location(locs(this), 'VLOC'), vert_type
 
    if (vert_type /= vertical_localization_type) then
       call convert_vertical_obs(ens_handle, 1, locs(this:this), &
@@ -3734,13 +3900,14 @@ do i=1, num_close
 
    dist(i) = get_dist(base_loc, locs(this))
 
-   if (.not. are_damping) cycle
+   ! do not try to damp impacts when obs has "vert is undefined".  
+   ! the impact will go all the way to the model top.  
+   ! this is the agreed-on functionality.
+   if (.not. are_damping .or. vert_type == VERTISUNDEF) cycle
 
    vert_value = query_location(locs(this), 'VLOC')
-   if (above_ramp_start(vert_value)) then
-      this_loc = set_location(0.0_r8, 0.0_r8, vert_value, vertical_localization_type)
-      damping_dist = get_dist(ramp_start_loc, this_loc)
-      dist(i) = dist(i) + (damping_dist * damping_dist) * damp_weight
+   if (above_ramp_start(vert_value, gc, base_type, ramp_end, dist(i), extra_damping_dist)) then
+      dist(i) = dist(i) + extra_damping_dist
    endif
 enddo
 
@@ -3766,8 +3933,7 @@ type(ensemble_type), optional, intent(in)  :: ens_handle
 character(len=*), parameter :: routine = 'get_close_state'
 
 integer :: i, status, this, vert_type
-real(r8) :: vert_value, damping_dist
-type(location_type) :: this_loc
+real(r8) :: vert_value, extra_damping_dist
 real(r8), parameter :: LARGE_DIST = 999999.0  ! positive and large
 
 ! if absolute distances aren't needed, or vertical localization isn't on,
@@ -3808,6 +3974,7 @@ do i=1, num_close
    this = close_ind(i)
 
    vert_type = query_location(locs(this))
+!print *, 'close_s, vval, vtype = ', i, query_location(locs(this), 'VLOC'), vert_type
 
    if (vert_type /= vertical_localization_type) then
       call convert_vertical_state(ens_handle, 1, locs(this:this), &
@@ -3822,13 +3989,14 @@ do i=1, num_close
 
    dist(i) = get_dist(base_loc, locs(this))
 
-   if (.not. are_damping) cycle
+   ! do not try to damp impacts when obs has "vert is undefined".  
+   ! the impact will go all the way to the model top.  
+   ! this is the agreed-on functionality.
+   if (.not. are_damping .or. vert_type == VERTISUNDEF) cycle
 
    vert_value = query_location(locs(this), 'VLOC')
-   if (above_ramp_start(vert_value)) then
-      this_loc = set_location(0.0_r8, 0.0_r8, vert_value, vertical_localization_type)
-      damping_dist = get_dist(ramp_start_loc, this_loc)
-      dist(i) = dist(i) + (damping_dist * damping_dist) * damp_weight
+   if (above_ramp_start(vert_value, gc, base_type, ramp_end, dist(i), extra_damping_dist)) then
+      dist(i) = dist(i) + extra_damping_dist
    endif
 enddo
 
@@ -3836,12 +4004,14 @@ enddo
 end subroutine get_close_state
 
 !--------------------------------------------------------------------
+!> set values that are used by many routines here and which do not
+!> change during the execution of filter.
 
 subroutine init_globals()
 
-global_ref_pressure = grid_data%P0%vals(1)
-global_model_top = grid_data%hyai%vals(1) * global_ref_pressure
-global_nlevels = grid_data%lev%nsize
+ref_surface_pressure = grid_data%P0%vals(1)
+ref_model_top_pressure = grid_data%hyai%vals(1) * ref_surface_pressure
+ref_nlevels = grid_data%lev%nsize
 
 end subroutine init_globals
 
@@ -3896,30 +4066,33 @@ end function is_surface_field
 !-----------------------------------------------------------------------
 !> Store a table of pressures and heights. based on a std atmosphere.
 !>  not precise - use only when rough numbers are good enough.
+!>  return which table was used.
+!>
+!> table from: http://www.pdas.com/atmos.html
+!> and also see:  http://www.pdas.com/upatmos.html
+!> for a good explanation of why you can't use the standard
+!> equations at high altitudes.   the low tables came from
+!> tables.c, and the high one came from bigtables.out.
+!> (all found in the atmos.zip file from that web site.)
 
-subroutine store_std_atm_tables(this_model_top)
+
+function store_std_atm_tables(this_model_top)
 real(r8), intent(in) :: this_model_top
+integer :: store_std_atm_tables
 
 logical, save :: table_initialized = .false.
 
-! table from: http://www.pdas.com/atmos.html
-! and also see:  http://www.pdas.com/upatmos.html
-! for a good explanation of why you can't use the standard
-! equations at high altitudes.   the low tables came from
-! tables.c, and the high one came from bigtables.out.
-! (all found in the atmos.zip file from that web site.)
-
-if (table_initialized) return
-
 if (this_model_top < high_top_threshold) then
-   call load_high_top_table()
+   if (.not. table_initialized) call load_high_top_table()
+   store_std_atm_tables = HIGH_TOP_TABLE
 else
-   call load_low_top_table()
+   if (.not. table_initialized) call load_low_top_table()
+   store_std_atm_tables = LOW_TOP_TABLE
 endif
 
 table_initialized = .true.
 
-end subroutine store_std_atm_tables
+end function store_std_atm_tables
 
 !-----------------------------------------------------------------------
 !> Free arrays associated with generic tables
