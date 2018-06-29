@@ -182,8 +182,10 @@
    /
 
 &model_nml
-   cam_template_filename = 'caminput.nc' 
-   cam_phis_filename     = 'cam_phis.nc'
+   cam_template_filename       = 'caminput.nc' 
+   cam_phis_filename           = 'cam_phis.nc'
+   vertical_localization_coord = 'SCALEHEIGHT'
+   use_log_vertical_scale      = .true.
    state_variables       = 'T',     'QTY_TEMPERATURE',         'NA', 'NA', 'UPDATE'
                            'US',    'QTY_U_WIND_COMPONENT',    'NA', 'NA', 'UPDATE'
                            'VS',    'QTY_V_WIND_COMPONENT',    'NA', 'NA', 'UPDATE'
@@ -191,20 +193,18 @@
                            'CLDLIQ','QTY_CLOUD_LIQUID_WATER',  'NA', 'NA', 'UPDATE'
                            'CLDICE','QTY_CLOUD_ICE',           'NA', 'NA', 'UPDATE'
                            'PS',    'QTY_SURFACE_PRESSURE',    'NA', 'NA', 'UPDATE'
-   assimilation_period_days    = 0
-   assimilation_period_seconds = 21600
-   vertical_localization_coord       = 'SCALEHEIGHT'
-   no_normalization_of_scale_heights = .true.
-   use_log_vertical_scale            = .true.
-   no_assim_above_pressure           = 2000.0
-   start_damping_ramp_at_pressure    = 6000.0
+   assimilation_period_days            = 0
+   assimilation_period_seconds         = 21600
+   no_obs_assim_above_level            = 12
+   model_damping_ends_at_level         = 7
    custom_routine_to_generate_ensemble = .true.
    fields_to_perturb                   = 'QTY_TEMPERATURE'
    perturbation_amplitude              = 0.0001
-   using_chemistry               = .false.
-   use_variable_mean_mass        = .false.
-   suppress_grid_info_in_output  = .false.
-   debug_level                   = 0
+   no_normalization_of_scale_heights   = .true.
+   use_variable_mean_mass              = .false.
+   using_chemistry                     = .false.
+   suppress_grid_info_in_output        = .false.
+   debug_level                         = 0
    /
 
 #========================================================================
