@@ -2,14 +2,14 @@
           "http://www.w3.org/TR/html4/strict.dtd">
 <HTML>
 <HEAD>
-<TITLE>program obs_diag</TITLE>
+<TITLE>program obs_diag (for 3D XYZ observations)</TITLE>
 <link rel="stylesheet" type="text/css" href="../../../../documentation/html/doc.css" />
 <link href="../../../../documentation/images/dart.ico" rel="shortcut icon" />
 </HEAD>
 <BODY>
 <A NAME="TOP"></A>
 
-<H1>PROGRAM <em class=program>obs_diag (for observations that use the threed_cartesian location module)</em></H1>
+<H1>PROGRAM <em class=program>obs_diag</em> (for observations that use the threed_cartesian location module)</H1>
 
 <table border=0 summary="" cellpadding=5>
 <tr>
@@ -146,7 +146,7 @@
    The rank histogram information can easily be plotted with
    <a href="http://meteora.ucsd.edu/~pierce/ncview_home_page.html">ncview</a>,
    a free third-party piece of software or with
-   <a href="https://svn-dares-dart.cgd.ucar.edu/DART/trunk/diagnostics/matlab/plot_rank_histogram.m">plot_rank_histogram.m</a>.
+   <a href="../../../../diagnostics/matlab/plot_rank_histogram.m">plot_rank_histogram.m</a>.
 </P>
 <P>
    <em class="program">obs_diag</em> can be configured to compare the
@@ -166,20 +166,23 @@
 <P>
    <em class=program>obs_diag</em> reads <em class=file>obs_seq.final</em>
    files and calculates the following quantities (in no particular order)
-   for an arbitrary number of regions and levels. It is necessary to query
+   for an arbitrary number of regions and levels.
+   <em class=program>obs_diag</em> creates a netCDF file called
+   <em class=file>obs_diag_output.nc</em>.  It is necessary to query
    the <em class=code>CopyMetaData</em> variable to determine the storage order
-   (i.e. "which copy is what?").
+   (i.e. "which copy is what?") if you want to use your own plotting routines.
 </P>
 
+<div class=unix>
+ncdump -f F -v CopyMetaData obs_diag_output.nc
+</div>
+<br />
+<br />
 <table width="90%">
 <tr><td valign="top"><b>Nposs</b></td>
     <td>The number of observations available to be assimilated.</td></tr>
 <tr><td valign="top"><b>Nused</b></td>
     <td>The number of observations that were assimilated.</td></tr>
-<tr><td valign="top"><b><em class=removed>NbigQC</em></b></td>
-    <td><em class=changed>Deprecated. Ignore.</em></td></tr>
-<tr><td valign="top"><b><em class=removed>NbadIZ</em></b></td>
-    <td><em class=changed>Deprecated. Ignore.</em></td></tr>
 <tr><td valign="top"><b>NbadUV</b></td>
     <td>the number of velocity observations that had a matching component
         that was not assimilated;</td></tr>
@@ -250,22 +253,25 @@
 <P>
    The DART QC flag is intended to provide information about whether the
    observation was assimilated, evaluated only, whether the assimilation resulted
-   in a 'good' observation, etc. Here is the table that should explain things:
+   in a 'good' observation, etc.
+   <em class=green>DART QC values lower than <strong>2</strong> indicate the prior and posteriors are OK.</em>
+   DART QC values higher than <strong>3</strong> were <strong>not</strong> assimilated or evaluated.
+   Here is the table that should explain things more fully:
 </P>
 
 <table width="80%">
    <tr><th align="left">DART QC flag value</th><th align="left">meaning</th></tr>
    <tr><td>0</td><td>observation assimilated</td></tr>
    <tr><td>1</td><td>observation evaluated only (because of namelist settings)</td></tr>
-   <tr><th align="left" colspan=2>DART QC values lower than this mean the prior and posteriors are OK</th></tr>
+   <tr><td colspan=2><hr /></td></tr>
    <tr><td>2</td><td>assimilated, but the posterior forward operator failed</td></tr>
    <tr><td>3</td><td>evaluated only, but the posterior forward operator failed</td></tr>
-   <tr><th align="left" colspan=2>DART QC values higher than this were not assimilated or evaluated because ...</th></tr>
+   <tr><td colspan=2><hr /></td></tr>
    <tr><td>4</td><td>prior forward operator failed</td></tr>
    <tr><td>5</td><td>not used because observation type not listed in namelist</td></tr>
    <tr><td>6</td><td>rejected because incoming observation QC too large</td></tr>
-   <tr><td>7</td><td>rejected because failed outlier threshold test</td></tr>
-   <tr><td><em>8</em></td><td><em>failed vertical conversion</em></td></tr>
+   <tr><td>7</td><td>rejected because of a failed outlier threshold test</td></tr>
+   <tr><td><em class=changed>8</em></td><td><em class=changed>vertical conversion failed</em></td></tr>
    <tr><td>9+</td><td>reserved for future use</td></tr>
 </table>
 
@@ -275,12 +281,16 @@
 <A NAME="New"></A>
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>What is new in the Manhattan Release.</H2>
-<ol><li>Removed <em class=code>rat_cri</em> and
+<ol>
+    <li>Support for DART QC = 8 (failed vertical conversion).</li><br />
+    <li>Simplified input file specification.</li><br />
+    <li>Replace namelist integer variable  <em class=code>debug</em> with logical 
+        variable <em class=code>verbose</em> to control amount of run-time output.</li><br />
+    <li>Removed <em class=code>rat_cri</em> and
         <em class=code>input_qc_threshold</em> from the namelists. They had been
-        deprecated for quite some time.</li>
-    <li>Support for a DART QC == 8 : Failed vertical conversion. Some of the internal
-        variable names have been changed to make it easier to distinguish between
-        variances and standard deviations.</li>
+        deprecated for quite some time.</li><br />
+    <li>Some of the internal variable names have been changed to make it 
+        easier to distinguish between variances and standard deviations.</li>
 </ol>
 
 <H2>What is new in the Lanai Release.</H2>
@@ -312,11 +322,6 @@
     <li>discontinued the use of <em class=code>rat_cri</em> and
         <em class=code>input_qc_threshold</em> namelist variables.
         Their functionality was replaced by the DART QC mechanism long ago.
-        The netCDF file variables <b>NbadIZ</b> and <b>NbigQC</b> still
-        exist (so as to keep the structure of the obs_diag_output file
-        constant for the stragglers) but contain meaningless values.
-        The 'M' release of DART will remove these variables from the
-        obs_diag_output file.
         </li><br />
      <li>The creation of the rank histogram (if possible) is now
         namelist-controlled by
@@ -344,29 +349,39 @@ prematurely terminating the namelist.
 <div class=namelist>
 <pre>
 &amp;obs_diag_nml
-   obs_sequence_name = 'obs_seq.final'
-   obs_sequence_list = ''
-   first_bin_center =  2003, 1, 1, 0, 0, 0
-   last_bin_center  =  2003, 1, 2, 0, 0, 0
-   bin_separation   =     0, 0, 0, 6, 0, 0
-   bin_width        =     0, 0, 0, 6, 0, 0
-   time_to_skip     =     0, 0, 0, 6, 0, 0
-   max_num_bins     = 1000
-   hlevel           = -888888.0
-   hlevel_edges     = -888888.0
-   Nregions         = 0
-   xlim1            = -888888.0
-   xlim2            = -888888.0
-   ylim1            = -888888.0
-   ylim2            = -888888.0
-   reg_names        = 'null'
-   trusted_obs      = 'null'
+   obs_sequence_name     = ''
+   obs_sequence_list     = ''
+   first_bin_center      =  2003, 1, 1, 0, 0, 0
+   last_bin_center       =  2003, 1, 2, 0, 0, 0
+   bin_separation        =     0, 0, 0, 6, 0, 0
+   bin_width             =     0, 0, 0, 6, 0, 0
+   time_to_skip          =     0, 0, 0, 6, 0, 0
+   max_num_bins          = 1000
+   hlevel                = -888888.0
+   hlevel_edges          = -888888.0
+   Nregions              = 0
+   xlim1                 = -888888.0
+   xlim2                 = -888888.0
+   ylim1                 = -888888.0
+   ylim2                 = -888888.0
+   reg_names             = 'null'
+   trusted_obs           = 'null'
    create_rank_histogram = .true.
    outliers_in_histogram = .false.
    use_zero_error_obs    = .false.
-   debug                 = .false.
+   verbose               = .false.
    /
-
+</pre>
+<P>These values may be more useful:</P>
+<pre>
+   obs_sequence_list     = 'input_file_list.txt'
+   hlevel_edges          = -1.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0, 32000.0, 64000.0
+   Nregions              = 1
+   reg_names             = 'everywhere - maybe'
+   xlim1                 = -1.0
+   xlim2                 = 1000000.0
+   ylim1                 = -1.0
+   ylim2                 = 1000000.0
 </pre>
 </div>
 
@@ -394,24 +409,15 @@ prematurely terminating the namelist.
 
 <TBODY valign=top>
 <TR><TD> obs_sequence_name </TD>
-    <TD> character </TD>
-    <TD>Name of the observation sequence file<em class=changed>(s)</em>. <br />
-This may be a relative or absolute filename. <em class=changed>Deprecated. If the filename contains a '/'
-the filename is considered to be comprised of everything to the right, and a
-directory structure to the left.  The directory structure is then queried to
-see if it can be incremented to handle a sequence of observation files. The
-default behavior of <em class="program">obs_diag</em> is to look for
-additional files to include until the files are exhausted or an
-<em class=file>obs_seq.final</em> file is found that contains observations beyond
-the timeframe of interest.<br />
-e.g. 'obsdir_001/obs_seq.final' will cause <em class="program">obs_diag</em> to
-look for 'obsdir_002/obs_seq.final', and so on.<br /> </em>
-If this is set, <em class=code>obs_sequence_list</em> must be set to '&nbsp;'
-(empty string).
+    <TD> character(len=256), dimension(100) </TD>
+    <TD>An array of names of observation sequence files.
+    These may be relative or absolute filenames.
+    If this is set, <em class=code>obs_sequence_list</em> 
+    must be set to '&nbsp;'&nbsp;(empty string).
 </TD></TR>
 
 <TR><TD> obs_sequence_list </TD>
-    <TD> character </TD>
+    <TD> character(len=256) </TD>
     <TD>Name of an ascii text file which contains a list of one or more
 observation sequence files, one per line.  If this is specified,
 <em class=code>obs_sequence_name</em> must be set to '&nbsp;'.  Can be created by any
@@ -535,21 +541,6 @@ is set to some later date.
 	 The observation error variance will be set to zero.
 </TD></TR>
 
-<TR><TD> print_mismatched_locs </TD>
-    <TD> logical </TD>
-    <TD> Print instances where U and V "pairs" don't have the same location.
-</TD></TR>
-
-<TR><TD><em class=removed>print_obs_locations</em> </TD>
-    <TD><em class=removed>logical            </em> </TD>
-    <TD>No longer supported.
-        <strong>To plot the locations of observations,</strong> please convert
-	your observation sequence file to netCDF with
-	<a href="../../obs_seq_to_netcdf/obs_seq_to_netcdf.html">obs_seq_to_netcdf</a>
-	and then plot with
-	<a href="../../../../diagnostics/matlab/plot_obs_netcdf.m">plot_obs_netcdf</a>
-</TD></TR>
-
 <TR><TD> create_rank_histogram </TD>
     <TD> logical </TD>
     <TD> if <em class=code>.true.</em> and there are actual ensemble estimates of the
@@ -565,10 +556,9 @@ is set to some later date.
 	 in the calculation of the rank histogram.
 </TD></TR>
 
-<TR><TD> debug </TD>
-    <TD> integer </TD>
-    <TD> Print extra info about the obs_diag run. 0 is minimal output,
-         larger values increase the amount of output.
+<TR><TD> verbose </TD>
+    <TD> logical </TD>
+    <TD>switch controlling amount of run-time output.
 </TD></TR>
 
 </TBODY>
@@ -607,19 +597,11 @@ sort_mod
         <em class="code">obs_diag_nml</em></LI>
     <LI><em class="file">obs_diag_output.nc</em> is the
         netCDF output file</LI>
-    <LI>the oned version of <em class="program">obs_diag</em> outputs many
-    files of the form "OBS_TYPE_VARIABLE_diagnostic.dat" and one text file
-    <em class="file">obsDiagAtts.m</em> containing the metadata</LI>
     <LI><em class="file">dart_log.out</em> list directed output
         from the obs_diag.</LI>
     <LI><em class="file">LargeInnov.txt</em> contains the distance ratio
 	histogram -- useful for estimating the distribution of the
         magnitudes of the innovations.</LI>
-    <LI><em class=removed>observation_locations.xxx.dat contains the
-    locations for all the observation in temporal bin "xxx". These are
-    only created if the namelist variable
-    <em class=code>print_obs_locations</em> is set to .true.</em>
-	</LI>
 </UL>
 
 <P>
@@ -921,48 +903,14 @@ in the same way as the other DART components.
 <P>
 There are two ways to specify input files for <em class=program>obs_diag</em>.
 You can either specify the name of a file containing a list of files (in
-<em class=code>obs_sequence_list</em>), or you may specify
-<em class=new>a single file via</em>
+<em class=code>obs_sequence_list</em>), or you may specify a list of files via
 <em class=code>obs_sequence_name</em>.
-<em class=changed>Deprecated ... which is descibed by the following illustration&nbsp;...</em>
 </P>
-<table width="100%">
-<TR><TH width=50% align=left>value</TH><TH>effect</TH></TR>
-
-<TR><TD valign="top">"obs_seq.final"</TD>
-    <TD>A single file is processed.
-        The file must exist in the current directory.</TD></TR>
-
-<TR><TD valign="top">"/path_to/nirvana/obs_seq.final"</TD>
-    <TD>A single file is processed.
-        The file must exist where you said it exists.</TD></TR>
-
-<TR><TD valign="top">"../nirvana/obs_seq.final"</TD>
-    <TD>A single file is processed.
-        Relative pathnames work just fine.</TD></TR>
-
-<TR><TD valign="top">"/path_to/nirvana_001/obs_seq.final"</TD>
-    <TD><em class=changed>Deprecated. A single file is processed, and more are expected.
-        Because the directory name contains an underscore ("_") and the
-        portion of the directory to the right of the (rightmost)
-        underscore can be incremented, <em class="program">obs_diag</em>
-	   will try to look for the next directory in the sequence, i.e.
-        "/path_to/nirvana_002/obs_seq.final". The tricky part is that
-	   the number of digits in the directory numbering must remain
-	   constant. Most (all?) of the DART scripts that produce these
-	   directories have historically used a constant number of digits
-	   so they alphabetically and numerically 'list' identically.
-	   <em class="program">obs_diag</em> will stop when it runs out
-	   of files to ingest, or if it encounters an observation sequence
-	   file whose first time is beyond the timeframe of interest.</em></TD></TR>
-</table>
-
-
 
 <H3 class=indent1>Example: observation sequence files spanning&nbsp;30&nbsp;days.</H3>
 <table width=95%>
-<tr><td>In this example, we will be accumulating metrics for 30 days over the
-   entire globe. The <em class=file>obs_diag_output.nc</em> file will have
+<tr><td>In this example, we will be accumulating metrics for 30 days.
+   The <em class=file>obs_diag_output.nc</em> file will have
    exactly ONE timestep in it (so it won't be much use for the
    <em class="program">plot_evolution</em> functions) - but the
    <em class="program">plot_profile</em> functions and the
@@ -994,24 +942,23 @@ Then, the namelist settings for 2008 07 31 12Z through 2008 08 30 12Z are:
 <div class="routine">
 <pre>
 &amp;obs_diag_nml
-   obs_sequence_name  = '',
-   obs_sequence_list  = <em class="input">'obs_file_list.txt',</em>
-   first_bin_center   = <em class="input"> 2008, 8,15,12, 0, 0 ,</em>
-   last_bin_center    = <em class="input"> 2008, 8,15,12, 0, 0 ,</em>
-   bin_separation     = <em class="input">    0, 0,30, 0, 0, 0 ,</em>
-   bin_width          = <em class="input">    0, 0,30, 0, 0, 0 ,</em>
-   time_to_skip       = <em class="input">    0, 0, 0, 0, 0, 0 ,</em>
-   max_num_bins       = 1000,
-   Nregions   = 1,
-   lonlim1    = <em class="input">  0.0,</em>
-   lonlim2    = <em class="input">360.0,</em>
-   latlim1    = <em class="input">-90.0,</em>
-   latlim2    = <em class="input"> 90.0,</em>
-   reg_names  = <em class="input">'Entire Domain',</em>
-   print_mismatched_locs = .false.,
-   <em class=removed>print_obs_locations   = .false.,</em>
-   verbose               = <em class="input">.true.,</em>
-   outliers_in_histogram = <em class="input">.false.</em>,
+   obs_sequence_name     = ''
+   obs_sequence_list     = <em class=input>'obs_file_list.txt'</em>
+   first_bin_center      = <em class=input> 2008, 8,15,12, 0, 0</em>
+   last_bin_center       = <em class=input> 2008, 8,15,12, 0, 0</em>
+   bin_separation        = <em class=input>    0, 0,30, 0, 0, 0</em>
+   bin_width             = <em class=input>    0, 0,30, 0, 0, 0</em>
+   time_to_skip          = <em class=input>    0, 0, 0, 0, 0, 0</em>
+   max_num_bins          = <em class=input>1000</em>
+   Nregions              = <em class=input>1</em>
+   xlim1                 = <em class=input>-1.0</em>
+   xlim2                 = <em class=input>1000000.0</em>
+   ylim1                 = <em class=input>-1.0</em>
+   ylim2                 = <em class=input>1000000.0</em>
+   reg_names             = <em class=input>'Entire Domain'</em>
+   create_rank_histogram = <em class=input>.true.</em>
+   outliers_in_histogram = <em class=input>.false.</em>
+   verbose               = <em class=input>.true.</em>
    /
 </pre>
 </div>
@@ -1059,16 +1006,6 @@ and look at the rank histograms with
 <em class="program">plot_rank_histogram.m</em>.
 </P>
 
-
-<H3 class=indent1><em class=removed>Example: plotting locations</em> deprecated</H3>
-<P>
-<strong>please convert your observation sequence file to netCDF format with
-<a href="../../obs_seq_to_netcdf/obs_seq_to_netcdf.html">obs_seq_to_netcdf</a>
-and use
-<a href="../../../../diagnostics/matlab/plot_obs_netcdf.m">plot_obs_netcdf.m</a></strong>.
-</P>
-
-
 <!--==================================================================-->
 <!-- Cite references, if need be.                                     -->
 <!--==================================================================-->
@@ -1106,7 +1043,7 @@ and use
 <TR><!-- routine --><TD VALIGN=top>obs_diag</TD>
     <!-- message --><TD VALIGN=top>metadata incomplete</TD>
     <!-- comment --><TD VALIGN=top>Couldn't find the index for the
-    observatoin value in the observation sequence file. It is the only
+    observation value in the observation sequence file. It is the only
     one that is required.</TD>
 </TR>
 <TR><!-- routine --><TD VALIGN=top>filter_get_obs_info</TD>
@@ -1117,14 +1054,6 @@ and use
     <!-- message --><TD VALIGN=top>namelist parameter out-of-bounds. Fix and try again</TD>
     <!-- comment --><TD VALIGN=top>bin_width, bin_separation, and time_to_skip must have
                                    year = 0 and month = 0</TD>
-</TR>
-<TR><TD VALIGN=top><em class=removed>ObsLocationsExist</em></TD>
-    <TD VALIGN=top><em class=removed>Cannot have pre-existing obs location
-    output files. Stopping.</em></TD>
-    <TD VALIGN=top><em class=removed>It is far easier to implement the
-    logic to output these files if they don't exist in the first place.
-    Remove anything/everything like "observation_locations.xxx.dat" from
-    the current directory and try again.</em></TD>
 </TR>
 </TABLE>
 </div>

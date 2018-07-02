@@ -39,15 +39,15 @@ use     location_mod, only : location_type, get_location, set_location_missing, 
                              set_location, query_location, LocationDims
 use time_manager_mod, only : time_type, set_date, set_time, get_time, print_time, &
                              set_calendar_type, print_date, GREGORIAN, &
-                             operator(*), operator(+), operator(-), &
-                             operator(>), operator(<), operator(/), &
-                             operator(/=), operator(<=)
+                             operator(*),  operator(+),  operator(-), &
+                             operator(>),  operator(<),  operator(/), &
+                             operator(/=), operator(<=), operator(>=)
 use    utilities_mod, only : open_file, close_file, register_module, &
                              file_exist, error_handler, E_ERR, E_WARN, E_MSG,  &
                              initialize_utilities, logfileunit, nmlfileunit,   &
                              find_namelist_in_file, check_namelist_read,       &
-                             nc_check, do_nml_file, do_nml_term, finalize_utilities, &
-                             next_file, get_next_filename
+                             nc_check, do_nml_file, do_nml_term,               &
+                             set_filename_list, finalize_utilities
 use         sort_mod, only : sort
 use   random_seq_mod, only : random_seq_type, init_random_seq, several_random_gaussians
 
@@ -57,13 +57,11 @@ use netcdf
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
+character(len=*), parameter :: source   = &
    "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
-!---------------------------------------------------------------------
-! Some basic parameters
 !---------------------------------------------------------------------
 
 integer, parameter :: MaxLevels  = 50
@@ -81,8 +79,6 @@ type(obs_type)          :: obs1, obsN
 type(obs_def_type)      :: obs_def
 type(location_type)     :: obs_loc
 
-character(len=256) :: obs_seq_in_file_name
-character(len=256), allocatable, dimension(:) :: obs_seq_filenames
 character(len=stringlength), dimension(MaxTrusted) :: trusted_list = 'null'
 
 ! Storage with fixed size for observation space diagnostics
@@ -121,7 +117,6 @@ logical :: pre_I_format
 
 integer,  dimension(2) :: key_bounds
 real(r8), dimension(1) :: obs
-real(r8) :: obs_err_var
 
 integer,  allocatable, dimension(:) :: keys
 integer,  allocatable, dimension(:) :: ens_copy_index
@@ -160,12 +155,9 @@ logical :: out_of_range, keeper
 ! FIXME can there be a case where the prior is evaluated and the posterior QC is wrong
 ! FIXME ... there are cases where the prior fails but the posterior works ...
 
-integer             :: org_qc_index, dart_qc_index
-integer             :: qc_integer
-integer, parameter  :: QC_MAX = 9
+integer             :: org_qc_index, dart_qc_index, qc_value
 integer, parameter  :: QC_MAX_PRIOR     = 3
 integer, parameter  :: QC_MAX_POSTERIOR = 1
-integer, dimension(0:QC_MAX) :: qc_counter = 0
 real(r8), allocatable, dimension(:) :: qc
 real(r8), allocatable, dimension(:) :: copyvals
 
@@ -176,15 +168,16 @@ integer, parameter, dimension(4) ::    good_prior_qcs = (/ 0, 1, 2, 3 /)
 integer, parameter, dimension(2) ::    good_poste_qcs = (/ 0, 1       /)
 integer :: numqcvals
 
-!>@todo  moving these out of the namelist, should remove from code
+integer, parameter :: max_num_input_files = 100
+
+!>@todo remove after verifying NbiqQC, NbadIZ not used in plotting scripts
 real(r8):: rat_cri               = 5000.0_r8 ! QC ratio
 real(r8):: input_qc_threshold    = 3.0_r8    ! maximum NCEP QC factor
 
 !-----------------------------------------------------------------------
-! Namelist with (some scalar) default values
-!-----------------------------------------------------------------------
-
-character(len=256) :: obs_sequence_name = 'obs_seq.final'
+! Namelist with default values
+!
+character(len=256) :: obs_sequence_name(max_num_input_files) = ''
 character(len=256) :: obs_sequence_list = ''
 integer, dimension(6) :: first_bin_center = (/ 2003, 1, 1, 0, 0, 0 /)
 integer, dimension(6) :: last_bin_center  = (/ 2003, 1, 2, 0, 0, 0 /)
@@ -204,7 +197,7 @@ type(location_type), dimension(MaxRegions) :: low_left_loc, up_right_loc
 
 character(len=stringlength), dimension(MaxTrusted) :: trusted_obs = 'null'
 
-integer :: debug                 = 0
+logical :: verbose               = .false.
 logical :: outliers_in_histogram = .false.
 logical :: create_rank_histogram = .true.
 logical :: use_zero_error_obs    = .false.
@@ -215,7 +208,7 @@ namelist /obs_diag_nml/ obs_sequence_name, obs_sequence_list,           &
                        hlevel_edges, &
                        Nregions, xlim1, xlim2, ylim1, ylim2, reg_names, &
                        create_rank_histogram, outliers_in_histogram,    &
-                       trusted_obs, use_zero_error_obs, debug
+                       trusted_obs, use_zero_error_obs, verbose
 
 !-----------------------------------------------------------------------
 ! Variables used to accumulate the statistics.
@@ -279,8 +272,8 @@ end type LRV_type
 type(TLRV_type) :: poste,    prior
 type( LRV_type) :: posteAVG, priorAVG
 
-type(time_type), allocatable, dimension(:)   :: bincenter
-type(time_type), allocatable, dimension(:,:) :: binedges
+type(time_type), allocatable, dimension(:)   :: bin_center
+type(time_type), allocatable, dimension(:,:) :: bin_edges
 real(digits12),  allocatable, dimension(:)   :: epoch_center
 real(digits12),  allocatable, dimension(:,:) :: epoch_edges
 integer,         allocatable, dimension(:)   :: obs_used_in_epoch
@@ -293,12 +286,13 @@ integer  :: iregion, iepoch, ivar, ifile, num_obs_in_epoch
 real(r8) :: obsx, obsy, obsz, obsloc3(3)
 
 integer  :: obsindex, i, iunit, ierr, io, ikind
+integer  :: seconds, days, Nepochs, num_input_files
+
+integer  :: num_trusted
+logical  :: trusted
 
 integer  :: level_index
-integer  :: Nlevels, ilev, num_trusted   ! counters
-integer  :: seconds, days, Nepochs
-
-logical  :: trusted
+integer  :: Nlevels, ilev
 
 real(r8), allocatable, dimension(:) :: scale_factor ! to convert to plotting units
 integer,  allocatable, dimension(:) :: ob_defining_vert ! obs index defining vert coord type
@@ -325,8 +319,8 @@ type(time_type) :: obs_time, skip_time
 character(len=512) :: string1, string2, string3
 character(len=stringlength) :: obsname
 
-integer  :: Nidentity  = 0   ! identity observations
-integer  :: num_ambiguous  = 0   ! prior QC 7, posterior mean MISSING_R8
+integer :: Nidentity = 0
+integer :: num_ambiguous = 0   ! prior QC 7, posterior mean MISSING_R8
 
 !=======================================================================
 ! Get the party started
@@ -336,12 +330,10 @@ call initialize_utilities('obs_diag')
 call register_module(source,revision,revdate)
 call static_init_obs_sequence()
 
-!----------------------------------------------------------------------
 ! Define/Append the 'horizontal wind' obs_kinds to supplant the list declared
 ! in obs_kind_mod.f90 i.e. if there is a RADIOSONDE_U_WIND_COMPONENT
 ! and a RADIOSONDE_V_WIND_COMPONENT, there must be a RADIOSONDE_HORIZONTAL_WIND
 ! Replace calls to 'get_name_for_type_of_obs' with variable 'obs_type_strings'
-!----------------------------------------------------------------------
 
 num_obs_types = grok_observation_names(obs_type_strings)
 
@@ -351,9 +343,7 @@ allocate(   scale_factor(num_obs_types), &
 scale_factor     = 1.0_r8
 ob_defining_vert = -1
 
-!----------------------------------------------------------------------
 ! Read the namelist
-!----------------------------------------------------------------------
 
 call find_namelist_in_file('input.nml', 'obs_diag_nml', iunit)
 read(iunit, nml = obs_diag_nml, iostat = io)
@@ -363,16 +353,11 @@ call check_namelist_read(iunit, io, 'obs_diag_nml')
 if (do_nml_file()) write(nmlfileunit, nml=obs_diag_nml)
 if (do_nml_term()) write(    *      , nml=obs_diag_nml)
 
-if ((obs_sequence_name /= '') .and. (obs_sequence_list /= '')) then
-   write(string1,*)'specify "obs_sequence_name" or "obs_sequence_list"'
-   write(string2,*)'set other to an empty string ... i.e. ""'
-   call error_handler(E_ERR, 'obs_diag', string1, source, revision, revdate, text2=string2)
-endif
+num_input_files = set_filename_list(obs_sequence_name, obs_sequence_list, 'obs_diag')
 
-!----------------------------------------------------------------------
+
 ! Check to see if we are including the outlier observations in the
 ! rank histogram calculation.
-!----------------------------------------------------------------------
 
 if ( outliers_in_histogram ) then
    numqcvals = size(hist_qcs)
@@ -380,9 +365,7 @@ else
    numqcvals = size(hist_qcs) - 1
 endif
 
-!----------------------------------------------------------------------
 ! Now that we have input, do some checking and setup
-!----------------------------------------------------------------------
 
 call set_calendar_type(GREGORIAN)
 call Namelist2Times()    ! convert namelist times to DART times
@@ -392,20 +375,11 @@ call DefineRegions()
 call CountTrustedObsTypes()
 call SetScaleFactors() ! for plotting purposes
 
-!----------------------------------------------------------------------
-! allocate space, initialize the variables that will hold the statistics
-!----------------------------------------------------------------------
-
-allocate(obs_seq_filenames(Nepochs*400))
-obs_seq_filenames = 'null'
-
 call InitializeVariables( Nepochs, Nlevels, Nregions, num_obs_types)
 
 U_obs_loc = set_location_missing()
 
-!----------------------------------------------------------------------
 ! Open file for histogram of innovations, as a function of standard deviation.
-!----------------------------------------------------------------------
 
 nsigmaUnit = open_file('LargeInnov.txt',form='formatted',action='write')
 write(nsigmaUnit,'(a)')'Any observations flagged as bad are dumped into the last bin.'
@@ -413,53 +387,18 @@ write(nsigmaUnit,'(a)')'   day   secs            x              y            lev
                        &         obs           prior  zscore     key    kind'
 
 !-----------------------------------------------------------------------
-! We must assume the observation sequence files span an unknown amount
-! of time. We must make some sort of assumption about the naming structure
-! of these files. Each file name is the same, but they live in sequentially-
-! numbered directories. At one point, the first node in the directory name
-! referred to 'month', so we will continue to interpret it that way.
-! The last part of the directory name will be incremented ad infinitum.
-!
-! Directory/file names are similar to    01_03/obs_seq.final
-!
-!-----------------------------------------------------------------------
-! The strategy at this point is to open WAY too many files and
-! check the observation sequences against ALL of the temporal bins.
-! If the sequence is completely before the time period of interest, we skip.
-! If the sequence is completely past the time period of interest, we stop.
-!-----------------------------------------------------------------------
 
-ObsFileLoop : do ifile=1, size(obs_seq_filenames)
+ObsFileLoop : do ifile=1, num_input_files
 
-   if (obs_sequence_list == '') then
-      obs_seq_in_file_name = next_file(obs_sequence_name,ifile)
-   else
-      obs_seq_in_file_name = get_next_filename(obs_sequence_list,ifile)
-      if (obs_seq_in_file_name == '') exit ObsFileLoop
-   endif
-
-   if ( file_exist(trim(obs_seq_in_file_name)) ) then
-      write(string1,'(''opening file # '',i3,1x,''['',A,'']'')') &
-                           ifile, trim(obs_seq_in_file_name)
-      call error_handler(E_MSG,'obs_diag',' ',text2=string1,text3=' ')
-   else
-      write(string1,*)trim(obs_seq_in_file_name), ' does not exist. Done reading files.'
-      if (ifile == 1) then
-         call error_handler(E_ERR,'obs_diag',string1,source,revision,revdate)
-      else
-         call error_handler(E_MSG,'obs_diag',string1,source,revision,revdate)
-      endif
-      exit ObsFileLoop
-   endif
-
-   ! Record the filename read - for the netCDF file.
-
-   obs_seq_filenames(ifile) = trim(obs_seq_in_file_name)
+   write(string1,*)'Reading file # ',ifile, ' of ',num_input_files, &
+                   ' "'//trim(obs_sequence_name(ifile))//'"'
+   call error_handler(E_MSG,'obs_diag',string1)
 
    ! Read in information about observation sequence so we can allocate
    ! observations. We need info about how many copies, qc values, etc.
+   ! We have already read this sequence once, so no caution required.
 
-   call read_obs_seq_header(obs_seq_in_file_name, &
+   call read_obs_seq_header(obs_sequence_name(ifile), &
              num_copies, num_qc, num_obs, max_num_obs, &
              obs_seq_file_id, obs_seq_read_format, pre_I_format, &
              close_the_file = .true.)
@@ -474,7 +413,7 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
    if (num_qc     > 0) allocate( qc(num_qc) )
    if (num_copies > 0) allocate( copyvals(num_copies) )
 
-   if ( debug > 0 ) then
+   if ( verbose ) then
       write(logfileunit,*)
       write(logfileunit,*)'num_copies          is ',num_copies
       write(logfileunit,*)'num_qc              is ',num_qc
@@ -491,23 +430,15 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
 
    ! Read in the entire observation sequence
 
-   call read_obs_seq(obs_seq_in_file_name, 0, 0, 0, seq)
+   call read_obs_seq(obs_sequence_name(ifile), 0, 0, 0, seq)
 
    ! Determine the time encompassed in the observation sequence.
    ! also compare to first/last times of ALL sequences
 
-   call GetFirstLastObs(obs_seq_in_file_name, seq, obs1, obsN, seqT1, seqTN, &
+   call GetFirstLastObs(obs_sequence_name(ifile), seq, obs1, obsN, seqT1, seqTN, &
                         AllseqT1, AllseqTN)
 
-   !--------------------------------------------------------------------
-   ! If the last observation is before the period of interest, move on.
-   !--------------------------------------------------------------------
-
-   if ( seqTN < TimeMin ) then
-      if (debug > 0) then
-         write(logfileunit,*)'seqTN < TimeMin ... trying next file.'
-         write(    *      ,*)'seqTN < TimeMin ... trying next file.'
-      endif
+   if (No_Time_Intersection(obs_sequence_name(ifile),seqT1,seqTN,TimeMin,TimeMax)) then
       call destroy_obs(obs1)
       call destroy_obs(obsN)
       call destroy_obs(observation)
@@ -516,42 +447,8 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
       if (allocated(qc)) deallocate( qc )
       if (allocated(copyvals)) deallocate( copyvals )
       cycle ObsFileLoop
-   else
-      if (debug > 0) then
-         write(logfileunit,*)'seqTN > TimeMin ... using ', &
-                             trim(obs_seq_in_file_name)
-         write(    *      ,*)'seqTN > TimeMin ... using ', &
-                             trim(obs_seq_in_file_name)
-      endif
    endif
 
-   !--------------------------------------------------------------------
-   ! If the first observation is after the period of interest, finish.
-   !--------------------------------------------------------------------
-
-   if ( seqT1 > TimeMax ) then
-      if (debug > 0) then
-         write(logfileunit,*)'seqT1 > TimeMax ... finishing.'
-         write(    *      ,*)'seqT1 > TimeMax ... finishing.'
-      endif
-      call destroy_obs(obs1)
-      call destroy_obs(obsN)
-      call destroy_obs(observation)
-      call destroy_obs(next_obs)
-      call destroy_obs_sequence(seq)
-      if (allocated(qc)) deallocate( qc )
-      if (allocated(copyvals)) deallocate( copyvals )
-      exit ObsFileLoop
-   else
-      if (debug > 0) then
-         write(logfileunit,*)'seqT1 < TimeMax ... using ', &
-                             trim(obs_seq_in_file_name)
-         write(    *      ,*)'seqT1 < TimeMax ... using ', &
-                             trim(obs_seq_in_file_name)
-      endif
-   endif
-
-   !--------------------------------------------------------------------
    ! Prepare some variables for the rank histogram.
    ! FIXME : Make sure this observation sequence file has the same number of
    ! ensemble members as 'the first one' (which defines the bins) ...
@@ -576,18 +473,18 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
          prior%hist_bin    = 0
          call init_random_seq(ran_seq, seed=23)
       endif
-      if ( debug > 0 ) then
+      if ( verbose ) then
          write(string1,*) 'Creating rank histogram with ',ens_size+1,' bins.'
          call error_handler(E_MSG,'obs_diag',string1)
       endif
    endif
 
    ! Find the index of obs, ensemble mean, spread ... etc.
-   !--------------------------------------------------------------------
+   !
    ! Only require obs_index to be present; this allows the program
    ! to be run on obs_seq.[in,out] files which have no means or spreads.
    ! You can still plot obs count, incoming QC, obs values ...
-   !--------------------------------------------------------------------
+   !
    ! Each observation sequence file can have its copies in any order.
 
    call SetIndices( obs_index, org_qc_index, dart_qc_index, &
@@ -595,24 +492,13 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
             prior_spread_index, posterior_spread_index, &
             ens_copy_index )
 
-   if ( any( (/ prior_mean_index,     prior_spread_index, &
-            posterior_mean_index, posterior_spread_index /) < 0) ) then
-      string1 = 'Observation sequence has no prior/posterior information.'
-      string2 = 'You will still get a count, maybe observation value, incoming qc, ...'
-      string3 = 'For simple information, you may want to use "obs_seq_to_netcdf" instead.'
-      call error_handler(E_MSG, 'obs_diag', string1, &
-                 source, revision, revdate, text2=string2, text3=string3)
-   endif
-
-   !====================================================================
    ! Loop over all potential time periods ... the observation sequence
    ! files are not required to be in any particular order.
-   !====================================================================
 
    EpochLoop : do iepoch = 1, Nepochs
 
-      beg_time = binedges(1,iepoch)
-      end_time = binedges(2,iepoch)
+      beg_time = bin_edges(1,iepoch)
+      end_time = bin_edges(2,iepoch)
 
       ! Using linked list information in the observation sequence,
       ! find the number of observations that are within this epoch.
@@ -621,7 +507,7 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
                   num_obs_in_epoch, out_of_range)
 
       if( num_obs_in_epoch == 0 ) then
-         if ( debug > 0 ) then
+         if ( verbose ) then
             write(logfileunit,*)' No observations in epoch ',iepoch,' cycling ...'
             write(     *     ,*)' No observations in epoch ',iepoch,' cycling ...'
          endif
@@ -637,9 +523,7 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
 
       call get_time_range_keys(seq, key_bounds, num_obs_in_epoch, keys)
 
-      !-----------------------------------------------------------------
       ObservationLoop : do obsindex = 1, num_obs_in_epoch
-      !-----------------------------------------------------------------
 
          ! 'flavor' is from the 'master list' in the obs_kind_mod.f90
          ! each obs_seq.final file has their own private kind - which
@@ -648,19 +532,19 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
          call get_obs_from_key(seq, keys(obsindex), observation)
          call get_obs_def(observation, obs_def)
 
-         flavor   = get_obs_def_type_of_obs(obs_def)
-         obsname  = get_name_for_type_of_obs(flavor)
-         obs_time = get_obs_def_time(obs_def)
-         obs_loc  = get_obs_def_location(obs_def)
-         obsloc3  = get_location(obs_loc)
+         flavor    = get_obs_def_type_of_obs(obs_def)
+         obsname   = get_name_for_type_of_obs(flavor)
+         obs_time  = get_obs_def_time(obs_def)
+         obs_loc   = get_obs_def_location(obs_def)
+         obsloc3   = get_location(obs_loc)
 
-         obsx   = obsloc3(1)
-         obsy   = obsloc3(2)
-         obsz   = obsloc3(3)
+         obsx      = obsloc3(1)
+         obsy      = obsloc3(2)
+         obsz      = obsloc3(3)
 
          ! Check to see if this is a trusted observation
          if ( num_trusted > 0 ) then
-            trusted = is_observation_trusted(obsname)
+            trusted = is_observation_trusted( obsname )
          else
             trusted = .false.
          endif
@@ -680,21 +564,10 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
          else
             obs_error_variance = get_obs_def_error_variance(obs_def)
          endif
-         obs_err_var = obs_error_variance * &
+         obs_error_variance = obs_error_variance * &
                        scale_factor(flavor) * scale_factor(flavor)
 
-         !--------------------------------------------------------------
-         ! Convert the DART QC data to an integer and create histogram
-         !--------------------------------------------------------------
-
-         call get_qc(observation, qc)
-
-         qc_integer = min( nint(qc(dart_qc_index)), QC_MAX )
-         qc_counter(qc_integer) = qc_counter(qc_integer) + 1  ! histogram
-
-         !--------------------------------------------------------------
          ! retrieve observation prior and posterior means and spreads
-         !--------------------------------------------------------------
 
          prior_mean(1)       = 0.0_r8
          posterior_mean(1)   = 0.0_r8
@@ -711,28 +584,34 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
          if (posterior_spread_index > 0) &
             call get_obs_values(observation, posterior_spread, posterior_spread_index)
 
-         !--------------------------------------------------------------
+         call get_qc(observation, qc)
+
+         if ( dart_qc_index > 0 ) then
+            qc_value = qc(dart_qc_index)
+         else
+            ! If there is no dart_qc, this must be a case where we 
+            ! are interested only in getting the location information.
+            qc_value = 0
+         endif
+
          ! Check to see if there are any observations with wild values
          ! and a DART QC flag that is inconsistent. I checked it once
-         ! with qc_integer < 4 and found that ONLY the posterior values
+         ! with qc_value < 4 and found that ONLY the posterior values
          ! were bad. While the underlying bug is being fixed, the workaround
          ! is to simply manually set the DART QC value such that the
          ! posterior is flagged as bad.  I cannot acutally tell if the
          ! observation is supposed to have been assimilated or just evaluated,
          ! so I erred on the conservative side. TJH 24 Aug 2007
-         !--------------------------------------------------------------
 
-         ! REPEATED FOR REFERENCE integer, parameter  :: QC_MAX_PRIOR     = 3
-         ! REPEATED FOR REFERENCE integer, parameter  :: QC_MAX_POSTERIOR = 1
-
-         ! DEBUG section for strange looking observations:
-         if ( 1 == 2 ) then
-         call get_obs_values(observation, copyvals)
-     ! add your own if test here and turn 1 == 2 into 1 == 1 above:
-     !   if ( obsindex == 311 ) then
-         if (any(copyvals(2:size(copyvals)) /= -888888.0) .and. (qc_integer == 4)) then
-     !   if (abs(prior_mean(1)) > 1000 .and. qc_integer < 4) then
-     !   if (.true.) then
+         ! DEBUG block for strange looking observations:
+         if ( .false. ) then
+            call get_obs_values(observation, copyvals)
+            ! add your own if test here and enable logic
+        !   if ( obsindex == 311 ) then
+            if (any(copyvals(2:size(copyvals)) /= -888888.0) .and. &
+                  (qc_value == 4)) then
+        !   if (abs(prior_mean(1)) > 1000 .and. qc_value < 4) then
+        !   if (.true.) then
               write(*,*)
               write(*,*)'Observation index is ',keys(obsindex),' and has:'
               write(*,*)'observation type       is',' '//trim(obsname)
@@ -742,7 +621,7 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
               write(*,*)'posterior_mean   value is',posterior_mean(1)
               write(*,*)'prior_spread     value is',prior_spread(1)
               write(*,*)'posterior_spread value is',posterior_spread(1)
-              write(*,*)'DART QC          value is',qc_integer
+              write(*,*)'DART QC          value is',qc_value
               write(*,*)'observation  is   trusted',trusted
               do i= 1,num_copies
                  write(*,*)copyvals(i),trim(get_copy_meta_data(seq,i))
@@ -751,7 +630,6 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
          endif
          endif
 
-         !--------------------------------------------------------------
          ! There is a ambiguous case wherein the prior is rejected (DART QC ==7)
          ! and the posterior forward operator fails (DART QC ==4). In this case,
          ! the DART_QC only reflects the fact the prior was rejected - HOWEVER -
@@ -763,23 +641,20 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
          ! outlier threshold will be wrong.
          !
          ! This is the only block of code you should need to change.
-         !--------------------------------------------------------------
 
-         if ((qc_integer == 7) .and. (abs(posterior_mean(1) - MISSING_R8) < 1.0_r8)) then
+         if ((qc_value == 7) .and. (abs(posterior_mean(1) - MISSING_R8) < 1.0_r8)) then
             write(string1,*)'WARNING ambiguous case for obs index ',obsindex
             string2 = 'obs failed outlier threshhold AND posterior operator failed.'
             string3 = 'Counting as a Prior QC == 7, Posterior QC == 4.'
             if (trusted) then
 ! COMMENT      string3 = 'WARNING changing DART QC from 7 to 4'
-! COMMENT      qc_integer = 4
+! COMMENT      qc_value = 4
             endif
             call error_handler(E_MSG,'obs_diag',string1,text2=string2,text3=string3)
             num_ambiguous = num_ambiguous + 1
          endif
 
-         !--------------------------------------------------------------
          ! Scale the quantities so they plot sensibly.
-         !--------------------------------------------------------------
 
          obs(1)  = obs(1)             *scale_factor(flavor)
          pr_mean = prior_mean(1)      *scale_factor(flavor)
@@ -787,30 +662,27 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
          pr_sprd = prior_spread(1)    *scale_factor(flavor)  ! standard deviations
          po_sprd = posterior_spread(1)*scale_factor(flavor)  ! standard deviations
 
-         !--------------------------------------------------------------
-         ! DEBUG Summary of observation knowledge at this point
-         !--------------------------------------------------------------
+         ! DEBUG block Summary of observation knowledge at this point
 
-         if ( debug > 99 ) then
+         if ( .false. ) then
             write(*,*)
-            write(*,*)'observation #,flavor ',obsindex,flavor
-            write(*,*)'obs_err_var ',obs_err_var
-            write(*,*)'obsx/obsy/obsz ',obsx,obsy,obsz
-            write(*,*)'obs(1), qc ',obs(1),qc
-            write(*,*)'pr_mean,po_mean ',pr_mean,po_mean
-            write(*,*)'pr_sprd,po_sprd ',pr_sprd,po_sprd
+            write(*,*)'observation #,flavor ', obsindex, flavor
+            write(*,*)'obs(1), qc ', obs(1), qc
+            write(*,*)'obs_error_variance ', obs_error_variance
+            call print_time(obs_time,'time is')
+            write(*,*)'pr_mean, po_mean ', pr_mean, po_mean
+            write(*,*)'pr_sprd, po_sprd ', pr_sprd, po_sprd
+            write(*,*)'obsx/obsy/obsz ', obsx, obsy, obsz
          endif
 
-         !--------------------------------------------------------------
          ! update the histogram of the magnitude of the innovation,
          ! where each bin is a single standard deviation.
          ! This is a one-sided histogram.
-         !--------------------------------------------------------------
 
-         pr_zscore = InnovZscore(obs(1), pr_mean, pr_sprd, obs_err_var, &
-                                 qc_integer, QC_MAX_PRIOR)
-         po_zscore = InnovZscore(obs(1), po_mean, po_sprd, obs_err_var, &
-                                 qc_integer, QC_MAX_POSTERIOR)
+         pr_zscore = InnovZscore(obs(1), pr_mean, pr_sprd, obs_error_variance, &
+                                 qc_value, QC_MAX_PRIOR)
+         po_zscore = InnovZscore(obs(1), po_mean, po_sprd, obs_error_variance, &
+                                 qc_value, QC_MAX_POSTERIOR)
 
          indx         = min(int(pr_zscore), MaxSigmaBins)
          nsigma(indx) = nsigma(indx) + 1
@@ -818,7 +690,7 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
          ! Individual (valid) observations that are very far away get
          ! logged to a separate file.
 
-         if( (pr_zscore > 3.0_r8) .and. (qc_integer <= QC_MAX_PRIOR) ) then
+         if( (pr_zscore > 3.0_r8) .and. (qc_value <= QC_MAX_PRIOR) ) then
             call get_time(obs_time,seconds,days)
 
             write(nsigmaUnit,'(i7,1x,i5,3(1x,f14.2),2(1x,f13.2),f8.1,2(1x,i7))') &
@@ -826,23 +698,19 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
                  obs(1), pr_mean, pr_zscore, keys(obsindex), flavor
          endif
 
-         !--------------------------------------------------------------
          ! At this point, the observation has passed all checks.
-         !--------------------------------------------------------------
 
          obs_used_in_epoch(iepoch) = obs_used_in_epoch(iepoch) + 1
 
-         !--------------------------------------------------------------
          ! If it is a U wind component, we need to save it.
          ! It will be matched up with the subsequent V component.
          ! At some point we have to remove the dependency that the
          ! U component MUST preceed the V component.
-         !--------------------------------------------------------------
 
          if ( get_quantity_for_type_of_obs(flavor) == QTY_U_WIND_COMPONENT ) then
 
             U_obs         = obs(1)
-            U_obs_err_var = obs_err_var
+            U_obs_err_var = obs_error_variance
             U_obs_loc     = obs_loc
             U_flavor      = flavor
             U_type        = QTY_U_WIND_COMPONENT
@@ -850,14 +718,12 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
             U_pr_sprd     = pr_sprd
             U_po_mean     = po_mean
             U_po_sprd     = po_sprd
-            U_qc          = qc_integer
+            U_qc          = qc_value
 
          endif
 
-         !--------------------------------------------------------------
          ! If needed, calculate the rank histogram bin (once!) for
          ! this observation - even if the QC value is bad.
-         !--------------------------------------------------------------
 
          if ( create_rank_histogram ) then
             call get_obs_values(observation, copyvals)
@@ -865,15 +731,11 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
                  obs_error_variance, ens_copy_index)
          endif
 
-         !--------------------------------------------------------------
          ! Figure out which level the observation relates to ...
-         !--------------------------------------------------------------
 
          level_index = vertical_bin_index(obsz)
 
-         !--------------------------------------------------------------
-         ! We have Nregions of interest
-         !--------------------------------------------------------------
+         ! We have Nregions of interest.
 
          Areas : do iregion =1, Nregions
 
@@ -884,10 +746,8 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
             ! temporal statistics part ... all the 'evolution' variables
             !===========================================================
 
-            !-----------------------------------------------------------
             ! Reject observations too high or too low without counting it
             ! as a possible observation for this region.
-            !-----------------------------------------------------------
 
             if ((level_index < 1) .or. (level_index > Nlevels)) then
                prior%NbadLV(iepoch,:,iregion,flavor) = &
@@ -897,10 +757,8 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
                cycle Areas
             endif
 
-            !-----------------------------------------------------------
             ! Count original QC values 'of interest' ...
-            ! TJH FIXME ... this is now a DART QC value ... deprecate
-            !-----------------------------------------------------------
+            !>@todo remove after verifying NbiqQC not used in plotting scripts
 
             if (      org_qc_index  > 0 ) then
                if (qc(org_qc_index) > input_qc_threshold ) then
@@ -909,16 +767,13 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
                endif
             endif
 
-            !-----------------------------------------------------------
             ! Count DART QC values
-            !-----------------------------------------------------------
 
-            call CountDartQC_4D(qc_integer, iepoch, level_index, iregion, &
+            call CountDartQC_4D(qc_value, iepoch, level_index, iregion, &
                     flavor, prior, poste, posterior_mean=po_mean)
 
-            !-----------------------------------------------------------
             ! Count 'large' innovations
-            !-----------------------------------------------------------
+            !>@todo remove after verifying NbiqIZ not used in plotting scripts
 
             if( pr_zscore > rat_cri ) then
                call IPE(prior%NbadIZ(iepoch,level_index,iregion,flavor), 1)
@@ -928,17 +783,13 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
                call IPE(poste%NbadIZ(iepoch,level_index,iregion,flavor), 1)
             endif
 
-            !-----------------------------------------------------------
             ! Do all the heavy lifting
-            !-----------------------------------------------------------
 
-            call Bin4D(qc_integer, iepoch, level_index, iregion, flavor, trusted, &
-                  obs(1), obs_err_var, pr_mean, pr_sprd, po_mean, po_sprd, &
+            call Bin4D(qc_value, iepoch, level_index, iregion, flavor, trusted, &
+                  obs(1), obs_error_variance, pr_mean, pr_sprd, po_mean, po_sprd, &
                   rank_histogram_bin)
 
-            !-----------------------------------------------------------
             ! Additional work for horizontal wind (given U,V)
-            !-----------------------------------------------------------
 
             ObsIsWindCheck: if ( get_quantity_for_type_of_obs(flavor) == QTY_V_WIND_COMPONENT ) then
 
@@ -979,11 +830,11 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
                      call IPE(poste%NbadIZ(iepoch,level_index,iregion,wflavor), 1)
                   endif
 
-                  call CountDartQC_4D(qc_integer, iepoch, level_index, iregion, &
+                  call CountDartQC_4D(qc_value, iepoch, level_index, iregion, &
                                       wflavor, prior, poste, uqc=U_qc)
 
-                  call Bin4D(qc_integer, iepoch, level_index, iregion, wflavor, &
-                     .false., obs(1), obs_err_var, pr_mean, pr_sprd, po_mean, po_sprd, &
+                  call Bin4D(qc_value, iepoch, level_index, iregion, wflavor, &
+                     .false., obs(1), obs_error_variance, pr_mean, pr_sprd, po_mean, po_sprd, &
                      rank_histogram_bin, U_obs, U_obs_err_var, U_pr_mean, &
                      U_pr_sprd, U_po_mean, U_po_sprd, U_qc)
                endif
@@ -1007,11 +858,9 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
                endif
             endif
 
-            !-----------------------------------------------------------
             ! Count DART QC values
-            !-----------------------------------------------------------
 
-            call CountDartQC_3D(qc_integer, level_index, iregion, flavor, &
+            call CountDartQC_3D(qc_value, level_index, iregion, flavor, &
                     priorAVG, posteAVG, posterior_mean=po_mean)
 
             ! Count 'large' innovations
@@ -1024,8 +873,8 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
                call IPE(posteAVG%NbadIZ(level_index,iregion,flavor), 1)
             endif
 
-            call Bin3D(qc_integer, level_index, iregion, flavor, trusted, &
-                   obs(1), obs_err_var, pr_mean, pr_sprd, po_mean, po_sprd)
+            call Bin3D(qc_value, level_index, iregion, flavor, trusted, &
+                   obs(1), obs_error_variance, pr_mean, pr_sprd, po_mean, po_sprd)
 
             ! Handle horizontal wind given U,V components
 
@@ -1052,11 +901,11 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
                      call IPE(posteAVG%NbadIZ(level_index,iregion,wflavor), 1)
                   endif
 
-                  call CountDartQC_3D(qc_integer, level_index, &
+                  call CountDartQC_3D(qc_value, level_index, &
                           iregion, wflavor, priorAVG, posteAVG, uqc=U_qc)
 
-                  call Bin3D(qc_integer, level_index, iregion,  &
-                      wflavor, .false., obs(1), obs_err_var, pr_mean, pr_sprd,      &
+                  call Bin3D(qc_value, level_index, iregion,  &
+                      wflavor, .false., obs(1), obs_error_variance, pr_mean, pr_sprd,      &
                       po_mean, po_sprd, U_obs, U_obs_err_var, U_pr_mean, U_pr_sprd, &
                       U_po_mean, U_po_sprd, U_qc)
                endif
@@ -1068,10 +917,8 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
 
          enddo Areas
 
-         !--------------------------------------------------------------
          ! If it is a V wind component, make sure we clear out any
          ! pre-existing U wind observations.
-         !--------------------------------------------------------------
 
          if ( get_quantity_for_type_of_obs(flavor) == QTY_V_WIND_COMPONENT ) then
 
@@ -1088,17 +935,15 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
 
          endif
 
-      !=================================================================
       enddo ObservationLoop
-      !=================================================================
 
       deallocate(keys)
 
    enddo EpochLoop
 
-   if (debug > 0) then
-      write(logfileunit,*)'End of EpochLoop for ',trim(obs_seq_in_file_name)
-      write(     *     ,*)'End of EpochLoop for ',trim(obs_seq_in_file_name)
+   if ( verbose ) then
+      write(string1,*)'Finished reading "',trim(obs_sequence_name(ifile))//'"'
+      call error_handler(E_MSG,'obs_diag',string1)
    endif
 
    call destroy_obs(obs1)
@@ -1111,17 +956,13 @@ ObsFileLoop : do ifile=1, size(obs_seq_filenames)
 
 enddo ObsFileLoop
 
-!-----------------------------------------------------------------------
 ! We have read all possible files, and stuffed the observations into the
 ! appropriate bins. Time to normalize.
-!-----------------------------------------------------------------------
 
 call Normalize4Dvars()
 call Normalize3Dvars()
 
-!-----------------------------------------------------------------------
 ! Print final summary.
-!-----------------------------------------------------------------------
 
 write(*,*)
 write(*,*) '# observations used  : ',sum(obs_used_in_epoch)
@@ -1205,10 +1046,8 @@ if (Nidentity > 0) then
    write(logfileunit,*)'state space diagnostics, i.e. take a peek in the matlab directory'
 endif
 
-!----------------------------------------------------------------------
 ! If the namelist input does not result in some observations, print
 ! a little summary that may result in better user input.
-!----------------------------------------------------------------------
 
 if ( sum(obs_used_in_epoch) == 0 ) then
    write(    *      ,*)
@@ -1225,23 +1064,18 @@ if ( sum(obs_used_in_epoch) == 0 ) then
    call error_handler(E_ERR,'obs_diag',string1,source,revision,revdate)
 endif
 
-!----------------------------------------------------------------------
-! Open netCDF output file
-!----------------------------------------------------------------------
-
 call WriteNetCDF('obs_diag_output.nc')
 
-!-----------------------------------------------------------------------
-! Really, really, done.
-!-----------------------------------------------------------------------
-
 call DestroyVariables()
-call error_handler(E_MSG,'obs_diag','Finished successfully.',source,revision,revdate)
+call error_handler(E_MSG,'obs_diag','Finished successfully.')
 call finalize_utilities()
 
 
-!======================================================================
 CONTAINS
+
+!======================================================================
+! These routines use common variables from the scope of this file.
+! If it's not in the argument list ... it's scoped within this file.
 !======================================================================
 
 
@@ -1481,8 +1315,6 @@ subroutine DestroyVariables()
 if (associated(prior%hist_bin)) deallocate(prior%hist_bin)
 if (allocated(ens_copy_index))  deallocate(ens_copy_index)
 
-deallocate(obs_seq_filenames)
-
 deallocate(prior%rmse,        prior%bias,      prior%spread,    prior%totspread, &
            prior%observation, prior%ens_mean,  prior%Nposs,     prior%Nused,     &
            prior%NbigQC,      prior%NbadIZ,    prior%NbadUV,    prior%NbadLV,    &
@@ -1521,7 +1353,7 @@ deallocate(posteAVG%NDartQC_0,  posteAVG%NDartQC_1,   posteAVG%NDartQC_2, &
            posteAVG%NDartQC_3,  posteAVG%NDartQC_4,   posteAVG%NDartQC_5, &
            posteAVG%NDartQC_6,  posteAVG%NDartQC_7,   posteAVG%NDartQC_8)
 
-deallocate(epoch_center, epoch_edges, bincenter, obs_used_in_epoch)
+deallocate(epoch_center, epoch_edges, bin_center, obs_used_in_epoch)
 
 deallocate(obs_type_strings, scale_factor)
 
@@ -1716,7 +1548,7 @@ else
    skip_time = beg_time - halfbinwidth + set_time(seconds, time_to_skip(3))
 endif
 
-if ( debug > 0 ) then
+if ( verbose ) then
    call print_date(    beg_time,'requested first bincenter date',logfileunit)
    call print_date(    beg_time,'requested first bincenter date')
    call print_date(    end_time,'requested last  bincenter date',logfileunit)
@@ -1762,8 +1594,8 @@ subroutine DefineTimeBins()
 ! Global variables set in this routine:
 ! type(time_type), intent(out) :: TimeMin, TimeMax
 ! integer,         intent(out) :: Nepochs
-! type(time_type), intent(out), dimension(  :) :: bincenter
-! type(time_type), intent(out), dimension(:,:) :: binedges
+! type(time_type), intent(out), dimension(  :) :: bin_center
+! type(time_type), intent(out), dimension(:,:) :: bin_edges
 ! real(digits12),  intent(out), dimension(  :) :: epoch_center
 ! real(digits12),  intent(out), dimension(:,:) :: epoch_edges
 ! integer,         intent(out), dimension(  :) :: obs_used_in_epoch
@@ -1781,7 +1613,7 @@ enddo NepochLoop
 write(string1,*)'Requesting ',Nepochs,' assimilation periods.'
 call error_handler(E_MSG,'DefineTimeBins',string1)
 
-allocate(   bincenter(Nepochs),    binedges(2,Nepochs), &
+allocate(   bin_center(Nepochs),    bin_edges(2,Nepochs), &
          epoch_center(Nepochs), epoch_edges(2,Nepochs), &
     obs_used_in_epoch(Nepochs) )
 
@@ -1795,70 +1627,70 @@ obs_used_in_epoch = 0
 ! only to the first bin leading edge.
 
 iepoch = 1
-bincenter( iepoch)    = beg_time
-binedges(2,iepoch)    = beg_time + halfbinwidth
+bin_center( iepoch)    = beg_time
+bin_edges(2,iepoch)    = beg_time + halfbinwidth
 
 if (beg_time <= halfbinwidth ) then
-   binedges(1,iepoch) = set_time(0,0)
+   bin_edges(1,iepoch) = set_time(0,0)
 else
-   binedges(1,iepoch) = beg_time - halfbinwidth + set_time(1,0)
+   bin_edges(1,iepoch) = beg_time - halfbinwidth + set_time(1,0)
 endif
 
-call get_time(bincenter(iepoch),seconds,days)
+call get_time(bin_center(iepoch),seconds,days)
 epoch_center(iepoch) = days + seconds/86400.0_digits12
 
-call get_time(binedges(1,iepoch),seconds,days)
+call get_time(bin_edges(1,iepoch),seconds,days)
 epoch_edges(1,iepoch) = days + seconds/86400.0_digits12
 
-call get_time(binedges(2,iepoch),seconds,days)
+call get_time(bin_edges(2,iepoch),seconds,days)
 epoch_edges(2,iepoch) = days + seconds/86400.0_digits12
 
 BinLoop : do iepoch = 2,Nepochs
 
-   bincenter( iepoch) = bincenter(iepoch-1) + binsep
-   binedges(1,iepoch) = bincenter(iepoch) - halfbinwidth + set_time(1,0)
-   binedges(2,iepoch) = bincenter(iepoch) + halfbinwidth
+   bin_center( iepoch) = bin_center(iepoch-1) + binsep
+   bin_edges(1,iepoch) = bin_center(iepoch) - halfbinwidth + set_time(1,0)
+   bin_edges(2,iepoch) = bin_center(iepoch) + halfbinwidth
 
-   call get_time(bincenter(iepoch),seconds,days)
+   call get_time(bin_center(iepoch),seconds,days)
    epoch_center(iepoch) = days + seconds/86400.0_digits12
 
-   call get_time(binedges(1,iepoch),seconds,days)
+   call get_time(bin_edges(1,iepoch),seconds,days)
    epoch_edges(1,iepoch) = days + seconds/86400.0_digits12
 
-   call get_time(binedges(2,iepoch),seconds,days)
+   call get_time(bin_edges(2,iepoch),seconds,days)
    epoch_edges(2,iepoch) = days + seconds/86400.0_digits12
 
 enddo BinLoop
 
-if ( debug > 0 ) then
-do iepoch = 1,Nepochs
+if ( verbose ) then
+   do iepoch = 1,Nepochs
+      write(logfileunit,*)
+      write(     *     ,*)
+      write(string1,'(''epoch '',i6,''  start'')')iepoch
+      write(string2,'(''epoch '',i6,'' center'')')iepoch
+      write(string3,'(''epoch '',i6,''    end'')')iepoch
+      call print_time(bin_edges(1,iepoch),string1,logfileunit)
+      call print_time(bin_center( iepoch),string2,logfileunit)
+      call print_time(bin_edges(2,iepoch),string3,logfileunit)
+      call print_time(bin_edges(1,iepoch),string1)
+      call print_time(bin_center( iepoch),string2)
+      call print_time(bin_edges(2,iepoch),string3)
+
+      call print_date(bin_edges(1,iepoch),string1,logfileunit)
+      call print_date(bin_center( iepoch),string2,logfileunit)
+      call print_date(bin_edges(2,iepoch),string3,logfileunit)
+      call print_date(bin_edges(1,iepoch),string1)
+      call print_date(bin_center( iepoch),string2)
+      call print_date(bin_edges(2,iepoch),string3)
+   enddo
    write(logfileunit,*)
    write(     *     ,*)
-   write(string1,'(''epoch '',i6,''  start'')')iepoch
-   write(string2,'(''epoch '',i6,'' center'')')iepoch
-   write(string3,'(''epoch '',i6,''    end'')')iepoch
-   call print_time(binedges(1,iepoch),string1,logfileunit)
-   call print_time(bincenter( iepoch),string2,logfileunit)
-   call print_time(binedges(2,iepoch),string3,logfileunit)
-   call print_time(binedges(1,iepoch),string1)
-   call print_time(bincenter( iepoch),string2)
-   call print_time(binedges(2,iepoch),string3)
-
-   call print_date(binedges(1,iepoch),string1,logfileunit)
-   call print_date(bincenter( iepoch),string2,logfileunit)
-   call print_date(binedges(2,iepoch),string3,logfileunit)
-   call print_date(binedges(1,iepoch),string1)
-   call print_date(bincenter( iepoch),string2)
-   call print_date(binedges(2,iepoch),string3)
-enddo
-write(logfileunit,*)
-write(     *     ,*)
 endif
 
-TimeMin = binedges(1,      1) ! minimum time of interest
-TimeMax = binedges(2,Nepochs) ! maximum time of interest
+TimeMin = bin_edges(1,      1) ! minimum time of interest
+TimeMax = bin_edges(2,Nepochs) ! maximum time of interest
 
-if ( debug > 0 ) then
+if ( verbose ) then
    call print_time(TimeMin,'First time of interest',logfileunit)
    call print_time(TimeMax,'Last  time of interest',logfileunit)
    call print_time(TimeMin,'First time of interest')
@@ -1932,7 +1764,7 @@ NOMINAL: do iedge = 1,Nlevels
 
 enddo NOMINAL
 
-if (debug > 0) then
+if ( verbose ) then
    write(*,'(''There are '',i2,'' edges defining '',i2,'' vertical bins.'')') ndum2, Nlevels
    do iedge = 1,ndum2
       write(*,*)'edge ',iedge,' is at ',hlevel_edges(iedge)
@@ -1979,12 +1811,12 @@ enddo
 
 ! Print a summary if desired. There can be a lot of levels so I cannot
 ! predict if they will fit in a string to be sent to the error_handler
-if (debug > 0) then
+if ( verbose ) then
    write(     *     ,*)'z interfaces: ',hlevel_edges(1:Nlevels+1)
    write(logfileunit,*)'z interfaces: ',hlevel_edges(1:Nlevels+1)
 endif
 
-if (debug > 0) then
+if ( verbose ) then
    do iregion = 1,Nregions
       write(string1,'(''Region '',i3,'' has LL and UR corners:'')')iregion
       call write_location(0,low_left_loc(iregion),'formatted',string2)
@@ -2069,14 +1901,13 @@ endif
 if (num_trusted > 0 ) then
    write(string1,*)'There are ',num_trusted, &
                    ' "trusted" observation types, they are:'
-   call error_handler(E_MSG, 'CountTrustedObsTypes', string1, source, revision, revdate)
+   call error_handler(E_MSG, 'CountTrustedObsTypes', string1)
    do i = 1,num_trusted
-      call error_handler(E_MSG, 'CountTrustedObsTypes', &
-                                trusted_list(i), source, revision, revdate)
+      call error_handler(E_MSG, 'CountTrustedObsTypes', trusted_list(i))
    enddo
 else
    write(string1,*)'There are no "trusted" observation types.'
-   call error_handler(E_MSG, 'CountTrustedObsTypes', string1, source, revision, revdate)
+   call error_handler(E_MSG, 'CountTrustedObsTypes', string1)
 endif
 
 end subroutine CountTrustedObsTypes
@@ -2128,32 +1959,36 @@ end subroutine SetScaleFactors
 
 
 !======================================================================
+!> We need to know the time of the first and last observations in the sequence,
+!> primarily just to see if they intersect the desired Epoch window.
+!> We also record these times so we can report the first/last times of all
+!> observations in all the obs_seq files.
 
+subroutine GetFirstLastObs(my_fname, my_sequence, my_obs1, my_obsN, &
+                   my_seqT1, my_seqTN, my_AllseqT1, my_AllseqTN)
 
-subroutine GetFirstLastObs(my_fileid, my_sequence, my_obs1, my_obsN, my_seqT1, my_seqTN, my_AllseqT1, my_AllseqTN)
-! We need to know the time of the first and last observations in the sequence,
-! primarily just to see if they intersect the desired Epoch window.
-! We also record these times so we can report the first/last times of all
-! observations in all the obs_seq files.
-character(len=*),        intent(in)    :: my_fileid
+character(len=*),        intent(in)    :: my_fname
 type(obs_sequence_type), intent(in)    :: my_sequence
-type(obs_type),          intent(out)   :: my_obs1, my_obsN
-type(time_type),         intent(out)   :: my_seqT1, my_seqTN        ! first,last T in obs sequence
-type(time_type),         intent(inout) :: my_AllseqT1, my_AllseqTN  ! ALL observation sequences
+type(obs_type),          intent(out)   :: my_obs1
+type(obs_type),          intent(out)   :: my_obsN
+type(time_type),         intent(out)   :: my_seqT1
+type(time_type),         intent(out)   :: my_seqTN
+type(time_type),         intent(inout) :: my_AllseqT1 ! ALL observation sequences
+type(time_type),         intent(inout) :: my_AllseqTN ! ALL observation sequences
 
 type(obs_def_type) :: obs_def
 
 logical, SAVE :: first_time = .true.
 
 if ( .not. get_first_obs(my_sequence, my_obs1) ) then
-   call error_handler(E_ERR,'obs_diag','No first observation in '//trim(my_fileid), &
+   call error_handler(E_ERR,'obs_diag','No first observation in '//trim(my_fname), &
    source,revision,revdate)
 endif
 call get_obs_def(my_obs1,   obs_def)
 my_seqT1 = get_obs_def_time(obs_def)
 
 if ( .not. get_last_obs(my_sequence, my_obsN) ) then
-   call error_handler(E_ERR,'obs_diag','No last observation in '//trim(my_fileid), &
+   call error_handler(E_ERR,'obs_diag','No last observation in '//trim(my_fname), &
    source,revision,revdate)
 endif
 call get_obs_def(my_obsN,   obs_def)
@@ -2177,7 +2012,7 @@ call print_time(my_seqTN,'Last  observation time',logfileunit)
 call print_date(my_seqT1,'First observation date',logfileunit)
 call print_date(my_seqTN,'Last  observation date',logfileunit)
 
-if (debug > 0) then
+if ( verbose ) then
    call print_time(my_seqT1,'First observation time')
    call print_time(my_seqTN,'Last  observation time')
    call print_date(my_seqT1,'First observation date')
@@ -2187,8 +2022,47 @@ endif
 write(logfileunit,*)
 write(*,*)
 
-
 end subroutine GetFirstLastObs
+
+
+!======================================================================
+!> Function to determine if the observation sequence file has any
+!> observations in the desired time window.
+
+function No_Time_Intersection(filename,sequence_T1,sequence_TN,first_time,last_time)
+
+character(len=*), intent(in) :: filename
+type(time_type),  intent(in) :: sequence_T1 !< first ob time in sequence
+type(time_type),  intent(in) :: sequence_TN !< last ob time in sequence
+type(time_type),  intent(in) :: first_time  !< first time of interest
+type(time_type),  intent(in) :: last_time   !< last time of interest
+logical                      :: No_Time_Intersection
+
+character(len=*), parameter :: routine = 'No_Time_Intersection'
+
+! If the last observation is before the period of interest, move on.
+
+if ( sequence_T1 >= first_time .and. sequence_TN <= last_time ) then
+   No_Time_Intersection = .false.
+else
+   No_Time_Intersection = .true.
+endif
+
+if ( sequence_TN < first_time ) then
+   if ( verbose ) then
+      string1 = '"'//trim(filename)//'" last obs before first time ... trying next file.'
+      call error_handler(E_MSG, routine, string1)
+   endif
+endif
+
+if ( sequence_T1 > last_time ) then
+   if ( verbose ) then
+      string1 = '"'//trim(filename)//'" first obs after last_time ... trying next file.'
+      call error_handler(E_MSG, routine, string1)
+   endif
+endif
+
+end function No_Time_Intersection
 
 
 !======================================================================
@@ -2216,7 +2090,7 @@ MetaDataLoop : do i=1, get_num_copies(seq)
 enddo MetaDataLoop
 
 write(string1,'(''There are '',i4,'' ensemble members.'')') GetEnsSize
-call error_handler(E_MSG,'GetEnsSize',string1,source,revision,revdate)
+call error_handler(E_MSG,'GetEnsSize',string1)
 
 end function GetEnsSize
 
@@ -2261,20 +2135,20 @@ MetaDataLoop : do i=1, get_num_copies(seq)
    metadata = get_copy_meta_data(seq,i)
 
    if ( use_zero_error_obs ) then
-      if(index(metadata,'truth'        ) > 0) obs_index = i
+      if(index(metadata, 'truth'      ) > 0) obs_index = i
    else
-      if(index(metadata,'observation'  ) > 0) obs_index = i
+      if(index(metadata, 'observation') > 0) obs_index = i
    endif
 
-   if(index(metadata,'prior ensemble mean'      ) > 0)       prior_mean_index = i
-   if(index(metadata,'posterior ensemble mean'  ) > 0)   posterior_mean_index = i
-   if(index(metadata,'prior ensemble spread'    ) > 0)     prior_spread_index = i
-   if(index(metadata,'posterior ensemble spread') > 0) posterior_spread_index = i
+   if(index(metadata, 'prior ensemble mean'      ) > 0)       prior_mean_index = i
+   if(index(metadata, 'posterior ensemble mean'  ) > 0)   posterior_mean_index = i
+   if(index(metadata, 'prior ensemble spread'    ) > 0)     prior_spread_index = i
+   if(index(metadata, 'posterior ensemble spread') > 0) posterior_spread_index = i
 
    if(index(metadata, 'prior ensemble member') > 0 .and. &
       create_rank_histogram ) then
-      ens_count = ens_count + 1
-      ens_copy_index(ens_count) = i
+         ens_count  = ens_count + 1
+         ens_copy_index(ens_count) = i
    endif
 
 enddo MetaDataLoop
@@ -2297,27 +2171,27 @@ enddo QCMetaDataLoop
 
 if ( prior_mean_index       < 0 ) then
    write(string1,*)'metadata:"prior ensemble mean" not found'
-   call error_handler(E_MSG,'SetIndices',string1,source,revision,revdate)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
 if ( posterior_mean_index   < 0 ) then
    write(string1,*)'metadata:"posterior ensemble mean" not found'
-   call error_handler(E_MSG,'SetIndices',string1,source,revision,revdate)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
 if ( prior_spread_index     < 0 ) then
    write(string1,*)'metadata:"prior ensemble spread" not found'
-   call error_handler(E_MSG,'SetIndices',string1,source,revision,revdate)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
 if ( posterior_spread_index < 0 ) then
    write(string1,*)'metadata:"posterior ensemble spread" not found'
-   call error_handler(E_MSG,'SetIndices',string1,source,revision,revdate)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
 if (           org_qc_index < 0 ) then
    write(string1,*)'metadata:"Quality Control" not found'
-   call error_handler(E_MSG,'SetIndices',string1,source,revision,revdate)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
 if (          dart_qc_index < 0 ) then
    write(string1,*)'metadata:"DART quality control" not found'
-   call error_handler(E_MSG,'SetIndices',string1,source,revision,revdate)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
 
 ! Only require obs_index to be present; this allows the program
@@ -2344,42 +2218,50 @@ else
    write(string1,'(''"observation"          index '',i2,'' metadata '',a)') &
      obs_index, trim(get_copy_meta_data(seq,obs_index))
 endif
-call error_handler(E_MSG,'SetIndices',string1,source,revision,revdate)
+call error_handler(E_MSG,'SetIndices',string1)
 
 if (prior_mean_index > 0 ) then
    write(string1,'(''"prior mean"           index '',i2,'' metadata '',a)') &
         prior_mean_index, trim(get_copy_meta_data(seq,prior_mean_index))
-   call error_handler(E_MSG,'SetIndices',string1,source,revision,revdate)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
 
 if (posterior_mean_index > 0 ) then
    write(string1,'(''"posterior mean"       index '',i2,'' metadata '',a)') &
         posterior_mean_index, trim(get_copy_meta_data(seq,posterior_mean_index))
-   call error_handler(E_MSG,'SetIndices',string1,source,revision,revdate)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
 
 if (prior_spread_index > 0 ) then
    write(string1,'(''"prior spread"         index '',i2,'' metadata '',a)') &
         prior_spread_index, trim(get_copy_meta_data(seq,prior_spread_index))
-   call error_handler(E_MSG,'SetIndices',string1,source,revision,revdate)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
 
 if (posterior_spread_index > 0 ) then
    write(string1,'(''"posterior spread"     index '',i2,'' metadata '',a)') &
         posterior_spread_index, trim(get_copy_meta_data(seq,posterior_spread_index))
-   call error_handler(E_MSG,'SetIndices',string1,source,revision,revdate)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
 
 if (org_qc_index > 0 ) then
    write(string1,'(''"Quality Control"      index '',i2,'' metadata '',a)') &
          org_qc_index, trim(get_qc_meta_data(seq,org_qc_index))
-   call error_handler(E_MSG,'SetIndices',string1,source,revision,revdate)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
 
 if (dart_qc_index > 0 ) then
    write(string1,'(''"DART quality control" index '',i2,'' metadata '',a)') &
         dart_qc_index, trim(get_qc_meta_data(seq,dart_qc_index))
-   call error_handler(E_MSG,'SetIndices',string1,source,revision,revdate)
+   call error_handler(E_MSG,'SetIndices',string1)
+endif
+
+if ( any( (/ prior_mean_index,     prior_spread_index, &
+         posterior_mean_index, posterior_spread_index /) < 0) ) then
+   string1 = 'Observation sequence has no prior/posterior information.'
+   string2 = 'You will still get a count, maybe observation value, incoming qc, ...'
+   string3 = 'For simple information, you may want to use "obs_seq_to_netcdf" instead.'
+   call error_handler(E_MSG, 'obs_diag', string1, text2=string2, text3=string3)
 endif
 
 end subroutine SetIndices
@@ -2516,9 +2398,8 @@ if (rank == 0) then ! ob is larger than largest ensemble member.
   rank = ens_size + 1
 endif
 
-! DEBUG block
 
-if ( 2 == 1 )  then
+if ( .false. )  then ! DEBUG block
    write(*,*)'observation error variance is ',error_variance
    write(*,*)'observation          value is ',obsvalue
    write(*,*)'observation           rank is ',rank
@@ -2555,9 +2436,9 @@ CheckMate = -1 ! Assume no match ... till proven otherwise
 flavor    = -1 ! bad flavor
 
 if ( (vflavor == MISSING_I) .or. (uflavor == MISSING_I)) then
-   if (debug > 0) then
+   if ( verbose ) then
       write(string1,*) 'missing U or V without companion - around OBS ', keys(obsindex)
-      call error_handler(E_MSG,'CheckMate',string1,source,revision,revdate)
+      call error_handler(E_MSG,'CheckMate',string1)
    endif
    return
 endif
@@ -3128,7 +3009,7 @@ subroutine Normalize4Dvars()
 ! The vertical coordinate system definition is summarized in WriteNetCDF
 ! if the verbose option is chosen.
 
-if (debug > 0) then
+if ( verbose ) then
    write(logfileunit,*)'Normalizing time-level-region-variable quantities.'
    write(     *     ,*)'Normalizing time-level-region-variable quantities.'
 endif
@@ -3238,7 +3119,7 @@ end subroutine Normalize4Dvars
 
 
 subroutine Normalize3Dvars()
-if (debug > 0) then
+if ( verbose ) then
    write(logfileunit,*)'Normalize quantities for all levels.'
    write(     *     ,*)'Normalize quantities for all levels.'
 endif
@@ -3335,7 +3216,7 @@ end subroutine Normalize3Dvars
 subroutine WriteNetCDF(fname)
 character(len=*), intent(in) :: fname
 
-integer :: ncid, i, indx1, nobs, typesdimlen
+integer :: ncid, i, nobs, typesdimlen
 integer ::  RegionDimID
 integer ::  BoundsDimID
 integer ::    ZlevDimID,    ZlevVarID   ! midpoints
@@ -3359,7 +3240,7 @@ if(.not. byteSizesOK()) then
 endif
 
 call nc_check(nf90_create(path = trim(fname), cmode = nf90_share, &
-         ncid = ncid), 'WriteNetCDF', 'create '//trim(fname))
+         ncid = ncid), 'WriteNetCDF', 'create "'//trim(fname)//'"')
 
 !----------------------------------------------------------------------------
 ! Write Global Attributes
@@ -3455,15 +3336,11 @@ enddo
 ! write all observation sequence files used
 !----------------------------------------------------------------------------
 
-FILEloop : do i = 1,SIZE(obs_seq_filenames)
-
-  indx1 = index(obs_seq_filenames(i),'null')
-
-  if (indx1 > 0) exit FILEloop
+FILEloop : do i = 1, num_input_files
 
   write(string1,'(''obs_seq_file_'',i3.3)')i
   call nc_check(nf90_put_att(ncid, NF90_GLOBAL, &
-         trim(string1), trim(obs_seq_filenames(i)) ), &
+         trim(string1), trim(obs_sequence_name(i)) ), &
          'WriteNetCDF', 'region_names:obs_kinds')
 
 enddo FILEloop
@@ -3481,7 +3358,7 @@ call nc_check(nf90_put_att(ncid, NF90_GLOBAL, 'comment', &
         &ObservationTypes variable has all types known.' ), &
         'WriteNetCDF', 'put_att obstypes comment '//trim(fname))
 
-if ( debug > 0 ) then
+if ( verbose ) then
    ! print a banner to help identify the columns - the whitespace makes it work.
    write(string1,*)'                                        # obs      vertical'
    write(string2,*)'observation type                 possible        system    scaling'
@@ -3493,7 +3370,7 @@ do ivar = 1,max_defined_types_of_obs
 
    nobs = sum(poste%Nposs(:,:,:,ivar))
 
-   if ( debug > 0 ) then
+   if ( verbose ) then
       write(string1,'(i4,1x,(a32),1x,i8,1x,'' obs@vert '',i3,f11.3)') ivar, &
          obs_type_strings(ivar), nobs, 0, scale_factor(ivar)
       call error_handler(E_MSG,'WriteNetCDF',string1)
@@ -3776,15 +3653,11 @@ vertical_bin_index = 0 ! set this to a 'bad' value.
 
 if ( z_in <= hlevel_edges(1) ) then
    vertical_bin_index = -1
-   if (debug > 2) then
-   endif
    return
 endif
 
 if ( z_in > hlevel_edges(Nlevels+1) ) then
    vertical_bin_index = 100 + Nlevels
-   if (debug > 2) then
-   endif
    return
 endif
 
@@ -3797,7 +3670,7 @@ HEIGHTLOOP : do i = 1,Nlevels
    endif
 enddo HEIGHTLOOP
 
-if (debug > 2) then
+if ( .false. ) then ! DEBUG block
    write(string1,*)'z = ',z_in,' is in bin ',vertical_bin_index
    write(string2,*)hlevel_edges(vertical_bin_index), z_in, &
                    hlevel_edges(vertical_bin_index+1)
