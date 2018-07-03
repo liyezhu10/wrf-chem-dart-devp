@@ -94,6 +94,8 @@ prematurely terminating the namelist.
    print_every_nth_obs        = 0,
    output_forward_op_errors   = .false.,
    silence                    = .false.,
+
+   gigg_obs_error_pdf         = 1
 /
 </pre>
 </div>
@@ -269,6 +271,18 @@ prematurely terminating the namelist.
     <TD>True means output almost no runtime messages.  Not recommended
         for general use, but can speed test programs if the execution
         time becomes dominated by the volume of output.
+</TD></TR>
+
+<TR><TD>gigg_obs_error_pdf</TD>
+    <TD>integer</TD>
+    <TD>The default value of 1 generates standard gaussian error distributions.
+        Values of 2 and 3 can be used to generate inverse gamma and gamma error distributions
+        for testing the GIGG filters of Craig Bishop. A value of 2 generates an inverse gamma
+        error distribution which is appropriate for testing the GIG filter (filter_kind = 102
+        in assim_tools_nml). A value of 3 generates a gamma error distribution which is appropriate
+        for testing the IGG filter (filter_kind = 103). In both cases, the observation error 
+        variance field in the obs sequence file contains the type 1 relative error variance
+        rather than the standard observational error variance.
 </TD></TR>
 
 </TBODY> 

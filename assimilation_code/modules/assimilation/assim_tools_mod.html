@@ -43,7 +43,7 @@ sequential filter as described in
 <a href="#References"> Anderson 2001, 2003 </a> along with systematic
 correction algorithms for both mean and spread. In addition, algorithms
 to do a variety of flavors of filters including the EAKF, ENKF, particle
-filter, and kernel filters are included. The parallel implementation
+filter, GIGG filters, quadratic filter, and kernel filters are included. The parallel implementation
 that allows each observation to update all state variables that are close
 to it at the same time is described in
 <a href="#References">Anderson and Collins, 2007</a>.
@@ -67,16 +67,20 @@ Available observation space filter types include:
 <a href="#References"> Anderson 2010</a>)
 <li> 9 = Particle filter (see
 <a href="#References"> Poterjoy 2016</a>)
+<li> 102 = GIG (gamma inverse gamma) filter (see
+<a href="#References"> Bishop 2016</a>)
+<li> 103 = IGG (inverse gamma gamma) filter (see
+<a href="#References"> Bishop 2016</a>)
 </ul>
 <P>
-We recommend using type=1, the EAKF.
+We recommend using type=1, the EAKF, for initial testing.
 Note that although the algorithm
 is expressed in a slightly different form,
 the EAKF is identical to the
 EnSRF (Ensemble Square Root Filter)
 described by Whitaker and Hamill in 2002.
 Highly non-gaussian distributions may get
-better results from type=8, Rank Histogram filter.
+better results from type=8, Rank Histogram filter. 
 </P>
 
 
@@ -349,6 +353,10 @@ prematurely terminating the namelist.
 <a href="#References"> Anderson 2010</a>)
 <li> 9 = Particle filter (see
 <a href="#References"> Poterjoy 2016</a>)
+<li> 102 = GIG filter (see
+<a href="#References"> Bishop 2016</a>)
+<li> 103 = IGG filter (see
+<a href="#References"> Bishop 2016</a>)
 <br /> <br />
 
 The EAKF is the most commonly used filter. 
@@ -361,10 +369,24 @@ The Rank Histgram filter can be more successful for highly nongaussian
 distributions. 
 <br /> <br />
 
-Jon Poterjoy's Particle filter is included with this code release.
+Thanks to Jon Poterjoy whose Particle filter is included with this code release.
 To use it rename assimilation_code/modules/assimilation/assim_tools_mod.pf.f90 to
 assim_tools_mod.f90 and rebuild filter.  There are additional namelist items in
 this version specific to the particle filter.  Read the code for more details.
+<br /> <br />
+
+Thanks to Dan Hodyss. His quadratic ensemble Kalman filter is not currently supported
+in the Manhattan release, but is available in the DART Classic release.
+<br /> <br />
+Thanks to Craig Bishop whose GIGG filter variants are available directly in this
+release. These filter variants can be tested by changing the observation error distribution in
+perfect_model_obs. Setting perfect_model_obs namelist entry gigg_obs_error_pdf to 2 generates
+an inverse gamma error distribution that is effective with the GIG filter (filter_kind = 102) 
+while gigg_obs_error_pdf = 3 generates a gamma error distribution that is effective with the
+IGG filter (filter_kind = 103). 
+
+
+
  </TD> </TR>
 
 <TR>
@@ -818,6 +840,14 @@ A localized particle filter for high-dimensional nonlinear systems.
 target="_blank" >
 doi:10.1175/MWR-D-15-0163.1</a>
 <br /> <br />
+<li>Bishop, C. H., 2016:,
+The GIGG-EnKF: ensemble Kalman filtering for highly skewed non-negative uncertainty distributions.
+<span style="font-style: italic;">Q. J. R. Meteorol. Soc.</span>
+<span style="font-weight: bold;">142</span> 1395-1412.<br />
+<a href="https://rmets.onlinelibrary.wiley.com/doi/abs/10.1002/qj.2742"
+target="_blank" >
+doi:10.1002/qj.2742</a>
+<br /> <br />
 </li>
 </UL>
 <br />
@@ -878,7 +908,9 @@ feature.
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>FUTURE PLANS</H2>
 <P>
-none at this time
+The quadratic filter of Dan Hodyss, currently available in DART classic, will be
+converted to Manhattan. Rank regression updates of state variables will be added
+as an option.
 </P>
 
 <!--==================================================================-->

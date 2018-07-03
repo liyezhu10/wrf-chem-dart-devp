@@ -17,7 +17,7 @@ use    options_mod,       only : get_missing_ok_status
 use  utilities_mod,       only : file_exist, get_unit, check_namelist_read, do_output,    &
                                  find_namelist_in_file, register_module, error_handler,   &
                                  E_ERR, E_MSG, nmlfileunit, do_nml_file, do_nml_term,     &
-                                 open_file, close_file, timestamp, to_upper
+                                 open_file, close_file, timestamp
 use       sort_mod,       only : index_sort 
 use random_seq_mod,       only : random_seq_type, random_gaussian, init_random_seq,       &
                                  random_uniform, random_gamma, random_inverse_gamma
@@ -90,7 +90,7 @@ integer :: print_trace_details = 0
 logical                :: first_inc_ran_call = .true.
 type (random_seq_type) :: inc_ran_seq
 
-! sequence for the GIGG filter
+! Random sequence for the GIGG filter
 logical                :: first_ran_gigg = .true.
 type (random_seq_type) :: gigg_ran_seq
 
@@ -134,12 +134,10 @@ character(len=*), parameter :: revdate  = "$Date$"
 !      8 = Rank Histogram Filter (see Anderson 2011)
 !     (9 = Localized Particle Filter (see Poterjoy 2016), in assim_tools_mod.pf.f90)
 !
-!     100 = GIGG, Craig Bishop. Detect interior type from observation quantity (NOT YET IMPLEMENTED) 
-!     101 ="Gauss_Gauss"     gaussian prior, gaussian observation likelihood
+!     101 = GIGG, Craig Bishop. Detect interior type from observation quantity (NOT YET IMPLEMENTED) 
 !     102 ="Gamma_InvGamma"  gamma prior, inverse-gamma observation likelihood
 !     103 ="InvGamma_Gamma"  inverse-gamma prior, gamma observation likelihood
 !      
-!
 !  special_localization_obs_types -> Special treatment for the specified observation types
 !  special_localization_cutoffs   -> Different cutoff value for each specified obs type
 !
@@ -674,7 +672,10 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
             grp_top = grp_end(group)
             call obs_increment(obs_prior(grp_bot:grp_top), grp_size, obs(1), &
                obs_err_var, obs_inc(grp_bot:grp_top), inflate, my_inflate,   &
-               my_inflate_sd, net_a(group), base_obs_kind)
+               my_inflate_sd, net_a(group))
+               ! For gigg filter could pass base_obs_kind into obs_increment to allow 
+               ! decision on filter kind to be made depending on the observed quantity 
+               ! my_inflate_sd, net_a(group), base_obs_kind)
          end do
 
          ! Compute updated values for single state space inflation
@@ -1245,7 +1246,9 @@ end subroutine filter_assim
 !-------------------------------------------------------------
 
 subroutine obs_increment(ens_in, ens_size, obs, obs_var, obs_inc, &
-   inflate, my_cov_inflate, my_cov_inflate_sd, net_a, quantity)
+   inflate, my_cov_inflate, my_cov_inflate_sd, net_a)
+   ! For gigg quantity would be passed in here.
+   ! inflate, my_cov_inflate, my_cov_inflate_sd, net_a, quantity)
 
 ! Given the ensemble prior for an observation, the observation, and
 ! the observation error variance, computes increments and adjusts
@@ -1257,7 +1260,8 @@ real(r8),                    intent(out)   :: obs_inc(ens_size)
 type(adaptive_inflate_type), intent(inout) :: inflate
 real(r8),                    intent(inout) :: my_cov_inflate, my_cov_inflate_sd
 real(r8),                    intent(out)   :: net_a
-integer,                     intent(in)    :: quantity
+! Declaration for implementing quanity-dependent gigg filter.
+!integer,                     intent(in)    :: quantity
 
 real(r8) :: ens(ens_size), inflate_inc(ens_size)
 real(r8) :: prior_mean, prior_var, new_val(ens_size)
@@ -1342,11 +1346,13 @@ else
       call obs_increment_boxcar(ens, ens_size, obs, obs_var, obs_inc, rel_weights)
     case (8) 
       call obs_increment_rank_histogram(ens, ens_size, prior_var, obs, obs_var, obs_inc)
-    case (100, 101, 102, 103)
-      call obs_increment_GIGG(ens, ens_size, prior_mean, prior_var, obs, obs_var, quantity, obs_inc)
+    case (101, 102, 103)
+      call obs_increment_GIGG(ens, ens_size, prior_mean, prior_var, obs, obs_var, obs_inc)
+      ! Need to pass quantity for quanitity-dependent gigg capability
+      !call obs_increment_GIGG(ens, ens_size, prior_mean, prior_var, obs, obs_var, quantity, obs_inc)
     case default
       call error_handler(E_ERR,'obs_increment', &
-                 'Unexpected error: Illegal value of filter_kind in assim_tools namelist [1-8, 100-103 OK]', &
+                 'Illegal value of filter_kind in assim_tools namelist [1-8, 101-103 OK]', &
                  source, revision, revdate)
    end select
 endif
@@ -2390,15 +2396,17 @@ end do
 end subroutine obs_increment_rank_histogram
 
 
-subroutine obs_increment_GIGG(ens, ens_size, prior_mean, prior_var, obs, obs_var, quantity, obs_inc)
+subroutine obs_increment_GIGG(ens, ens_size, prior_mean, prior_var, obs, obs_var, obs_inc)
+! Need quanity for implementation of quantity-dependent gigg
+!subroutine obs_increment_GIGG(ens, ens_size, prior_mean, prior_var, obs, obs_var, quantity, obs_inc)
 !------------------------------------------------------------------------
 !
-! Craig Bishop's GIGG filter variant.
+! Thanks to Craig Bishop for providing his GIGG filter variant for DART.
 !  Filter subtype determined here based on whether prior and observation 
 !  likelihood pdfs are best approximated by the following assumptions:
-!   GIGG_type 1: Gaussian prior and Gaussian observation likelihood assumed
-!   GIGG_type 2: gamma prior and inverse gamma likelihood assumed
-!   GIGG_type 3: inverse-gamma prior and gamma likelihood assumed
+!   GIGG_type 1: gigg type depending on observation quanity
+!   GIGG_type 2: gamma prior and inverse gamma likelihood assumed for all observations
+!   GIGG_type 3: inverse-gamma prior and gamma likelihood assumed for all observations
 
 
 ! Type 1 relative ob error variance T1Rr = obs_var/(obs_truth**2) where 
@@ -2412,92 +2420,73 @@ subroutine obs_increment_GIGG(ens, ens_size, prior_mean, prior_var, obs, obs_var
 integer,   intent(in)  :: ens_size
 real(r8),  intent(in)  :: ens(ens_size), obs, obs_var
 real(r8),  intent(in)  :: prior_mean, prior_var
-integer,   intent(in)  :: quantity
+!integer,   intent(in)  :: quantity
 real(r8),  intent(out) :: obs_inc(ens_size)
 
 
 integer  :: i, GIGG_type
-real(r8) :: new_mean, var_ratio, a
-real(r8) :: temp_mean, temp_var, new_ens(ens_size), new_var
-real(r8) :: T1Rr, T2Rr
-real(r8) :: wk1, wk2, T2Pr, inv_prior_mean
-real(r8) :: GIG_gain, T1Rr_GIG_PO, y_GIG_mean_PO, y_GIG_sample_mean_PO, nobs_GIG
-real(r8) :: IGG_gain, T1Rr_IGG_PO, y_IGG_mean_PO, y_IGG_sample_mean_PO, nobs_IGG, nanal_var_IGG, anal_var_IGG
-real(r8) :: y_GIG_var_PO, y_IGG_var_PO, T2Rr_IGG_PO
-real(r8) :: alpha, theta, lambda, beta, k_gamma, scale
+real(r8) :: new_mean, T1Rr, T2Rr, wk1, T2Pr, inv_prior_mean
+real(r8) :: GIG_gain, IGG_gain, y_IGG_mean_PO, y_IGG_sample_mean_PO, nobs_IGG, nanal_var_IGG, anal_var_IGG
+real(r8) :: y_IGG_var_PO, T2Rr_IGG_PO
+real(r8) :: alpha, beta
 real(r8) :: nanal_perts(ens_size), nfcst_perts(ens_size), ny_PO(ens_size), nfcst
-real(r8) :: y_GIG_PO(ens_size), y_IGG_PO(ens_size)
+real(r8) :: y_IGG_PO(ens_size)
 real(r8) :: k_gig, k_post, k_prior, rescale, theta_gig, wk_samp_mean, correction_ratio
 real(r8) :: y_anal_wk(ens_size), y_anal(ens_size), prior_mean_temp
 
-
-
-! See comment by other init_random_seq() call.  Will preproduce results
-! exactly for the same number of mpi tasks; will not if # tasks changes.
-
 ! Have three namelist variants for filter_kind that come here
-! 100 means that the choice of filter kind within gigg is a function of quantity (not yet implemented)
-! 101 means just do EAKF
+! 101 means that the choice of filter kind within gigg is a function of quantity (not yet implemented)
 ! 102 means GIG (gamma prior, inverse gamma likelihood)
 ! 103 means IGG (inverse gamma prior, gamma likelihood)
 
-if(filter_kind == 100) then
-   call error_handler(E_ERR, 'obs_increment_GIGG:', 'filter_kind 100 not yet implemented', &
+if(filter_kind == 101) then
+   call error_handler(E_ERR, 'obs_increment_GIGG:', 'filter_kind 101 not yet implemented', &
                       source, revision, revdate)
 endif
 
-! seed the random number generator the first time through this code.
+! Seed the random number generator the first time through this code.
 if(first_ran_gigg) then
+   ! See comment by other init_random_seq() call.  Will reproduce results
+   ! exactly for the same number of mpi tasks; will not if # tasks changes.
    call init_random_seq(gigg_ran_seq, my_task_id() + 1)
    first_ran_gigg = .false.
 endif
 
-! FIXME: compute something based on the obs value (obs), the obs variance (obs_var),
-! the prior ensemble distribution (ens(ens_size), the prior mean and variance (prior_mean,
-! prior_var), and the quantity of interest (quantity, e.g. QTY_TEMPERATURE, QTY_U_WIND_COMPONENT, etc)
-! and set GIGG_type here. 
-! The value of the type 1 relative error variance is assumed to be in the obs_seq file at this point
 
-GIGG_type = filter_kind - 100 ! or 2 or 3
+GIGG_type = filter_kind - 100 ! Kind is 1 or 2 or 3 for case below; Case 1 is currently blocked by logic above
+! The value of the type 1 relative error variance is assumed to be in the obs_seq file at this point
 T1Rr = obs_var
 
 select case (GIGG_type)
- case (1)  ! gaussian ens prior, gaussian obs likelihood
-   ! Compute the new mean
-   var_ratio = obs_var / (prior_var + obs_var)
-   new_mean  = var_ratio * (prior_mean  + prior_var*obs / obs_var)
-
-   ! Compute sd ratio and shift ensemble
-   a = sqrt(var_ratio)
-
-   obs_inc = a * (ens - prior_mean) + new_mean - ens
+ case (1)  ! 
+    ! This is where code to do a quantity dependent GIGG filter would go. 
+    ! Not implemented at this time but stubs exist throughout the module to do this. Search for 'gigg'
 
  case (2)   ! gamma ens prior, inverse gamma obs likelihood
-
-   !Define type 2 prior and ob relative variance
+   ! Define type 2 prior and ob relative variance
    T2Pr = prior_var / (prior_mean**2 + prior_var)
    T2Rr = 1.0_r8 / ((1.0_r8 / T1Rr) + 1.0_r8)
-   !Define the GIG gain
+   ! Define the GIG gain
    GIG_gain = T2Pr / (T2Pr + T2Rr)
    inv_prior_mean = 1.0_r8 / prior_mean
 
-   !Compute new_mean - the posterior mean. Equation (6) from Bishop (2016)
+   ! Compute new_mean - the posterior mean. Equation (6) from Bishop (2016)
    wk1 = inv_prior_mean + GIG_gain * ((1.0_r8 / obs) - (T2Rr + 1) * inv_prior_mean)
    new_mean = 1.0_r8 /wk1
 
-   !Compute obs_inc - the correction to the existing ensemble
-   !first compute required shape parameters   
+   ! Compute obs_inc - the correction to the existing ensemble
+   ! First compute required shape parameters   
    k_prior = (1.0_r8 / T2Pr) - 1.0_r8   ! shape parameter for gamma approximation to prior
    k_gig = (1.0_r8 / T2Rr) + 1.0_r8     ! shape parameter for perturbations to be added to forecast
    k_post = k_prior + k_gig             ! shape parameter for posterior distribution of gig assumptions satisfied
    ! Compute rescaling factor to ensure perturbed forecasts have posterior mean
    rescale = (k_prior*new_mean) / (k_post*prior_mean)
-   !Now perturb the forecast perturbations so that their shape parameter would be the same as the posterior
-   theta_gig = prior_mean / k_prior  ! note that theta_gig=theta_mean as required by summation theorem
+   ! Perturb the forecast perturbations so that their shape parameter would be the same as the posterior
+   theta_gig = prior_mean / k_prior     ! note that theta_gig=theta_mean as required by summation theorem
    wk_samp_mean = 0.0_r8                ! summation variable to compute sample mean
    do i = 1, ens_size
       if (prior_mean < 0.0_r8) then
-         prior_mean_temp = 10e-4_r8
+         prior_mean_temp = 10.0e-4_r8
          msgstring =  'Correcting negative prior_mean for GIG filter '
          call error_handler(E_MSG, 'obs_increment_gigg:', msgstring)
          theta_gig = prior_mean_temp / k_prior  !note that theta_gig=theta_mean as required by summation theorem
@@ -2511,7 +2500,6 @@ select case (GIGG_type)
    y_anal = correction_ratio * y_anal_wk
    ! Create the perturbations (obs_inc) that when added to prior turn it into the gig posterior
    obs_inc = y_anal - ens
-
 
  case (3)   ! inv gamma ens prior, gamma obs likelihood
    ! Define type 2 prior relative variance
@@ -2542,13 +2530,13 @@ select case (GIGG_type)
       y_IGG_PO(i) = random_inverse_gamma(gigg_ran_seq, alpha, beta)
    enddo
 
-   wk1 = 0.0_r8;
+   wk1 = 0.0_r8
    do i = 1, ens_size
        wk1 = wk1 + y_IGG_PO(i)
    enddo
    y_IGG_sample_mean_PO = wk1 / ens_size
 
-   ! Now create normalized fcst and observation perturbations using equation (8) of Bishop (2016)
+   ! Create normalized fcst and observation perturbations using equation (8) of Bishop (2016)
    nobs_IGG = 1.0_r8 / sqrt(y_IGG_mean_PO**2 - y_IGG_var_PO)
    nfcst = 1.0_r8 / sqrt(prior_mean**2 + prior_var)
    do i= 1, ens_size
@@ -2560,8 +2548,7 @@ select case (GIGG_type)
    nanal_var_IGG = T2Pr - T2Pr**2 / (T2Pr + T1Rr)
    ! Compute posterior variance using eq (29) of Bishop (2016)
    anal_var_IGG = (new_mean**2) * nanal_var_IGG / (1.0_r8 - nanal_var_IGG)
-   ! Now create obs_inc=anal_ens-ens for IGG case where anal_ens=nanal_perts*new_mean + new_mean
-
+   ! Create obs_inc=anal_ens-ens for IGG case where anal_ens=nanal_perts*new_mean + new_mean
    obs_inc = (nanal_perts * sqrt(new_mean**2 + anal_var_IGG) + new_mean) - ens
 
  case default
@@ -3025,16 +3012,14 @@ select case (filter_kind)
    msgstring = 'Boxcar'
  case (8)
    msgstring = 'Rank Histogram Filter'
- case (100)
-   msgstring = 'GIGG Filter for Selected Variables'
  case (101)
-   msgstring = 'GIGG Filter version of gaussian gaussian standard EAKF'
+   msgstring = 'GIGG Filter for Selected Variables'
  case (102)
    msgstring = 'GIG Filter'
  case (103)
    msgstring = 'IGG Filter'
  case default 
-   call error_handler(E_ERR, 'assim_tools_init:', 'illegal filter_kind value, valid values are 1-8,100-103', &
+   call error_handler(E_ERR, 'assim_tools_init:', 'illegal filter_kind value, valid values are 1-8,101-103', &
                       source, revision, revdate)
 end select
 call error_handler(E_MSG, 'assim_tools_init:', 'Selected filter type is '//trim(msgstring))
