@@ -65,7 +65,7 @@
    last_obs_days            = -1
    last_obs_seconds         = -1
 
-   inf_flavor                  = 0,                       0
+   inf_flavor                  = 2,                       0
    inf_initial_from_restart    = .false.,                 .false.
    inf_sd_initial_from_restart = .false.,                 .false.
    inf_deterministic           = .true.,                  .true.
@@ -73,8 +73,8 @@
    inf_lower_bound             = 1.0,                     1.0
    inf_upper_bound             = 1000000.0,               1000000.0
    inf_damping                 = 1.0,                     1.0
-   inf_sd_initial              = 0.2,                     0.5
-   inf_sd_lower_bound          = 0.2,                     0.5
+   inf_sd_initial              = 0.0,                     0.5
+   inf_sd_lower_bound          = 0.0,                     0.5
    inf_sd_max_change           = 1.05,                    1.05
 
    trace_execution             = .false.
@@ -98,7 +98,7 @@
 # large for the model to converge.  to test that the model is
 # doing a successful assimilation, change cutoff to 0.02 and rerun.
 &assim_tools_nml
-   filter_kind                     = 1
+   filter_kind                     = 8
    cutoff                          = 0.2
    sort_obs_inc                    = .false.
    spread_restoration              = .false.
