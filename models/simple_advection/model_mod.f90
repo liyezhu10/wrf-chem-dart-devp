@@ -145,7 +145,7 @@ namelist /model_nml/ num_grid_points, grid_spacing_meters, &
                      lagrangian_for_wind, destruction_rate, &
                      source_random_amp_frac, source_damping_rate, &
                      source_diurnal_rel_amp, source_phase_noise, &
-                     template_file, my_ens_size
+                     template_file
 
 
 ! Define the location of the state variables in module storage
@@ -196,7 +196,7 @@ allocate(mean_source(num_grid_points), &
    source_random_amp(num_grid_points))
 
 ! Set the base value for the mean source; This case has a single enhanced source
-mean_source    = 0.1_r8
+mean_source    = 0.0_r8
 mean_source(1) = 1.0_r8
 
 ! A rapidly varying source
@@ -653,10 +653,11 @@ do i=1,num_grid_points
    where(state_ens_handle%vars(i,:) < 0.0_r8) state_ens_handle%vars(i,:) = 0.0_r8 
 
    ! Perturb the source
+   ! Not perturbed for Elia's initial exploration
    do j=1,state_ens_handle%my_num_copies
-      state_ens_handle%vars(num_grid_points + i,j) = random_gaussian(random_seq, &
-                                                     state_ens_handle%vars(num_grid_points + i,j), &
-                                                     state_ens_handle%vars(num_grid_points + i,j))
+      !!!state_ens_handle%vars(num_grid_points + i,j) = random_gaussian(random_seq, &
+                                                     !!!state_ens_handle%vars(num_grid_points + i,j), &
+                                                     !!!state_ens_handle%vars(num_grid_points + i,j))
    enddo
    where(state_ens_handle%vars(num_grid_points + i,:) < 0.0_r8) state_ens_handle%vars(num_grid_points + i,:) = 0.0_r8 
 

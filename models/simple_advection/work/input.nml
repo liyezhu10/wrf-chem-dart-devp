@@ -1,5 +1,5 @@
 &perfect_model_obs_nml
-   read_input_state_from_file = .true.
+   read_input_state_from_file = .false.
    single_file_in             = .true.
    input_state_files          = "perfect_input.nc"
 
@@ -49,7 +49,7 @@
 
    ens_size                     = 80
    num_groups                   = 1
-   perturb_from_single_instance = .false.
+   perturb_from_single_instance = .true.
    perturbation_amplitude       = 0.2
    distributed_state            = .true.
 
@@ -69,7 +69,7 @@
    inf_initial_from_restart    = .false.,                 .false.
    inf_sd_initial_from_restart = .false.,                 .false.
    inf_deterministic           = .true.,                  .true.
-   inf_initial                 = 1.0,                     1.2
+   inf_initial                 = 1.00,                     1.2
    inf_lower_bound             = 1.0,                     1.0
    inf_upper_bound             = 1000000.0,               1000000.0
    inf_damping                 = 1.0,                     1.0
@@ -99,7 +99,7 @@
 # doing a successful assimilation, change cutoff to 0.02 and rerun.
 &assim_tools_nml
    filter_kind                     = 1
-   cutoff                          = 100000000.0
+   cutoff                          = 0.2
    sort_obs_inc                    = .false.
    spread_restoration              = .false.
    sampling_error_correction       = .false.
@@ -128,21 +128,21 @@
    /
 
 &obs_kind_nml
-   assimilate_these_obs_types = 'TRACER_CONCENTRATION',
-                                'VELOCITY'
-   evaluate_these_obs_types   = 'TRACER_SOURCE'
+   assimilate_these_obs_types =  'TRACER_CONCENTRATION', 'VELOCITY',
+                                
+   evaluate_these_obs_types   = ''
    /
 
 &model_nml
-   num_grid_points        = 10
+   num_grid_points        = 40
    grid_spacing_meters    = 100000
    time_step_days         = 0
    time_step_seconds      = 3600
-   mean_wind              = 20.0
-   wind_random_amp        = 0.0002777778
-   wind_damping_rate      = 0.000002777778
+   mean_wind              = 10.0
+   wind_random_amp        = 0.0003
+   wind_damping_rate      = 0.000005
    lagrangian_for_wind    = .true.
-   destruction_rate       = 0.00005555556
+   destruction_rate       = 0.000002
    source_random_amp_frac = 0.0
    source_damping_rate    = 0.000002777778
    source_diurnal_rel_amp = 0.0
