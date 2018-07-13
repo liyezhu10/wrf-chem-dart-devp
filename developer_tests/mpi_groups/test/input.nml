@@ -3,7 +3,7 @@
 /
 
 &mpi_utilities_nml
-   verbose = .false.
+   verbose = .true.
 /
 
 &ensemble_manager_nml
@@ -18,7 +18,7 @@
    input_state_files  = 'simple1.nc', 'simple2.nc'
    output_state_files = ''
    dtype = 1 
-   ltype = 2 
+   ltype = 3 
    ttype = 1 
    /
 

@@ -35,8 +35,9 @@ use     location_mod, only : location_type, get_dist, query_location,          &
                              loc_get_close_state => get_close_state,           &
                              is_vertical, set_vertical_localization_coord
                              
-use netcdf_utilities_mod, only : nc_add_global_attribute, nc_sync, nc_check, &
-                                 nc_add_global_creation_time, nc_redef, nc_enddef
+use netcdf_utilities_mod, only : nc_add_global_attribute, nc_synchronize_file, &
+                                 nc_add_global_creation_time, nc_check, &
+                                 nc_begin_define_mode, nc_end_define_mode
 
 use location_io_mod,      only :  nc_write_location_atts, nc_write_location
 
@@ -86,8 +87,7 @@ use mpi_utilities_mod, only: my_task_id, all_reduce_min_max, task_count
 
 use    random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
 
-use ensemble_manager_mod, only : ensemble_type, map_pe_to_task, &
-                                 get_copy_owner_index, get_var_owner_index, get_my_vars
+use ensemble_manager_mod, only : ensemble_type, get_my_num_vars, get_my_vars
 
 use distributed_state_mod
 
@@ -1006,7 +1006,7 @@ if(is_vertical(location, "SURFACE").and. sfc_elev_max_diff >= 0) then
    endif
    if(abs(llv(3) - zGridFace(1,cellid)) > sfc_elev_max_diff) then
       !Soyoung: No threshold for surface altimeter 
-      !if(obs_kind == KIND_SURFACE_PRESSURE .or. obs_kind == KIND_SURFACE_ELEVATION) then
+      !if(obs_kind == QTY_SURFACE_PRESSURE .or. obs_kind == QTY_SURFACE_ELEVATION) then
       !   istatus = 0
       !else
          istatus = 12
@@ -1297,7 +1297,7 @@ write(filename,*) 'ncid', ncid
 ! and then put into define mode.
 !-------------------------------------------------------------------------------
 
-call nc_redef(ncid)
+call nc_begin_define_mode(ncid)
 
 !-------------------------------------------------------------------------------
 ! We need the dimension ID for the number of copies/ensemble members, and
@@ -1471,7 +1471,7 @@ endif ! add_static_data_to_diags
 ! Finished with dimension/variable definitions, must end 'define' mode to fill.
 !----------------------------------------------------------------------------
 
-call nc_enddef(ncid)
+call nc_end_define_mode(ncid)
 
 if (add_static_data_to_diags) then
    !----------------------------------------------------------------------------
@@ -1588,12 +1588,13 @@ if (add_static_data_to_diags) then
    deallocate(data1d)
 
    call nc_check(nf90_close(mpasFileID),'nc_write_model_atts','close '//trim(grid_definition_filename))
+
 endif ! add_static_data_to_diags
 
 !-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
 !-------------------------------------------------------------------------------
-call nc_sync(ncid)
+call nc_synchronize_file(ncid)
 
 end subroutine nc_write_model_atts
 
@@ -1681,85 +1682,80 @@ subroutine pert_model_copies(ens_handle, ens_size, pert_amp, interf_provided)
  logical,               intent(out) :: interf_provided
 
 logical, allocatable  :: within_range(:)
-integer(i8), allocatable :: var_list(:)
 real(r8), allocatable :: min_var(:), max_var(:)
-integer               :: start_ind, end_ind
-real(r8)              :: pert_ampl
-integer :: copy
-integer :: count
-logical :: bitwise_lanai
-integer :: i
-integer(i8) :: j
-integer :: num_variables
+integer  :: start_ind, end_ind
+real(r8) :: pert_val, range
+integer  :: copy
+integer  :: num_variables
+integer  :: i, j
+integer(i8), allocatable :: var_list(:)
 
 
 
 ! Perturbs a model state copies for generating initial ensembles.
-! The perturbed state is returned in pert_state.
 ! A model may choose to provide a NULL INTERFACE by returning
 ! .false. for the interf_provided argument. This indicates to
-! the filter that if it needs to generate perturbed states, it
-! may do so by adding a perturbation to each model state 
+! the filter that if it needs to generate perturbed states, 
+! it may do so by adding a perturbation to each model state 
 ! variable independently. The interf_provided argument
 ! should be returned as .true. if the model wants to do its own
 ! perturbing of states.
 
 interf_provided = .true.
 
+!>@todo If MPAS ever supports more than a single domain then
+!>look at the wrf model_mod code for how to change this.  you
+!>have to separate out the total number of variables across
+!>all domains for the min/max part, and then loop over only
+!>the number of variables in each domain in the second part.
+
 num_variables = get_num_variables(domid)
 
 ! Get min and max of each variable in each domain
-allocate(var_list(ens_handle%my_num_vars))
-
+allocate(var_list(get_my_num_vars(ens_handle)))
+call get_my_vars(ens_handle, var_list)
 
 allocate(min_var(num_variables), max_var(num_variables))
 allocate(within_range(ens_handle%my_num_vars))
 
- do i = 1, get_num_variables(domid)
+do i = 1, get_num_variables(domid)
 
    start_ind = get_index_start(domid, i)
    end_ind = get_index_end(domid, i)
 
-   call get_my_vars(ens_handle, var_list)
-   within_range = var_list >= start_ind .and. var_list <= end_ind
+   within_range = (var_list >= start_ind .and. var_list <= end_ind)
    min_var(i) = minval(ens_handle%copies(1,:), MASK=within_range)
    max_var(i) = maxval(ens_handle%copies(1,:), MASK=within_range)
 
 enddo
 
+! get global min/max for each variable
 call all_reduce_min_max(min_var, max_var, num_variables)
+deallocate(within_range)
 
-bitwise_lanai = .true.
-if (bitwise_lanai) then
+call init_random_seq(random_seq, my_task_id()+1)
 
-   call pert_copies_lanai_bitwise(ens_handle, ens_size, min_var, max_var)
+do i = 1, num_variables
 
-else
+   start_ind = get_index_start(domid, i)
+   end_ind = get_index_end(domid, i)
 
-   call init_random_seq(random_seq, my_task_id())
+   ! make the perturbation amplitude a fraction of the
+   ! entire variable range.
+   range = max_var(i) - min_var(i)
+   pert_val = model_perturbation_amplitude * range   ! this is a namelist item
 
-   count = 1 ! min and max are numbered 1 to n, where n is the total number of variables
-   do i = 1, num_variables
+   do j=1, ens_handle%my_num_vars
+      if (ens_handle%my_vars(j) >= start_ind .and. ens_handle%my_vars(j) <= end_ind) then
+         do copy = 1, ens_size
+            ens_handle%copies(copy, j) = random_gaussian(random_seq, ens_handle%copies(copy, j), pert_val)
+         enddo
 
-      start_ind = get_index_start(domid, i)
-      end_ind = get_index_end(domid, i)
+         ! keep variable from exceeding the original range
+         ens_handle%copies(1:ens_size,j) = max(min_var(i), ens_handle%copies(1:ens_size,j))
+         ens_handle%copies(1:ens_size,j) = min(max_var(i), ens_handle%copies(1:ens_size,j))
 
-      do j=1, ens_handle%my_num_vars
-         if (ens_handle%my_vars(j) >= start_ind .and. ens_handle%my_vars(j) <= end_ind) then
-            do copy = 1, ens_size
-               pert_ampl = model_perturbation_amplitude * ens_handle%copies(copy, j)
-               ens_handle%copies(copy, j) = random_gaussian(random_seq, ens_handle%copies(copy, j), pert_ampl)
-            enddo
-
-            ! keep variable from exceeding the original range
-            ens_handle%copies(1:ens_size,j) = max(min_var(count), ens_handle%copies(1:ens_size,j))
-            ens_handle%copies(1:ens_size,j) = min(max_var(count), ens_handle%copies(1:ens_size,j))
-
-         endif
-      enddo
-
-      count = count + 1
-
+      endif
    enddo
 
 endif
@@ -1854,9 +1850,9 @@ do copy = 1, ens_size
 
 enddo
 
-deallocate(counter)
+deallocate(var_list, min_var, max_var)
 
-end subroutine pert_copies_lanai_bitwise
+end subroutine pert_model_copies
 
 !------------------------------------------------------------------
 ! Given a DART location (referred to as "base") and a set of candidate
@@ -5378,14 +5374,12 @@ end subroutine compute_elevation_with_barycentric
 !------------------------------------------------------------
 
 subroutine find_triangle(loc, nc, c, weights, ier)
-!find_triangle_vert_indices (state_handle, loc, nc, c, lower, upper, fract, weights, ier)
 
-!type(ensemble_type), intent(in)  :: state_handle
-type(location_type), intent(in)  :: loc !(:) ! ens_size
+type(location_type), intent(in)  :: loc 
 integer,             intent(out) :: nc
 integer,             intent(out) :: c(:) ! single value - cell id
 real(r8),            intent(out) :: weights(:)
-integer,             intent(out) :: ier !(:) ! ens_size
+integer,             intent(out) :: ier
 
 ! compute the values at the correct vertical level for each
 ! of the 3 cell centers defining a triangle that encloses the

@@ -73,7 +73,6 @@ use      obs_kind_mod,   only : QTY_U_WIND_COMPONENT, QTY_V_WIND_COMPONENT, &
                                 get_index_for_quantity, get_num_quantities, &
                                 get_name_for_quantity
 
-!HK should model_mod know about the number of copies?
 use ensemble_manager_mod,  only : ensemble_type, map_pe_to_task, get_var_owner_index, &
                                   get_my_vars, get_copy_owner_index
 

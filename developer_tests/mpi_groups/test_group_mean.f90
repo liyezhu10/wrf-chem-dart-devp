@@ -187,8 +187,11 @@ call task_sync()
 !----------------------------------------------------------------------
 ! Check window
 !----------------------------------------------------------------------
+call print_ens_handle(ens_handle,  force = .true., label = 'ens_handle ', contents= .true., limit = 5 )
+call task_sync()
 
-! call create_mean_window(ens_handle, mean_copy=1, distribute_mean=.true.)
+call print_ens_handle(mean_handle, force = .true., label = 'mean_handle', contents= .true., limit = 5 )
+call create_mean_window(mean_handle, mean_copy=1, distribute_mean=.true.)
 
 do my_rank = 0, task_count() - 1
    if (my_rank == my_task_id()) then
@@ -199,33 +202,23 @@ do my_rank = 0, task_count() - 1
       call task_sync()
    endif
 enddo
+
+print*, ''
 
 do my_rank = 0, task_count(get_group_comm()) - 1
    if (my_rank == my_task_id()) then
       do my_index = 1, ens_handle%my_num_vars
-         print*, 'rank, my_index, ens_handle%copies(i) ', my_task_id(), my_index, ens_handle%copies(1,my_index)
+         print*, 'group rank, my_index, mean_handle%copies(i) ', my_task_id(get_group_comm()), my_index, mean_handle%copies(1,my_index)
       enddo
    else
       call task_sync()
    endif
 enddo
-do my_rank = 0, task_count() - 1
-   if (my_rank == my_task_id()) then
-      do my_index = 1, ens_handle%my_num_vars
-         print*, 'rank, my_index, ens_handle%copies(i) ', my_task_id(), my_index, ens_handle%copies(1,my_index)
-      enddo
-   else
-      call task_sync()
-   endif
-enddo
-
-! do my_rank = 0, task_count() - 1
-! enddo
 
 ! 
 ! print*, 'finished rank', my_task_id()
 
-! call free_mean_window()
+call free_mean_window()
 
 !----------------------------------------------------------------------
 ! finalize test_group_mean
@@ -271,23 +264,6 @@ subroutine finalize_modules_used()
 call finalize_mpi_utilities()
 
 end subroutine finalize_modules_used
-
-!----------------------------------------------------------------------
-!> print the vars array
-
-subroutine print_ens(ens_handle, lim, rank)
-type(ensemble_type), intent(in) :: ens_handle
-integer,             intent(in) :: rank
-integer,             intent(in) :: lim
-integer :: i
-
-print*, 'rank :: ', rank
-do i = 1, ens_handle%my_num_vars
-   write(*,'(A,I3,A,i4)'), 'my_vars(', i,') = ', ens_handle%my_vars(i)
-enddo
-write(*,*) ''
-
-end subroutine print_ens
 
 end program test_group_mean
 

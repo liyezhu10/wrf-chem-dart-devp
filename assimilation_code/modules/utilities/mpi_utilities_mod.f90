@@ -109,6 +109,7 @@ public :: initialize_mpi_utilities, finalize_mpi_utilities,                  &
           get_from_fwd, get_from_mean, broadcast_minmax, broadcast_flag,     &
           start_mpi_timer, read_mpi_timer, create_groups, get_group_size,    &
           set_group_size, group_task_id, get_group_comm, get_group_id,       &
+          start_mpi_timer, read_mpi_timer, send_sum_to,                      &
           all_reduce_min_max  ! deprecated, replace by broadcast_minmax
 
 ! version controlled file description for error handling, do not edit
@@ -508,18 +509,22 @@ function task_count(mpi_comm)
 integer, optional, intent(in) :: mpi_comm
 integer :: task_count
 
+integer :: my_num_tasks
+
 if ( .not. module_initialized ) then
    write(errstring, *) 'initialize_mpi_utilities() must be called first'
    call error_handler(E_ERR,'task_count', errstring, source, revision, revdate)
 endif
 
+task_count = total_tasks
+
 if (present(mpi_comm)) then
-   call MPI_Comm_size(mpi_comm, total_tasks, errcode)
+   call MPI_Comm_size(mpi_comm, my_num_tasks, errcode)
    if (errcode /= MPI_SUCCESS) then
       write(errstring, '(a,i8)') 'MPI_Comm_rank returned error code ', errcode
       call error_handler(E_ERR,'mpi_task_id', errstring, source, revision, revdate)
    endif
-   task_count = total_tasks
+   task_count = my_num_tasks
 endif
 
 end function task_count
@@ -542,6 +547,7 @@ endif
 group_task_id = group_rank
 
 end function group_task_id
+
 !-----------------------------------------------------------------------------
 
 !> Return my unique task id.  Values run from 0 to N-1 (where N is the
@@ -1492,7 +1498,6 @@ sum = localsum(1)
 
 end subroutine sum_across_tasks_real
 
-
 !-----------------------------------------------------------------------------
 ! pipe-related utilities - used in 'async4' handshakes between mpi jobs
 ! and scripting to allow filter and an mpi model to alternate execution.
@@ -1916,6 +1921,27 @@ end function get_dart_mpi_comm
 
 !-----------------------------------------------------------------------------
 !-----------------------------------------------------------------------------
+! Collect sum across tasks for a given array.
+subroutine send_sum_to(local_val, task, global_val)
+
+real(r8), intent(in)  :: local_val(:) !> min max on each task
+integer,  intent(in)  :: task !> task to collect on
+real(r8), intent(out) :: global_val(:) !> only concerned with this on task collecting result
+
+integer :: errcode
+
+if ( .not. module_initialized ) then
+   write(errstring, *) 'initialize_mpi_utilities() must be called first'
+   call error_handler(E_ERR,'send_sum_to', errstring, source, revision, revdate)
+endif
+
+! collect values on a single given task 
+call mpi_reduce(local_val(:), global_val(:), size(global_val), datasize, MPI_SUM, task, get_dart_mpi_comm(), errcode)
+
+end subroutine send_sum_to
+
+!-----------------------------------------------------------------------------
+!-----------------------------------------------------------------------------
 ! Collect min and max on task.
 subroutine send_minmax_to(minmax, task, global_val)
 
@@ -1937,7 +1963,7 @@ end subroutine send_minmax_to
 !-----------------------------------------------------------------------------
 ! cover routine which is deprecated.  when all user code replaces this
 ! with broadcast_minmax(), remove this.
-subroutine all_reduce_min_max(min_var, max_var, num_elements)
+subroutine :ll_reduce_min_max(min_var, max_var, num_elements)
 
 integer,  intent(in)    :: num_elements
 real(r8), intent(inout) :: min_var(num_elements)

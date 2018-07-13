@@ -14,7 +14,7 @@ use        types_mod, only : r8, missing_r8, metadatalength
 use    utilities_mod, only : register_module, initialize_utilities,            &
                              find_namelist_in_file, check_namelist_read,       &
                              error_handler, E_ERR, E_MSG, nmlfileunit,         &
-                             do_nml_file, do_nml_term, get_next_filename,      &
+                             do_nml_file, do_nml_term,                         &
                              open_file, close_file, finalize_utilities
 use     location_mod, only : location_type, get_location, set_location,        &
                              LocationName, read_location, operator(/=),        &
@@ -58,8 +58,6 @@ integer                 :: size_seq_in, size_seq_out
 integer                 :: num_copies_in, num_qc_in
 integer                 :: num_inserted, iunit, io, i, j
 integer                 :: max_num_obs, file_id
-integer                 :: num_rejected_badqc, num_rejected_diffqc
-integer                 :: num_rejected_other
 character(len=129)      :: read_format
 logical                 :: pre_I_format, cal
 character(len=512)      :: msgstring, msgstring1, msgstring2, msgstring3
@@ -174,9 +172,6 @@ if (print_only) call print_obs_seq(seq_in, filename_in)
 !       Must pass a copy of incoming obs to insert_obs_in_seq.
 !--------------------------------------------------------------
 num_inserted = 0
-num_rejected_badqc = 0
-num_rejected_diffqc = 0
-num_rejected_other = 0
 
 if ( get_first_obs(seq_in, obs_in) )  then
 
