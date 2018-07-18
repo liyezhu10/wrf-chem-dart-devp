@@ -57,14 +57,24 @@ switch lower(pinfo.model)
       % compute distance from 0
       err        = squeeze(total_err(truth, ens));
       err_spread = squeeze(total_err(zeros(size(spread)), spread));
-      errTotal   = sum(err)/pinfo.time_series_length;
-      spreadTotal= sum(err_spread)/pinfo.time_series_length;
-      string1 = ['time-mean Ensemble Mean Total Error = ' num2str(errTotal)];
-      string2 = ['time-mean Ensemble Spread = ' num2str(spreadTotal)];
+
+num_to_skip = 500;
+      %errTotal   = sum(err)/pinfo.time_series_length;
+      errTotal   = sum(err(num_to_skip:end))/(pinfo.time_series_length-num_to_skip + 1);
+      %spreadTotal= sum(err_spread)/pinfo.time_series_length;
+      spreadTotal= sum(err_spread(num_to_skip:end))/(pinfo.time_series_length-num_to_skip + 1);
+      string1 = ['time-mean Ensemble Mean Total/sqrt(40) = ' num2str(errTotal ./ sqrt(40))];
+      string2 = ['time-mean Ensemble Spread/sqrt(40)= ' num2str(spreadTotal ./ sqrt(40))];
+
+      fid_out = fopen('rms_spread_out', 'w');
+      fprintf(fid_out, '%11.6f %11.6f', errTotal ./ sqrt(40), spreadTotal ./ sqrt(40));
+      fclose(fid_out);
+      
 
       clf;
       plot(pinfo.time,err, 'b', pinfo.time,err_spread, 'r');
-      legend(string1,string2,'Location','NorthEast')
+      hleg = legend(string1,string2,'Location','NorthEast');
+      set(hleg, 'fontsize', 16)
       legend boxoff
       s1 = sprintf('%s Total Error over all %d variables', pinfo.model, num_vars);
       title({s1,pinfo.diagn_file},'interpreter','none','fontweight','bold')
