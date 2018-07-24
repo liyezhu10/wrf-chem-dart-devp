@@ -35,7 +35,8 @@ use random_seq_mod,   only : random_seq_type, init_random_seq, random_gaussian
 
 use ensemble_manager_mod,  only : ensemble_type, get_allow_transpose, &
                                   all_vars_to_all_copies, all_copies_to_all_vars, &
-                                  init_ensemble_manager, end_ensemble_manager
+                                  init_ensemble_manager, end_ensemble_manager, &
+                                  copies_in_window
 
 use distributed_state_mod, only : get_state
 
@@ -634,7 +635,7 @@ integer,   intent(in) :: ens_size
 real(r8),  intent(in)  :: pert_amp
 logical,  intent(out) :: interf_provided
 
-integer :: i,j
+integer :: i,j,num_ens_copies
 real(r8) :: avg_wind
 
 interf_provided = .true.
@@ -644,17 +645,18 @@ if(.not. allocated(state_ens_handle%vars)) &
         allocate(state_ens_handle%vars(state_ens_handle%num_vars, state_ens_handle%my_num_copies))
 call all_copies_to_all_vars(state_ens_handle)
 
+num_ens_copies = copies_in_window(state_ens_handle)
 do i=1,num_grid_points
 
    ! Perturb the tracer concentration
-   do j=1,state_ens_handle%my_num_copies
+   do j=1,num_ens_copies
       state_ens_handle%vars(i,j) = random_gaussian(random_seq, state_ens_handle%vars(i,j), state_ens_handle%vars(i,j))
    enddo
    where(state_ens_handle%vars(i,:) < 0.0_r8) state_ens_handle%vars(i,:) = 0.0_r8 
 
    ! Perturb the source
    ! Not perturbed for Elia's initial exploration
-   do j=1,state_ens_handle%my_num_copies
+   do j=1,num_ens_copies
       !!!state_ens_handle%vars(num_grid_points + i,j) = random_gaussian(random_seq, &
                                                      !!!state_ens_handle%vars(num_grid_points + i,j), &
                                                      !!!state_ens_handle%vars(num_grid_points + i,j))
@@ -662,10 +664,10 @@ do i=1,num_grid_points
    where(state_ens_handle%vars(num_grid_points + i,:) < 0.0_r8) state_ens_handle%vars(num_grid_points + i,:) = 0.0_r8 
 
    ! Perturb the u field
-   do j=1,state_ens_handle%my_num_copies
+   do j=1,num_ens_copies
 
       ! Find the average value of the wind field for the base
-      avg_wind = sum(state_ens_handle%vars(2*num_grid_points + i:3*num_grid_points,j)) / num_grid_points
+      avg_wind = sum(state_ens_handle%vars(2*num_grid_points:3*num_grid_points,j)) / num_grid_points
       ! Get a random draw to get 
       state_ens_handle%vars(2*num_grid_points + i,j) = random_gaussian(random_seq, 0.05_r8, avg_wind)
    enddo
