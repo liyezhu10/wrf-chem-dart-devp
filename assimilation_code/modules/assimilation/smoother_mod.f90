@@ -125,7 +125,7 @@ allow_missing = get_missing_ok_status()
 ! NOTE: Using ens_handle here (not lag_handle) so it doesn't die for 0 lag choice
 if(num_lags > 0) call adaptive_inflate_init(lag_inflate, 0, .false., .false., &
    .false. ,.true., 1.0_r8, 0.0_r8,       &
-   1.0_r8, 1.0_r8, 0.0_r8, ens_handle, allow_missing, "Lag")
+   1.0_r8, 1.0_r8, 0.0_r8, 1.0_r8, ens_handle, allow_missing, "Lag")
 
 end subroutine init_smoother
 
@@ -271,8 +271,8 @@ logical, intent(in) :: output_inflation
 
 ! The 4 is for ensemble mean and spread plus inflation mean and spread
 character(len = metadatalength) :: state_meta(num_output_state_members + 4)
-!character(len = 14)  :: file_name
-!character(len = 15)  :: meta_data_string
+character(len = 14)  :: file_name
+character(len = 15)  :: meta_data_string
 integer              :: i, ensemble_offset, num_state_copies
 
 ! must have called init_smoother() before using this routine
@@ -344,7 +344,7 @@ integer,             intent(in)    :: start_copy, end_copy
 character(len = 256) :: file_name
 integer              :: i, smoother_index
 
-!type(file_info_type) :: file_info
+type(file_info_type) :: file_info
 
 ! must have called init_smoother() before using this routine
 if ( .not. module_initialized ) then
