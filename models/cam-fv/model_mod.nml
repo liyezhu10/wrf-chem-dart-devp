@@ -2,9 +2,13 @@
 # options for vertical localization:  'PRESSURE', 'HEIGHT', 'SCALEHEIGHT', 'LEVEL'
 # options for vertical interpolation (use_log_vertical_scale) = .false., .true.
 #
+# model top related items (no_obs_assim_above_level, model_damping_ends_at_level)
+# are now specified in model level numbers.  the top level is 1 and increases
+# going down towards the surface.
+#
 # examples of state_variables, 5 columns per field:
 #
-#    netcdf varname, dart quantity, min allowed value, max allowed value, (no)update this var
+#   netcdf varname, dart quantity, min allowed value, max allowed value, (no)update this var
 #
 #   state_variables = 'T', 'QTY_TEMPERATURE',                'NA', 'NA', 'UPDATE'
 #                     'US','QTY_U_WIND_COMPONENT',           'NA', 'NA', 'UPDATE'
@@ -18,23 +22,23 @@
 #                     'H', 'QTY_ATOMIC_H_MIXING_RATIO',      'NA', 'NA', 'UPDATE'
 #                     'Op','QTY_ION_O_MIXING_RATIO',         'NA', 'NA', 'UPDATE'
 
-
 &model_nml
-   cam_template_filename           = 'caminput.nc'
-   cam_phis_filename               = 'cam_phis.nc'
-   state_variables                 = ''
+   cam_template_filename               = 'caminput.nc'
+   cam_phis_filename                   = 'cam_phis.nc'
+   vertical_localization_coord         = 'PRESSURE'
+   use_log_vertical_scale              = .false.
+   no_normalization_of_scale_heights   = .true.
+   no_obs_assim_above_level            = -1,
+   model_damping_ends_at_level         = -1,
+   state_variables                     = ''
+   assimilation_period_days            = 0
+   assimilation_period_seconds         = 21600
+   suppress_grid_info_in_output        = .false.
    custom_routine_to_generate_ensemble = .true.
-   fields_to_perturb               = ''
-   perturbation_amplitude          = 0.0_r8
-   assimilation_period_days        = 0
-   assimilation_period_seconds     = 21600
-   vertical_localization_coord     = 'PRESSURE'
-   use_log_vertical_scale          = .false.
-   no_assim_above_pressure         = -1.0      
-   start_damping_ramp_at_pressure  = -1.0      
-   using_chemistry                 = .false.
-   use_variable_mean_mass          = .false.
-   suppress_grid_info_in_output    = .false.
-   debug_level                     = 0
+   fields_to_perturb                   = ''
+   perturbation_amplitude              = 0.0_r8
+   using_chemistry                     = .false.
+   use_variable_mean_mass              = .false.
+   debug_level                         = 0
 /
 
