@@ -337,17 +337,18 @@ height is simply the log of the pressure at any location.
     <TD> integer </TD>
     <TD>Because the top of the model is highly damped it is recommended
 to NOT assimilate observations in the top model levels.  The units here
-are CAM model level numbers.  Set it to the lowest model level (the highest
-number) where damping is applied in the model.  
+are CAM model level numbers.  Set it to equal or below the lowest model 
+level (the highest number) where damping is applied in the model.  
 </TD></TR>
 
 <TR><TD> model_damping_ends_at_level </TD>
     <TD> integer </TD>
     <TD>Set this to the lowest model level (the highest number) where
 model damping is applied.  Observations below the 'no_obs_assim_above_level'
-cutoff but close enough to the model top to have an impact during
-assimilation will have their impacts decreased smoothly in model levels
-above this limit.
+cutoff but close enough to the model top to have an impact during the
+assimilation will have their impacts decreased smoothly to 0 at this
+given model level. The assimilation should make no changes to the model
+state above the given level.
 </TD></TR>
 
 <TR><TD>state_variables </TD>
