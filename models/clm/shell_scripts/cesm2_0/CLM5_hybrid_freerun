@@ -27,11 +27,12 @@
 # incorporate any needed changes into this script.
 # ==============================================================================
 
-setenv CASE           clm5_f09_spinup80
-setenv resolution     f09_f09
+setenv resolution     f09_f09_mg17
+setenv compset        2000_DATM%CPLHIST_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
 setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
 setenv cesmtag        ctsm
-setenv num_instances  80
+setenv num_instances  4
+setenv CASE           clm5.0.06_f09_mv2_$num_instances
 
 # ==============================================================================
 # Directories:
@@ -59,14 +60,14 @@ setenv num_instances  80
 
 setenv project      P86850054
 setenv machine      cheyenne
-setenv cesmdata     /glade/p/cesm/cseg/inputdata
-setenv cesmroot     /glade/p/work/${USER}/CESM/$cesmtag
-setenv caseroot     /glade/p/work/${USER}/cases/$cesmtag/${CASE}
+setenv cesmdata     /glade/p_old/cesm/cseg/inputdata
+setenv cesmroot     /glade/work/${USER}/CESM/$cesmtag
+setenv caseroot     /glade/work/${USER}/cases/$cesmtag/${CASE}
 setenv rundir       /glade/scratch/${USER}/$cesmtag/${CASE}/run
 setenv exeroot      /glade/scratch/${USER}/$cesmtag/${CASE}/bld
 setenv archdir      /glade/scratch/${USER}/$cesmtag/${CASE}/archive
 
-setenv dartroot     /glade/p/work/thoar/DART/cesm_clm
+setenv dartroot     /glade/work/thoar/DART/cesm_clm
 
 # ==============================================================================
 # configure settings:
@@ -91,7 +92,7 @@ setenv reftod       00000
 setenv refdate      $refyear-$refmon-$refday
 setenv reftimestamp $refyear-$refmon-$refday-$reftod
 
-setenv stagedir /glade/p/image/RDA_strawman/CESM_ensembles/CLM/CLM5BGC-Crop/${reftimestamp}
+setenv stagedir /glade/p_old/image/RDA_strawman/CESM_ensembles/CLM/CLM5BGC-Crop/ctsm_${reftimestamp}
 
 setenv startdate    2001-07-01
 
@@ -123,7 +124,7 @@ set stream_year_last  = 2010
 #
 # ==============================================================================
 
-setenv queue        economy
+setenv queue        premium
 setenv timewall     00:20:00
 setenv short_term_archiver off
 
@@ -240,7 +241,24 @@ endif
 ./xmlchange EXEROOT=${exeroot}
 ./xmlchange RUNDIR=${rundir}
 
-./xmlchange DATM_MODE=CPLHISTForcing
+# This comes from http://esmci.github.io/cime/data_models/data-atm.html
+# Note If DATM_MODE is set to CPLHIST, it is normally assumed that the model 
+# domain will be identical to all of the stream domains. To ensure this, the 
+# xml variables ATM_DOMAIN_PATH and ATM_DOMAIN_FILE are ignored and a valid 
+# setting must be given for DATM_CPLHIST_DOMAIN_FILE. If DATM_CPLHIST_DOMAIN_FILE 
+# is set to null, then the datm component domain information is read in from 
+# the first coupler history file in the target stream and it is assumed that the 
+# first coupler stream file that is pointed to contains the domain information 
+# for that stream. This is the default that should be used for this mode. 
+# Alternatively, DATM_CPLHIST_DOMAIN_FILE can be set to 
+# $ATM_DOMAIN_PATH/$ATM_DOMAIN_FILE in a non-default configuration.
+
+./xmlchange DATM_MODE=CPLHIST
+#./xmlchange ATM_DOMAIN_PATH=/glade/p_old/image/thoar/CAM_DATM/4xdaily
+#./xmlchange ATM_DOMAIN_FILE=CAM_DATM.cpl_NINST.ha2x1dx6h.RUNYEAR.nc
+#./xmlchange DATM_CPLHIST_DOMAIN_FILE=/glade/p_old/image/thoar/CAM_DATM/4xdaily/CAM_DATM.cpl_0001.ha2x1dx6h.2001.nc
+./xmlchange DATM_CPLHIST_DOMAIN_FILE=null
+
 ./xmlchange DATM_CPLHIST_YR_ALIGN=$stream_year_align
 ./xmlchange DATM_CPLHIST_YR_START=$stream_year_first
 ./xmlchange DATM_CPLHIST_YR_END=$stream_year_last
@@ -299,16 +317,15 @@ endif
 ./xmlchange ROOTPE_LND=0,NTHRDS_LND=$nthreads,NTASKS_LND=$lnd_tasks
 ./xmlchange ROOTPE_ESP=0,NTHRDS_ESP=$nthreads,NTASKS_ESP=$esp_tasks
 
-./case.setup || exit 6
-
-echo "case setup finished"
-
-# ====================================
-
 ./xmlchange --subgroup case.run        --id JOB_QUEUE          --val ${queue}
 ./xmlchange --subgroup case.run        --id JOB_WALLCLOCK_TIME --val ${timewall}
 ./xmlchange --subgroup case.st_archive --id JOB_WALLCLOCK_TIME --val 1:00
 
+./case.setup || exit 6
+
+echo "case setup finished"
+
+# ==============================================================================
 # These are archiving options that may be used.
 # You can turn the short/long term archivers on or off ({short,long}_term_archiver),
 # but these settings should be made in either event.
@@ -323,6 +340,10 @@ endif
 # INFO_DBUG level of debug output, 0=minimum, 1=normal, 2=more, 3=too much.
 ./xmlchange DEBUG=FALSE
 ./xmlchange INFO_DBUG=0
+
+# I am not sure this has anything to do with our case, as we are using
+# our own forcing data ... required by changes to /glade in July 2018
+./xmlchange DIN_LOC_ROOT_CLMFORC=/glade/p/cgd/tss/CTSM_datm_forcing_data
 
 # ==============================================================================
 # Modify namelist templates for each instance.
@@ -341,7 +362,9 @@ while ( $inst <= $num_instances )
    set FILE2 = datm.streams.txt.CPLHISTForcing.nonSolarFlux${inst_string}
    set FILE3 = datm.streams.txt.CPLHISTForcing.State1hr${inst_string}
    set FILE4 = datm.streams.txt.CPLHISTForcing.State3hr${inst_string}
+   set DOMAINFILE = '/glade/p/cesmdata/cseg/inputdata/share/domains/domain.lnd.fv0.9x1.25_gx1v7.151020.nc'
 
+   echo "domainfile = '${DOMAINFILE}'" >> ${fname}
    echo "streams = '$FILE1 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
    echo "          '$FILE2 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
    echo "          '$FILE3 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
@@ -387,13 +410,7 @@ while ( $inst <= $num_instances )
    #      vegetated landunits, which is not a very good initialization, so
    #      you'll want to spin up for a while to spin up the new glacier_mec
    #      landunits.
-   #
-   # Additionally, the finidat interpolation is known to have a multi-instance
-   # filename problem preventing the use of pnetcdf unless the filename is
-   # explicitly specified.
 
-#  set finidat_name = "finidat${inst_string}_interp_dest.nc"
-#  echo "finidat_interp_dest = '"$finidat_name"'"            >> ${fname}
    echo "use_init_interp = .true."                           >> ${fname}
    echo "init_interp_fill_missing_with_natveg = .true."      >> ${fname}
    echo "hist_empty_htapes = .true."                         >> ${fname}
