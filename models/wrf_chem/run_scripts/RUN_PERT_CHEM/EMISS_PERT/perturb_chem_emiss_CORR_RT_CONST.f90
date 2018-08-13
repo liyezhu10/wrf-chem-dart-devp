@@ -1,7 +1,7 @@
 !
 ! code to perturb the wrfchem emission files
 !
-! ifort -C perturb_chem_emiss_CORR_RT_CONST.f90 -o perturb_chem_emiss_CORR_RT_CONST.exe -lgfortran -lnetcdff -lnetcdf
+! gfortran -fcheck=all perturb_chem_emiss_CORR_RT_CONST.f90 -o perturb_chem_emiss_CORR_RT_CONST.exe -I$NETCDF/include -L$NETCDF/lib -lnetcdff -lnetcdf
 !
           program main
              implicit none
@@ -169,16 +169,19 @@
                 print *, pert_land_biog_d,pert_watr_biog_d
                 print *, pert_land_biog_m,pert_watr_biog_m
 !
-! draw member
                 if(sw_chem) then
+!
+! draw member
                    imem=iimem
                    if(imem.ge.0.and.imem.lt.10) write(cmem,"('.e00',i1)"),imem
                    if(imem.ge.10.and.imem.lt.100) write(cmem,"('.e0',i2)"),imem
                    if(imem.ge.100.and.imem.lt.1000) write(cmem,"('.e',i3)"),imem
                    wrfchem_file=trim(wrfchemi)//trim(cmem)
                    do isp=1,nchem_spc
-                      print *, 'isp ',isp,trim(ch_chem_spc(isp))
-
+!                      print *, 'pert_land ',pert_land_chem_d
+!                      print *, 'pert_watr ',pert_watr_chem_d
+!                      print *, 'isp ',isp,trim(ch_chem_spc(isp))
+                      print *, 'file ',trim(wrfchem_file)
                       call get_WRFCHEM_emiss_data(wrfchem_file,ch_chem_spc(isp),chem_data3d,nx,ny,nz_chem)
                       do i=1,nx
                          do j=1,ny
@@ -421,10 +424,10 @@
              character*(*)                         :: file
 !
 ! open netcdf file
-             rc = nf_open(trim(file),NF_NOWRITE,f_id)
+             rc = nf_open(trim(file),NF_SHARE,f_id)
 !             print *, trim(file)
              if(rc.ne.0) then
-                print *, 'nf_open error ',trim(file)
+                print *, 'nf_open error in get ',rc, trim(file)
                 call abort
              endif
 !
@@ -501,9 +504,10 @@
 ! open netcdf file
              rc = nf_open(trim(file),NF_WRITE,f_id)
              if(rc.ne.0) then
-                print *, 'nf_open error ',trim(file)
+                print *, 'nf_open error in put ',rc, trim(file)
                 call abort
              endif
+!             print *, 'f_id ',f_id
 !
 ! get variables identifiers
              rc = nf_inq_varid(f_id,trim(name),v_id)
@@ -512,6 +516,7 @@
                 print *, 'nf_inq_varid error ', v_id
                 call abort
              endif
+!             print *, 'v_id ',v_id
 !
 ! get dimension identifiers
              v_dimid=0
@@ -521,6 +526,7 @@
                 print *, 'nf_inq_var error ', v_dimid
                 call abort
              endif
+!             print *, 'v_ndim, v_dimid ',v_ndim,v_dimid      
 !
 ! get dimensions
              v_dim(:)=1
@@ -550,9 +556,14 @@
 !
 ! put data
              one(:)=1
-             rc = nf_put_vara_real(f_id,v_id,one,v_dim,data)
+!             rc = nf_close(f_id)
+!             rc = nf_open(trim(file),NF_WRITE,f_id)
+             rc = nf_put_vara_real(f_id,v_id,one(1:v_ndim),v_dim(1:v_ndim),data)
              if(rc.ne.0) then
-                print *, 'nf_put_vara_real ', data(1,1,1)
+                print *, 'nf_put_vara_real return code ',rc
+                print *, 'f_id,v_id ',f_id,v_id
+                print *, 'one ',one(1:v_ndim)
+                print *, 'v_dim ',v_dim(1:v_ndim)
                 call abort
              endif
              rc = nf_close(f_id)

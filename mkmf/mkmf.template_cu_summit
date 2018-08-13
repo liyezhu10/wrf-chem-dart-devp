@@ -122,8 +122,8 @@ LD = ifort
 #
 # NETCDF = /opt/local
 
-INCS = -I$(NETCDF)/include -I${CURC_MKL_INC}
-LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf -L${CURC_MKL_LIB} -lmkl_rt -lmkl_lapack95_lp64 -lmkl_blas95_lp64 -lm -lpthread
+INCS = -I$(NETCDF)/include
+LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf -lmkl_rt -lmkl_lapack95_lp64 -lmkl_blas95_lp64 -lm -lpthread
 #FFLAGS  = -O2 -CB -ftz -vec-report0 -mcmodel=medium -shared-intel -fp-model precise $(INCS)
 #FFLAGS  = -g -C -CB -ftz -vec-report0 -mcmodel=medium -shared-intel -fp-model precise $(INCS)
 #

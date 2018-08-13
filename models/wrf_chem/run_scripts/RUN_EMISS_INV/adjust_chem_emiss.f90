@@ -1,7 +1,7 @@
 !
 ! code to adjust emissions at subsequent times
 !
-! ifort -C adjust_chem_emiss.f90 -o adjust_chem_emiss.exe -lgfortran -lnetcdff -lnetcdf
+! ifort -C adjust_chem_emiss.f90 -o adjust_chem_emiss.exe -I$NETCDF_DIR/include -L$NETCDF_DIR/lib -lnetcdff -lnetcdf
 !
           program main
              implicit none

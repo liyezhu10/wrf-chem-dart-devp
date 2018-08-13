@@ -1,7 +1,7 @@
 !
 ! code to fix time stamp on netcdf file
 !
-! ifort -C fix_time_stamp.f90 -o fix_time_stamp.exe -lgfortran -lnetcdff -lnetcdf
+! ifort -C fix_time_stamp.f90 -o fix_time_stamp.exe -I$NETCDF_DIR/include -L$NETCDF_DIR/lib -lnetcdff -lnetcdf
 !
           program main
              implicit none

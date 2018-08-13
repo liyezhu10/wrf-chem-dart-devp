@@ -143,7 +143,7 @@ real                            :: bin_beg, bin_end
 real                            :: sec, lat, lon, nlevels
 real                            :: pi ,rad2deg, re, wt, corr_err, fac, fac_obs_error
 real                            :: ln_10, xg_sec_avg, co_log_max, co_log_min, co_min
-real                            :: irot, nlvls_fix
+integer                         :: irot, nlvls_fix
 real*8, dimension(1000)         :: unif
 real*8, dimension(num_qc)       :: co_qc
 real*8, dimension(mop_dim)      :: co_avgker
