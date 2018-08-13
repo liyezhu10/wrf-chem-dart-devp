@@ -23,11 +23,11 @@ export CYCLE_END_DATE=2014071406
 export CYCLE_DATE=${CYCLE_STR_DATE}
 export NL_FAC_OBS_ERROR_MOPITT=1.00
 export NL_FAC_OBS_ERROR_IASI=1.00
-export RETRIEVAL_TYPE_MOPITT=RETR
-export RETRIEVAL_TYPE_IASI=RETR
+export RETRIEVAL_TYPE_MOPITT=CPSR
+export RETRIEVAL_TYPE_IASI=CPSR
 #
 export PERT_CHEM_GENER=false
-export USE_LOG=true
+export USE_LOG=false
 if [[ ${USE_LOG} == true && ${RETRIEVAL_TYPE_MOPITT} != 'RETR' && ${RETRIEVAL_TYPE_IASI} != 'RETR' ]]; then
    echo 'if $USE_LOG=true then $RETRIEVAL_TYPE_MOPITT and $RETRIEVAL_TYPE_IASI must be RETR'
    exit
@@ -131,7 +131,7 @@ export INPUT_DATA_DIR=/gpfs/summit/datasets/GEOSChem_met_emis/wrf
 #
 # DEPENDENT INPUT DATA DIRECTORIES:
 export EXPERIMENT_DIR=${SCRATCH_DIR}
-export RUN_DIR=${EXPERIMENT_DIR}/real_FRAPPE_RETR_MOP_CO
+export RUN_DIR=${EXPERIMENT_DIR}/real_FRAPPE_CPSR_MOP_CO
 export TRUNK_DIR=${WORK_DIR}/TRUNK
 export WPS_DIR=${TRUNK_DIR}/${WPS_VER}
 export WPS_GEOG_DIR=${INPUT_DATA_DIR}/${WPS_GEOG_VER}
@@ -267,8 +267,8 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_WRFCHEM_CHEMI=false
    export RUN_PERT_WRFCHEM_CHEM_ICBC=false
    export RUN_PERT_WRFCHEM_CHEM_EMISS=false
-   export RUN_MOPITT_CO_OBS=false
-   export RUN_IASI_CO_OBS=false
+   export RUN_MOPITT_CO_OBS=true
+   export RUN_IASI_CO_OBS=true
    export RUN_IASI_O3_OBS=false
    export RUN_OMI_NO2_OBS=false
    export RUN_AIRNOW_O3_OBS=false
@@ -278,8 +278,8 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_PANDA_PM25_OBS=false
    export RUN_MODIS_AOD_OBS=false
    export RUN_MET_OBS=false
-   export RUN_COMBINE_OBS=false
-   export RUN_PREPROCESS_OBS=false
+   export RUN_COMBINE_OBS=true
+   export RUN_PREPROCESS_OBS=true
 #
    if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
       export RUN_WRFCHEM_INITIAL=true
@@ -293,7 +293,7 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
       export RUN_ENSEMBLE_MEAN_OUTPUT=false
    else
       export RUN_WRFCHEM_INITIAL=false
-      export RUN_DART_FILTER=false
+      export RUN_DART_FILTER=true
       export RUN_UPDATE_BC=true
       export RUN_WRFCHEM_CYCLE_CR=true
       export RUN_BAND_DEPTH=false

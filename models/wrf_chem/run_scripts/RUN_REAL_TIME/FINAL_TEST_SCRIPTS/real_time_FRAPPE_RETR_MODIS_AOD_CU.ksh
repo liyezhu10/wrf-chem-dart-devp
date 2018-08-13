@@ -131,7 +131,7 @@ export INPUT_DATA_DIR=/gpfs/summit/datasets/GEOSChem_met_emis/wrf
 #
 # DEPENDENT INPUT DATA DIRECTORIES:
 export EXPERIMENT_DIR=${SCRATCH_DIR}
-export RUN_DIR=${EXPERIMENT_DIR}/real_FRAPPE_RETR_MOP_CO
+export RUN_DIR=${EXPERIMENT_DIR}/real_FRAPPE_RETR_MOD_AOD
 export TRUNK_DIR=${WORK_DIR}/TRUNK
 export WPS_DIR=${TRUNK_DIR}/${WPS_VER}
 export WPS_GEOG_DIR=${INPUT_DATA_DIR}/${WPS_GEOG_VER}
@@ -255,31 +255,31 @@ export ASIM_MAX_SEC_GREG=${temp[1]}
 # SELECT COMPONENT RUN OPTIONS:
 if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_GEOGRID=false
-   export RUN_UNGRIB=false
-   export RUN_METGRID=false
-   export RUN_REAL=false
-   export RUN_PERT_WRFCHEM_MET_IC=false
-   export RUN_PERT_WRFCHEM_MET_BC=false
-   export RUN_EXO_COLDENS=false
-   export RUN_SEASON_WES=false
-   export RUN_WRFCHEM_BIO=false
-   export RUN_WRFCHEM_FIRE=false
-   export RUN_WRFCHEM_CHEMI=false
-   export RUN_PERT_WRFCHEM_CHEM_ICBC=false
-   export RUN_PERT_WRFCHEM_CHEM_EMISS=false
-   export RUN_MOPITT_CO_OBS=false
-   export RUN_IASI_CO_OBS=false
+   export RUN_UNGRIB=true
+   export RUN_METGRID=true
+   export RUN_REAL=true
+   export RUN_PERT_WRFCHEM_MET_IC=true
+   export RUN_PERT_WRFCHEM_MET_BC=true
+   export RUN_EXO_COLDENS=true
+   export RUN_SEASON_WES=true
+   export RUN_WRFCHEM_BIO=true
+   export RUN_WRFCHEM_FIRE=true
+   export RUN_WRFCHEM_CHEMI=true
+   export RUN_PERT_WRFCHEM_CHEM_ICBC=true
+   export RUN_PERT_WRFCHEM_CHEM_EMISS=true
+   export RUN_MOPITT_CO_OBS=true
+   export RUN_IASI_CO_OBS=true
    export RUN_IASI_O3_OBS=false
    export RUN_OMI_NO2_OBS=false
-   export RUN_AIRNOW_O3_OBS=false
-   export RUN_AIRNOW_CO_OBS=false
+   export RUN_AIRNOW_O3_OBS=true
+   export RUN_AIRNOW_CO_OBS=true
    export RUN_PANDA_CO_OBS=false
    export RUN_PANDA_O3_OBS=false
    export RUN_PANDA_PM25_OBS=false
-   export RUN_MODIS_AOD_OBS=false
-   export RUN_MET_OBS=false
-   export RUN_COMBINE_OBS=false
-   export RUN_PREPROCESS_OBS=false
+   export RUN_MODIS_AOD_OBS=true
+   export RUN_MET_OBS=true
+   export RUN_COMBINE_OBS=true
+   export RUN_PREPROCESS_OBS=true
 #
    if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
       export RUN_WRFCHEM_INITIAL=true
@@ -293,7 +293,7 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
       export RUN_ENSEMBLE_MEAN_OUTPUT=false
    else
       export RUN_WRFCHEM_INITIAL=false
-      export RUN_DART_FILTER=false
+      export RUN_DART_FILTER=true
       export RUN_UPDATE_BC=true
       export RUN_WRFCHEM_CYCLE_CR=true
       export RUN_BAND_DEPTH=false
@@ -1179,11 +1179,11 @@ export NL_ASSIMILATE_THESE_OBS_TYPES="'RADIOSONDE_TEMPERATURE',
                                    'AIRCRAFT_TEMPERATURE',
                                    'SAT_U_WIND_COMPONENT',
                                    'SAT_V_WIND_COMPONENT',
-                                   'MOPITT_CO_RETRIEVAL'"
+                                   'MODIS_AOD_RETRIEVAL'"
 #                                   'AIRNOW_CO'"
+#                                   'MOPITT_CO_RETRIEVAL'"
 #                                   'IASI_CO_RETRIEVAL',
 #                                   'IASI_O3_RETRIEVAL',
-#                                   'MODIS_AOD_RETRIEVAL',
 #                                   'AIRNOW_O3',
 #                                   'PANDA_CO',
 #                                   'PANDA_O3',
