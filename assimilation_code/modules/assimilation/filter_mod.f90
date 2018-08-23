@@ -59,7 +59,8 @@ use ensemble_manager_mod,  only : init_ensemble_manager, end_ensemble_manager,  
                                   map_task_to_pe,  map_pe_to_task, prepare_to_update_copies,  &
                                   copies_in_window, set_num_extra_copies, get_allow_transpose, &
                                   allocate_single_copy, allocate_vars, deallocate_single_copy, &
-                                  all_copies_to_all_vars, all_vars_to_all_copies, get_my_num_vars
+                                  all_copies_to_all_vars, all_vars_to_all_copies,              &
+                                  get_my_num_vars, get_my_vars
                                   
 
 use adaptive_inflate_mod,  only : do_ss_inflate, mean_from_restart, sd_from_restart,          &

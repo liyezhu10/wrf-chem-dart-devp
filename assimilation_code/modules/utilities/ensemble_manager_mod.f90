@@ -874,8 +874,7 @@ subroutine get_copy_owner_index(ens_handle, copy_number, owner, owners_index)
 ! and its index in that pes local storage. Depends on distribution_type
 ! with only option 1 currently implemented.
 
-type (ensemble_type),  intent(in)  :: ens_handle
-type (ensemble_type), intent(in)  :: ens_handle
+type (ensemble_type), intent(in) :: ens_handle
 integer, intent(in)  :: copy_number
 integer, intent(out) :: owner, owners_index
 
@@ -1171,7 +1170,7 @@ integer(i8) :: num_vars
 integer     :: num_copies, my_num_vars, my_num_copies, my_pe
 integer     :: max_num_vars, max_num_copies, num_copies_to_receive
 integer     :: sending_pe, recv_pe, k, sv, num_vars_to_send, copy
-integer     :: global_ens_index
+integer     :: global_ens_index, num_pes
 
 ! only output if there is a label
 if (present(label)) then
@@ -1508,7 +1507,7 @@ integer     :: max_num_vars1, max_num_copies1, max_num_vars2, max_num_copies2
 integer     :: num_vars_to_receive
 integer     :: sending_pe, recv_pe, k, sv, num_copies_to_send
 integer     :: global_ens_index, copy
-integer     :: group_pe, group_size
+integer     :: group_pe, group_size, num_vars_to_reveive
 
 ! only output if there is a label
 if (present(label)) then
@@ -1628,9 +1627,9 @@ SENDING_PE_LOOP: do sending_pe = 0,  ens_handle1%num_pes- 1
 
                call receive_from(group_pe, transfer_temp(1:num_vars_to_receive), get_group_comm())
                ! Copy the transfer array to my local storage
-               call compute_number_of_groups()
+               !#! call compute_number_of_groups()
                do sv = 1, num_vars_to_receive
-                  ens_handle1%vars(var_list(), 1) = transfer_temp(sv)
+                  ens_handle2%vars(var_list(:), 1) = transfer_temp(sv) !JPH todo: ens_handle1->2
                enddo
            enddo COPIES_RECV_LOOP
          !#! enddo ALL_MY_COPIES_RECV_LOOP

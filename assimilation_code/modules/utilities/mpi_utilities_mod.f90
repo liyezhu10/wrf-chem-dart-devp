@@ -109,8 +109,7 @@ public :: initialize_mpi_utilities, finalize_mpi_utilities,                  &
           get_from_fwd, get_from_mean, broadcast_minmax, broadcast_flag,     &
           start_mpi_timer, read_mpi_timer, create_groups, get_group_size,    &
           set_group_size, group_task_id, get_group_comm, get_group_id,       &
-          start_mpi_timer, read_mpi_timer, send_sum_to,                      &
-          all_reduce_min_max  ! deprecated, replace by broadcast_minmax
+          send_sum_to, all_reduce_min_max  ! deprecated, replace by broadcast_minmax
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -1963,7 +1962,7 @@ end subroutine send_minmax_to
 !-----------------------------------------------------------------------------
 ! cover routine which is deprecated.  when all user code replaces this
 ! with broadcast_minmax(), remove this.
-subroutine :ll_reduce_min_max(min_var, max_var, num_elements)
+subroutine all_reduce_min_max(min_var, max_var, num_elements)
 
 integer,  intent(in)    :: num_elements
 real(r8), intent(inout) :: min_var(num_elements)
