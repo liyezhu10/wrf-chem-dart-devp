@@ -130,12 +130,6 @@ call find_namelist_in_file("input.nml", "simple_test_nml", iunit)
 read(iunit, nml = simple_test_nml, iostat = io)
 call check_namelist_read(iunit, io, "simple_test_nml")
 
-
-!----------------------------------------------------------------------
-! create groups
-!----------------------------------------------------------------------
-call create_groups()
-
 !----------------------------------------------------------------------
 ! create data array
 !----------------------------------------------------------------------
@@ -144,6 +138,16 @@ allocate(my_array(NX/group_size))
 do ii = 1, NX/group_size
    my_array(ii) = local_rank*NX/group_size + ii
 end do
+
+!----------------------------------------------------------------------
+! create groups
+!----------------------------------------------------------------------
+call create_groups()
+
+!----------------------------------------------------------------------
+! create window
+!----------------------------------------------------------------------
+call create_window()
 
 if (my_task_id() == 0) then
    print*, my_task_id(), '::', my_array(:)
@@ -161,9 +165,11 @@ if (my_task_id() == 3) then
    print*, my_task_id(), '::', my_array(:)
 endif
 
-do ii = 1,NX
-   print*, 'my_task_id() = ', my_task_id(), 'get_owner(ii)', ii, get_owner(ii, my_task_id())
+do ii = 1, NX
+   print*, 'my_task_id() = ', my_task_id(), 'get_owner(ii)', ii, get_owner(ii, my_task_id()), get_my_val(ii)
 enddo
+
+call free_window()
 
 !----------------------------------------------------------------------
 ! finalize simple_test
@@ -184,11 +190,11 @@ integer ierr ! all MPI errors are fatal anyway
 
 allocate(group_members(group_size)) ! this is module global
 
-call mpi_comm_group(mpi_comm_world, group_all, ierr)  ! get the word group from mpi_comm_world
-call build_my_group(my_task_id(), group_size, group_members) ! create a list of processors in the grid group
-call mpi_group_incl(group_all, group_size, group_members, subgroup, ierr)
-call mpi_comm_create(mpi_comm_world, subgroup, mpi_comm_grid, ierr)
-call mpi_comm_rank(mpi_comm_grid, local_rank, ierr) ! rank within group
+call mpi_comm_group(  mpi_comm_world, group_all,                           ierr ) ! get the word group from mpi_comm_world
+call build_my_group(  my_task_id(),   group_size, group_members )                 ! create a list of processors in the grid group
+call mpi_group_incl(  group_all,      group_size, group_members, subgroup, ierr )
+call mpi_comm_create( mpi_comm_world, subgroup,   mpi_comm_grid,           ierr )
+call mpi_comm_rank(   mpi_comm_grid,  local_rank,                          ierr ) ! rank within group
 
 print*, 'my_task_id(), local_rank, group_size, subgroup', my_task_id(), local_rank, group_size, subgroup
 
@@ -241,19 +247,19 @@ integer(KIND=MPI_ADDRESS_KIND) :: window_size
 ! datasize comes from mpi_utilities_mod
 call mpi_type_size(datasize, sizedouble, ierr)
 
-window_size = NX*sizedouble
+window_size = (NX/group_size)*sizedouble
 aa          = malloc(NX)
 
 call MPI_ALLOC_MEM(window_size, mpi_info_null, aa, ierr)
 
 ! can't do my_array assignment with a cray pointer, so you need to loop
-count = 1
-do ii = 1, NX
-   duplicate_array(count) = my_array(ii)
-   count = count + 1
-enddo
+!#! count = 1
+!#! do ii = 1, NX
+!#!    duplicate_array(count) = my_array(ii)
+!#!    count = count + 1
+!#! enddo
 
-call mpi_win_create(duplicate_array, window_size,   &
+call mpi_win_create(my_array,        window_size,   &
                     sizedouble,      MPI_INFO_NULL, &
                     mpi_comm_grid,   my_window,     ierr)
 
@@ -284,6 +290,9 @@ integer                          :: ierr
 
 ! caluclate who has the info
 owner = get_owner(i, my_task_id())
+target_disp = mod(i,NX/group_size)
+
+!print*, 'my_task_id(), owner, my_window', my_task_id(), owner, my_window
 
 ! grab the info
 call mpi_win_lock(MPI_LOCK_SHARED, owner, 0, my_window, ierr)
