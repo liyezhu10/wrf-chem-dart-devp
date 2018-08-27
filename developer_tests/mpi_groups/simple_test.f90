@@ -65,10 +65,12 @@ integer, parameter :: MAX_FILES = 1000
 !------------------------------------------------------------------
 ! The namelist variables
 !------------------------------------------------------------------
-integer :: group_size = 2
-integer(KIND=MPI_OFFSET_KIND) :: NX = 8 !< lengths of dimensions
+logical                       :: debug      = .false.
+integer                       :: group_size = 2
+integer(KIND=MPI_OFFSET_KIND) :: NX         = 8 !< lengths of dimensions
+integer                       :: max_iter   = 1000
 
-namelist /simple_test_nml/ NX, group_size
+namelist /simple_test_nml/ NX, group_size, max_iter, debug
 
 ! io variables
 integer                   :: iunit, io
@@ -94,7 +96,7 @@ character(len=256), allocatable :: file_array_input(:,:)
 character(len=256), dimension(1) :: var_names = (/'temp'/)
 integer,parameter :: one_domain = 1
 
-integer :: my_rank
+real(r8) ::  u, my_val
 
 integer, allocatable :: group_members(:)
 integer :: group_all
@@ -111,6 +113,13 @@ pointer(aa, duplicate_array)
 ! index variables
 integer :: ii, jj
 
+! timing variables
+real(r8) :: t1, t2, max_time, min_time
+
+! MPI variables
+integer :: ierr
+integer :: my_rank
+
 !======================================================================
 ! start of executable code
 !======================================================================
@@ -120,10 +129,23 @@ call find_namelist_in_file("input.nml", "simple_test_nml", iunit)
 read(iunit, nml = simple_test_nml, iostat = io)
 call check_namelist_read(iunit, io, "simple_test_nml")
 
+if (group_size == -1) group_size = task_count()
+
 !----------------------------------------------------------------------
 ! create groups
 !----------------------------------------------------------------------
+t1 = MPI_WTIME()
 call create_groups()
+t2 = MPI_WTIME() - t1
+
+call MPI_REDUCE(t2, max_time, 1, MPI_REAL8, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
+call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, MPI_COMM_WORLD, ierr)
+
+if (my_task_id() == 0) then
+   print*, 'group_size = ', group_size, ' NX = ', NX
+   print*, 'create_groups : Max Time = ', max_time, t1, t2
+   print*, 'create_groups : Min Time = ', min_time, t1, t2
+endif
 
 !----------------------------------------------------------------------
 ! create data array
@@ -139,33 +161,61 @@ end do
 !----------------------------------------------------------------------
 call create_window()
 
-do jj = 0, task_count()-1
-   if (my_task_id() == jj) then
-      print*, my_task_id(), '::', my_array(:)
-   else
-      call task_sync()
-   endif
+!----------------------------------------------------------------------
+! timing test
+!----------------------------------------------------------------------
+t2 = 0.0_r8
+do ii = 1, max_iter
+   call random_number(u)
+   jj = FLOOR(NX*u)+1
+   t1 = MPI_WTIME()
+   my_val = get_my_val(jj)
+   t2 = t2 + (MPI_WTIME() - t1)
 enddo
 
-do jj = 0, task_count()-1
-   if (my_task_id() == jj) then
-      do ii = 1, NX
-         print*, 'my_task_id() = ', my_task_id(), 'get_owner(ii)', ii, get_owner(ii, my_task_id()), get_my_val(ii)
-      enddo
-   else
-      call task_sync()
-   endif
-enddo
+call MPI_REDUCE(t2, max_time, 1, MPI_REAL8, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
+call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, MPI_COMM_WORLD, ierr)
+if (my_task_id() == 0) then
+   print*, 'get_value     : Max Time = ', max_time, t1, t2
+   print*, 'get_value     : Min Time = ', min_time, t1, t2
+endif
 
-call task_sync()
+!----------------------------------------------------------------------
+! print array
+!----------------------------------------------------------------------
+if (debug) then
+   do jj = 0, task_count()-1
+      if (my_task_id() == jj) then
+         print*, my_task_id(), '::', my_array(:)
+      else
+         call task_sync()
+      endif
+   enddo
+endif
 
-call free_window()
-
-call task_sync()
+!----------------------------------------------------------------------
+! debug get_my_val
+!----------------------------------------------------------------------
+if (debug) then
+   do jj = 0, task_count()-1
+      if (my_task_id() == jj) then
+         do ii = 1, NX
+            print*, 'my_task_id() = ', my_task_id(), 'get_owner(ii)', ii, get_owner(ii, my_task_id()), get_my_val(ii)
+         enddo
+      else
+         call task_sync()
+      endif
+   enddo
+   
+   call task_sync()
+endif
 
 !----------------------------------------------------------------------
 ! finalize simple_test
 !----------------------------------------------------------------------
+call free_window()
+
+call task_sync()
 
 call finalize_modules_used()
 
@@ -178,9 +228,8 @@ contains
 !> make a communicator for the distributed grid
 subroutine create_groups
 
-integer ierr ! all MPI errors are fatal anyway
-
 allocate(group_members(group_size)) ! this is module global
+
 
 call mpi_comm_group(  mpi_comm_world, group_all,                           ierr ) ! get the word group from mpi_comm_world
 call build_my_group(  my_task_id(),   group_size, group_members )                 ! create a list of processors in the grid group
@@ -188,8 +237,9 @@ call mpi_group_incl(  group_all,      group_size, group_members, subgroup, ierr 
 call mpi_comm_create( mpi_comm_world, subgroup,   mpi_comm_grid,           ierr )
 call mpi_comm_rank(   mpi_comm_grid,  local_rank,                          ierr ) ! rank within group
 
-print*, 'my_task_id(), local_rank, group_size, subgroup', my_task_id(), local_rank, group_size, subgroup
-
+if (debug) then
+   print*, 'my_task_id(), local_rank, group_size, subgroup', my_task_id(), local_rank, group_size, subgroup
+endif
 end subroutine create_groups
 
 !-----------------------------------------------------------
@@ -233,7 +283,7 @@ end subroutine build_my_group
 !> change the subroutine who_has_grid_info
 subroutine create_window
 
-integer ii, jj, kk, ierr, sizedouble, count
+integer ii, jj, kk, sizedouble, count
 integer(KIND=MPI_ADDRESS_KIND) :: window_size
 
 ! datasize comes from mpi_utilities_mod
@@ -278,13 +328,14 @@ integer, intent(in) :: i
 
 integer                          :: owner !< which task has the part of get_my_val we need
 integer(KIND=MPI_ADDRESS_KIND)   :: target_disp !< displacement
-integer                          :: ierr
 
 ! caluclate who has the info
 owner = get_owner(i, my_task_id())
 target_disp = mod(i,NX/group_size)
 
-!print*, 'my_task_id(), owner, my_window', my_task_id(), owner, my_window
+if (debug) then
+   print*, 'my_task_id(), owner, my_window', my_task_id(), owner, my_window
+endif
 
 ! grab the info
 call mpi_win_lock(MPI_LOCK_SHARED, owner, 0, my_window, ierr)

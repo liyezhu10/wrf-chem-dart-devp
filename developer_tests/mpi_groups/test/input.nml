@@ -14,8 +14,10 @@
 /
 
 &simple_test_nml
-   NX         = 12 
-   group_size = 3 
+   max_iter   = 1000000
+   NX         = 360000000 
+   group_size = 18 
+   debug      = .false.
    /
 
 &test_group_mean_nml
