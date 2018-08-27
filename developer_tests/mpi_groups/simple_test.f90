@@ -131,6 +131,11 @@ read(iunit, nml = simple_test_nml, iostat = io)
 call check_namelist_read(iunit, io, "simple_test_nml")
 
 !----------------------------------------------------------------------
+! create groups
+!----------------------------------------------------------------------
+call create_groups()
+
+!----------------------------------------------------------------------
 ! create data array
 !----------------------------------------------------------------------
 allocate(my_array(NX/group_size))
@@ -138,11 +143,6 @@ allocate(my_array(NX/group_size))
 do ii = 1, NX/group_size
    my_array(ii) = local_rank*NX/group_size + ii
 end do
-
-!----------------------------------------------------------------------
-! create groups
-!----------------------------------------------------------------------
-call create_groups()
 
 !----------------------------------------------------------------------
 ! create window
