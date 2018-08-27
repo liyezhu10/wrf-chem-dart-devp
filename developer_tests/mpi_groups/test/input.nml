@@ -13,6 +13,15 @@
    debug = .true.
 /
 
+&simple_test_nml
+   num_ens            = 1
+   input_state_files  = 'simple1.nc', 'simple2.nc'
+   output_state_files = ''
+   dtype = 1 
+   ltype = 3 
+   ttype = 1 
+   /
+
 &test_group_mean_nml
    num_ens            = 1
    input_state_files  = 'simple1.nc', 'simple2.nc'
