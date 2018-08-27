@@ -65,18 +65,10 @@ integer, parameter :: MAX_FILES = 1000
 !------------------------------------------------------------------
 ! The namelist variables
 !------------------------------------------------------------------
+integer :: group_size = 2
+integer(KIND=MPI_OFFSET_KIND) :: NX = 8 !< lengths of dimensions
 
-logical                       :: single_file = .false.
-integer                       :: num_ens = 1
-integer                       :: dtype = 1
-integer                       :: ltype = 1
-integer                       :: ttype = 1
-character(len=256)            :: input_state_files(MAX_FILES)  = 'null'
-character(len=256)            :: output_state_files(MAX_FILES) = 'null'
-
-
-namelist /simple_test_nml/ num_ens, single_file, input_state_files, output_state_files, &
-                               dtype, ltype, ttype
+namelist /simple_test_nml/ NX, group_size
 
 ! io variables
 integer                   :: iunit, io
@@ -105,12 +97,10 @@ integer,parameter :: one_domain = 1
 integer :: my_rank
 
 integer, allocatable :: group_members(:)
-integer :: group_size = 2
 integer :: group_all
 integer :: subgroup
 integer :: mpi_comm_grid
 integer :: local_rank
-integer(KIND=MPI_OFFSET_KIND) :: NX = 8 !< lengths of dimensions
 
 ! grid window
 integer               :: my_window
@@ -119,7 +109,7 @@ real(r8)              :: duplicate_array(*)
 pointer(aa, duplicate_array)
 
 ! index variables
-integer :: ii
+integer :: ii, jj
 
 !======================================================================
 ! start of executable code
@@ -149,27 +139,29 @@ end do
 !----------------------------------------------------------------------
 call create_window()
 
-if (my_task_id() == 0) then
-   print*, my_task_id(), '::', my_array(:)
-endif
-
-if (my_task_id() == 1) then
-   print*, my_task_id(), '::', my_array(:)
-endif
-
-if (my_task_id() == 2) then
-   print*, my_task_id(), '::', my_array(:)
-endif
-
-if (my_task_id() == 3) then
-   print*, my_task_id(), '::', my_array(:)
-endif
-
-do ii = 1, NX
-   print*, 'my_task_id() = ', my_task_id(), 'get_owner(ii)', ii, get_owner(ii, my_task_id()), get_my_val(ii)
+do jj = 0, task_count()-1
+   if (my_task_id() == jj) then
+      print*, my_task_id(), '::', my_array(:)
+   else
+      call task_sync()
+   endif
 enddo
 
+do jj = 0, task_count()-1
+   if (my_task_id() == jj) then
+      do ii = 1, NX
+         print*, 'my_task_id() = ', my_task_id(), 'get_owner(ii)', ii, get_owner(ii, my_task_id()), get_my_val(ii)
+      enddo
+   else
+      call task_sync()
+   endif
+enddo
+
+call task_sync()
+
 call free_window()
+
+call task_sync()
 
 !----------------------------------------------------------------------
 ! finalize simple_test

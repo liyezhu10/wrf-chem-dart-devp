@@ -3,7 +3,7 @@
 /
 
 &mpi_utilities_nml
-   verbose = .true.
+   verbose = .false.
 /
 
 &ensemble_manager_nml
@@ -14,12 +14,8 @@
 /
 
 &simple_test_nml
-   num_ens            = 1
-   input_state_files  = 'simple1.nc', 'simple2.nc'
-   output_state_files = ''
-   dtype = 1 
-   ltype = 3 
-   ttype = 1 
+   NX         = 12 
+   group_size = 3 
    /
 
 &test_group_mean_nml
