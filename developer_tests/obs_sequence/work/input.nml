@@ -26,13 +26,12 @@
 !   read_binary_file_format = 'big_endian'
 
 &obs_rwtest_nml
-   prompt_for_filenames = .true.
+   prompt_for_filenames = .false.
    filename_in   = '../data/obs_seq.binary.BE'
    filename_out  = 'obs_seq.xx'
    print_only    = .false.
    calendar      = 'no_calendar'
 /
-
 
 &utilities_nml
    TERMLEVEL      = 1,

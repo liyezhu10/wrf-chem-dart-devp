@@ -492,6 +492,7 @@ do i=1, groupsize
 enddo
 
 allocate(toc%toc_entries(ntoc))
+toc%toc_count = 0
 
 call build_toc(qty_count, knownqtys, type_count, knowntypes, toc)
 

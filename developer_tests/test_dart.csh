@@ -168,26 +168,28 @@ echo
 echo
 echo "=================================================================="
 echo "=================================================================="
-echo "Testing location modules starting at "`date`
+echo "Running developer tests starting at "`date`
 echo "=================================================================="
 echo "=================================================================="
 echo
 echo
 
-cd ${DARTHOME}/developer_tests/location
+cd ${DARTHOME}/developer_tests
 if ( 1 == 1 ) then
-  ./testall.csh
+  ./run_dev_tests.csh
 endif
 
 echo
 echo
 echo "=================================================================="
 echo "=================================================================="
-echo "Location module testing complete at "`date`
+echo "Developer tests complete at "`date`
 echo "=================================================================="
 echo "=================================================================="
 echo
 echo
+
+#----------------------------------------------------------------------
 
 echo "SKIPPING Testing single-threaded lorenz_96 (L96) at "`date`
 #echo "Testing single-threaded lorenz_96 (L96) at "`date`
