@@ -71,16 +71,16 @@ private
 ! this directory.  It is a sed script that comments in and out the interface
 ! block below.  Please leave the BLOCK comment lines unchanged.
 
-! !!SYSTEM_BLOCK_EDIT START COMMENTED_OUT
-! ! interface block for getting return code back from system() routine
-! interface
-!  function system(string)
-!   character(len=*) :: string
-!   integer :: system
-!  end function system
-! end interface
-! ! end block
-! !!SYSTEM_BLOCK_EDIT END COMMENTED_OUT
+ !!SYSTEM_BLOCK_EDIT START COMMENTED_IN
+ ! interface block for getting return code back from system() routine
+ interface
+  function system(string)
+   character(len=*) :: string
+   integer :: system
+  end function system
+ end interface
+ ! end block
+ !!SYSTEM_BLOCK_EDIT END COMMENTED_IN
 
 
 ! allow global sum to be computed for integers, r4, and r8s
@@ -2083,6 +2083,7 @@ integer, intent(inout) :: group_size
 integer i, ierr ! all MPI errors are fatal anyway
 integer, allocatable :: group_members(:)
 integer :: local_group_rank
+
 allocate(group_members(group_size)) ! this is module global
 
 call mpi_comm_group(my_local_comm, group_all, ierr)  ! get the word group from mpi_comm_world
@@ -2099,7 +2100,7 @@ call MPI_Barrier(my_local_comm, ierr)
       call MPI_Barrier(my_local_comm, ierr)
       if(my_task_id() == i) then
          write(*,'(''WORLD RANK/SIZE:'',I2,''/'',I2,'' GROUP RANK/SIZE:'',I2,''/'',I2,'' SUBGROUP '',I10)') &
-                                    my_task_id(), task_count()           ,group_rank, group_size, subgroup
+            my_task_id(), task_count(), group_rank, group_size, subgroup
       endif
    enddo
 endif

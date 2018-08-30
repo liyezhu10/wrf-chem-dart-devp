@@ -22,7 +22,9 @@ use     mpi_utilities_mod, only : initialize_mpi_utilities, finalize_mpi_utiliti
 use      time_manager_mod, only : time_type, set_time, print_date, operator(-), &
                                   NO_CALENDAR
 
-use  ensemble_manager_mod, only : init_ensemble_manager, ensemble_type, print_ens_handle
+use  ensemble_manager_mod, only : init_ensemble_manager, ensemble_type, print_ens_handle, &
+                                  all_vars_to_all_copies, all_copies_to_all_vars, &
+                                  all_copies_to_all_copies
 
 use   state_vector_io_mod, only : state_vector_io_init, read_state, write_state
 
@@ -69,8 +71,11 @@ logical                       :: debug      = .false.
 integer                       :: group_size = 2
 integer(KIND=MPI_OFFSET_KIND) :: NX         = 8 !< lengths of dimensions
 integer                       :: max_iter   = 1000
+integer                       :: dtype = 1
+integer                       :: ltype = 1
+integer                       :: ttype = 1
 
-namelist /simple_test_nml/ NX, group_size, max_iter, debug
+namelist /simple_test_nml/ NX, group_size, max_iter, dtype, ltype, ttype, debug
 
 ! io variables
 integer                   :: iunit, io
@@ -82,17 +87,14 @@ logical :: read_time_from_file = .true.
 type(ensemble_type)   :: ens_handle
 type(ensemble_type)   :: mean_handle
 
-type(time_type)       :: model_time
-integer(i8)           :: model_size, my_index
-
 ! misc. variables
-integer :: i, idom, imem, domid, num_domains
+integer :: i
 
 ! message strings
 character(len=512) :: my_base, my_desc
 character(len=512) :: string1
 
-character(len=256), allocatable :: file_array_input(:,:)
+character(len=256), allocatable  :: file_array_input(:,:)
 character(len=256), dimension(1) :: var_names = (/'temp'/)
 integer,parameter :: one_domain = 1
 
@@ -148,18 +150,47 @@ if (my_task_id() == 0) then
 endif
 
 !----------------------------------------------------------------------
-! create data array
+! create data array on task 0
 !----------------------------------------------------------------------
+
+! Set up the ensemble storage for mean
+call init_ensemble_manager(mean_handle,               &
+                           num_copies           = 1,  &
+                           num_vars             = NX, &
+                           distribution_type_in = dtype, & ! round robin, pair round robin, block
+                           layout_type          = ltype, & ! distribute mean in groups
+                           transpose_type_in    = ttype, & ! no vars, transposable, transpose and duplicate
+                           use_groups           = .true.)
+
+!do ii = 1, mean_handle%num_copies
+!   do jj = 1, mean_handle%my_num_vars
+do ii = 1, mean_handle%num_vars
+   do jj = 1, mean_handle%my_num_copies
+      !print*, my_task_id(), mean_handle%my_num_vars, ii, (my_task_id()+1)*NX/group_size + ii
+      mean_handle%vars(ii, jj) = (my_task_id()+1)*NX/group_size + ii
+   enddo
+enddo
+
+!call all_copies_to_all_vars(mean_handle)
+!call all_vars_to_all_copies(mean_handle)
+
+!call print_ens_handle(mean_handle,              &
+!                      force    = .true.,        &
+!                      label    = 'mean_handle', &
+!                      contents = .true.)
+!print*, my_task_id(), 'AFTER PRINT'
+
 allocate(my_array(NX/group_size))
 
 do ii = 1, NX/group_size
    my_array(ii) = local_rank*NX/group_size + ii
-end do
+enddo
 
 !----------------------------------------------------------------------
 ! create window
 !----------------------------------------------------------------------
-call create_window()
+!call create_window()
+call create_mean_window(mean_handle, mean_copy=1, distribute_mean=.true.)
 
 !----------------------------------------------------------------------
 ! timing test
@@ -171,13 +202,16 @@ do ii = 1, max_iter
    t1 = MPI_WTIME()
    my_val = get_my_val(jj)
    t2 = t2 + (MPI_WTIME() - t1)
+   if (my_val /= jj) then
+      print*, 'jj /= my_val'
+   endif
 enddo
 
 call MPI_REDUCE(t2, max_time, 1, MPI_REAL8, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
 call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, MPI_COMM_WORLD, ierr)
 if (my_task_id() == 0) then
-   print*, 'get_value     : Max Time = ', max_time, t1, t2
-   print*, 'get_value     : Min Time = ', min_time, t1, t2
+   print*, 'get_value     : Max Time = ', max_time
+   print*, 'get_value     : Min Time = ', min_time
 endif
 
 !----------------------------------------------------------------------

@@ -3,7 +3,7 @@
 /
 
 &mpi_utilities_nml
-   verbose = .false.
+   verbose = .true.
 /
 
 &ensemble_manager_nml
@@ -13,10 +13,16 @@
    debug = .true.
 /
 
-&simple_test_nml
    max_iter   = 1000000
-   NX         = 360000000 
-   group_size = 18 
+   NX         = 180000000 
+
+&simple_test_nml
+   max_iter   = 100000
+   NX         = 8
+   group_size = 2 
+   dtype      = 1
+   ltype      = 3
+   ttype      = 2
    debug      = .false.
    /
 
