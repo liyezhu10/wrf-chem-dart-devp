@@ -59,11 +59,13 @@ module ensemble_manager_mod
 ! appropriately abstracted at a higher level of code.
 
 use types_mod,         only : r8, i4, i8,  MISSING_R8
+
 use utilities_mod,     only : register_module, do_nml_file, do_nml_term, &
                               error_handler, E_ERR, E_MSG, do_output, &
                               nmlfileunit, find_namelist_in_file,        &
                               check_namelist_read, timestamp, set_output
-use sort_mod,          only : index_sort
+
+
 use time_manager_mod,  only : time_type, set_time
 
 !>@todo FIXME either: make group versions of each of these, overload them, or add an
@@ -74,7 +76,7 @@ use mpi_utilities_mod, only : task_count, my_task_id, send_to, receive_from, &
                               create_groups, set_group_size, get_group_size, &
                               get_group_id, get_group_comm, get_dart_mpi_comm
 
-
+use sort_mod,          only : index_sort
 
 implicit none
 private
@@ -289,7 +291,7 @@ else
    ens_handle%layout_type = layout_type
 endif
 
-! Check for error: only layout_types 1 and 2 are implemented
+! Check for error: only layout_types 1, 2 and 3 are implemented
 if (ens_handle%layout_type /= 1 .and. ens_handle%layout_type /=2 .and. ens_handle%layout_type /= 3) then
    call error_handler(E_ERR, 'init_ensemble_manager', &
                       'only layout values 1 (standard), 2 (round-robin) allowed, and 3 (groups) ', &
@@ -300,7 +302,6 @@ endif
 ! 1 not transposable - always copy complete
 ! 2 transposable - has a vars array
 ! 3 duplicatable - really only 1 copy, but this gets duplicated as vars array on every task during a transpose
-!  (FIXME: does #3 default to total number of tasks but you can set it to fewer if you want?)
 if (.not. present(transpose_type_in)) then
    transpose_type = 1
 else
