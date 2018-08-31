@@ -138,10 +138,10 @@ type ensemble_type
    integer, allocatable,private :: task_to_pe_list(:), pe_to_task_list(:) ! List of tasks
    ! Flexible my_pe, layout_type which allows different task layouts for different ensemble handles
    integer                      :: my_pe
-   integer                      :: my_group_pe   ! FIXME do we need this and num_pes at the same time?
+   integer                      :: my_group_pe ! FIXME do we need this and num_pes at the same time?
    integer,private              :: layout_type
    integer,private              :: transpose_type
-   integer                      :: num_extras   ! FIXME: this needs to be more general.
+   integer                      :: num_extras ! FIXME: this needs to be more general.
    integer                      :: my_communicator ! FIXME: is this needed?
 end type ensemble_type
 
@@ -217,7 +217,6 @@ contains
 !> a node or across more than a node but less than the total number 
 !> of tasks.
 
-! FIXME: JPH, pass in the group size here?
 subroutine init_ensemble_manager(ens_handle, num_copies, &
    num_vars, distribution_type_in, layout_type, transpose_type_in, use_groups)
 
@@ -257,7 +256,7 @@ if (do_grp) then
    ! if that works, we can remove group_size and just set
    ! num_pes to either task_count or tasks_per_group.
    ens_handle%num_pes         = tasks_per_group
-   ens_handle%group_size      = tasks_per_group ! FIXME can we avoid using this
+   ens_handle%group_size      = tasks_per_group  ! FIXME can we avoid using this
    ens_handle%my_communicator = get_group_comm()  
 endif
 
@@ -274,7 +273,8 @@ if (.not. present(distribution_type_in)) then
 else
    if(distribution_type_in < 1 .or. distribution_type_in > 3) then
        call error_handler(E_ERR, 'init_ensemble_manager', &
-              'only distribution_type 1 is implemented at the moment', source, revision, revdate)
+                          'only distribution_types 1, 2 and 3 are implemented', &
+                          source, revision, revdate)
    endif
    ens_handle%distribution_type = distribution_type_in
 endif
@@ -292,7 +292,9 @@ else
 endif
 
 ! Check for error: only layout_types 1, 2 and 3 are implemented
-if (ens_handle%layout_type /= 1 .and. ens_handle%layout_type /=2 .and. ens_handle%layout_type /= 3) then
+if (ens_handle%layout_type /= 1 .and. &
+    ens_handle%layout_type /= 2 .and. &
+    ens_handle%layout_type /= 3) then
    call error_handler(E_ERR, 'init_ensemble_manager', &
                       'only layout values 1 (standard), 2 (round-robin) allowed, and 3 (groups) ', &
                       source, revision, revdate)
@@ -381,8 +383,6 @@ call check_namelist_read(iunit, io, "ensemble_manager_nml")
 if (do_nml_file()) write(nmlfileunit, nml=ensemble_manager_nml)
 if (do_nml_term()) write(     *     , nml=ensemble_manager_nml)
 
-! FIXME: may need a way to set up what the group size is.
-! perhaps get the size from the communicator...
 if (tasks_per_group == MPI_GROUPS_NOT_SET) then
    tasks_per_group = task_count()
 endif
@@ -394,9 +394,9 @@ if(tasks_per_group  < 0 .or. tasks_per_group > task_count()) then
 endif
 
 ! FIXME: does this go in set_up_ens_distribution()
-call set_group_size( tasks_per_group )
-call create_groups(  tasks_per_group )
-call task_sync() !FIXME: JPH - do we need this sync??
+call set_group_size(tasks_per_group)
+call create_groups(tasks_per_group)
+call task_sync()
    
 end subroutine static_init_ensemble_manager
 
@@ -1543,9 +1543,6 @@ end if
 !  then if there are more than 1 group, have each task broadcast their
 !  copies to their corresponding task numbers in each of the other groups.
 
- 
-!mean_ens_handle%copies(1,:) = state_ens_handle%copies(mean_copy, :)
-
 ! Short var definitions ens 1
 num_copies1    = ens_handle1%num_copies
 num_vars1      = ens_handle1%num_vars
@@ -1572,6 +1569,7 @@ max_num_copies2 = get_max_num_copies(ens_handle2)
 max_num_vars2   = get_max_num_vars(ens_handle2)
 
 call task_sync()
+
 print*, 'num_copies1    ', my_task_id(), num_copies1    
 print*, 'num_vars1      ', my_task_id(), num_vars1      
 print*, 'my_num_vars1   ', my_task_id(), my_num_vars1   
@@ -1593,24 +1591,22 @@ print*, 'max_num_copies2', my_task_id(), max_num_copies2
 
 allocate(var_list1(my_num_vars1), var_list2(my_num_vars2), &
          var_list(max_num_vars1), transfer_temp(my_num_vars1*group_size/task_count()))
-allocate(copy_list1(1), copy_list2(1), &
-         copy_list(1))
+allocate(copy_list1(1), copy_list2(1), copy_list(1))
    
-SENDING_PE_LOOP: do sending_pe = 0,  ens_handle1%num_pes- 1
- 
-   ! figure out what piece to receive from each other PE and receive it
-   call get_var_list(ens_handle1, num_vars1, sending_pe, var_list, num_vars_to_receive)
+SENDING_PE_LOOP: do sending_pe = 0,  ens_handle1%num_pes-1
  
    if (my_pe1 /= sending_pe ) then
-      print*, 'RECV LOOP, nvars, sendPE, numRecv        : ', num_vars1, sending_pe, num_vars_to_receive, my_pe1
-      print*, ''
-      !#!print*, 'RECV LOOP, var_list(:)                   : ', var_list(1:my_num_vars1)
 
-      num_vars_to_receive = num_vars_to_receive/group_size
-      
+      ! figure out what piece to receive from each other PE and receive it
+      call get_var_list(ens_handle1, num_vars1, sending_pe, var_list, num_vars_to_receive)
+      num_vars_to_receive = num_vars_to_reveive/group_size
+
+      print*, 'RECV LOOP, nvars, sendPE, numRecv : ', num_vars1, sending_pe, num_vars_to_receive
+      print*, ''
+      print*, 'RECV LOOP, var_list(:) : ', var_list(1:my_num_vars1)
       if( num_vars_to_receive > 0 ) then
          !#! ! Loop to receive these vars for each copy stored on my_pe
-         ALL_MY_COPIES_RECV_LOOP: do k = 1, my_num_copies1
+         !#! ALL_MY_COPIES_RECV_LOOP: do k = 1, my_num_copies1
 
            print*, 'sending_pe, k', sending_pe, k
 
@@ -1629,7 +1625,7 @@ SENDING_PE_LOOP: do sending_pe = 0,  ens_handle1%num_pes- 1
                   ens_handle2%vars(var_list(:), 1) = transfer_temp(sv) !JPH todo: ens_handle1->2
                enddo
            enddo COPIES_RECV_LOOP
-         enddo ALL_MY_COPIES_RECV_LOOP
+         !#! enddo ALL_MY_COPIES_RECV_LOOP
       endif
 
    else
@@ -1646,17 +1642,17 @@ SENDING_PE_LOOP: do sending_pe = 0,  ens_handle1%num_pes- 1
                   !#! call send_to(map_pe_to_task(ens_handle1, recv_pe), &
                   !#!              transfer_temp(1:my_num_vars1), get_group_comm())
                endif
-               print*, 'SEND COPIES, nvars, sendPE, numRecv      : ', num_vars1, sending_pe, num_vars_to_receive, my_pe1
+               print*, 'SEND COPIES, nvars, sendPE, numRecv : ', num_vars1, sending_pe, num_vars_to_receive
                print*, ''
-               !#!print*, 'SEND LOOP, var_list(:)                   : ', var_list(1:my_num_vars1)
+               print*, 'SEND LOOP, var_list(:) : ', var_list(1:my_num_vars1)
 
             else
 
                ! figure out what piece to recieve from myself and recieve it
                call get_var_list(ens_handle1, num_vars1, sending_pe, var_list, num_vars_to_receive, group_size)
-               print*, 'else SEND COPIES, nvars, sendPE, numRecv : ', num_vars1, sending_pe, num_vars_to_receive, my_pe1
+               print*, 'else SEND COPIES, nvars, sendPE, numRecv : ', num_vars1, sending_pe, num_vars_to_receive
                print*, ''
-               !#!print*, 'else SEND COPIES, var_list(:)            : ', var_list(1:my_num_vars1)
+               print*, 'else SEND COPIES, var_list(:) : ', var_list(1:my_num_vars1)
 
                !#! do k = 1,  my_num_copies
                !#!    ! sending to yourself so just copy
@@ -1673,6 +1669,57 @@ SENDING_PE_LOOP: do sending_pe = 0,  ens_handle1%num_pes- 1
 
 enddo SENDING_PE_LOOP
 
+! else ! use old communication pattern
+! 
+! ! Loop to give each pe a turn to receive its vars
+! RECEIVING_PE_LOOP: do recv_pe = 0, ens_handle1%num_pes - 1
+!    ! If I'm the receiving pe, do this block
+!    if(my_pe1 == recv_pe) then
+! 
+!       ! Figure out what piece to receive from each other PE and receive it
+!       RECEIVE_FROM_EACH: do sending_pe = 0, ens_handle1%num_pes - 1
+!          call get_var_list(ens_handle1, num_vars, sending_pe, var_list, num_vars_to_receive)
+! 
+!          ! Loop to receive these vars for each copy stored on my_pe1
+!          ALL_MY_COPIES: do k = 1, my_num_copies
+! 
+!             ! If sending_pe is receiving_pe, just copy
+!             if(sending_pe == recv_pe) then
+!                global_ens_index = ens_handle1%my_copies(k)
+!                do sv = 1, num_vars_to_receive
+!                   ens_handle1%vars(var_list(sv), k) = ens_handle1%copies(global_ens_index, sv)
+!                end do
+!             else
+!                if (num_vars_to_receive > 0) then
+!                   ! Otherwise, receive this part from the sending pe
+!                   call receive_from(map_pe_to_task(ens_handle1, sending_pe), transfer_temp(1:num_vars_to_receive))
+!    
+!                   ! Copy the transfer array to my local storage
+!                   do sv = 1, num_vars_to_receive
+!                      ens_handle1%vars(var_list(sv), k) = transfer_temp(sv)
+!                   end do
+!                endif
+!             endif
+!          end do ALL_MY_COPIES
+!       end do RECEIVE_FROM_EACH
+!    else
+!       ! I'm the sending PE, figure out what copies of my vars I'll send.
+!       call get_copy_list(ens_handle1, num_copies, recv_pe, copy_list, num_copies_to_send)
+!        
+!       do copy = 1, num_copies_to_send
+!          if (my_num_vars1 > 0) then
+!             transfer_temp(1:my_num_vars1) = ens_handle1%copies(copy_list(copy), :)
+!             ! Have to  use temp because %copies section is not contiguous storage
+!             call send_to(map_pe_to_task(ens_handle1, recv_pe), transfer_temp(1:my_num_vars1))
+!          endif
+!       end do
+!       
+!    endif
+! end do RECEIVING_PE_LOOP
+! 
+! endif
+! 
+! 
 ! ! Free up the temporary storage
 deallocate(var_list, var_list1, var_list2, transfer_temp) 
 deallocate(copy_list, copy_list1, copy_list2)
@@ -1860,12 +1907,11 @@ if (present(limit)) limit_count = limit
 if (has_label) then
    call error_handler(E_MSG, 'ensemble handle: ', label, source, revision, revdate)
 endif
-
-write(msgstring, *) 'handle num         : ', ens_handle%id_num 
+write(msgstring, *) 'handle num: ',          ens_handle%id_num 
 call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
-write(msgstring, *) 'num_pes            : ', ens_handle%num_pes
+write(msgstring, *) 'num_pes: ',             ens_handle%num_pes
 call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
-write(msgstring, *) 'group_size         : ', ens_handle%group_size
+write(msgstring, *) 'group_size: ',          ens_handle%group_size
 call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
 write(msgstring, *) 'number of    copies: ', ens_handle%num_copies
 call error_handler(E_MSG, 'ensemble handle: ', msgstring, source, revision, revdate)
