@@ -96,10 +96,15 @@
 ! use would be if (impact_table(kind1, kind2) > 0.0) then ok else 
 ! change the increments. this could be done in assim_tools in a generic way.
 
+!>@todo FIXME move the namelist to here.
+!>pass in the input/output names/any value to the create routine.
+!>call a debug routine to turn on debugging messages.
 program obs_impact_tool
 
 use      types_mod, only : r8
-use  utilities_mod, only : register_module, initialize_utilities, finalize_utilities
+use  utilities_mod, only : register_module, initialize_utilities, finalize_utilities, &
+                           find_namelist_in_file, check_namelist_read, E_MSG,         &
+                           do_nml_file, do_nml_term, nmlfileunit, error_handler
 use obs_impact_mod, only : create_impact_table
 
 ! version controlled file description for error handling, do not edit
@@ -109,16 +114,37 @@ character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 character(len=128), parameter :: id  = "$Id$"
 
+integer :: funit, ios
 
-real(r8), allocatable :: table(:,:)
+! namelist: input/output names, values, etc
+character(len=512) :: input_filename  = ''
+character(len=512) :: output_filename = ''
+logical :: debug = .false.  ! .true. for more output
+
+! namelist
+namelist /obs_impact_tool_nml/  &
+   input_filename,  &
+   output_filename, &
+   debug
+
 
 ! initialization and setup
 
 call initialize_utilities('obs_impact_tool')
 call register_module(source,revision,revdate)
 
+call find_namelist_in_file("input.nml", "obs_impact_tool_nml", funit)
+read(funit, nml = obs_impact_tool_nml, iostat = ios)
+call check_namelist_read(funit, ios, "obs_impact_tool_nml")
+
+if (do_nml_file()) write(nmlfileunit, nml=obs_impact_tool_nml)
+if (do_nml_term()) write(     *     , nml=obs_impact_tool_nml)
+
+if (debug) call error_handler(E_MSG, 'obs_impact_tool', ' debug on')
+
+
 ! build and output impact_table
-call create_impact_table()
+call create_impact_table(input_filename, output_filename, debug) 
 
 ! clean up
 call finalize_utilities('obs_impact_tool')
