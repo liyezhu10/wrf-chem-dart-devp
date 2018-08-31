@@ -40,7 +40,7 @@ public :: get_unit, &
           error_handler, &
           to_upper, &
           squeeze_out_blanks, &
-          nc_check, &
+          nc_check, &    ! remove this; moved to netcdf_utils
           next_file, &   ! deprecate this
           logfileunit, &
           nmlfileunit, &
@@ -66,6 +66,7 @@ public :: get_unit, &
           string_to_integer, &
           string_to_logical, &
           find_enclosing_indices, &
+          find_first_occurrence, &
           array_dump, &
           dump_unit_attributes, &
           ! lowest level routines
@@ -157,7 +158,6 @@ logical, intent(in), optional          :: output_flag
 integer :: iunit, io
 
 character(len=256) :: lname
-character(len=512) :: string1,string2,string3
 
 if ( module_initialized ) return
 
@@ -178,11 +178,10 @@ endif
 ! be used just yet. If we cannot open a logfile, we
 ! always abort execution at this step.
 
-if ( present(progname) ) then
-   if (do_output_flag) write(*,*)'Starting program ',trim(progname)
-endif
-
-if (do_output_flag) write(*,*)'Initializing the utilities module.'
+!>@todo see if we like leaving this off
+!if ( present(progname) ) then
+!   if (do_output_flag) write(*,*)'Starting program ',trim(progname)
+!endif
 
 ! Read the namelist entry first before opening logfile, because
 ! you can rename the logfile via a utilities namelist item.
@@ -191,39 +190,30 @@ call find_namelist_in_file("input.nml", "utilities_nml", iunit)
 read(iunit, nml = utilities_nml, iostat = io)
 call check_namelist_read(iunit, io, "utilities_nml")
 
+! Check to make sure termlevel is set to a reasonable value
+call check_term_level(TERMLEVEL)
+
 ! Open the log file with the name from the namelist 
 ! does not return here on failure.
 logfileunit = get_unit()
 
-if (present(alternatename)) then
-   lname = alternatename
-else
-   lname = logfilename
-endif
-
-if (do_output_flag) write(*,*)'Trying to log to unit ', logfileunit
-if (do_output_flag) write(*,*)'Trying to open file ', trim(lname)
+! name of the log file
+lname = logfilename
+if (present(alternatename)) lname = alternatename
 
 open(logfileunit, file=lname, form='formatted', &
                   action='write', position='append', iostat = io )
 if ( io /= 0 ) call fatal_opening_log('initialize_utilities', lname)
 
-! Log the run-time 
-
+! Log the starting wall-clock time 
 if (do_output_flag) then
    if ( present(progname) ) then
-      call write_time (logfileunit, label='Starting ', &
-                       string1='Program '//trim(progname))
-      call write_time (             label='Starting ', &
-                       string1='Program '//trim(progname))
+      call log_time (logfileunit, label='Starting ', &
+                     string1='Program '//trim(progname))
    else
-      call write_time (logfileunit, label='Starting ')
-      call write_time (             label='Starting ')
+      call log_time (logfileunit, label='Starting ')
    endif 
 endif
-
-! Check to make sure termlevel is set to a reasonable value
-call check_term_level(TERMLEVEL)
 
 ! Echo the module information using normal mechanism
 call register_module(source, revision, revdate)
@@ -244,7 +234,7 @@ if (do_nml_file()) then
            position='append', iostat = io )
       if ( io /= 0 ) then
          call error_handler(E_ERR,'initialize_utilities', &
-             'Cannot open nm log file', source, revision, revdate)
+             'Cannot open namelist log file', source, revision, revdate)
       endif
  
    else
@@ -266,24 +256,9 @@ if (do_output_flag) then
    if (do_nml_term()) write(     *     , nml=utilities_nml)
 endif
 
-! Record the values used for variable types:
-if (do_output_flag .and. print_debug) then
+! Record the values used for variable kinds
+if (do_output_flag .and. print_debug) call dump_varkinds()
   
-   call log_it('') ! a little whitespace is nice
-
-   write(string1,*)'..  digits12 is ',digits12
-   write(string2,*)'r8       is ',r8
-   write(string3,*)'r4       is ',r4
-   call error_handler(E_DBG, 'initialize_utilities', string1, &
-                      source, revision, revdate, text2=string2, text3=string3)
-
-   write(string1,*)'..  integer  is ',kind(iunit) ! any integer variable will do
-   write(string2,*)'i8       is ',i8
-   write(string3,*)'i4       is ',i4
-   call error_handler(E_DBG, 'initialize_utilities', string1, &
-                      source, revision, revdate, text2=string2, text3=string3)
-endif
-
 end subroutine initialize_utilities
 
 !-----------------------------------------------------------------------
@@ -297,30 +272,27 @@ if (.not. module_initialized) return
 
 if (do_output_flag) then
    if ( present(progname) ) then
-      call write_time (logfileunit, label='Finished ', &
-                       string1='Program '//trim(progname))
-      call write_time (             label='Finished ', &
-                       string1='Program '//trim(progname))
+      call log_time (logfileunit, label='Finished ', &
+                     string1='Program '//trim(progname))
+   else
+      call log_time (logfileunit, label='Finished ')
+   endif 
+
+   if (do_nml_file() .and. (nmlfileunit /= logfileunit)) then
+      if ( present(progname) ) then
+         write(nmlfileunit, *) '!Finished Program '//trim(progname)
       else
-         call write_time (logfileunit, label='Finished ')
-         call write_time (             label='Finished ')
+         write(nmlfileunit, *) '!Finished Program '
       endif 
+   endif 
+endif
 
-      if (do_nml_file() .and. (nmlfileunit /= logfileunit)) then
-         if ( present(progname) ) then
-            write(nmlfileunit, *) '!Finished Program '//trim(progname)
-         else
-            write(nmlfileunit, *) '!Finished Program '
-         endif 
-      endif 
-   endif
+call close_file(logfileunit)
+if ((nmlfileunit /= logfileunit) .and. (nmlfileunit /= -1)) then
+   call close_file(nmlfileunit)
+endif
 
-   call close_file(logfileunit)
-   if ((nmlfileunit /= logfileunit) .and. (nmlfileunit /= -1)) then
-      call close_file(nmlfileunit)
-   endif
-
-   module_initialized = .false.
+module_initialized = .false.
 
 end subroutine finalize_utilities
 
@@ -412,9 +384,6 @@ integer            :: io
 
 if (.not. module_initialized) call fatal_not_initialized('find_namelist_in_file')
 
-! Decide if there is a logfile or not by looking at the logfileunit.
-! if >= 0, ok to write there.
-
 ! Check for namelist file existence; no file is an error
 if(.not. file_exist(trim(namelist_file_name))) then
 
@@ -454,6 +423,8 @@ do
       endif
    endif
 end do
+
+! not reached
 
 end subroutine find_namelist_in_file
 
@@ -658,7 +629,7 @@ character(len=*), intent(in) :: routine, text
 character(len=*), intent(in), optional :: src, rev, rdate, aut, text2, text3
 
 character(len=16) :: taskstr, msgtype
-character(len=246) :: wherefrom, wherecont
+character(len=256) :: wherefrom, wherecont
 
 ! the init code uses the error_handler so no trying to call init from here.
 if ( .not. module_initialized ) call fatal_not_initialized('error_handler')
@@ -711,11 +682,11 @@ select case(level)
 
    case (E_ALLMSG)
 
-         if ( single_task ) then
+      if ( single_task ) then
                              call log_it(trim(wherefrom)//' '//trim(text))
          if (present(text2)) call log_it(trim(wherecont)//' '//trim(text2))
          if (present(text3)) call log_it(trim(wherecont)//' '//trim(text3))
-           else
+      else
         ! this has a problem that multiple tasks are writing to the same logfile.
         ! it's overwriting existing content.  short fix is to NOT write ALLMSGs
         ! to the log file, only stdout.
@@ -747,7 +718,10 @@ end subroutine error_handler
 
 
 !-----------------------------------------------------------------------
-!>
+!> open a file.  assigns a unit number to be used for subsequent read/writes.
+!> can open an existing file, append to an existing file, overwrite an
+!> existing file, or create a new file.  additional options for setting the
+!> record length on formatted files, and doing binary byte-swapping conversions.
 
 function open_file (fname, form, action, access, convert, delim, reclen, return_rc) result (iunit)
 
@@ -987,11 +961,10 @@ end function ascii_file_format
 !-----------------------------------------------------------------------
 !>@todo FIXME:  nsc opinion:
 !> 1. this routine should NOT support 'end' anymore.  the calling code
-!> should call finalize_utilities() directly.  
-!> 2. 'brief' format should be the default (easier to grep for in output,
-!> or sed for postprocessing)
-!> 3. write_time() should be able to take a string to write into, and there should
-!> be an easy way to write to both the log and standard out in a single call.
+!>    should call finalize_utilities() directly.  
+!> 2. 'brief' format should be the default (easier to grep for and to
+!>     sed for postprocessing)
+!> 3. write_time() should be able to take a string to write into
 
 subroutine timestamp(string1,string2,string3,pos)
 
@@ -1003,29 +976,61 @@ subroutine timestamp(string1,string2,string3,pos)
    if ( .not. module_initialized ) call initialize_utilities
    if ( .not. do_output_flag) return
 
-!>@todo remove this option
-   if (trim(adjustl(pos)) == 'end') then
+!>@todo remove this option after a few months of having it deprecated.
+   if (pos == 'end') then
+      call log_it('calling timestamp with the "end" option is deprecated')
+      call log_it('call finalize_utilities() directly instead.')
       call finalize_utilities()
-   else if (trim(adjustl(pos)) == 'brief') then
-      call write_time (logfileunit, brief=.true., & 
-                       string1=string1, string2=string2, string3=string3)
-      call write_time (             brief=.true., &
-                       string1=string1, string2=string2, string3=string3)
+
+   else if (pos == 'brief') then
+      call log_time (logfileunit, brief=.true., & 
+                     string1=string1, string2=string2, string3=string3)
        
    else
-      call write_time (logfileunit, & 
-                       string1=string1, string2=string2, string3=string3)
-      call write_time (string1=string1, string2=string2, string3=string3)
-       
+      call log_time (logfileunit, & 
+                     string1=string1, string2=string2, string3=string3)
    endif
 
 end subroutine timestamp
 
 !-----------------------------------------------------------------------
-!> write time to the given unit.  should have option to write to a string
-!> or both log and stdout.  and brief should be the default.  (my opinion. nsc)
+!> write time to standard output and also a unit number if specified.
 !>
-!>   in: unit number (default is * if not specified)
+!>   in: unit number to write to, in addition to unit 6
+!>   in: label (default is  "Time is" if not specified)
+!>   in: string1,2,3 (no defaults)
+!>
+!>
+!>  default output is a block of 3-4 lines, with dashed line separators
+!>  and up to 3 descriptive text strings.
+!>  if brief specified as true, only string1 printed if given,
+!>  and time printed on same line in YYYY/MM/DD HH:MM:SS format
+!>  with the tag 'TIME:' before it.  should be easier to postprocess.
+
+subroutine log_time(unit, label, string1, string2, string3, tz, brief)
+
+integer,          optional, intent(in) :: unit
+character(len=*), optional, intent(in) :: label
+character(len=*), optional, intent(in) :: string1
+character(len=*), optional, intent(in) :: string2
+character(len=*), optional, intent(in) :: string3
+logical,          optional, intent(in) :: tz
+logical,          optional, intent(in) :: brief
+
+integer :: stdout = 6
+
+if (present(unit)) &
+   call write_time(unit, label, string1, string2, string3, tz, brief)
+
+call write_time(stdout, label, string1, string2, string3, tz, brief)
+
+end subroutine log_time
+
+!-----------------------------------------------------------------------
+!> write time to the given unit.  should have option to write to a string.
+!> and brief should be the default.  (my opinion. nsc)
+!>
+!>   in: unit number (default is 6 if not specified)
 !>   in: label (default is  "Time is" if not specified)
 !>   in: string1,2,3 (no defaults)
 !>
@@ -1035,7 +1040,7 @@ end subroutine timestamp
 !>  and time printed on same line in YYYY/MM/DD HH:MM:SS format
 !>  with the tag 'TIME:' before it.  should be easier to postprocess.
 
-subroutine write_time (unit, label, string1, string2, string3, tz, brief)
+subroutine write_time(unit, label, string1, string2, string3, tz, brief)
 
 integer,          optional, intent(in) :: unit
 character(len=*), optional, intent(in) :: label
@@ -1053,16 +1058,14 @@ character(len= 5) :: zone
 integer, dimension(8) :: values
 logical :: oneline
 
-if (present(unit)) then
-   lunit = unit
-else
-   lunit = 6   ! this should be *
-endif
 
 call DATE_AND_TIME(cdate, ctime, zone, values)
 
 ! give up if no good values were returned
 if (.not. any(values /= -HUGE(0)) ) return 
+
+lunit = 6   ! normal fortran output unit
+if (present(unit)) lunit = unit
 
 oneline = .false.
 if (present(brief)) oneline = brief
@@ -1071,14 +1074,13 @@ if (present(brief)) oneline = brief
 !> add on the label if it's there separately.
 
 if (oneline) then
+   write(msgstring1,'(A,1X,I4,5(A1,I2.2))') 'TIME:', &
+                     values(1), '/', values(2), '/', values(3), &
+                     ' ', values(5), ':', values(6), ':', values(7)
    if (present(string1)) then
-      write(lunit,'(A,1X,I4,5(A1,I2.2))') string1//' TIME:', &
-                     values(1), '/', values(2), '/', values(3), &
-                     ' ', values(5), ':', values(6), ':', values(7)
+      write(lunit,'(A)') trim(string1)//' '//trim(msgstring1)
    else
-      write(lunit,'(A,1X,I4,5(A1,I2.2))') 'TIME: ', &
-                     values(1), '/', values(2), '/', values(3), &
-                     ' ', values(5), ':', values(6), ':', values(7)
+      write(lunit,'(A)') trim(msgstring1)
    endif
 else
    write(lunit,*)
@@ -1089,7 +1091,7 @@ else
       write(lunit,*) 'Time is  ... at YYYY MM DD HH MM SS = '
    endif 
    write(lunit,'(17x,i4,5(1x,i2))') values(1), values(2), &
-                     values(3),  values(5), values(6), values(7)
+             values(3),  values(5), values(6), values(7)
 
    if(present(string1)) write(lunit,*)trim(string1)
    if(present(string2)) write(lunit,*)trim(string2)
@@ -2216,10 +2218,17 @@ end subroutine array_4d_dump
 !> if the fraction_across the enclosing level should be computed using a
 !> log scale, set log_scale = .true.
 !>
+!> if indirect_indices specified, use as indirect indices into data_array,
+!> with these indices giving the sorted order.  the order of the values
+!> cannot be inverted!  use either indirect addressing or inverted but
+!> not both.
+!> 
 !> my_status values:
 !>   0 = good return
 !>  -1 = value_to_find is below smallest value
 !>   1 = value_to_find is above largest value
+!>
+!>  95 = cannot combine inverted and indirect indices
 !>  96 = cannot use log scale with negative data values
 !>  97 = array only has a single value
 !>  98 = interval has 0 width or values are inverted
@@ -2227,6 +2236,16 @@ end subroutine array_4d_dump
 !>
 !> bad output values use MISSING_I and MISSING_R8
 !>
+!> usage example:
+!>   you have an array of model level heights called my_heights() and you
+!>   have an array of data values at those model levels called data_on_heights.
+!>   you want to interpolate the data at a height of 'this_height'.
+!>
+!>   call find_enclosing_indices(size(my_heights), my_heights, this_height, low_i, high_i, fract, istat)
+!>   if (istat /= 0) return
+!>   value = data_on_heights(low_i)  * (1.0 - fract) + &
+!>           data_on_heights(high_i) * fract
+!>          
 !> FIXME:
 !> added to the utilities module, but this module should be split into
 !> smaller modules because right now it's a dumping ground for every
@@ -2235,7 +2254,7 @@ end subroutine array_4d_dump
 
 subroutine find_enclosing_indices(nitems, data_array, value_to_find,     &
                                   smaller_index, larger_index, fraction_across, my_status, &
-                                  inverted, log_scale)
+                                  inverted, log_scale, indirect_indices)
 
 integer,  intent(in)  :: nitems
 real(r8), intent(in)  :: data_array(nitems)
@@ -2246,10 +2265,12 @@ real(r8), intent(out) :: fraction_across
 integer,  intent(out) :: my_status
 logical,  intent(in), optional :: inverted
 logical,  intent(in), optional :: log_scale
+integer,  intent(in), optional :: indirect_indices(nitems)
 
 integer :: i, j, k
-integer :: smaller_val_i, larger_val_i
-logical :: one_is_smallest, linear_interp    ! the normal defaults
+integer :: lowest_i, highest_i
+real(r8) :: smaller_data, larger_data, this_data
+logical :: one_is_smallest, linear_interp, direct    ! the normal defaults are true
 
 ! set defaults and initialize intent(out) items
 ! so we can return immediately on error.
@@ -2259,6 +2280,9 @@ if (present(inverted)) one_is_smallest = .not. inverted
 
 linear_interp = .true.
 if (present(log_scale)) linear_interp = .not. log_scale
+
+direct = .true.
+if (present(indirect_indices)) direct = .false.
 
 smaller_index = MISSING_I
 larger_index  = MISSING_I
@@ -2271,81 +2295,111 @@ if (nitems <= 1) then
    my_status = 97
    return
 endif
+if (.not. direct .and. .not. one_is_smallest) then
+   my_status = 95
+   return
+endif
 
 ! set these indices so we can simplify the tests below
-if (one_is_smallest) then
-   smaller_val_i = 1
-   larger_val_i  = nitems
+if (.not. direct) then
+   lowest_i  = indirect_indices(1)
+   highest_i = indirect_indices(nitems)
+else if (one_is_smallest) then
+   lowest_i  = 1
+   highest_i = nitems
 else
-   smaller_val_i = nitems
-   larger_val_i  = 1
+   lowest_i  = nitems
+   highest_i = 1
 endif
    
-! discard out of range values
-if (value_to_find < data_array(smaller_val_i)) then
+! get limits so we can easily discard out of range values
+smaller_data  = data_array(lowest_i)
+larger_data   = data_array(highest_i)
+
+if (value_to_find < smaller_data) then
    my_status = -1
    return
 endif
 
-if (value_to_find > data_array(larger_val_i)) then
+if (value_to_find > larger_data) then
    my_status = 1
    return
 endif
 
-! bisection section (get it?)
+! bisection search:
+! because input must be in sorted order take the middle
+! index each time and shift the lower or upper index
+! to match it, depending on which half the value falls in.
+
 i = 1
 j = nitems
 
 do
    k=(i+j)/2
-   if ((value_to_find < data_array(k) .and.       one_is_smallest) .or. &
-       (value_to_find > data_array(k) .and. .not. one_is_smallest)) then
+
+   if (direct) then
+      this_data = data_array(k)
+   else
+      this_data = data_array(indirect_indices(k))
+   endif
+
+   if ((value_to_find < this_data .and.       one_is_smallest) .or. &
+       (value_to_find > this_data .and. .not. one_is_smallest)) then
       j=k
    else
       i=k
    endif
+   
    if (i+1 >= j) exit
 enddo
 
-! return vals
-smaller_index = i
-larger_index  = i+1
-
-! again, set these indices so we can simplify the tests below
-! to compute fraction_across
-if (one_is_smallest) then
-   smaller_val_i = i
-   larger_val_i  = i+1
+! return index values.  if indirect, return indices
+! directly into the data array so caller doesn't have
+! do redo the indirection.
+if (.not. direct) then
+   smaller_index = indirect_indices(i)
+   larger_index  = indirect_indices(i+1)
+else if (one_is_smallest) then
+   smaller_index = i
+   larger_index  = i+1
 else
-   smaller_val_i = i+1
-   larger_val_i  = i
+   smaller_index = i+1
+   larger_index  = i       
 endif
-   
-! avoid divide by 0.  at this point we'll be returning valid index values
-! but returning a bad fraction and status code.  might help identify where
-! in the incoming data array things are bad.
-if ((data_array(larger_val_i) - data_array(smaller_val_i)) <= 0.0_r8) then
+
+! use the indices to look up the corresponding data values
+! to compute the fraction across.
+smaller_data = data_array(smaller_index)
+larger_data  = data_array(larger_index)
+
+! avoid cases that would divide by 0 below.
+!> if smaller > larger then the input data isn't monotonic.
+!>   return valid index values but bad status and fraction.
+!> if smaller == larger, return fraction of 0
+
+if (smaller_data > larger_data) then
    my_status = 98
+   return
+endif
+if (smaller_data == larger_data) then
+   fraction_across = 0.0_r8
+   my_status = 0
    return
 endif
 
 ! no log computations if any data values are negative
-! (do this on 2 lines to avoid testing the data value
-!  unless we are planning to take the log.)
-if (.not. linear_interp) then
-   if (data_array(smaller_val_i) <= 0.0) then
-      my_status = 96
-      return
-   endif
+if (.not. linear_interp .and. smaller_data <= 0.0) then
+   my_status = 96
+   return
 endif
 
-! compute fraction here
+! compute fraction here.  0.0 = smaller value, 1.0 = larger value
 if (linear_interp) then
-   fraction_across = (value_to_find            - data_array(smaller_val_i)) / &
-                     (data_array(larger_val_i) - data_array(smaller_val_i))
+   fraction_across = (value_to_find - smaller_data) / &
+                     (larger_data   - smaller_data)
 else
-   fraction_across = (log(value_to_find)            - log(data_array(smaller_val_i))) / &
-                     (log(data_array(larger_val_i)) - log(data_array(smaller_val_i)))
+   fraction_across = (log(value_to_find) - log(smaller_data)) / &
+                     (log(larger_data)   - log(smaller_data))
 
 endif
 
@@ -2354,6 +2408,211 @@ my_status = 0
 
 end subroutine find_enclosing_indices
 
+!-----------------------------------------------------------------------
+!> given an array of sorted values and a value to find, return the
+!>  first index value that is less than or equal to the target.
+!>
+!> if the array values are inverted (e.g. index 1 is the largest value),
+!> set inverted = .true. 
+!>
+!> if indirect_indices specified, use as indirect indices into data_array,
+!> with these indices giving the sorted order.  return index will be the
+!> direct index into the data_array.  to also return the index into the
+!> indirect array, specify the_indirect_index in the arg list.
+!>  
+!> note that you cannot specify both inverted and indirect.
+!>
+!> my_status values:
+!>   0 = good return
+!>  -1 = value_to_find is below the smallest value
+!>   1 = value_to_find is above largest value
+!>
+!>  94 = invalid indirect index values
+!>  95 = cannot specify the_indirect_index and not indirect_indices(:)
+!>  96 = cannot specify both indirect and inverted
+!>  97 = empty input data array
+!>  98 = interval values are inverted
+!>  99 = unknown error
+!>
+!> bad output values use MISSING_I and MISSING_R8
+!>
+!> usage example:
+!>   you have a long array of unsorted numbers and you want to find the index of
+!>   a given value.
+!>
+!>   ! do this only once
+!>   call index_sort(unsorted_array, index_array, sizeof(unsorted_array))
+!>
+!>   call find_first_occurrence(sizeof(unsorted_array), unsorted_array, value_to_find, &
+!>                              this_index, istat, indirect_indices = index_array)
+!>   if (istat /= 0) return
+!>   if (value_to_find == unsorted_array(this_index)) then
+!>      print *, 'found ', value_to_find, ' in array at index ', this_index
+!>   else
+!>      print *, 'did not find exact match in array'
+!>      print *, 'largest value still less than ', value_to_find, ' in array at index ', this_index
+!>      print *, 'is value ', unsorted_array(this_index)
+!>   endif
+!>          
+
+!>@todo FIXME - do we need an integer version of this?  (i think yes)
+!>    possibly also a character version for arrays of strings.
+!>    C++ overloading would be nice sometimes.
+
+subroutine find_first_occurrence(nitems, data_array, value_to_find, &
+                                the_index, my_status, &
+                                inverted, indirect_indices, the_indirect_index)
+
+integer,  intent(in)  :: nitems
+real(r8), intent(in)  :: data_array(nitems)
+real(r8), intent(in)  :: value_to_find
+integer,  intent(out) :: the_index
+integer,  intent(out) :: my_status
+logical,  intent(in),  optional :: inverted
+integer,  intent(in),  optional :: indirect_indices(nitems)
+integer,  intent(out), optional :: the_indirect_index
+
+integer :: i, j, k
+integer :: lowest_i, highest_i
+logical :: one_is_smallest, direct    ! the normal defaults are true
+real(r8) :: smallest_data, largest_data, this_data
+
+! set defaults and initialize intent(out) items
+! so we can return immediately on error.
+
+one_is_smallest = .true.
+if (present(inverted)) one_is_smallest = .not. inverted
+
+direct = .true.
+if (present(indirect_indices)) direct = .false.
+
+the_index = MISSING_I
+if (present(the_indirect_index)) the_indirect_index = MISSING_I
+my_status = -99
+
+
+! exclude malformed call cases
+if (nitems < 1) then
+   my_status = 97
+   return
+endif
+
+if (.not. direct .and. .not. one_is_smallest) then
+   my_status = 96
+   return
+endif
+
+if (present(the_indirect_index) .and. .not. present(indirect_indices)) then
+   my_status = 95
+   return
+endif
+
+!> if the input is a single value, test it and
+!> return if the value to find is too small or too large.
+!> also check for bad indirect index values.
+if (nitems == 1) then
+   if (.not. direct) then
+      if (indirect_indices(1) /= 1) then
+         my_status = 94
+         return
+      endif
+   endif
+
+   this_data = data_array(1)
+   if (value_to_find < this_data) then
+      my_status = -1
+      return
+   endif
+   if (value_to_find > this_data) then
+      my_status = 1
+      return
+   endif
+
+   the_index = 1
+   if (present(the_indirect_index)) the_indirect_index = 1
+   my_status = 0
+   return
+endif
+
+! set these indices so we can simplify the tests below
+if (.not. direct) then
+   lowest_i  = indirect_indices(1)
+   highest_i = indirect_indices(nitems)
+else if (one_is_smallest) then
+   lowest_i  = 1
+   highest_i = nitems
+else
+   lowest_i  = nitems
+   highest_i = 1
+endif
+   
+! get limits so we can easily discard out of range values
+smallest_data  = data_array(lowest_i)
+largest_data   = data_array(highest_i)
+
+! discard small and large values here
+if (value_to_find < smallest_data) then
+   my_status = -1
+   return
+endif
+if (value_to_find > largest_data) then
+   my_status = 1
+   return
+endif
+
+! if equal to the largest value, return here.
+if (value_to_find == largest_data) then
+   the_index = highest_i
+   if (present(the_indirect_index)) the_indirect_index = nitems
+   my_status = 0
+   return
+endif
+ 
+! bisection search:
+! because input must be in sorted order take the middle
+! index each time and shift the lower or upper index
+! to match it, depending on which half the value falls in.
+
+i = 1
+j = nitems
+
+do
+   k=(i+j)/2
+
+   if (direct) then
+      this_data = data_array(k)
+   else
+      this_data = data_array(indirect_indices(k))
+   endif
+
+   if ((value_to_find <  this_data .and.       one_is_smallest) .or. &
+       (value_to_find >= this_data .and. .not. one_is_smallest)) then
+      j=k
+   else
+      i=k
+   endif
+
+   if (i+1 >= j) exit
+enddo
+
+! always return the index directly into the incoming data array.  
+! if requested and there are indirect indices also return the indirect 
+! array index number.  the former makes it easy to access the data directly.  
+! the latter makes it possible to move forward and back in numeric order.
+if (.not. direct) then
+   the_index = indirect_indices(i)
+   if (present(the_indirect_index)) the_indirect_index = i
+else if (one_is_smallest) then
+   the_index = i
+else
+   the_index = j
+endif
+
+! good return
+my_status = 0
+
+end subroutine find_first_occurrence
+
 
 !-----------------------------------------------------------------------
 !-----------------------------------------------------------------------
@@ -2361,131 +2620,145 @@ end subroutine find_enclosing_indices
 !-----------------------------------------------------------------------
 !-----------------------------------------------------------------------
 
+!-----------------------------------------------------------------------
+!> print out the kind numbers for various variable kinds
+
+subroutine dump_varkinds()
+
+integer :: bob
+
+call log_it('') ! a little whitespace is nice
+
+write(msgstring1,*)'..  digits12 is ',digits12
+write(msgstring2,*)'r8       is ',r8
+write(msgstring3,*)'r4       is ',r4
+call error_handler(E_DBG, 'initialize_utilities', msgstring1, &
+                   source, revision, revdate, text2=msgstring2, text3=msgstring3)
+
+write(msgstring1,*)'..  integer  is ',kind(bob) ! any integer variable will do
+write(msgstring2,*)'i8       is ',i8
+write(msgstring3,*)'i4       is ',i4
+call error_handler(E_DBG, 'initialize_utilities', msgstring1, &
+                   source, revision, revdate, text2=msgstring2, text3=msgstring3)
+
+end subroutine dump_varkinds
  
 !-----------------------------------------------------------------------
 !>  Useful for dumping all the attributes for a file 'unit'
 !>  A debugging routine, really. TJH Oct 2004
 
-   subroutine dump_unit_attributes(iunit) 
+subroutine dump_unit_attributes(iunit) 
 
-      integer, intent(in) :: iunit
+integer, intent(in) :: iunit
 
-      logical :: exists, connected, named_file
-      character(len=256) :: file_name
-      character(len=512) :: str1
-      character(len=32)  :: ynu     ! YES, NO, UNDEFINED ... among others
-      integer :: ios, reclen, nextrecnum
-character(len=*), parameter :: routine = "dump_unit_attributes"
+logical :: exists, connected, named_file
+integer :: ios, reclen, nextrecnum
+character(len=256) :: file_name
+character(len=32)  :: ynu     ! YES, NO, UNDEFINED ... among others
 
-      if ( .not. module_initialized ) call initialize_utilities
+if ( .not. module_initialized ) call initialize_utilities
 
-      write(str1,*)'for unit ',iunit 
-call error_handler(E_MSG, routine, str1, source, revision, revdate)
+call output_unit_attribs(ios, 'for unit', '', ivalue=iunit)
 
-      inquire(iunit, opened = connected, iostat=ios)
-      if ( connected .and. (ios == 0) ) &
-   call error_handler(E_MSG, routine, ' connected', source, revision, revdate)
+inquire(iunit, opened = connected, iostat=ios)
+call output_unit_attribs(ios, 'connected', '', lvalue=connected)
 
-      inquire(iunit, named = named_file, iostat=ios)
-      if ( named_file .and. (ios == 0) ) &
-   call error_handler(E_MSG, routine, ' file is named.', source, revision, revdate)
+inquire(iunit, named = named_file, iostat=ios)
+call output_unit_attribs(ios, 'named file', '', lvalue=named_file)
 
-      inquire(iunit, name = file_name, iostat=ios)
-      if ( ios == 0 ) then
-         write(str1,*)'file name is ' // trim(adjustl(file_name))
-   call error_handler(E_MSG, routine, str1, source, revision, revdate)
-      endif
+if (named_file) then
+   inquire(iunit, name = file_name, iostat=ios)
+   call output_unit_attribs(ios, 'file name is', file_name)
+endif
 
-      inquire(iunit, exist = exists, iostat=ios)
-      if ( exists .and. (ios == 0) ) &
-   call error_handler(E_MSG, routine, ' file exists', source, revision, revdate)
+inquire(iunit, exist = exists, iostat=ios)
+call output_unit_attribs(ios, 'file exists', '', lvalue=exists)
 
-      inquire(iunit, recl = reclen, iostat=ios)
-      if ( ios == 0 ) then
-         write(str1,*)'record length is ', reclen
-   call error_handler(E_MSG, routine, str1, source, revision, revdate)
-      endif
+inquire(iunit, recl = reclen, iostat=ios)
+call output_unit_attribs(ios, 'record length', '', ivalue=reclen)
 
-      inquire(iunit, nextrec = nextrecnum, iostat=ios)
-      if ( ios == 0 ) then
-         write(str1,*)'next record is ', nextrecnum
-   call error_handler(E_MSG, routine, str1, source, revision, revdate)
-      endif
+inquire(iunit, nextrec = nextrecnum, iostat=ios)
+call output_unit_attribs(ios, 'next record', '', ivalue=nextrecnum)
 
-      inquire(iunit, access = ynu, iostat=ios)
-      if ( ios == 0 ) then
-         write(str1,*)'access_type is ', ynu
-   call error_handler(E_MSG, routine, str1, source, revision, revdate)
-      endif
+inquire(iunit, access = ynu, iostat=ios)
+call output_unit_attribs(ios, 'access type', ynu)
 
-      inquire(iunit, sequential = ynu, iostat=ios)
-      if ( ios == 0 ) then
-         write(str1,*)'is file sequential ', ynu
-   call error_handler(E_MSG, routine, str1, source, revision, revdate)
-      endif
+inquire(iunit, sequential = ynu, iostat=ios)
+call output_unit_attribs(ios, 'sequential', ynu)
 
-      inquire(iunit, direct = ynu, iostat=ios)
-      if ( ios == 0 ) then
-         write(str1,*)'is file direct ', ynu
-   call error_handler(E_MSG, routine, str1, source, revision, revdate)
-      endif
+inquire(iunit, direct = ynu, iostat=ios)
+call output_unit_attribs(ios, 'direct', ynu)
 
-      inquire(iunit, form = ynu, iostat=ios)
-      if ( ios == 0 ) then
-         write(str1,*)'file format ', ynu
-   call error_handler(E_MSG, routine, str1, source, revision, revdate)
-      endif
+inquire(iunit, form = ynu, iostat=ios)
+call output_unit_attribs(ios, 'file format', ynu)
 
-      inquire(iunit, action = ynu, iostat=ios)
-      if ( ios == 0 ) then
-         write(str1,*)'action ', ynu
-   call error_handler(E_MSG, routine, str1, source, revision, revdate)
-      endif
+inquire(iunit, action = ynu, iostat=ios)
+call output_unit_attribs(ios, 'action', ynu)
 
-      inquire(iunit, read = ynu, iostat=ios)
-      if ( ios == 0 ) then
-         write(str1,*)'read ', ynu
-   call error_handler(E_MSG, routine, str1, source, revision, revdate)
-      endif
+inquire(iunit, read = ynu, iostat=ios)
+call output_unit_attribs(ios, 'read', ynu)
 
-      inquire(iunit, write = ynu, iostat=ios)
-      if ( ios == 0 ) then
-         write(str1,*)'write ', ynu
-   call error_handler(E_MSG, routine, str1, source, revision, revdate)
-      endif
+inquire(iunit, write = ynu, iostat=ios)
+call output_unit_attribs(ios, 'write', ynu)
 
-      inquire(iunit, readwrite = ynu, iostat=ios)
-      if ( ios == 0 ) then
-         write(str1,*)'readwrite ', ynu
-   call error_handler(E_MSG, routine, str1, source, revision, revdate)
-      endif
+inquire(iunit, readwrite = ynu, iostat=ios)
+call output_unit_attribs(ios, 'readwrite', ynu)
 
-      inquire(iunit, blank = ynu, iostat=ios)
-      if ( ios == 0 ) then
-         write(str1,*)'blank ', ynu
-   call error_handler(E_MSG, routine, str1, source, revision, revdate)
-      endif
+inquire(iunit, blank = ynu, iostat=ios)
+call output_unit_attribs(ios, 'blank', ynu)
 
-      inquire(iunit, position = ynu, iostat=ios)
-      if ( ios == 0 ) then
-         write(str1,*)'position ', ynu
-   call error_handler(E_MSG, routine, str1, source, revision, revdate)
-      endif
+inquire(iunit, position = ynu, iostat=ios)
+call output_unit_attribs(ios, 'position', ynu)
 
-      inquire(iunit, delim = ynu, iostat=ios)
-      if ( ios == 0 ) then
-         write(str1,*)'delim ', ynu
-   call error_handler(E_MSG, routine, str1, source, revision, revdate)
-      endif
+inquire(iunit, delim = ynu, iostat=ios)
+call output_unit_attribs(ios, 'delim', ynu)
 
-      inquire(iunit, pad = ynu, iostat=ios)
-      if ( ios == 0 ) then
-         write(str1,*)'pad ', ynu
-   call error_handler(E_MSG, routine, str1, source, revision, revdate)
-      endif
+inquire(iunit, pad = ynu, iostat=ios)
+call output_unit_attribs(ios, 'pad', ynu)
 
-   end subroutine dump_unit_attributes
+end subroutine dump_unit_attributes
 
+!-----------------------------------------------------------------------
+!> fairly specialized routine to output the results 
+!> of a file inquire call from dump_unit_attributes
+
+
+subroutine output_unit_attribs(ios, label, cvalue, ivalue, lvalue)
+integer,           intent(in) :: ios
+character(len=*),  intent(in) :: label
+character(len=*),  intent(in) :: cvalue
+integer, optional, intent(in) :: ivalue
+logical, optional, intent(in) :: lvalue
+
+character(len=128) :: string1
+
+! if the inquire failed, just return
+if (ios /= 0) return
+
+! format the output string based on the type of input
+
+if (present(lvalue)) then    ! logical
+
+   if (lvalue) then
+      write(string1, *) trim(label) // " is true"
+   else
+      write(string1, *) trim(label) // " is false"
+   endif
+
+else if (present(ivalue)) then   ! integer
+
+   write(string1, *) trim(label) // " is ", ivalue
+
+else   ! character
+
+   write(string1, *) trim(label) // " = " // trim(cvalue)
+
+endif
+
+call error_handler(E_MSG, 'dump_unit_attributes', string1, &
+                   source, revision, revdate)
+
+end subroutine output_unit_attribs
 
 !-----------------------------------------------------------------------
 !-----------------------------------------------------------------------
