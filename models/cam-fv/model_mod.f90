@@ -3694,8 +3694,8 @@ vert_only_dist = get_dist(ramp_start_loc, this_loc, obs_type)
 
 ! we need this to compute what?
 if (vert_only_dist > total_dist) then
- print *, 'unexpected, vert larger than total:  ', vert_only_dist, total_dist
- print *, 'obs_type, vert_norm = ', obs_type, vert_norm
+ !print *, 'unexpected, vert larger than total:  ', vert_only_dist, total_dist
+ !print *, 'obs_type, vert_norm = ', obs_type, vert_norm
  horiz_dist = 0.0_r8
 else
 horiz_dist = sqrt(total_dist**2 - vert_only_dist**2)
