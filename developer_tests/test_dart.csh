@@ -6,6 +6,17 @@
 #
 # DART $Id$
 
+# this can be run from the command line, or submitted to
+# a batch system.
+
+#SBATCH -J centos
+#SBATCH -n 1
+#SBATCH --ntasks-per-node=1
+#SBATCH -t 2:30:00
+#SBATCH -A P86850054
+#SBATCH -p dav
+#SBATCH --reservation cent74
+#SBATCH -o tcsh.log
 
 set clobber
 setenv MPIFLAG '-nompi'
