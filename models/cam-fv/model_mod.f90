@@ -8,18 +8,6 @@
 !> this is the interface between the cam-fv atmosphere model and dart.
 !> the required public interfaces and arguments cannot be changed.
 !>
-!>
-!----------------------------------------------------------------
-!>@todo FIXME: consistent directions for interpolation/fractions
-!>
-!>  still to verify: we should always pass top level first, then bottom level.
-!>  fraction should be computed and interpreted as 0 = top, 1 = bottom.
-!>  in the code below, there are !x! marks on some lines.  the meanings are:
-!>   !$! - where top and bottom might need to be swapped in call or 
-!>         subroutine interfaces.
-!>   !*! - where fraction is used and may need the sense to be switched 
-!>         (may be using 1 = top and 0 = bottom)
-!>
 !----------------------------------------------------------------
 
 module model_mod
@@ -511,7 +499,7 @@ real(r8),            intent(out) :: vals(ens_size)
 integer,             intent(out) :: my_status
 
 integer :: next_lat, prev_lon, stagger
-real(r8) :: vals_bot(ens_size), vals_top(ens_size)
+real(r8) :: vals1(ens_size), vals2(ens_size)
 
 vals(:) = MISSING_R8
 stagger = grid_stagger%qty_stagger(stagger_qty)
@@ -524,25 +512,25 @@ select case (stagger)
    call quad_index_neighbors(lon_index, lat_index, prev_lon, next_lat)
 
    call get_values_from_single_level(ens_handle, ens_size, qty, lon_index, lat_index, lev_index, &
-                                     vals_bot, my_status)
+                                     vals1, my_status)
    if (my_status /= 0) return
    call get_values_from_single_level(ens_handle, ens_size, qty, lon_index, next_lat,  lev_index, &
-                                     vals_top, my_status)
+                                     vals2, my_status)
    if (my_status /= 0) return
 
-   vals = (vals_bot + vals_top) * 0.5_r8
+   vals = (vals1 + vals2) * 0.5_r8
 
   case (STAGGER_V)
    call quad_index_neighbors(lon_index, lat_index, prev_lon, next_lat)
 
    call get_values_from_single_level(ens_handle, ens_size, qty, lon_index, lat_index, lev_index, &
-                                     vals_bot, my_status)
+                                     vals1, my_status)
    if (my_status /= 0) return
    call get_values_from_single_level(ens_handle, ens_size, qty, prev_lon,  lat_index, lev_index, &
-                                     vals_top, my_status)
+                                     vals2, my_status)
    if (my_status /= 0) return
 
-   vals = (vals_bot + vals_top) * 0.5_r8
+   vals = (vals1 + vals2) * 0.5_r8
 
   ! no stagger - cell centers, or W stagger
   case default
@@ -916,7 +904,8 @@ if (which_vert == VERTISHEIGHT) then
 endif
 
 if (which_vert == VERTISLEVEL) then
-   if (vert_value > no_assim_above_level) my_status = 14
+   ! level 1 is top; watch less than/greater than in tests
+   if (vert_value < no_assim_above_level) my_status = 14
    return
 endif
 
@@ -947,7 +936,7 @@ integer,            intent(out) :: my_status(ens_size)
 
 integer  :: icorner, numdims
 integer  :: level_one_array(ens_size)
-integer  :: four_bot_levs(4, ens_size), four_top_levs(4, ens_size)
+integer  :: four_levs1(4, ens_size), four_levs2(4, ens_size)
 real(r8) :: four_vert_fracts(4, ens_size)
 
 character(len=*), parameter :: routine = 'get_quad_vals:'
@@ -968,7 +957,7 @@ if (numdims == 3) then
       call find_vertical_levels(state_handle, ens_size, &
                                 four_lons(icorner), four_lats(icorner), lon_lat_vert(3), &
                                 which_vert, obs_qty, varid, &
-                                four_bot_levs(icorner, :), four_top_levs(icorner, :), &    !$! 
+                                four_levs1(icorner, :), four_levs2(icorner, :), & 
                                 four_vert_fracts(icorner, :), my_status)
       if (any(my_status /= 0)) return
   
@@ -982,12 +971,12 @@ if (numdims == 3) then
    if (varid > 0) then
 
       call get_four_state_values(state_handle, ens_size, four_lons, four_lats, &
-                                four_bot_levs, four_top_levs, four_vert_fracts, &       !$!
+                                four_levs1, four_levs2, four_vert_fracts, &   
                                 varid, quad_vals, my_status)
 
    else ! get 3d special variables in another ways ( like QTY_PRESSURE )
       call get_four_nonstate_values(state_handle, ens_size, four_lons, four_lats, &
-                                   four_bot_levs, four_top_levs, four_vert_fracts, &       !$!
+                                   four_levs1, four_levs2, four_vert_fracts, & 
                                    obs_qty, quad_vals, my_status)
 
    endif
@@ -1032,43 +1021,43 @@ end subroutine get_quad_vals
 !>
 
 subroutine get_four_state_values(state_handle, ens_size, four_lons, four_lats, &
-                                 four_bot_levs, four_top_levs, four_vert_fracts, &
+                                 four_levs1, four_levs2, four_vert_fracts, &
                                  varid, quad_vals, my_status)
 
 type(ensemble_type), intent(in) :: state_handle
 integer,             intent(in) :: ens_size
 integer,             intent(in) :: four_lons(4), four_lats(4)
-integer,             intent(in) :: four_bot_levs(4, ens_size), four_top_levs(4, ens_size)
+integer,             intent(in) :: four_levs1(4, ens_size), four_levs2(4, ens_size)
 real(r8),            intent(in) :: four_vert_fracts(4, ens_size)
 integer,             intent(in) :: varid
 real(r8),           intent(out) :: quad_vals(4, ens_size) !< array of interpolated values
 integer,            intent(out) :: my_status(ens_size)
 
 integer  :: icorner
-real(r8) :: botvals(ens_size), topvals(ens_size)
+real(r8) :: vals1(ens_size), vals2(ens_size)
 
 character(len=*), parameter :: routine = 'get_four_state_values:'
 
 do icorner=1, 4
    call get_values_from_varid(state_handle,  ens_size, &
                               four_lons(icorner), four_lats(icorner), &
-                              four_bot_levs(icorner, :), varid, botvals, &
+                              four_levs1(icorner, :), varid, vals1, &
                               my_status)
 
    if (any(my_status /= 0)) then
-      my_status(:) = 16   ! cannot retrieve bottom values
+      my_status(:) = 16   ! cannot retrieve vals1 values
       return
    endif
 
    call get_values_from_varid(state_handle,  ens_size, &
                               four_lons(icorner), four_lats(icorner), &
-                              four_top_levs(icorner, :), varid, topvals, my_status)
+                              four_levs2(icorner, :), varid, vals2, my_status)
    if (any(my_status /= 0)) then
       my_status(:) = 17   ! cannot retrieve top values
       return
    endif
 
-   call vert_interp(ens_size, botvals, topvals, four_vert_fracts(icorner, :), &       !$!
+   call vert_interp(ens_size, vals1, vals2, four_vert_fracts(icorner, :), & 
                     quad_vals(icorner, :))
 
 enddo
@@ -1080,41 +1069,41 @@ end subroutine get_four_state_values
 !>
 
 subroutine get_four_nonstate_values(state_handle, ens_size, four_lons, four_lats, &
-                                 four_bot_levs, four_top_levs, four_vert_fracts, &       !$!
+                                 four_levs1, four_levs2, four_vert_fracts, &
                                  obs_qty, quad_vals, my_status)
 
 type(ensemble_type), intent(in) :: state_handle
 integer,             intent(in) :: ens_size
 integer,             intent(in) :: four_lons(4), four_lats(4)
-integer,             intent(in) :: four_bot_levs(4, ens_size), four_top_levs(4, ens_size)
+integer,             intent(in) :: four_levs1(4, ens_size), four_levs2(4, ens_size)
 real(r8),            intent(in) :: four_vert_fracts(4, ens_size)
 integer,             intent(in) :: obs_qty
 real(r8),           intent(out) :: quad_vals(4, ens_size) !< array of interpolated values
 integer,            intent(out) :: my_status(ens_size)
 
 integer  :: icorner
-real(r8) :: botvals(ens_size), topvals(ens_size)
+real(r8) :: vals1(ens_size), vals2(ens_size)
 
 character(len=*), parameter :: routine = 'get_four_nonstate_values:'
 
 do icorner=1, 4
    call get_values_from_nonstate_fields(state_handle,  ens_size, &
                               four_lons(icorner), four_lats(icorner), &
-                              four_bot_levs(icorner, :), obs_qty, botvals, my_status)
+                              four_levs1(icorner, :), obs_qty, vals1, my_status)
    if (any(my_status /= 0)) then
-      my_status(:) = 16   ! cannot retrieve bottom values
+      my_status(:) = 16   ! cannot retrieve vals1 values
       return
    endif
 
    call get_values_from_nonstate_fields(state_handle,  ens_size, &
                               four_lons(icorner), four_lats(icorner), &
-                              four_top_levs(icorner, :), obs_qty, topvals, my_status)
+                              four_levs2(icorner, :), obs_qty, vals2, my_status)
    if (any(my_status /= 0)) then
       my_status(:) = 17   ! cannot retrieve top values
       return
    endif
 
-   call vert_interp(ens_size, botvals, topvals, four_vert_fracts(icorner, :), &       !$!
+   call vert_interp(ens_size, vals1, vals2, four_vert_fracts(icorner, :), &
                     quad_vals(icorner, :))
 
 enddo
@@ -1202,7 +1191,7 @@ real(r8), intent(out) :: vals(ens_size)
 character(len=*), parameter :: routine = 'get_quad_values'
 
 integer :: stagger, prev_lon, next_lat
-real(r8) :: vals_bot(ens_size), vals_top(ens_size)
+real(r8) :: vals1(ens_size), vals2(ens_size)
 
 stagger = grid_stagger%qty_stagger(stagger_qty)
 
@@ -1212,17 +1201,17 @@ select case (obs_quantity)
      select case (stagger)
        case (STAGGER_U)
           call quad_index_neighbors(lon_index, lat_index, prev_lon, next_lat)
-          vals_bot(:) = phis(lon_index, lat_index) 
-          vals_top(:) = phis(lon_index, next_lat) 
+          vals1(:) = phis(lon_index, lat_index) 
+          vals2(:) = phis(lon_index, next_lat) 
      
-        vals = (vals_bot + vals_top) * 0.5_r8 
+        vals = (vals1 + vals2) * 0.5_r8 
      
        case (STAGGER_V)
           call quad_index_neighbors(lon_index, lat_index, prev_lon, next_lat)
-          vals_bot(:) = phis(lon_index, lat_index) 
-          vals_top(:) = phis(prev_lon,  lat_index) 
+          vals1(:) = phis(lon_index, lat_index) 
+          vals2(:) = phis(prev_lon,  lat_index) 
      
-        vals = (vals_bot + vals_top) * 0.5_r8
+        vals = (vals1 + vals2) * 0.5_r8
      
        ! no stagger - cell centers, or W stagger
        case default
@@ -1247,19 +1236,18 @@ end subroutine get_quad_values
 !-----------------------------------------------------------------------
 !> interpolate in the vertical between 2 arrays of items.
 !>
-!> model level 1 is top, so the fraction is interpreted as:
-!>
-!> vert_fracts: 0 is 100% of the top level and 
-!>              1 is 100% of the bottom level
+!> vert_fracts: 0 is 100% of the first level and 
+!>              1 is 100% of the second level
 
-subroutine vert_interp(nitems, botvals, topvals, vert_fracts, out_vals)
+subroutine vert_interp(nitems, levs1, levs2, vert_fracts, out_vals)
 integer,  intent(in)  :: nitems
-real(r8), intent(in)  :: botvals(nitems)
-real(r8), intent(in)  :: topvals(nitems)
+real(r8), intent(in)  :: levs1(nitems)
+real(r8), intent(in)  :: levs2(nitems)
 real(r8), intent(in)  :: vert_fracts(nitems)
 real(r8), intent(out) :: out_vals(nitems)
 
-out_vals(:) = (botvals(:) * vert_fracts(:)) + (topvals(:) * (1.0_r8-vert_fracts(:)))
+out_vals(:) = (levs1(:) * (1.0_r8-vert_fracts(:))) + &
+              (levs2(:) *         vert_fracts(:))
 
 end subroutine vert_interp
 
@@ -1292,7 +1280,7 @@ end subroutine quad_index_neighbors
 !> 
 
 subroutine find_vertical_levels(ens_handle, ens_size, lon_index, lat_index, vert_val, &
-                                which_vert, obs_qty, var_id, bot_levs, top_levs, vert_fracts, my_status)       !$!
+                                which_vert, obs_qty, var_id, levs1, levs2, vert_fracts, my_status)
 type(ensemble_type), intent(in)  :: ens_handle
 integer,             intent(in)  :: ens_size
 integer,             intent(in)  :: lon_index 
@@ -1301,22 +1289,22 @@ real(r8),            intent(in)  :: vert_val
 integer,             intent(in)  :: which_vert
 integer,             intent(in)  :: obs_qty
 integer,             intent(in)  :: var_id
-integer,             intent(out) :: bot_levs(ens_size)
-integer,             intent(out) :: top_levs(ens_size)
+integer,             intent(out) :: levs1(ens_size)
+integer,             intent(out) :: levs2(ens_size)
 real(r8),            intent(out) :: vert_fracts(ens_size)
 integer,             intent(out) :: my_status(ens_size)
 
 character(len=*), parameter :: routine = 'find_vertical_levels:'
 
-integer  :: bot1, top1, imember, level_one, status1, k
+integer  :: l1, l2, imember, level_one, status1, k
 real(r8) :: fract1
 real(r8) :: surf_pressure (  ens_size )
 real(r8) :: pressure_array( ref_nlevels, ens_size )
 real(r8) :: height_array  ( ref_nlevels, ens_size )
 
 ! assume the worst
-bot_levs(:)    = MISSING_I
-top_levs(:)    = MISSING_I
+levs1(:)    = MISSING_I
+levs2(:)    = MISSING_I
 vert_fracts(:) = MISSING_R8
 my_status(:)   = 98
 
@@ -1341,15 +1329,15 @@ select case (which_vert)
 
       do imember=1, ens_size
          call pressure_to_level(ref_nlevels, pressure_array(:, imember), vert_val, & 
-                                bot_levs(imember), top_levs(imember), &       !$!
+                                levs1(imember), levs2(imember), &
                                 vert_fracts(imember), my_status(imember))
 
       enddo
 
       if (debug_level > 100) then
          do k = 1,ens_size
-            print*, 'ISPRESSURE bot_levs(k), top_levs(k), vert_fracts(k), vert_val', &
-                     bot_levs(k), top_levs(k), vert_fracts(k), vert_val
+            print*, 'ISPRESSURE levs1(k), levs2(k), vert_fracts(k), vert_val', &
+                     levs1(k), levs2(k), vert_fracts(k), vert_val
           enddo
       endif
 
@@ -1368,44 +1356,44 @@ select case (which_vert)
 
       do imember=1, ens_size
          call height_to_level(ref_nlevels, height_array(:, imember), vert_val, & 
-                             bot_levs(imember), top_levs(imember), vert_fracts(imember), &       !$!
+                             levs1(imember), levs2(imember), vert_fracts(imember), &
                              my_status(imember))
       enddo
       if (any(my_status /= 0)) return   !>@todo FIXME let successful members continue?
 
       if (debug_level > 100) then
          do k = 1,ens_size
-            print*, 'ISHEIGHT ens#, bot_levs(#), top_levs(#), vert_fracts(#), top/bot height(#)', &
-                     k, bot_levs(k), top_levs(k), vert_fracts(k), height_array(top_levs(k),k), height_array(bot_levs(k), k)
+            print*, 'ISHEIGHT ens#, levs1(#), levs2(#), vert_fracts(#), top/bot height(#)', &
+                     k, levs1(k), levs2(k), vert_fracts(k), height_array(levs2(k),k), height_array(levs1(k), k)
          enddo
       endif
       
    case(VERTISLEVEL)
       ! this routine returns false if the level number is out of range.
-      if (check_good_levels(vert_val, ref_nlevels, bot1, top1, fract1)) then      !$!
+      if (.not. check_good_levels(vert_val, ref_nlevels, l1, l2, fract1)) then
          my_status(:) = 8
          return
       endif
 
       ! because we're given a model level as input, all the ensemble
       ! members have the same outgoing values.
-      bot_levs(:) = bot1
-      top_levs(:) = top1
+      levs1(:) = l1
+      levs2(:) = l2
       vert_fracts(:) = fract1
       my_status(:) = 0
 
       if (debug_level > 100) then
          do k = 1,ens_size
-            print*, 'ISLEVEL bot_levs(k), top_levs(k), vert_fracts(k), vert_val', &
-                     bot_levs(k), top_levs(k), vert_fracts(k), vert_val
+            print*, 'ISLEVEL levs1(k), levs2(k), vert_fracts(k), vert_val', &
+                     levs1(k), levs2(k), vert_fracts(k), vert_val
          enddo
       endif
 
    ! 2d fields
    case(VERTISUNDEF, VERTISSURFACE)
-      if (get_dims_from_qty(obs_qty, var_id) == 2) then      !$!
-         bot_levs(:) = ref_nlevels
-         top_levs(:) = ref_nlevels - 1
+      if (get_dims_from_qty(obs_qty, var_id) == 2) then
+         levs1(:) = ref_nlevels - 1
+         levs2(:) = ref_nlevels
          vert_fracts(:) = 1.0_r8
          my_status(:) = 0
       else
@@ -1585,7 +1573,7 @@ end function single_pressure_value_int
 !-----------------------------------------------------------------------
 !> Compute pressure at one level given the surface pressure
 !> cam model levels: 1 is the model top, N is the bottom.
-!> fraction = 0 is full top level, fraction = 1 is full bottom level
+!> fraction = 0 is full level 1, fraction = 1 is full level 2
 !> level is real/fractional value
 
 
@@ -1596,38 +1584,46 @@ real(r8), intent(in)  :: level
 real(r8) :: single_pressure_value_real
 
 integer :: k
-real(r8) :: fract, bot_pres, top_pres
+real(r8) :: fract, pres1, pres2
 
 k = int(level)
 fract = level - int(level)
 
-top_pres = single_pressure_value_int(surface_pressure, k)
-bot_pres = single_pressure_value_int(surface_pressure, k+1)
+if (k /= ref_nlevels) then
+   pres1 = single_pressure_value_int(surface_pressure, k)
+   pres2 = single_pressure_value_int(surface_pressure, k+1)
+else
+   pres1 = single_pressure_value_int(surface_pressure, k-1)
+   pres2 = single_pressure_value_int(surface_pressure, k)
+   fract = 1.0_r8
+endif
 
-single_pressure_value_real = fract * bot_pres + (1.0_r8 - fract) * top_pres  !*!
+single_pressure_value_real = (pres1 * (1.0_r8 - fract)) + &
+                              pres2 * (fract)
 
 end function single_pressure_value_real
 
 !-----------------------------------------------------------------------
 !> return the level indices and fraction across the level.
-!> 1 is top, N is bottom, bot is the lower level, top is the upper level
-!> so top value will be smaller than bot.  fract = 0 is the full top,
-!> fract = 1 is the full bot.  return non-zero if value outside the valid range.
+!> level 1 is model top, level N is model bottom. 
+!> pressure is smallest at the top, so the values are not inverted
+!> in the array.
+!> fract = 0 means full lev1 value,
+!> fract = 1 means full lev2 value. 
+!> return non-zero if value outside valid range.
 
 subroutine pressure_to_level(nlevels, pressures, p_val, &
-                              bot_lev, top_lev, fract, my_status)      !$!
+                              lev1, lev2, fract, my_status)
 
 integer,  intent(in)  :: nlevels
 real(r8), intent(in)  :: pressures(:)
 real(r8), intent(in)  :: p_val
-integer,  intent(out) :: bot_lev
-integer,  intent(out) :: top_lev
+integer,  intent(out) :: lev1
+integer,  intent(out) :: lev2
 real(r8), intent(out) :: fract  
 integer,  intent(out) :: my_status
 
-!> watch the order here.  top_lev is first, bot_lev is second because
-!> this routine expects the lower numbered index first, larger second.
-call find_enclosing_indices(nlevels, pressures, p_val, top_lev, bot_lev, fract, my_status, &      !$!
+call find_enclosing_indices(nlevels, pressures, p_val, lev1, lev2, fract, my_status, & 
                             inverted = .false., log_scale = use_log_vertical_scale)
 
 if (my_status /= 0) my_status = 10
@@ -1636,26 +1632,27 @@ end subroutine pressure_to_level
 
 !-----------------------------------------------------------------------
 !> return the level indices and fraction across the level.
-!> index 1 is model top, N is model bottom.  botvals will be the
-!> smaller index number, botvals will be the lower one
-!> fract = 0 is the full top, fract = 1 is the full bot.  
-!> return non-zero if value outside the valid range.
-!>
+!> level 1 is model top, level N is model bottom. 
+!> height is largest at the top, so the values *are* inverted
+!> in the array.
+!> fract = 0 means full lev1 value,
+!> fract = 1 means full lev2 value. 
+!> return non-zero if value outside valid range.
 
 subroutine height_to_level(nlevels, heights, h_val, &
-                            bot_lev, top_lev, fract, my_status)      !$!
+                            lev1, lev2, fract, my_status)
 
 integer,  intent(in)  :: nlevels
 real(r8), intent(in)  :: heights(:)
 real(r8), intent(in)  :: h_val
-integer,  intent(out) :: bot_lev
-integer,  intent(out) :: top_lev
+integer,  intent(out) :: lev1
+integer,  intent(out) :: lev2
 real(r8), intent(out) :: fract  
 integer,  intent(out) :: my_status
 
 character(len=*), parameter :: routine = 'height_to_level:'
 
-call find_enclosing_indices(nlevels, heights, h_val, bot_lev, top_lev, fract, my_status, &      !$!
+call find_enclosing_indices(nlevels, heights, h_val, lev1, lev2, fract, my_status, &
                             inverted = .true., log_scale = .false.)
 
 if (my_status /= 0) my_status = 11
@@ -1665,15 +1662,13 @@ end subroutine height_to_level
 !-----------------------------------------------------------------------
 !> in cam level 1 is at the model top, level N is the lowest level
 !> our convention in this code is:  between levels a fraction of 0
-!> is 100% the top level, and fraction of 1 is 100% the bottom level.
-!> the top level is always closer to the model top and so has a *smaller*
-!> level number than the bottom level. 
+!> is 100% level 1, and fraction of 1 is 100% level 2.
 
-function check_good_levels(vert_value, valid_range, bot, top, fract)
+function check_good_levels(vert_value, valid_range, l1, l2, fract)
 real(r8), intent(in)  :: vert_value
 integer,  intent(in)  :: valid_range
-integer,  intent(out) :: bot
-integer,  intent(out) :: top
+integer,  intent(out) :: l1
+integer,  intent(out) :: l2
 real(r8), intent(out) :: fract
 logical               :: check_good_levels
 
@@ -1682,31 +1677,31 @@ real(r8) :: fract_level
 
 ! be a pessimist, then you're never disappointed
 check_good_levels = .false.
-bot = MISSING_I
-top = MISSING_I
+l1 = MISSING_I
+l2 = MISSING_I
 fract = MISSING_R8
 
-integer_level = floor(vert_value)         ! potential top
+! out of range checks
+if (vert_value < 1.0_r8 .or. vert_value > valid_range) return
+
+integer_level = floor(vert_value) 
 fract_level = vert_value - integer_level 
 
 ! cam levels start at the top so level 1 is
-! the highest level and increase on the way down.
+! the highest level and increases on the way down.
 
 !>might want to allow extrapolation - which means
 !>allowing out of range values here and handling
 !>them correctly in the calling and vert_interp() code.
 
-! out of range checks
-if (vert_value < 1.0_r8 .or. vert_value > valid_range) return
-
 if (vert_value /= valid_range) then
-   top = integer_level
-   bot = top + 1
+   l1 = integer_level
+   l2 = integer_level + 1
    fract = fract_level
 else   
-   ! equal to the bottom level
-   top = integer_level - 1
-   bot = integer_level
+   ! equal to the largest level number
+   l1 = integer_level - 1
+   l2 = integer_level
    fract = 1.0_r8
 endif
 
@@ -3135,17 +3130,17 @@ real(r8), intent(in)  :: height
 integer,  intent(out) :: status
 real(r8) :: generic_height_to_pressure
 
-integer :: bot_lev, top_lev
+integer :: lev1, lev2
 real(r8) :: fract
 
 generic_height_to_pressure = MISSING_R8
 
 call height_to_level(std_atm_table_len, std_atm_hgt_col, height, & 
-                     bot_lev, top_lev, fract, status)      !$!
+                     lev1, lev2, fract, status)
 if (status /= 0) return
 
-generic_height_to_pressure = std_atm_pres_col(bot_lev) * fract + &                !*!
-                             std_atm_pres_col(top_lev) * (1.0_r8-fract)
+generic_height_to_pressure = std_atm_pres_col(lev1) * (1.0_r8-fract) + &
+                             std_atm_pres_col(lev2) * (fract)
 
 end function generic_height_to_pressure
 
@@ -3157,17 +3152,17 @@ real(r8), intent(in)  :: pressure
 integer,  intent(out) :: status
 real(r8) :: generic_pressure_to_height
 
-integer :: bot_lev, top_lev
+integer :: lev1, lev2
 real(r8) :: fract
 
 generic_pressure_to_height = MISSING_R8
 
 call pressure_to_level(std_atm_table_len, std_atm_pres_col, pressure, &
-                       bot_lev, top_lev, fract, status)                  !$!
+                       lev1, lev2, fract, status)
 if (status /= 0) return
 
-generic_pressure_to_height = std_atm_hgt_col(bot_lev) * fract + &                 !*!
-                             std_atm_hgt_col(top_lev) * (1.0_r8-fract)
+generic_pressure_to_height = std_atm_hgt_col(lev1) * (1.0_r8 - fract) + &
+                             std_atm_hgt_col(lev2) * (fract)
 
 end function generic_pressure_to_height
 
@@ -3180,7 +3175,7 @@ real(r8), intent(in)  :: pressure
 integer,  intent(out) :: status
 real(r8) :: generic_cam_pressure_to_cam_level
 
-integer :: bot_lev, top_lev
+integer :: lev1, lev2
 real(r8) :: fract
 real(r8) :: pressure_array(ref_nlevels)
 
@@ -3189,10 +3184,10 @@ generic_cam_pressure_to_cam_level = MISSING_R8
 call single_pressure_column(ref_surface_pressure, ref_nlevels, pressure_array)
 
 call pressure_to_level(ref_nlevels, pressure_array, pressure, &
-                       bot_lev, top_lev, fract, status)                  !$!
+                       lev1, lev2, fract, status)
 if (status /= 0) return
 
-generic_cam_pressure_to_cam_level = bot_lev + (1.0_r8 - fract)            !*!
+generic_cam_pressure_to_cam_level = lev1 + fract
 
 end function generic_cam_pressure_to_cam_level
 
