@@ -15,7 +15,7 @@ module distributed_state_mod
 !>    no_cray_win_mod.f90 does not use cray pointers
 !>    cray_win_mod.f90 uses cray pointers
 
-use mpi_utilities_mod,    only : my_task_id, group_task_id, &
+use mpi_utilities_mod,    only : my_task_id, &
                                  get_from_fwd, get_from_mean
 use types_mod,            only : r8, i8
 use ensemble_manager_mod, only : ensemble_type, map_pe_to_task, get_var_owner_index, &
@@ -144,10 +144,9 @@ else
 
    owner_of_state = map_pe_to_task(state_ens_handle, owner_of_state)        ! task
 
-   if (group_task_id() == owner_of_state) then
+   if (my_task_id() == owner_of_state) then
       x(1) = mean_ens_handle%copies(1, element_index)
    else
-      print*, 'dist mean_win', mean_win
       call get_from_mean(owner_of_state, mean_win, element_index, x(1))
    endif
 

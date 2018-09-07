@@ -88,7 +88,7 @@ FFLAGS  = -O2 -ffree-line-length-none $(INCS)
 LDFLAGS = $(FFLAGS) $(LIBS)
 
 FFLAGS = -g -Wuninitialized -Wunused -ffree-line-length-none -fbounds-check \
-         -fbacktrace -ffpe-trap=invalid,zero,overflow $(INCS)
+         -fbacktrace  -fcray-pointer -ffpe-trap=invalid,zero,overflow $(INCS)
 
 # <next few lines under version control, do not edit>
 # $URL$

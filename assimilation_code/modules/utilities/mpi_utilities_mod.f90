@@ -71,16 +71,16 @@ private
 ! this directory.  It is a sed script that comments in and out the interface
 ! block below.  Please leave the BLOCK comment lines unchanged.
 
- !!SYSTEM_BLOCK_EDIT START COMMENTED_IN
- ! interface block for getting return code back from system() routine
- interface
-  function system(string)
-   character(len=*) :: string
-   integer :: system
-  end function system
- end interface
- ! end block
- !!SYSTEM_BLOCK_EDIT END COMMENTED_IN
+! !!SYSTEM_BLOCK_EDIT START COMMENTED_OUT
+! ! interface block for getting return code back from system() routine
+! interface
+!  function system(string)
+!   character(len=*) :: string
+!   integer :: system
+!  end function system
+! end interface
+! ! end block
+! !!SYSTEM_BLOCK_EDIT END COMMENTED_OUT
 
 
 ! allow global sum to be computed for integers, r4, and r8s
@@ -92,12 +92,12 @@ end interface
 
 !   ---- private data for mpi_utilities ----
 
-integer :: myrank        = -1  ! my mpi number
-integer :: total_tasks   = -1  ! total mpi tasks/procs
-integer :: my_local_comm =  0  ! duplicate communicator private to this file
-integer :: my_group_comm =  0  ! duplicate communicator private to this file
-integer :: datasize      =  0  ! which MPI type corresponds to our r8 definition
-integer :: longinttype   =  0  ! create an MPI type corresponding to our i8 definition
+integer :: myrank         = -1  ! my mpi number
+integer :: total_tasks    = -1  ! total mpi tasks/procs
+integer :: my_local_comm  =  0  ! duplicate communicator private to this file
+integer :: my_group_comm  =  0  ! duplicate communicator private to this file
+integer :: datasize       =  0  ! which MPI type corresponds to our r8 definition
+integer :: longinttype    =  0  ! create an MPI type corresponding to our i8 definition
 
 
 
@@ -129,9 +129,9 @@ logical :: given_communicator = .false.   ! if communicator passed in, use it
 
 ! group variables
 integer :: group_all
-integer :: mpi_group_comm
-integer :: subgroup   !< subgroup for the grid
-integer :: group_rank !< rank within group
+integer :: dart_group
+integer :: sub_group
+integer :: group_rank
 integer :: group_size
 
 character(len = 256) :: errstring, errstring1
@@ -321,7 +321,9 @@ if (errcode /= MPI_SUCCESS) then
 endif
 
 ! number of tasks (if 10, returns 10.  task id numbers go from 0-9)
+print*, 'myrank =  ', myrank, ' my_local_comm = ', my_local_comm
 call MPI_Comm_size(my_local_comm, total_tasks, errcode)
+print*, 'myrank =  ', myrank, ' my_local_comm = ', my_local_comm, ' total_tasks = ', total_tasks, 'errcode', errcode
 if (errcode /= MPI_SUCCESS) then
    write(errstring, '(a,i8)') 'MPI_Comm_size returned error code ', errcode
    call error_handler(E_ERR,'initialize_mpi_utilities', errstring, source, revision, revdate)
@@ -433,10 +435,12 @@ endif
 ! close down at the same time.
 call task_sync()
 
-call MPI_Comm_free(mpi_group_comm, errcode)
-if (errcode /= MPI_SUCCESS) then
-   write(*, '(a,i8)') 'finalize_mpi_utilities: MPI_Comm_free groups returned error code ', errcode
-   call exit(-99)
+if (my_group_comm /= -1) then
+   call MPI_Comm_free(my_group_comm, errcode)
+   if (errcode /= MPI_SUCCESS) then
+      write(*, '(a,i8)') 'finalize_mpi_utilities: MPI_Comm_free groups returned error code ', errcode
+      call exit(-99)
+   endif
 endif
 
 if (.not. given_communicator) then
@@ -518,7 +522,9 @@ endif
 task_count = total_tasks
 
 if (present(mpi_comm)) then
+   print*, 'my_task_id() =',  my_task_id(), ' mpi_comm =  ', mpi_comm
    call MPI_Comm_size(mpi_comm, my_num_tasks, errcode)
+   print*, 'my_task_id() =',  my_task_id(), ' mpi_comm =  ', mpi_comm, ' my_num_tasks = ', my_num_tasks, ' errcode ', errcode
    if (errcode /= MPI_SUCCESS) then
       write(errstring, '(a,i8)') 'MPI_Comm_rank returned error code ', errcode
       call error_handler(E_ERR,'mpi_task_id', errstring, source, revision, revdate)
@@ -612,11 +618,11 @@ end subroutine task_sync
 !> called receive to accept the data.  If the send_to/receive_from calls are 
 !> not paired correctly the code will hang.
 
-subroutine send_to(dest_id, srcarray, mpi_group_comm, time, label)
+subroutine send_to(dest_id, srcarray, mpi_comm, time, label)
 
 integer,          intent(in)           :: dest_id
 real(r8),         intent(in)           :: srcarray(:)
-integer,          intent(in), optional :: mpi_group_comm
+integer,          intent(in), optional :: mpi_comm
 type(time_type),  intent(in), optional :: time
 character(len=*), intent(in), optional :: label
 
@@ -640,8 +646,8 @@ if ((dest_id < 0) .or. (dest_id >= total_tasks)) then
    call error_handler(E_ERR,'send_to', errstring, source, revision, revdate)
 endif
 
-if (present(mpi_group_comm)) then
-   mpi_send_comm = mpi_group_comm
+if (present(mpi_comm)) then
+   mpi_send_comm = mpi_comm
 else
    mpi_send_comm = my_local_comm
 endif
@@ -744,11 +750,11 @@ end subroutine send_to
 !> sent the data.  If the send_to/receive_from calls are not paired correctly 
 !> the code will hang.
 
-subroutine receive_from(src_id, destarray, mpi_group_comm, time, label)
+subroutine receive_from(src_id, destarray, mpi_comm, time, label)
 
 integer,          intent(in)            :: src_id
 real(r8),         intent(inout)         :: destarray(:)
-integer,          intent(in),  optional :: mpi_group_comm
+integer,          intent(in),  optional :: mpi_comm
 type(time_type),  intent(out), optional :: time
 character(len=*), intent(in),  optional :: label
 
@@ -766,8 +772,8 @@ if ( .not. module_initialized ) then
    call error_handler(E_ERR,'receive_from', errstring, source, revision, revdate)
 endif
 
-if (present(mpi_group_comm)) then
-   mpi_recv_comm = mpi_group_comm
+if (present(mpi_comm)) then
+   mpi_recv_comm = mpi_comm
 else
    mpi_recv_comm = my_local_comm
 endif
@@ -943,7 +949,7 @@ else
 
       ! test this - are array sections going to cause array temps to be created?
       if (.not. make_copy_before_broadcast) then
-      call MPI_Bcast(array(offset:offset+nextsize-1), nextsize, datasize, root, my_local_comm, errcode)
+         call MPI_Bcast(array(offset:offset+nextsize-1), nextsize, datasize, root, my_local_comm, errcode)
       else
          if (my_task_id() == root) tmpdata = array(offset:offset+nextsize-1)
          call MPI_Bcast(tmpdata, nextsize, datasize, root, my_local_comm, errcode)
@@ -2077,64 +2083,88 @@ end subroutine broadcast_flag
 
 !-----------------------------------------------------------------------------
 
-subroutine create_groups(group_size)
-integer, intent(inout) :: group_size
+!> create sub_group given a larger set of tasks
+!> here we are using the dart communicator as the larger group
+!> and dividing it into my_group_size chunks, the remaing tasks 
+!> will be slightly smaller than my_group_size if task_count() is 
+!> not divisable by my_group_size.  here group_members is a list
+!> of all of the dart communicator tasks that are in the same
+!> group, and sub_group is a handle to the group that is the
+!> same across all processors.
+subroutine create_groups(my_group_size, my_comm)
+integer, intent(inout) :: my_group_size
+integer, intent(inout), optional :: my_comm
 
-integer i, ierr ! all MPI errors are fatal anyway
 integer, allocatable :: group_members(:)
-integer :: local_group_rank
+integer :: i
 
-allocate(group_members(group_size)) ! this is module global
+allocate(group_members(my_group_size)) ! this is module global
 
-call mpi_comm_group(my_local_comm, group_all, ierr)  ! get the word group from mpi_comm_world
-call build_my_group(group_size, group_members) ! create a list of processors in the grid group
-call mpi_group_incl(group_all, group_size, group_members, subgroup, ierr)
-call mpi_comm_create(my_local_comm, subgroup, mpi_group_comm, ierr)
-call mpi_group_size(subgroup, group_size, ierr)
-call mpi_group_rank(subgroup, group_rank, ierr)
+! get the dart_group
+call mpi_comm_group(  my_local_comm,                 dart_group,                  errcode ) 
+! create a list of processors in the sub_group
+call build_my_group(  my_task_id(my_local_comm),     my_group_size,  group_members )                 
+! create a sub_group from the dart communicator
+call mpi_group_incl(  dart_group,    my_group_size,  group_members, sub_group, errcode )
+! create the group communicator
+call mpi_comm_create( my_local_comm, sub_group,      my_group_comm,            errcode )
+! rank within the group. DO WE NEED THIS? WE CAN INSTEAD USE my_task_id(my_communicator)
+call mpi_group_rank(  sub_group,     group_rank,                               errcode)
 
 !if (verbose) then
 if (.true.) then
-call MPI_Barrier(my_local_comm, ierr)
-   do i = 0, (task_count()-1)
-      call MPI_Barrier(my_local_comm, ierr)
-      if(my_task_id() == i) then
-         write(*,'(''WORLD RANK/SIZE:'',I2,''/'',I2,'' GROUP RANK/SIZE:'',I2,''/'',I2,'' SUBGROUP '',I10)') &
-            my_task_id(), task_count(), group_rank, group_size, subgroup
+call MPI_Barrier(my_local_comm, errcode)
+   do i = 0, (task_count(my_local_comm)-1)
+      call MPI_Barrier(my_local_comm, errcode)
+      if(my_task_id(my_local_comm) == i) then
+         write(*,'(''WORLD RANK/SIZE:'',I2,''/'',I2,'' GROUP RANK/SIZE:'',I2,''/'',I2,'' SUB GROUP '',I10)') &
+            my_task_id(my_local_comm), task_count(my_local_comm), &
+            my_task_id(my_group_comm), task_count(my_group_comm), &
+            sub_group
       endif
    enddo
 endif
+
 deallocate(group_members)! this is module global
+
+! JPH, NOT SURE WE NEED THIS, WE CAN PROBABLY GET AWAY WITH USING THE LOCAL COMMUNICATOR
+! 
+if (present(my_comm)) then
+   my_comm = my_group_comm
+endif 
 
 end subroutine create_groups
 
 !-----------------------------------------------------------
+!> build the group to store the grid.
+!>
+!> my_groups_size may be different for different tasks if the 
+!> number of tasks does not equaly divide num_vars.
+subroutine build_my_group(myrank, my_group_size, group_members)
 
-!> Build the group to store the grid
-subroutine build_my_group(group_size, group_members)
-integer, intent(inout)  :: group_size ! need to modify this if your #tasks does not divide by group size
-integer, intent(out)    :: group_members(group_size)
+! JPH: IS THIS NEEDED??
+!implicit none
+
+integer, intent(in)    :: myrank ! why are you passing this in?
+integer, intent(inout) :: my_group_size
+integer, intent(out)   :: group_members(my_group_size)
 
 integer bottom, top !< start and end members of the group
 integer i
 
 ! integer arithmatic. rouding down to the lowest group size
-bottom = (myrank / group_size ) * group_size
-top = bottom + group_size - 1
+bottom = (myrank / my_group_size ) * my_group_size
+top = bottom + my_group_size - 1
 if (top >= task_count()) then
    top = task_count() - 1
-   group_size = top - bottom + 1
-   do i = 0, task_count()-1
-      if (myrank == i) then 
-         print*, 'rank', myrank, 'bottom top', bottom, top, 'group_size', group_size
-      endif 
-   enddo
+   my_group_size = top - bottom + 1
+   print*, 'rank', myrank, 'bottom top', bottom, top, 'my_group_size', my_group_size
 endif
 
 
 ! fill up group members
 group_members(1) = bottom
-do i = 2, group_size
+do i = 2, my_group_size
    group_members(i) = group_members(i-1) + 1
 enddo
 
@@ -2151,7 +2181,6 @@ integer :: get_group_size
 get_group_size = group_size
 
 end function get_group_size
-
 !-----------------------------------------------------------
 
 !> get group_id
@@ -2181,7 +2210,7 @@ end subroutine set_group_size
 function get_group_comm()
 integer :: get_group_comm
 
-get_group_comm = mpi_group_comm
+get_group_comm = my_group_comm
 
 end function get_group_comm
 

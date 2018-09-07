@@ -14,17 +14,15 @@ use         utilities_mod, only : register_module, error_handler, E_MSG, E_ERR, 
                                   nc_check, E_MSG, open_file, close_file, do_output
 
 use     mpi_utilities_mod, only : initialize_mpi_utilities, finalize_mpi_utilities, &
-                                  task_count, my_task_id, task_sync, set_group_size,&
-                                  get_group_size, set_group_size,    &
-                                  group_task_id, get_dart_mpi_comm, get_group_comm, &
-                                  get_group_id, datasize
+                                  task_count, my_task_id, task_sync, datasize, &
+                                  get_dart_mpi_comm, create_groups
 
 use      time_manager_mod, only : time_type, set_time, print_date, operator(-), &
                                   NO_CALENDAR
 
 use  ensemble_manager_mod, only : init_ensemble_manager, ensemble_type, print_ens_handle, &
                                   all_vars_to_all_copies, all_copies_to_all_vars, &
-                                  all_copies_to_all_copies
+                                  my_vars_to_group_copies
 
 use   state_vector_io_mod, only : state_vector_io_init, read_state, write_state
 
@@ -84,8 +82,9 @@ type(stage_metadata_type) :: input_restart_files, output_restart_files
 logical :: read_time_from_file = .true.
 
 ! model state variables
-type(ensemble_type)   :: ens_handle
+type(ensemble_type)   :: state_handle
 type(ensemble_type)   :: mean_handle
+type(ensemble_type)   :: group_mean_handle
 
 ! misc. variables
 integer :: i
@@ -101,10 +100,10 @@ integer,parameter :: one_domain = 1
 real(r8) ::  u, my_val
 
 integer, allocatable :: group_members(:)
-integer :: group_all
-integer :: subgroup
-integer :: mpi_comm_grid
-integer :: local_rank
+integer :: dart_group
+integer :: sub_group
+integer :: group_comm
+integer :: group_rank
 
 ! grid window
 integer               :: my_window
@@ -137,16 +136,16 @@ if (group_size == -1) group_size = task_count()
 ! create groups
 !----------------------------------------------------------------------
 t1 = MPI_WTIME()
-call create_groups()
+call create_groups(group_size, group_comm)
 t2 = MPI_WTIME() - t1
 
-call MPI_REDUCE(t2, max_time, 1, MPI_REAL8, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
-call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, MPI_COMM_WORLD, ierr)
+call MPI_REDUCE(t2, max_time, 1, MPI_REAL8, MPI_MAX, 0, get_dart_mpi_comm(), ierr)
+call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, get_dart_mpi_comm(), ierr)
 
 if (my_task_id() == 0) then
-   print*, 'group_size = ', group_size, ' NX = ', NX
-   print*, 'create_groups : Max Time = ', max_time, t1, t2
-   print*, 'create_groups : Min Time = ', min_time, t1, t2
+   print*, 'group_size = ', group_size, ', NX = ', NX
+   print*, 'create_groups : Max Time = ', max_time
+   print*, 'create_groups : Min Time = ', min_time
 endif
 
 !----------------------------------------------------------------------
@@ -154,100 +153,139 @@ endif
 !----------------------------------------------------------------------
 
 ! Set up the ensemble storage for mean
-call init_ensemble_manager(mean_handle,               &
+call init_ensemble_manager(group_mean_handle,               &
                            num_copies           = 1,  &
                            num_vars             = NX, &
-                           distribution_type_in = dtype, & ! round robin, pair round robin, block
-                           layout_type          = ltype, & ! distribute mean in groups
-                           transpose_type_in    = ttype, & ! no vars, transposable, transpose and duplicate
-                           use_groups           = .true.)
+                           distribution_type_in = dtype, & ! 1 - round robin, 2 - pair round robin, 3 - block
+                           layout_type          = ltype, & ! 1 - standard,    2 - round-robbin,     3 - distribute mean in groups
+                           transpose_type_in    = ttype, & ! 1 - no vars,     2 - transposable,     3 - transpose and duplicate
+                           mpi_comm             = group_comm)  
 
-!do ii = 1, mean_handle%num_copies
-!   do jj = 1, mean_handle%my_num_vars
-do ii = 1, mean_handle%num_vars
-   do jj = 1, mean_handle%my_num_copies
-      !print*, my_task_id(), mean_handle%my_num_vars, ii, (my_task_id()+1)*NX/group_size + ii
-      mean_handle%vars(ii, jj) = (my_task_id()+1)*NX/group_size + ii
+call init_ensemble_manager(state_handle,              &
+                           num_copies           = 1,  &
+                           num_vars             = NX, &
+                           distribution_type_in = 1,  & ! 1 - round robin, 2 - pair round robin, 3 - block
+                           layout_type          = 1,  & ! 1 - standard,    2 - round-robbin,     3 - distribute mean in groups
+                           transpose_type_in    = 2,  & ! 1 - no vars,     2 - transposable,     3 - transpose and duplicate
+                           mpi_comm             = get_dart_mpi_comm())  
+                           
+
+! first task has the state_handle vars then sends copies to 
+! other tasks doing a transpose (i.e all_vars_to_all_copies)
+if (my_task_id() == 0) then
+   do i = 1, NX
+      ! Dimensioned (num_vars, my_num_copies)
+      state_handle%vars(i, 1) = i
    enddo
-enddo
+endif
 
-!call all_copies_to_all_vars(mean_handle)
+!print*, my_task_id(), 'initial transpose state_handle%copies  (:,:)',state_handle%copies(:,:)
+!print*, my_task_id(), 'initial transpose state_handle%vars    (:,:)',state_handle%vars(:,:)
+
+! let all tasks have a copy of the mean
+call all_vars_to_all_copies(state_handle, label='state_handle%vars(:,:) -> state_handle%copies(:,:)')
+
+call print_ens_handle(state_handle,             &
+                      force    = .true.,        &
+                      label    = 'state_handle', &
+                      contents = .true.)
+
+! mean_handle is optionally returned when creating mean window.
+call create_mean_window(state_handle, mean_copy=1, distribute_mean=.false., state_mean_ens_handle=mean_handle)
+
+call my_vars_to_group_copies(mean_handle, group_mean_handle, label='my_vars_to_group_copies')
+
+call print_ens_handle(mean_handle,             &
+                      force    = .true.,        &
+                      label    = 'mean_handle', &
+                      contents = .true.)
+
+call print_ens_handle(group_mean_handle,             &
+                      force    = .true.,        &
+                      label    = 'group_mean_handle', &
+                      contents = .true.)
+
+!print*, 'actav state_handle%copies(:,:)',state_handle%copies(:,:)
+!print*, 'actav state_handle%vars  (:,:)',state_handle%vars(:,:)
+
 !call all_vars_to_all_copies(mean_handle)
 
-!call print_ens_handle(mean_handle,              &
-!                      force    = .true.,        &
-!                      label    = 'mean_handle', &
-!                      contents = .true.)
-!print*, my_task_id(), 'AFTER PRINT'
+!print*, 'avtac state_handle%copies(:,:)',state_handle%copies(:,:)
+!print*, 'avtac state_handle%vars  (:,:)',state_handle%vars(:,:)
 
-allocate(my_array(NX/group_size))
+call free_mean_window()
 
-do ii = 1, NX/group_size
-   my_array(ii) = local_rank*NX/group_size + ii
-enddo
+! call print_ens_handle(mean_handle,              &
+!                       force    = .true.,        &
+!                       label    = 'mean_handle', &
+!                       contents = .true.)
+! print*, my_task_id(), 'AFTER PRINT'
 
-!----------------------------------------------------------------------
-! create window
-!----------------------------------------------------------------------
-!call create_window()
-call create_mean_window(mean_handle, mean_copy=1, distribute_mean=.true.)
-
-!----------------------------------------------------------------------
-! timing test
-!----------------------------------------------------------------------
-t2 = 0.0_r8
-do ii = 1, max_iter
-   call random_number(u)
-   jj = FLOOR(NX*u)+1
-   t1 = MPI_WTIME()
-   my_val = get_my_val(jj)
-   t2 = t2 + (MPI_WTIME() - t1)
-   if (my_val /= jj) then
-      print*, 'jj /= my_val'
-   endif
-enddo
-
-call MPI_REDUCE(t2, max_time, 1, MPI_REAL8, MPI_MAX, 0, MPI_COMM_WORLD, ierr)
-call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, MPI_COMM_WORLD, ierr)
-if (my_task_id() == 0) then
-   print*, 'get_value     : Max Time = ', max_time
-   print*, 'get_value     : Min Time = ', min_time
-endif
-
-!----------------------------------------------------------------------
-! print array
-!----------------------------------------------------------------------
-if (debug) then
-   do jj = 0, task_count()-1
-      if (my_task_id() == jj) then
-         print*, my_task_id(), '::', my_array(:)
-      else
-         call task_sync()
-      endif
-   enddo
-endif
-
-!----------------------------------------------------------------------
-! debug get_my_val
-!----------------------------------------------------------------------
-if (debug) then
-   do jj = 0, task_count()-1
-      if (my_task_id() == jj) then
-         do ii = 1, NX
-            print*, 'my_task_id() = ', my_task_id(), 'get_owner(ii)', ii, get_owner(ii, my_task_id()), get_my_val(ii)
-         enddo
-      else
-         call task_sync()
-      endif
-   enddo
-   
-   call task_sync()
-endif
-
-!----------------------------------------------------------------------
-! finalize simple_test
-!----------------------------------------------------------------------
-call free_window()
+! allocate(my_array(NX/group_size))
+! 
+! do ii = 1, NX/group_size
+!    my_array(ii) = group_rank*NX/group_size + ii
+! enddo
+! 
+! !----------------------------------------------------------------------
+! ! create window
+! !----------------------------------------------------------------------
+! call create_window()
+! 
+! !----------------------------------------------------------------------
+! ! timing test
+! !----------------------------------------------------------------------
+! t2 = 0.0_r8
+! do ii = 1, max_iter
+!    call random_number(u)
+!    jj = FLOOR(NX*u)+1
+!    t1 = MPI_WTIME()
+!    my_val = get_my_val(jj)
+!    t2 = t2 + (MPI_WTIME() - t1)
+!    if (my_val /= jj) then
+!       print*, 'jj /= my_val', jj, my_val
+!    endif
+! enddo
+! 
+! call MPI_REDUCE(t2, max_time, 1, MPI_REAL8, MPI_MAX, 0, get_dart_mpi_comm(), ierr)
+! call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, get_dart_mpi_comm(), ierr)
+! if (my_task_id() == 0) then
+!    print*, 'get_value     : Max Time = ', max_time
+!    print*, 'get_value     : Min Time = ', min_time
+! endif
+! 
+! !----------------------------------------------------------------------
+! ! print array
+! !----------------------------------------------------------------------
+! if (debug) then
+!    do jj = 0, task_count()-1
+!       if (my_task_id() == jj) then
+!          print*, my_task_id(), '::', my_array(:)
+!       else
+!          call task_sync()
+!       endif
+!    enddo
+! endif
+! 
+! !----------------------------------------------------------------------
+! ! debug get_my_val
+! !----------------------------------------------------------------------
+! do jj = 0, task_count()-1
+!    if (my_task_id() == jj .and. debug) then
+!       do ii = 1, NX
+!          print*, 'my_task_id() = ', my_task_id(), 'get_owner(ii)', ii, get_owner(ii, my_task_id()), get_my_val(ii)
+!       enddo
+!    else
+!       call task_sync()
+!    endif
+! enddo
+! 
+! call task_sync()
+! 
+! !----------------------------------------------------------------------
+! ! finalize simple_test
+! !----------------------------------------------------------------------
+! call free_window()
 
 call task_sync()
 
@@ -257,101 +295,51 @@ call finalize_modules_used()
 contains
 !======================================================================
 
-!-------------------------------------------------------------
-!> create groups for grid
-!> make a communicator for the distributed grid
-subroutine create_groups
-
-allocate(group_members(group_size)) ! this is module global
-
-
-call mpi_comm_group(  mpi_comm_world, group_all,                           ierr ) ! get the word group from mpi_comm_world
-call build_my_group(  my_task_id(),   group_size, group_members )                 ! create a list of processors in the grid group
-call mpi_group_incl(  group_all,      group_size, group_members, subgroup, ierr )
-call mpi_comm_create( mpi_comm_world, subgroup,   mpi_comm_grid,           ierr )
-call mpi_comm_rank(   mpi_comm_grid,  local_rank,                          ierr ) ! rank within group
-
-if (debug) then
-   print*, 'my_task_id(), local_rank, group_size, subgroup', my_task_id(), local_rank, group_size, subgroup
-endif
-end subroutine create_groups
-
-!-----------------------------------------------------------
-!> build the group to store the grid
-subroutine build_my_group(myrank, group_size, group_members)
-
-implicit none
-
-integer, intent(in)     :: myrank ! why are you passing this in?
-integer, intent(inout)  :: group_size ! need to modify this if your #tasks does not divide by group size
-integer, intent(out)    :: group_members(group_size)
-
-integer bottom, top !< start and end members of the group
-integer i
-
-! integer arithmatic. rouding down to the lowest group size
-bottom = (myrank / group_size ) * group_size
-top = bottom + group_size - 1
-if (top >= task_count()) then
-   top = task_count() - 1
-   group_size = top - bottom + 1
-   print*, 'rank', myrank, 'bottom top', bottom, top, 'group_size', group_size
-endif
-
-
-! fill up group members
-group_members(1) = bottom
-do i = 2, group_size
-   group_members(i) = group_members(i-1) + 1
-enddo
-
-end subroutine build_my_group
-
-!-----------------------------------------------------------
-!> create window for get_my_val
-!> Need to add a loop for domain.  Just single domain for now.
-!> Window is filled with columns contiguous in memory, possibly
-!> we will grab a whole column at once.
-!> 
-!> If you want to change the order in the window, be sure to 
-!> change the subroutine who_has_grid_info
-subroutine create_window
-
-integer ii, jj, kk, sizedouble, count
-integer(KIND=MPI_ADDRESS_KIND) :: window_size
-
-! datasize comes from mpi_utilities_mod
-call mpi_type_size(datasize, sizedouble, ierr)
-
-window_size = (NX/group_size)*sizedouble
-aa          = malloc(NX)
-
-call MPI_ALLOC_MEM(window_size, mpi_info_null, aa, ierr)
-
-! can't do my_array assignment with a cray pointer, so you need to loop
-!#! count = 1
-!#! do ii = 1, NX
-!#!    duplicate_array(count) = my_array(ii)
-!#!    count = count + 1
-!#! enddo
-
-call mpi_win_create(my_array,        window_size,   &
-                    sizedouble,      MPI_INFO_NULL, &
-                    mpi_comm_grid,   my_window,     ierr)
-
-end subroutine create_window
-
-!---------------------------------------------------------
-!> Free the mpi windows you created
-subroutine free_window
-integer :: ierr
-
-call mpi_win_free(my_window, ierr)
-call MPI_FREE_MEM(duplicate_array, ierr)
-
-deallocate(group_members, my_array)
-
-end subroutine free_window
+!#! !-----------------------------------------------------------
+!#! !> create window for get_my_val
+!#! !> Need to add a loop for domain.  Just single domain for now.
+!#! !> Window is filled with columns contiguous in memory, possibly
+!#! !> we will grab a whole column at once.
+!#! !> 
+!#! !> If you want to change the order in the window, be sure to 
+!#! !> change the subroutine who_has_grid_info
+!#! subroutine create_window
+!#! 
+!#! integer ii, jj, kk, sizedouble, count
+!#! integer(KIND=MPI_ADDRESS_KIND) :: window_size
+!#! 
+!#! ! datasize comes from mpi_utilities_mod
+!#! call mpi_type_size(datasize, sizedouble, ierr)
+!#! 
+!#! window_size = (NX/group_size)*sizedouble
+!#! aa          = malloc(NX)
+!#! 
+!#! call MPI_ALLOC_MEM(window_size, mpi_info_null, aa, ierr)
+!#! 
+!#! ! can't do my_array assignment with a cray pointer, so you need to loop
+!#! !#! count = 1
+!#! !#! do ii = 1, NX
+!#! !#!    duplicate_array(count) = my_array(ii)
+!#! !#!    count = count + 1
+!#! !#! enddo
+!#! 
+!#! call mpi_win_create(my_array,        window_size,   &
+!#!                     sizedouble,      MPI_INFO_NULL, &
+!#!                     group_comm,   my_window,     ierr)
+!#! 
+!#! end subroutine create_window
+!#! 
+!#! !---------------------------------------------------------
+!#! !> Free the mpi windows you created
+!#! subroutine free_window
+!#! integer :: ierr
+!#! 
+!#! call mpi_win_free(my_window, ierr)
+!#! call MPI_FREE_MEM(duplicate_array, ierr)
+!#! 
+!#! deallocate(group_members, my_array)
+!#! 
+!#! end subroutine free_window
 
 !---------------------------------------------------------
 !> Function to get get_my_val
@@ -411,6 +399,7 @@ subroutine finalize_modules_used()
 
 ! this must be last, and you can't print/write anything
 ! after this is called.
+print*, my_task_id(), ' calling mpi_finialize'
 call finalize_mpi_utilities()
 
 end subroutine finalize_modules_used

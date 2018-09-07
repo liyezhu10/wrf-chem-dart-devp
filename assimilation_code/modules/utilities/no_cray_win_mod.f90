@@ -9,13 +9,13 @@ module window_mod
 
 !> \defgroup window window_mod
 !> @{
-use mpi_utilities_mod,    only : datasize, my_task_id, get_dart_mpi_comm, get_group_comm, task_sync
+use mpi_utilities_mod,    only : datasize, my_task_id, get_dart_mpi_comm, get_group_comm
 use types_mod,            only : r8, i8
 use ensemble_manager_mod, only : ensemble_type, map_pe_to_task, get_var_owner_index, &
                                  copies_in_window, init_ensemble_manager, &
                                  get_allow_transpose, end_ensemble_manager, &
                                  set_num_extra_copies, all_copies_to_all_vars, &
-                                 all_vars_to_all_copies, all_copies_to_all_copies
+                                 all_vars_to_all_copies
 
 use mpi
 
@@ -101,11 +101,12 @@ end subroutine create_state_window
 !-------------------------------------------------------------
 !> Using a mean ensemble handle.
 !> 
-subroutine create_mean_window(state_ens_handle, mean_copy, distribute_mean)
+subroutine create_mean_window(state_ens_handle, mean_copy, distribute_mean, state_mean_ens_handle)
 
 type(ensemble_type), intent(in)  :: state_ens_handle
 integer,             intent(in)  :: mean_copy
 logical,             intent(in)  :: distribute_mean
+type(ensemble_type), intent(out), optional  :: state_mean_ens_handle
 
 integer               :: ierr
 integer               :: bytesize
@@ -115,45 +116,35 @@ integer               :: my_num_vars !< number of elements a task owns
 use_distributed_mean = distribute_mean
 
 if (use_distributed_mean) then
-   ! group_size defaults to task_count, so always say we're using groups here.
-   call init_ensemble_manager(mean_ens_handle, 1, state_ens_handle%num_vars, use_groups = .true.) ! distributed ensemble
+   call init_ensemble_manager(mean_ens_handle, 1, state_ens_handle%num_vars) ! distributed ensemble
    call set_num_extra_copies(mean_ens_handle, 0)
-   print*, 'IN DIST MEAN'
-   ! this is what all_copies_to_all_copies does if group_size = task_count
-   ! otherwise, we do lots of ugly looping.
-   ! mean_ens_handle%copies(1,:) = state_ens_handle%copies(mean_copy, :)
-   call all_copies_to_all_copies(state_ens_handle, mean_copy, mean_ens_handle, 1)
-   print*, 'ALL_COPIES_TO_ALL_COPIES'
+   mean_ens_handle%copies(1,:) = state_ens_handle%copies(mean_copy, :)
+   allocate(mean_1d(state_ens_handle%my_num_vars))
+   mean_1d(:) = mean_ens_handle%copies(1,:)
 
    ! find out how many variables I have
    my_num_vars = mean_ens_handle%my_num_vars
    call mpi_type_size(datasize, bytesize, ierr)
    window_size = my_num_vars*bytesize
+
    ! Need a simply contiguous piece of memory to pass to mpi_win_create
    ! Expose local memory to RMA operation by other processes in a communicator.
-   ! call mpi_win_create(mean_1d, window_size, bytesize, MPI_INFO_NULL, get_dart_mpi_comm(), mean_win, ierr)
-   allocate(mean_1d(data_count*my_num_vars))
-   if (my_task_id() == 0) then 
-      print*, 'window_size', window_size
-      print*, 'mean_1d    ', mean_1d
-      print*, 'my_num_vars', state_ens_handle%my_num_vars
-   endif
-   call mpi_win_create(mean_1d, window_size, bytesize, MPI_INFO_NULL, get_group_comm(), mean_win, ierr)
+   call mpi_win_create(mean_1d, window_size, bytesize, MPI_INFO_NULL, mean_ens_handle%my_communicator, mean_win, ierr)
 else
-   ! transpose_type_in always distributed group
    call init_ensemble_manager(mean_ens_handle, 1, state_ens_handle%num_vars, transpose_type_in = 3)
    call set_num_extra_copies(mean_ens_handle, 0)
    mean_ens_handle%copies(1,:) = state_ens_handle%copies(mean_copy, :)
    call all_copies_to_all_vars(mean_ens_handle) ! this is a transpose-duplicate
 endif
-
-call task_sync()
-print*, 'rank, my_num_vars', my_task_id(), mean_ens_handle%my_num_vars, get_dart_mpi_comm(), get_group_comm()
    
 ! grabbing mean directly, no windows are being used
 current_win = MEAN_WINDOW
 
 data_count = copies_in_window(mean_ens_handle) ! One.
+
+if (present(state_mean_ens_handle)) then
+   state_mean_ens_handle = mean_ens_handle
+endif
 
 end subroutine create_mean_window
 
@@ -189,19 +180,11 @@ subroutine free_mean_window()
 integer :: ierr
 
 if(get_allow_transpose(mean_ens_handle)) then
-   print*, 'GET_ALLOW_TRANSPOSE'
    call end_ensemble_manager(mean_ens_handle)
 else
-   print*, 'NOT GET_ALLOW_TRANSPOSE'
    call mpi_win_free(mean_win, ierr)
-   if (ierr /= MPI_SUCCESS) then
-      write(*, *) 'initialize_mpi_utilities: MPI_Initialized returned error code ', ierr
-   endif
-   call exit(-99)
    deallocate(mean_1d)
-   print*, 'START END_ENSEMBLE_MANAGER'
    call end_ensemble_manager(mean_ens_handle)
-   print*, 'END_ENSEMBLE_MANAGER'
 endif
 
 current_win = NO_WINDOW

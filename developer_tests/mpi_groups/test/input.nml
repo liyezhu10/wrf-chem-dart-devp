@@ -1,15 +1,15 @@
 &assim_tools
-   distribute_mean = .true.
+   distribute_mean = .false.
 /
 
 &mpi_utilities_nml
    verbose = .true.
 /
 
-&ensemble_manager_nml
-   layout = 3
-   tasks_per_node  = 4
    tasks_per_group = 2
+&ensemble_manager_nml
+   layout = 2
+   tasks_per_node  = 4
    debug = .true.
 /
 
@@ -22,8 +22,8 @@
    group_size = 2 
    dtype      = 1
    ltype      = 3
-   ttype      = 2
-   debug      = .false.
+   ttype      = 1
+   debug      = .true.
    /
 
 &test_group_mean_nml
