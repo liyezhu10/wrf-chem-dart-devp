@@ -26,7 +26,8 @@ use  ensemble_manager_mod, only : ensemble_type
 
 use model_check_utilities_mod, only : test_single_interpolation, &
                                       find_closest_gridpoint, &
-                                      count_error_codes
+                                      count_error_codes, &
+                                      verify_consistent_istatus
 
 use             model_mod, only : get_model_size, &
                                   get_state_meta_data, &
@@ -143,6 +144,8 @@ do i = 1, nx
       loc  = set_location(X(i), Y(j))
 
       call model_interpolate(ens_handle, ens_size, loc, mykindindex, field(i,j,:), ios_out)
+
+      call verify_consistent_istatus(ens_size, field(i,j,:), ios_out)
 
       write(iunit,*) field(i,j,:)
       if (any(ios_out /= 0)) then
