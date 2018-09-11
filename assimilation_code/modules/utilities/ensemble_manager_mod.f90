@@ -197,10 +197,9 @@ if ( .not. module_initialized ) then
    if (do_nml_file()) write(nmlfileunit, nml=ensemble_manager_nml)
    if (do_nml_term()) write(     *     , nml=ensemble_manager_nml)
 
-   ! Get mpi information for this process; it's stored in module storage
-   ens_handle%num_pes = task_count(ens_handle%my_communicator)
-
 endif
+
+ens_handle%num_pes = task_count(ens_handle%my_communicator)
 
 ! Optional layout_type argument to assign how my_pe is related to my_task_id
 ! layout_type can be set individually for each ensemble handle. It is not advisable to do this
@@ -212,15 +211,19 @@ else
 endif
 
 ! Check for error: only layout_types 1 and 2 are implemented
-if (ens_handle%layout_type /= 1 .and. ens_handle%layout_type /=2 ) then
-   call error_handler(E_ERR, 'init_ensemble_manager', 'only layout values 1 (standard), 2 (round-robin) allowed ', &
+if (ens_handle%layout_type /= 1 .and. &
+    ens_handle%layout_type /= 2 .and. &
+    ens_handle%layout_type /= 3 ) then
+   call error_handler(E_ERR, 'init_ensemble_manager', &
+                      'only layout values 1 (standard), 2 (round-robin), 3 (groups) allowed ', &
                       source, revision, revdate)
 endif
 
 ! Optional transpose type:
 ! 1 not transposable - always copy complete
 ! 2 transposable - has a vars array
-! 3 duplicatable - really only 1 copy, but this gets duplicated as vars array on every task during a transpose
+! 3 duplicatable - really only 1 copy, but this gets duplicated 
+!                  as vars array on every task during a transpose
 if (.not. present(transpose_type_in)) then
    transpose_type = 1
 else
@@ -233,11 +236,11 @@ allocate(ens_handle%task_to_pe_list(ens_handle%num_pes))
 allocate(ens_handle%pe_to_task_list(ens_handle%num_pes))
 
 call assign_tasks_to_pes(ens_handle, num_copies, ens_handle%layout_type)
-ens_handle%my_pe = map_task_to_pe(ens_handle, my_task_id())
+ens_handle%my_pe = map_task_to_pe(ens_handle, my_task_id(ens_handle%my_communicator))
 
 ! Set the global storage bounds for the number of copies and variables
 ens_handle%num_copies = num_copies
-ens_handle%num_vars = num_vars
+ens_handle%num_vars   = num_vars
 
 ! For debugging, error checking
 ens_handle%id_num = global_counter
@@ -281,6 +284,10 @@ call set_up_ens_distribution(ens_handle)
 ens_handle%num_extras = 0 ! This can be changed by calling set_num_extra_copies
 
 if (debug) call print_ens_handle(ens_handle)
+   !call print_ens_handle(ens_handle,              &
+   !                      force    = .true.,       &
+   !                      label    = 'debug ens_handle', &
+   !                      contents = .true.)
 
 end subroutine init_ensemble_manager
 
@@ -1075,25 +1082,8 @@ integer     :: global_ens_index
 
 ! only output if there is a label
 if (present(label)) then
-   call timestamp_message('vars_to_copies start: '//label, alltasks=.true.)
+   call timestamp_message('my_vars_to_group_copies start: '//label, alltasks=.true.)
 endif
-
-! Error checking, but can't return early in case only some of the
-! MPI tasks need to transpose.  Only if all N tasks say this is an
-! unneeded transpose can we skip it.
-!if (ens_handle%valid == VALID_BOTH) then
-!   if (flag_unneeded_transposes) then
-!      write(msgstring, *) 'task ', my_task_id(), ' ens_handle ', ens_handle%id_num
-!      call error_handler(E_MSG, 'all_vars_to_all_copies', &
-!           'vars & copies both valid, transpose not needed for this task', &
-!            source, revision, revdate, text2=msgstring)
-!   endif
-!else if (ens_handle%valid /= VALID_VARS) then
-!   write(msgstring, *) 'ens_handle ', ens_handle%id_num
-!   call error_handler(E_ERR, 'all_vars_to_all_copies', &
-!        'last access not var-complete', source, revision, revdate, &
-!         text2=msgstring)
-!endif
 
 ens_handle%valid = VALID_BOTH
 
@@ -1735,83 +1725,91 @@ logical :: print_anyway
 logical :: has_label
 logical :: do_contents
 integer :: limit_count
-integer :: i,j,listlen
+integer :: i,j,listlen, rank
 
-print_anyway = .false.
-if (present(force)) then
-   print_anyway = force
-endif
-
-has_label = .false.
-if (present(label)) then
-   has_label = .true.
-endif
-
-do_contents = .false.
-if (present(contents)) then
-   do_contents = contents
-endif
-
-limit_count = HUGE(1_i4)
-if (present(limit)) then
-   limit_count = limit
-endif
-
-! print out contents of an ensemble handle derived type
-if (.not. debug .and. .not. print_anyway) return
-
-if (has_label) then
-   call error_handler(E_ALLMSG, 'ensemble handle: ', label, source, revision, revdate)
-endif
-write(msgstring, *) 'handle num: ',          ens_handle%id_num 
-call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
-write(msgstring, *) 'number of    copies: ', ens_handle%num_copies
-call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
-write(msgstring, *) 'number of    vars  : ', ens_handle%num_vars
-call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
-write(msgstring, *) 'number of my_copies: ', ens_handle%my_num_copies
-call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
-write(msgstring, *) 'number of my_vars  : ', ens_handle%my_num_vars
-call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
-write(msgstring, *) 'valid              : ', ens_handle%valid
-call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
-write(msgstring, *) 'distribution_type  : ', ens_handle%distribution_type
-call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
-write(msgstring, *) 'my_pe number       : ', ens_handle%my_pe
-call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
-
-! large task counts crash here when the list length exceeds the buffer length.
-! break the list up into chunks of 10 to avoid this.
-if (allocated(ens_handle%pe_to_task_list)) then
-   listlen = size(ens_handle%pe_to_task_list)
-   do i=1, listlen, 10
-      write(msgstring, *) 'task_to_pe_list    : ', ens_handle%task_to_pe_list(i:min(i+9,listlen))
+do rank = 0, task_count() - 1
+   if (rank == my_task_id()) then 
+      print_anyway = .false.
+      if (present(force)) then
+         print_anyway = force
+      endif
+      
+      has_label = .false.
+      if (present(label)) then
+         has_label = .true.
+      endif
+      
+      do_contents = .false.
+      if (present(contents)) then
+         do_contents = contents
+      endif
+      
+      limit_count = HUGE(1_i4)
+      if (present(limit)) then
+         limit_count = limit
+      endif
+      
+      ! print out contents of an ensemble handle derived type
+      if (.not. debug .and. .not. print_anyway) return
+      
+      if (has_label) then
+         call error_handler(E_ALLMSG, 'ensemble handle: ', label, source, revision, revdate)
+      endif
+      write(msgstring, *) 'handle num: ',          ens_handle%id_num 
       call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
-   enddo
-   do i=1, listlen, 10
-      write(msgstring, *) 'pe_to_task_list    : ', ens_handle%pe_to_task_list(i:min(i+9,listlen))
+      write(msgstring, *) 'number of    copies: ', ens_handle%num_copies
       call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
-   enddo
-endif
-
-! warning - for large state vectors this is a lot of output
-if (do_contents .and. allocated(ens_handle%copies)) then
-   do j = 1, min(ens_handle%my_num_vars, limit_count)
-      do i = 1, min(ens_handle%num_copies, limit_count)
-         write(msgstring, *) 'ens_handle%copies(i,j) : ', i, j, ens_handle%copies(i,j)
-         call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
-      enddo
-   enddo
-endif
-
-if (do_contents .and. allocated(ens_handle%vars)) then
-   do j = 1, min(ens_handle%my_num_copies, limit_count)
-      do i = 1, min(ens_handle%num_vars, limit_count)
-         write(msgstring, *) 'ens_handle%vars(i,j) : ', i, j, ens_handle%vars(i,j)
-         call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
-      enddo
-   enddo
-endif
+      write(msgstring, *) 'number of    vars  : ', ens_handle%num_vars
+      call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+      write(msgstring, *) 'number of my_copies: ', ens_handle%my_num_copies
+      call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+      write(msgstring, *) 'number of my_vars  : ', ens_handle%my_num_vars
+      call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+      write(msgstring, *) 'valid              : ', ens_handle%valid
+      call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+      write(msgstring, *) 'distribution_type  : ', ens_handle%distribution_type
+      call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+      write(msgstring, *) 'number of num_pes ', ens_handle%num_pes
+      call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+      write(msgstring, *) 'my_pe number       : ', ens_handle%my_pe
+      call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+      
+      ! large task counts crash here when the list length exceeds the buffer length.
+      ! break the list up into chunks of 10 to avoid this.
+      if (allocated(ens_handle%pe_to_task_list)) then
+         listlen = size(ens_handle%pe_to_task_list)
+         do i=1, listlen, 10
+            write(msgstring, *) 'task_to_pe_list    : ', ens_handle%task_to_pe_list(i:min(i+9,listlen))
+            call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+         enddo
+         do i=1, listlen, 10
+            write(msgstring, *) 'pe_to_task_list    : ', ens_handle%pe_to_task_list(i:min(i+9,listlen))
+            call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+         enddo
+      endif
+      
+      ! warning - for large state vectors this is a lot of output
+      if (do_contents .and. allocated(ens_handle%copies)) then
+         do j = 1, min(ens_handle%my_num_vars, limit_count)
+            do i = 1, min(ens_handle%num_copies, limit_count)
+               write(msgstring, *) 'ens_handle%copies(i,j) : ', i, j, ens_handle%copies(i,j)
+               call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+            enddo
+         enddo
+      endif
+      
+      if (do_contents .and. allocated(ens_handle%vars)) then
+         do j = 1, min(ens_handle%my_num_copies, limit_count)
+            do i = 1, min(ens_handle%num_vars, limit_count)
+               write(msgstring, *) 'ens_handle%vars(i,j) : ', i, j, ens_handle%vars(i,j)
+               call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+            enddo
+         enddo
+      endif
+   else
+      call task_sync()
+   endif
+enddo
 
 end subroutine print_ens_handle
 
@@ -1826,6 +1824,7 @@ subroutine assign_tasks_to_pes(ens_handle, nEns_members, layout_type)
 ! Possible options:
 !   1. Standard task layout - first n tasks have the ensemble members my_pe = my_task_id()
 !   2. Round-robin on the nodes
+!   3. Group Distribution
 
 type(ensemble_type), intent(inout)    :: ens_handle
 integer,             intent(in)       :: nEns_members
@@ -1837,7 +1836,8 @@ if (layout_type /= 1 .and. layout_type /=2 .and. layout_type /=3 ) then
    source,revision,revdate)
 endif
 
-if (tasks_per_node >= ens_handle%num_pes) then ! all tasks are on one node, don't try to spread them out
+! all tasks are on one node, don't try to spread them out
+if (tasks_per_node >= ens_handle%num_pes) then 
    call simple_layout(ens_handle, ens_handle%num_pes)
    return
 endif
@@ -1872,7 +1872,6 @@ integer :: group_size
 integer :: dart_task
 integer :: group_task
 
-
 print*, 'group_task_to_dart_task'
 !>@ todo FIXME : How often is this accessed?  
 !> Would it be more efficient to store it in the ensemble type?
@@ -1884,13 +1883,20 @@ call calc_tasks_on_each_node(ens_handle, num_nodes, last_node_task_number)
 
 allocate(mycount(num_nodes))
 
-mycount(:) = 1  ! keep track of the pes assigned to each node
-i = 0           ! keep track of the # of pes assigned
+! keep track of the pes assigned to each node
+mycount(:) = 1  
 
-do while (i < ens_handle%num_pes)   ! until you run out of processors
-   do j = 1, num_nodes   ! loop around the nodes
+! keep track of the # of pes assigned
+i = 0           
 
-      if(j == num_nodes) then  ! special case for the last node - it could have fewer tasks than the other nodes
+! until you run out of processors
+do while (i < ens_handle%num_pes)   
+   ! loop around the nodes
+   do j = 1, num_nodes
+
+      ! special case for the last node - it could have fewer tasks than 
+      ! the other nodes
+      if(j == num_nodes) then
          if(mycount(j) <= last_node_task_number) then
             ens_handle%task_to_pe_list(tasks_per_node*(j-1) + mycount(j)) = i
             mycount(j) = mycount(j) + 1

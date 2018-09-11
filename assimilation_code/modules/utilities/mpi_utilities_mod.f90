@@ -514,6 +514,7 @@ integer :: task_count
 
 integer :: my_num_tasks
 
+
 if ( .not. module_initialized ) then
    write(errstring, *) 'initialize_mpi_utilities() must be called first'
    call error_handler(E_ERR,'task_count', errstring, source, revision, revdate)
@@ -522,9 +523,11 @@ endif
 task_count = total_tasks
 
 if (present(mpi_comm)) then
+   print*, 'CALLING TASK_COUNT() WITH MPI_COMM'
    print*, 'my_task_id() =',  my_task_id(), ' mpi_comm =  ', mpi_comm
    call MPI_Comm_size(mpi_comm, my_num_tasks, errcode)
-   print*, 'my_task_id() =',  my_task_id(), ' mpi_comm =  ', mpi_comm, ' my_num_tasks = ', my_num_tasks, ' errcode ', errcode
+   print*, 'my_task_id() =',  my_task_id(), ' mpi_comm =  ', &
+           mpi_comm, ' my_num_tasks = ', my_num_tasks, ' errcode ', errcode
    if (errcode /= MPI_SUCCESS) then
       write(errstring, '(a,i8)') 'MPI_Comm_rank returned error code ', errcode
       call error_handler(E_ERR,'mpi_task_id', errstring, source, revision, revdate)
@@ -2103,24 +2106,29 @@ allocate(group_members(my_group_size)) ! this is module global
 ! get the dart_group
 call mpi_comm_group(  my_local_comm,                 dart_group,                  errcode ) 
 ! create a list of processors in the sub_group
-call build_my_group(  my_task_id(my_local_comm),     my_group_size,  group_members )                 
+call build_my_group(  my_task_id(),                  my_group_size,  group_members )                 
 ! create a sub_group from the dart communicator
 call mpi_group_incl(  dart_group,    my_group_size,  group_members, sub_group, errcode )
 ! create the group communicator
 call mpi_comm_create( my_local_comm, sub_group,      my_group_comm,            errcode )
 ! rank within the group. DO WE NEED THIS? WE CAN INSTEAD USE my_task_id(my_communicator)
-call mpi_group_rank(  sub_group,     group_rank,                               errcode)
+call mpi_group_rank(  sub_group,  group_rank,                               errcode)
+call mpi_group_size(  sub_group,  group_size,                               errcode)
+
+print*, 'my_local_comm = ', my_local_comm, ' my_group_comm = ', my_group_comm, &
+        'group_rank = ', group_rank 
 
 !if (verbose) then
 if (.true.) then
 call MPI_Barrier(my_local_comm, errcode)
-   do i = 0, (task_count(my_local_comm)-1)
+   do i = 0, (task_count()-1)
       call MPI_Barrier(my_local_comm, errcode)
-      if(my_task_id(my_local_comm) == i) then
+      if(my_task_id() == i) then
          write(*,'(''WORLD RANK/SIZE:'',I2,''/'',I2,'' GROUP RANK/SIZE:'',I2,''/'',I2,'' SUB GROUP '',I10)') &
-            my_task_id(my_local_comm), task_count(my_local_comm), &
-            my_task_id(my_group_comm), task_count(my_group_comm), &
-            sub_group
+            my_task_id(), task_count(), group_rank, group_size, sub_group
+            !my_task_id(my_local_comm), task_count(my_local_comm), &
+            !my_task_id(my_group_comm), task_count(my_group_comm), &
+            !sub_group
       endif
    enddo
 endif

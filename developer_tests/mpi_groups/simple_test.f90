@@ -130,12 +130,15 @@ call find_namelist_in_file("input.nml", "simple_test_nml", iunit)
 read(iunit, nml = simple_test_nml, iostat = io)
 call check_namelist_read(iunit, io, "simple_test_nml")
 
+print*, 'SETTING group_size = ', group_size
 if (group_size == -1) group_size = task_count()
 
 !----------------------------------------------------------------------
 ! create groups
 !----------------------------------------------------------------------
 t1 = MPI_WTIME()
+print*, 'CALLING create_groups'
+!call local_create_groups()
 call create_groups(group_size, group_comm)
 t2 = MPI_WTIME() - t1
 
@@ -152,7 +155,17 @@ endif
 ! create data array on task 0
 !----------------------------------------------------------------------
 
+print*, 'INIT_ENSEMBLE_MANAGER state_handle'
+call init_ensemble_manager(state_handle,              &
+                           num_copies           = 1,  &
+                           num_vars             = NX, &
+                           distribution_type_in = 1,  & ! 1 - round robin, 2 - pair round robin, 3 - block
+                           layout_type          = 1,  & ! 1 - standard,    2 - round-robbin,     3 - distribute mean in groups
+                           transpose_type_in    = 3,  & ! 1 - no vars,     2 - transposable,     3 - transpose and duplicate
+                           mpi_comm             = get_dart_mpi_comm())  
+                           
 ! Set up the ensemble storage for mean
+print*, 'INIT_ENSEMBLE_MANAGER group_mean_handle'
 call init_ensemble_manager(group_mean_handle,               &
                            num_copies           = 1,  &
                            num_vars             = NX, &
@@ -161,18 +174,11 @@ call init_ensemble_manager(group_mean_handle,               &
                            transpose_type_in    = ttype, & ! 1 - no vars,     2 - transposable,     3 - transpose and duplicate
                            mpi_comm             = group_comm)  
 
-call init_ensemble_manager(state_handle,              &
-                           num_copies           = 1,  &
-                           num_vars             = NX, &
-                           distribution_type_in = 1,  & ! 1 - round robin, 2 - pair round robin, 3 - block
-                           layout_type          = 1,  & ! 1 - standard,    2 - round-robbin,     3 - distribute mean in groups
-                           transpose_type_in    = 2,  & ! 1 - no vars,     2 - transposable,     3 - transpose and duplicate
-                           mpi_comm             = get_dart_mpi_comm())  
-                           
 
 ! first task has the state_handle vars then sends copies to 
 ! other tasks doing a transpose (i.e all_vars_to_all_copies)
 if (my_task_id() == 0) then
+   print*, 'SETTING VALUES FOR state_handle%vars'
    do i = 1, NX
       ! Dimensioned (num_vars, my_num_copies)
       state_handle%vars(i, 1) = i
@@ -184,6 +190,8 @@ endif
 
 ! let all tasks have a copy of the mean
 call all_vars_to_all_copies(state_handle, label='state_handle%vars(:,:) -> state_handle%copies(:,:)')
+
+call task_sync()
 
 call print_ens_handle(state_handle,             &
                       force    = .true.,        &
@@ -200,6 +208,8 @@ call print_ens_handle(mean_handle,             &
                       label    = 'mean_handle', &
                       contents = .true.)
 
+call task_sync()
+
 call print_ens_handle(group_mean_handle,             &
                       force    = .true.,        &
                       label    = 'group_mean_handle', &
@@ -213,7 +223,7 @@ call print_ens_handle(group_mean_handle,             &
 !print*, 'avtac state_handle%copies(:,:)',state_handle%copies(:,:)
 !print*, 'avtac state_handle%vars  (:,:)',state_handle%vars(:,:)
 
-call free_mean_window()
+!#! call free_mean_window()
 
 ! call print_ens_handle(mean_handle,              &
 !                       force    = .true.,        &
@@ -366,6 +376,55 @@ call mpi_win_unlock(owner, my_window, ierr)
 
 end function
 
+!-------------------------------------------------------------
+!> create groups for grid
+!> make a communicator for the distributed grid
+subroutine local_create_groups
+
+allocate(group_members(group_size)) ! this is module global
+
+call mpi_comm_group(  mpi_comm_world, group_comm,                           ierr ) ! get the word group from mpi_comm_world
+call build_my_group(  my_task_id(),   group_size, group_members )                 ! create a list of processors in the grid group
+call mpi_group_incl(  group_comm,     group_size, group_members, sub_group, ierr )
+call mpi_comm_create( mpi_comm_world, sub_group,   group_comm,              ierr )
+call mpi_comm_rank(   group_comm,     group_rank,                           ierr ) ! rank within group
+
+if (debug) then
+   print*, 'my_task_id(), group_rank, group_size, sub_group', my_task_id(), group_rank, group_size, sub_group
+endif
+end subroutine local_create_groups
+
+!-----------------------------------------------------------
+!> build the group to store the grid
+subroutine build_my_group(myrank, group_size, group_members)
+
+implicit none
+
+integer, intent(in)     :: myrank ! why are you passing this in?
+integer, intent(inout)  :: group_size ! need to modify this if your #tasks does not divide by group size
+integer, intent(out)    :: group_members(group_size)
+
+integer bottom, top !< start and end members of the group
+integer i
+
+! integer arithmatic. rouding down to the lowest group size
+bottom = (myrank / group_size ) * group_size
+top = bottom + group_size - 1
+if (top >= task_count()) then
+   top = task_count() - 1
+   group_size = top - bottom + 1
+   print*, 'rank', myrank, 'bottom top', bottom, top, 'group_size', group_size
+endif
+
+
+! fill up group members
+group_members(1) = bottom
+do i = 2, group_size
+   group_members(i) = group_members(i-1) + 1
+enddo
+
+end subroutine build_my_group
+
 !---------------------------------------------------------
 !> Get the group number
 function get_owner(i, pe)
@@ -384,10 +443,13 @@ end function get_owner
 
 subroutine initialize_modules_used()
 
+print*, 'initialize_mpi_utilities'
 call initialize_mpi_utilities('simple_test')
 
+print*, 'register_module'
 call register_module(source,revision,revdate)
 
+print*, 'state_vector_io_init'
 call state_vector_io_init()
 
 end subroutine initialize_modules_used
