@@ -10,7 +10,7 @@
 &ensemble_manager_nml
    layout = 1
    tasks_per_node  = 4
-   debug = .true.
+   debug = .false.
 /
 
    max_iter   = 1000000
@@ -18,11 +18,11 @@
 
 &simple_test_nml
    max_iter   = 100000
-   NX         = 8
-   group_size = 2 
+   NX         = 16 
+   group_size = 4 
    dtype      = 1
-   ltype      = 2
-   ttype      = 3
+   ltype      = 1
+   ttype      = 1
    debug      = .true.
    /
 

@@ -15,7 +15,7 @@ use ensemble_manager_mod, only : ensemble_type, map_pe_to_task, get_var_owner_in
                                  copies_in_window, init_ensemble_manager, &
                                  get_allow_transpose, end_ensemble_manager, &
                                  set_num_extra_copies, all_copies_to_all_vars, &
-                                 all_vars_to_all_copies
+                                 all_vars_to_all_copies, duplicate_ens, print_ens_handle
 
 use mpi
 
@@ -108,9 +108,9 @@ integer,             intent(in)  :: mean_copy
 logical,             intent(in)  :: distribute_mean
 type(ensemble_type), intent(out), optional  :: state_mean_ens_handle
 
-integer               :: ierr
-integer               :: bytesize
-integer               :: my_num_vars !< number of elements a task owns
+integer :: ierr
+integer :: bytesize
+integer :: my_num_vars !< number of elements a task owns
 
 ! create an ensemble handle of just the mean copy.
 use_distributed_mean = distribute_mean
@@ -135,6 +135,7 @@ else
    call set_num_extra_copies(mean_ens_handle, 0)
    mean_ens_handle%copies(1,:) = state_ens_handle%copies(mean_copy, :)
    call all_copies_to_all_vars(mean_ens_handle) ! this is a transpose-duplicate
+   print*, 'CALLED ALL_COPIES_TO_ALL_VARS'
 endif
    
 ! grabbing mean directly, no windows are being used
@@ -144,7 +145,13 @@ data_count = copies_in_window(mean_ens_handle) ! One.
 
 if (present(state_mean_ens_handle)) then
    state_mean_ens_handle = mean_ens_handle
+   !call duplicate_ens(mean_ens_handle, state_mean_ens_handle, duplicate_time=.true.)
 endif
+
+call print_ens_handle(mean_ens_handle,             &
+                      force    = .true.,        &
+                      label    = 'create_mean_window : mean_handle', &
+                      contents = .true.)
 
 end subroutine create_mean_window
 

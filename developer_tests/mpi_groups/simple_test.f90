@@ -6,39 +6,25 @@
 
 program simple_test
 
-use             types_mod, only : r8, i8, missing_r8, metadatalength
+use             types_mod, only : r8
 
-use         utilities_mod, only : register_module, error_handler, E_MSG, E_ERR, &
+use         utilities_mod, only : register_module, E_MSG, &
                                   initialize_utilities, finalize_utilities,     &
-                                  find_namelist_in_file, check_namelist_read,   &
-                                  nc_check, E_MSG, open_file, close_file, do_output
+                                  find_namelist_in_file, check_namelist_read
 
 use     mpi_utilities_mod, only : initialize_mpi_utilities, finalize_mpi_utilities, &
                                   task_count, my_task_id, task_sync, datasize, &
                                   get_dart_mpi_comm, create_groups
 
-use      time_manager_mod, only : time_type, set_time, print_date, operator(-), &
-                                  NO_CALENDAR
-
 use  ensemble_manager_mod, only : init_ensemble_manager, ensemble_type, print_ens_handle, &
                                   all_vars_to_all_copies, all_copies_to_all_vars, &
                                   my_vars_to_group_copies
 
-use   state_vector_io_mod, only : state_vector_io_init, read_state, write_state
-
-use   state_structure_mod, only : get_num_domains, get_model_variable_indices, &
-                                  state_structure_info, add_domain
-
 use      io_filenames_mod, only : io_filenames_init, file_info_type,       &
                                   stage_metadata_type, get_stage_metadata, &
-                                  get_restart_filename, set_file_metadata, &
-                                  set_io_copy_flag, READ_COPY, WRITE_COPY
+                                  get_restart_filename, set_file_metadata
 
-use distributed_state_mod, only : create_state_window, free_state_window, &
-                                  create_mean_window, free_mean_window,   &
-                                  get_state
-
-use             model_mod, only : static_init_model
+use distributed_state_mod, only : create_mean_window, free_mean_window
 
 use netcdf
 
@@ -77,9 +63,6 @@ namelist /simple_test_nml/ NX, group_size, max_iter, dtype, ltype, ttype, debug
 
 ! io variables
 integer                   :: iunit, io
-type(file_info_type)      :: file_info_input, file_info_output
-type(stage_metadata_type) :: input_restart_files, output_restart_files
-logical :: read_time_from_file = .true.
 
 ! model state variables
 type(ensemble_type)   :: state_handle
@@ -87,16 +70,7 @@ type(ensemble_type)   :: mean_handle
 type(ensemble_type)   :: group_mean_handle
 
 ! misc. variables
-integer :: i
-
-! message strings
-character(len=512) :: my_base, my_desc
-character(len=512) :: string1
-
-character(len=256), allocatable  :: file_array_input(:,:)
-character(len=256), dimension(1) :: var_names = (/'temp'/)
-integer,parameter :: one_domain = 1
-
+integer  :: i
 real(r8) ::  u, my_val
 
 integer, allocatable :: group_members(:)
@@ -119,7 +93,6 @@ real(r8) :: t1, t2, max_time, min_time
 
 ! MPI variables
 integer :: ierr
-integer :: my_rank
 
 !======================================================================
 ! start of executable code
@@ -154,24 +127,26 @@ endif
 !----------------------------------------------------------------------
 ! create data array on task 0
 !----------------------------------------------------------------------
-
+! distribution_type_in :: 1 - round robin, 2 - pair round robin, 3 - block
+! layout_type          :: 1 - standard,    2 - round-robbin,     3 - distribute mean in groups
+! transpose_type       :: 1 - no vars,     2 - transposable,     3 - transpose and duplicate
 print*, 'INIT_ENSEMBLE_MANAGER state_handle'
 call init_ensemble_manager(state_handle,              &
                            num_copies           = 1,  &
                            num_vars             = NX, &
-                           distribution_type_in = 1,  & ! 1 - round robin, 2 - pair round robin, 3 - block
-                           layout_type          = 1,  & ! 1 - standard,    2 - round-robbin,     3 - distribute mean in groups
-                           transpose_type_in    = 3,  & ! 1 - no vars,     2 - transposable,     3 - transpose and duplicate
+                           distribution_type_in = 1,  &
+                           layout_type          = 1,  & 
+                           transpose_type_in    = 2,  & 
                            mpi_comm             = get_dart_mpi_comm())  
                            
 ! Set up the ensemble storage for mean
 print*, 'INIT_ENSEMBLE_MANAGER group_mean_handle'
-call init_ensemble_manager(group_mean_handle,               &
-                           num_copies           = 1,  &
-                           num_vars             = NX, &
-                           distribution_type_in = dtype, & ! 1 - round robin, 2 - pair round robin, 3 - block
-                           layout_type          = ltype, & ! 1 - standard,    2 - round-robbin,     3 - distribute mean in groups
-                           transpose_type_in    = ttype, & ! 1 - no vars,     2 - transposable,     3 - transpose and duplicate
+call init_ensemble_manager(group_mean_handle,            &
+                           num_copies           = 1,     &
+                           num_vars             = NX,    &
+                           distribution_type_in = dtype, &
+                           layout_type          = ltype, &
+                           transpose_type_in    = ttype, &
                            mpi_comm             = group_comm)  
 
 
@@ -185,12 +160,8 @@ if (my_task_id() == 0) then
    enddo
 endif
 
-!print*, my_task_id(), 'initial transpose state_handle%copies  (:,:)',state_handle%copies(:,:)
-!print*, my_task_id(), 'initial transpose state_handle%vars    (:,:)',state_handle%vars(:,:)
-
-! let all tasks have a copy of the mean
-call all_vars_to_all_copies(state_handle, label='state_handle%vars(:,:) -> state_handle%copies(:,:)')
-
+! let all tasks have a subset of the mean copy
+call all_vars_to_all_copies(state_handle, label='all_vars_to_all_copies')
 call task_sync()
 
 call print_ens_handle(state_handle,             &
@@ -198,10 +169,12 @@ call print_ens_handle(state_handle,             &
                       label    = 'state_handle', &
                       contents = .true.)
 
+call task_sync()
+
 ! mean_handle is optionally returned when creating mean window.
 call create_mean_window(state_handle, mean_copy=1, distribute_mean=.false., state_mean_ens_handle=mean_handle)
 
-call my_vars_to_group_copies(mean_handle, group_mean_handle, label='my_vars_to_group_copies')
+call task_sync()
 
 call print_ens_handle(mean_handle,             &
                       force    = .true.,        &
@@ -210,10 +183,22 @@ call print_ens_handle(mean_handle,             &
 
 call task_sync()
 
+! task_count = 4, NX = 8
+! num_copies_to_receive = 1
+! num_vars_to_receive = 4
+
+! vars   is from the mean_handle
+! copies is from the group_mean_handle
+call my_vars_to_group_copies(mean_handle, group_mean_handle, label='my_vars_to_group_copies')
+
+call task_sync()
+
 call print_ens_handle(group_mean_handle,             &
                       force    = .true.,        &
                       label    = 'group_mean_handle', &
                       contents = .true.)
+
+call task_sync()
 
 !print*, 'actav state_handle%copies(:,:)',state_handle%copies(:,:)
 !print*, 'actav state_handle%vars  (:,:)',state_handle%vars(:,:)
@@ -448,9 +433,6 @@ call initialize_mpi_utilities('simple_test')
 
 print*, 'register_module'
 call register_module(source,revision,revdate)
-
-print*, 'state_vector_io_init'
-call state_vector_io_init()
 
 end subroutine initialize_modules_used
 

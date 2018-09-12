@@ -798,6 +798,7 @@ if(ens_handle%transpose_type == 2) then
 endif
 
 if(ens_handle%transpose_type == 3) then
+   print*, my_task_id(), 'allocating space for vars on every task'
    allocate(ens_handle%vars(ens_handle%num_vars,1))
 endif
 
@@ -865,7 +866,7 @@ owners_index = div + 1
 end subroutine get_var_owner_index
 
 !-----------------------------------------------------------------
-
+!>@todo FIXME : This is off by one for evenly divisable num_vars
 function get_max_num_vars(ens_handle, num_vars)
 !!!function get_max_num_vars(num_vars, distribution_type)
 
@@ -883,7 +884,7 @@ get_max_num_vars = num_vars / ens_handle%num_pes + 1
 end function get_max_num_vars
 
 !-----------------------------------------------------------------
-
+!>@todo FIXME : This is off by one for evenly divisable num_copies
 function get_max_num_copies(ens_handle, num_copies)
 !!!function get_max_num_copies(num_copies, distribution_type)
 
@@ -928,6 +929,8 @@ else
    pes_num_vars = num_per_pe_below
 endif
 
+print*, 'get_var_list : pes_num_vars       = ', pes_num_vars
+print*, 'get_var_list : ens_handle%num_pes = ', ens_handle%num_pes
 ! Fill out the pe's vars
 do i = 1, pes_num_vars
    var_list(i) = (pe + 1) + (i - 1) * ens_handle%num_pes
@@ -960,6 +963,8 @@ else
    pes_num_copies = num_per_pe_below
 endif
 
+print*, 'get_copy_list : pes_num_copies     = ', pes_num_copies
+print*, 'get_copy_list : ens_handle%num_pes = ', ens_handle%num_pes
 ! Fill out the pe's copies
 do i = 1, pes_num_copies
    copy_list(i) = (pe + 1) + (i - 1) * ens_handle%num_pes
@@ -1008,7 +1013,7 @@ ens_size = ens_handle%num_copies - ens_handle%num_extras
 
 ! Counting up the 'real' ensemble copies a task has.  Don't 
 ! want the extras (mean, etc.)
-if (ens_handle%transpose_type == 1) then ! distibuted (all tasks have all copies)
+if (    ens_handle%transpose_type == 1) then ! distibuted (all tasks have all copies)
    copies_in_window = ens_size
 elseif (ens_handle%transpose_type == 2) then ! var complete (only some tasks have data)
    copies_in_window = 0
@@ -1018,6 +1023,7 @@ elseif (ens_handle%transpose_type == 2) then ! var complete (only some tasks hav
       endif
    enddo
 elseif(ens_handle%transpose_type == 3)then ! mean copy on each process
+   !print*, 'TRANSPOSE_TYPE == 3'
    copies_in_window = 1
 endif
 
@@ -1054,7 +1060,7 @@ end subroutine set_num_extra_copies
 
 !-----------------------------------------------------------------
 
-subroutine my_vars_to_group_copies(ens_handle, mean_handle, label)
+subroutine my_vars_to_group_copies(mean_handle, group_mean_handle, label)
 
 ! Converts from having subset of copies of all variables to having
 ! all copies of a subset of variables on a given PE.
@@ -1066,8 +1072,8 @@ subroutine my_vars_to_group_copies(ens_handle, mean_handle, label)
 ! or original version of the routine. 
 !   Default: use updated version
 
-type (ensemble_type), intent(inout)        :: ens_handle
 type (ensemble_type), intent(inout)        :: mean_handle
+type (ensemble_type), intent(inout)        :: group_mean_handle
 character (len=*),    intent(in), optional :: label
 
 integer(i8), allocatable :: var_list(:)
@@ -1078,34 +1084,35 @@ integer(i8) :: num_vars
 integer     :: num_copies, my_num_vars, my_num_copies, my_pe
 integer     :: max_num_vars, max_num_copies, num_copies_to_receive
 integer     :: sending_pe, recv_pe, k, sv, num_vars_to_send, copy
-integer     :: global_ens_index
+integer     :: global_ens_index, i
+integer     :: mpe, mnv, nv, gs
 
 ! only output if there is a label
 if (present(label)) then
    call timestamp_message('my_vars_to_group_copies start: '//label, alltasks=.true.)
 endif
 
-ens_handle%valid = VALID_BOTH
+mean_handle%valid = VALID_BOTH
 
 ! Accelerated version for single process
-if(ens_handle%num_pes == 1 .AND. mean_handle%num_pes == 1) then
-   mean_handle%copies = transpose(ens_handle%vars)
+if(mean_handle%num_pes == 1 .AND. group_mean_handle%num_pes == 1) then
+   group_mean_handle%copies = transpose(mean_handle%vars)
    return
 end if
 
 ! Short var definitions
 ! going to use ensemble handle for now
-! num_copies    = ens_handle%num_copies
-! num_vars      = ens_handle%num_vars
-! my_num_vars   = ens_handle%my_num_vars
-! my_num_copies = ens_handle%my_num_copies
-! my_pe         = ens_handle%my_pe
+! num_copies    = mean_handle%num_copies
+! num_vars      = mean_handle%num_vars
+! my_num_vars   = mean_handle%my_num_vars
+! my_num_copies = mean_handle%my_num_copies
+! my_pe         = mean_handle%my_pe
 
 ! What is maximum number of vars stored on a copy complete pe?
-max_num_vars = get_max_num_vars(mean_handle, mean_handle%num_vars)
+max_num_vars = get_max_num_vars(group_mean_handle, group_mean_handle%num_vars)
 
 ! What is maximum number of copies stored on a var complete pe?
-max_num_copies = get_max_num_copies(mean_handle, mean_handle%num_copies)
+max_num_copies = get_max_num_copies(group_mean_handle, group_mean_handle%num_copies)
 
 print*, 'PE ', my_task_id(), ', max_num_vars   = ', max_num_vars 
 print*, 'PE ', my_task_id(), ', max_num_copies = ', max_num_copies 
@@ -1113,36 +1120,56 @@ print*, 'PE ', my_task_id(), ', max_num_copies = ', max_num_copies
 allocate(var_list(max_num_vars), transfer_temp(max_num_vars), &
          copy_list(max_num_copies))
 
-! state_handle uses vars   (sending info)
-! mean_handle  uses copies (receiving info)
+! state_handle       uses vars   (sending info)
+! group_mean_handle  uses copies (receiving info)
+
+if (group_mean_handle%transpose_type == 3) then
+   my_num_copies = 1
+endif
 
 !> @todo FIXME JPH : initally we are going to assume that the mean is on each
 !> task and then state_handle will copy over only the bits that it needs into
 !> the group
 
-! Loop to give each pe a turn to receive its copies
-RECEIVING_PE_LOOP: do recv_pe = 0, mean_handle%num_pes - 1
+! copies Dimensioned (num_copies, my_num_vars)
+! vars   Dimensioned (num_vars, my_num_copies)
+print*, my_task_id(), 'shape(      mean_handle%vars  (:,:))', shape(mean_handle%vars(:,:))
+print*, my_task_id(), 'shape(group_mean_handle%copies(:,:))', shape(group_mean_handle%copies(:,:))
 
-   call get_copy_list(mean_handle, mean_handle%num_copies, sending_pe, copy_list, num_copies_to_receive)
+mnv = group_mean_handle%my_num_vars
+mpe = group_mean_handle%my_pe
+gs  = group_mean_handle%num_pes
+nv  = group_mean_handle%num_vars
 
-   ! I'm the sending PE, figure out what vars of my copies I'll send.
-   call get_var_list(ens_handle, ens_handle%num_vars, recv_pe, var_list, num_vars_to_send)
-   ! Loop to receive for each copy stored on mean_handle%my_pe
-   print*, 'PE ', my_task_id(), ', copy_list = ', copy_list(:), ' num_copeis_to_receive ', num_copies_to_receive
-   print*, 'PE ', my_task_id(), ', var_list  = ', var_list(:),  ' num_vars_to_send      ', num_vars_to_send
-   ALL_MY_COPIES: do k = 1, num_copies_to_receive
+group_mean_handle%copies(1,1:mnv) = mean_handle%vars(1+mpe:nv:gs,1)
 
-      global_ens_index = copy_list(k)
-
-      ! If sending_pe is receiving_pe, just copy
-      if(sending_pe == recv_pe) then
-         ! compute my_num_vars from mean_handle
-         do sv = 1, mean_handle%my_num_vars
-            mean_handle%copies(global_ens_index, sv) = ens_handle%vars(ens_handle%my_vars(sv), k)
-         end do
-      endif
-   end do ALL_MY_COPIES
-end do RECEIVING_PE_LOOP
+!#! ! Loop to give each pe a turn to receive its copies
+!#! RECEIVING_PE_LOOP: do recv_pe = 0, group_mean_handle%num_pes - 1
+!#! 
+!#!    call get_copy_list(group_mean_handle, group_mean_handle%num_copies, sending_pe, copy_list, num_copies_to_receive)
+!#! 
+!#!    ! I'm the sending PE, figure out what vars of my copies I'll send.
+!#!    call get_var_list(mean_handle, mean_handle%num_vars, recv_pe, var_list, num_vars_to_send)
+!#! 
+!#!    ! Loop to receive for each copy stored on group_mean_handle%my_pe
+!#!    print*, 'PE ', my_task_id(), ', copy_list = ', copy_list(:), &
+!#!            ' num_copeis_to_receive ', num_copies_to_receive
+!#!    print*, 'PE ', my_task_id(), ', var_list  = ', var_list(:),  &
+!#!            ' num_vars_to_send      ', num_vars_to_send
+!#! 
+!#!    ALL_MY_COPIES: do k = 1, num_copies_to_receive
+!#! 
+!#!       global_ens_index = copy_list(k)
+!#! 
+!#!       ! If sending_pe is receiving_pe, just copy
+!#!       if(sending_pe == recv_pe) then
+!#!          ! compute my_num_vars from group_mean_handle
+!#!          do sv = 1, group_mean_handle%my_num_vars
+!#!             group_mean_handle%copies(global_ens_index, sv) = mean_handle%vars(mean_handle%my_vars(sv), k)
+!#!          end do
+!#!       endif
+!#!    end do ALL_MY_COPIES
+!#! end do RECEIVING_PE_LOOP
 
 ! Free up the temporary storage
 deallocate(var_list, transfer_temp, copy_list)
@@ -1542,6 +1569,7 @@ deallocate(var_list, transfer_temp, copy_list)
 
 if (ens_handle%transpose_type == 3) then
    ! duplicate a single ensmeble member on all tasks
+   print*, 'called broadcast_copy'
    call broadcast_copy(ens_handle, 1, ens_handle%vars(:, 1))
 endif
 
@@ -1759,13 +1787,15 @@ do rank = 0, task_count() - 1
       call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
       write(msgstring, *) 'number of    copies: ', ens_handle%num_copies
       call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+      write(msgstring, *) 'number of my_vars  : ', ens_handle%my_num_vars
+      call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
       write(msgstring, *) 'number of    vars  : ', ens_handle%num_vars
       call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
       write(msgstring, *) 'number of my_copies: ', ens_handle%my_num_copies
       call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
-      write(msgstring, *) 'number of my_vars  : ', ens_handle%my_num_vars
-      call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
       write(msgstring, *) 'valid              : ', ens_handle%valid
+      call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
+      write(msgstring, *) 'transpose_type  : ', ens_handle%transpose_type
       call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
       write(msgstring, *) 'distribution_type  : ', ens_handle%distribution_type
       call error_handler(E_ALLMSG, 'ensemble handle: ', msgstring, source, revision, revdate)
@@ -1799,6 +1829,9 @@ do rank = 0, task_count() - 1
       endif
       
       if (do_contents .and. allocated(ens_handle%vars)) then
+         print*, my_task_id(), 'num_vars         = ', ens_handle%num_vars
+         print*, my_task_id(), 'my_num_copies    = ', ens_handle%my_num_copies
+         print*, my_task_id(), 'shape(vars(:,:)) = ', shape(ens_handle%vars(:,:))
          do j = 1, min(ens_handle%my_num_copies, limit_count)
             do i = 1, min(ens_handle%num_vars, limit_count)
                write(msgstring, *) 'ens_handle%vars(i,j) : ', i, j, ens_handle%vars(i,j)
