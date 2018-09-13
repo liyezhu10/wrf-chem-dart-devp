@@ -170,7 +170,16 @@ if (debug) &
 call task_sync()
 
 ! mean_handle is optionally returned when creating mean window.
+t1 = MPI_WTIME()
 call create_mean_window(state_handle, mean_copy=1, distribute_mean=.false., return_mean_ens_handle=mean_handle)
+t2 = t2 + (MPI_WTIME() - t1)
+
+call MPI_REDUCE(t2, max_time, 1, MPI_REAL8, MPI_MAX, 0, get_dart_mpi_comm(), ierr)
+call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, get_dart_mpi_comm(), ierr)
+if (my_task_id() == 0) then
+   print*, 'create_mean_window : Max Time = ', max_time
+   print*, 'create_mean_window : Min Time = ', min_time
+endif
 
 call task_sync()
 
@@ -189,7 +198,16 @@ call task_sync()
 ! vars   is from the mean_handle
 ! copies is from the group_mean_handle
 !>@todo FIXME : this should be in the create_mean_window routine
+t1 = MPI_WTIME()
 call my_vars_to_group_copies(mean_handle, group_mean_handle, label='my_vars_to_group_copies')
+t2 = t2 + (MPI_WTIME() - t1)
+
+call MPI_REDUCE(t2, max_time, 1, MPI_REAL8, MPI_MAX, 0, get_dart_mpi_comm(), ierr)
+call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, get_dart_mpi_comm(), ierr)
+if (my_task_id() == 0) then
+   print*, 'create_mean_window : Max Time = ', max_time
+   print*, 'create_mean_window : Min Time = ', min_time
+endif
 
 call task_sync()
 
