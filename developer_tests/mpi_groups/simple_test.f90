@@ -376,7 +376,7 @@ owner = get_owner(i, my_task_id(group_comm))
 target_disp = (i-1)/(group_size)
 
 if (debug) then
-   print*, 'my_task_id() = ', my_task_id(), ' i = ', i, 'owner = ', owner, 'target_disp', target_disp
+   print*, 'my_task_id() = ', my_task_id(), ' i = ', i, 'owner_group = ', owner, 'owner_world', get_owner(i,my_task_id()),' target_disp', target_disp
 endif
 
 ! grab the info
@@ -442,6 +442,7 @@ integer, intent(in) :: i
 integer, intent(in) :: pe
 integer :: get_owner
 
+integer :: my_group
 integer :: num_groups
 integer :: num_vars
 
@@ -449,7 +450,10 @@ num_groups = NX / group_size
 num_vars   = NX / num_groups
 
 !get_owner  = (i-1)/num_groups
-get_owner  = mod((i-1), num_vars)
+my_group = (pe/group_size) * group_size
+get_owner  = my_group+mod(i-1,group_size)
+
+!get_owner  = mod((i-1), num_vars)
 
 end function get_owner
 
