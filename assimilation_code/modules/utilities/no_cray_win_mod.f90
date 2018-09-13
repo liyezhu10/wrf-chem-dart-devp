@@ -15,7 +15,7 @@ use ensemble_manager_mod, only : ensemble_type, map_pe_to_task, get_var_owner_in
                                  copies_in_window, init_ensemble_manager, &
                                  get_allow_transpose, end_ensemble_manager, &
                                  set_num_extra_copies, all_copies_to_all_vars, &
-                                 all_vars_to_all_copies, duplicate_ens, print_ens_handle
+                                 all_vars_to_all_copies
 
 use mpi
 
@@ -156,11 +156,6 @@ data_count = copies_in_window(mean_ens_handle) ! One.
 if (present(return_mean_ens_handle)) then
    return_mean_ens_handle = mean_ens_handle
 endif
-
-call print_ens_handle(mean_ens_handle,             &
-                      force    = .true.,        &
-                      label    = 'create_mean_window : mean_handle', &
-                      contents = .true.)
 
 end subroutine create_mean_window
 

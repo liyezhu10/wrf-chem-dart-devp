@@ -929,8 +929,6 @@ else
    pes_num_vars = num_per_pe_below
 endif
 
-print*, 'get_var_list : pes_num_vars       = ', pes_num_vars
-print*, 'get_var_list : ens_handle%num_pes = ', ens_handle%num_pes
 ! Fill out the pe's vars
 do i = 1, pes_num_vars
    var_list(i) = (pe + 1) + (i - 1) * ens_handle%num_pes
@@ -963,8 +961,6 @@ else
    pes_num_copies = num_per_pe_below
 endif
 
-print*, 'get_copy_list : pes_num_copies     = ', pes_num_copies
-print*, 'get_copy_list : ens_handle%num_pes = ', ens_handle%num_pes
 ! Fill out the pe's copies
 do i = 1, pes_num_copies
    copy_list(i) = (pe + 1) + (i - 1) * ens_handle%num_pes
@@ -1114,9 +1110,6 @@ max_num_vars = get_max_num_vars(group_mean_handle, group_mean_handle%num_vars)
 ! What is maximum number of copies stored on a var complete pe?
 max_num_copies = get_max_num_copies(group_mean_handle, group_mean_handle%num_copies)
 
-print*, 'PE ', my_task_id(), ', max_num_vars   = ', max_num_vars 
-print*, 'PE ', my_task_id(), ', max_num_copies = ', max_num_copies 
-
 allocate(var_list(max_num_vars), transfer_temp(max_num_vars), &
          copy_list(max_num_copies))
 
@@ -1133,8 +1126,6 @@ endif
 
 ! copies Dimensioned (num_copies, my_num_vars)
 ! vars   Dimensioned (num_vars, my_num_copies)
-print*, my_task_id(), 'shape(      mean_handle%vars  (:,:))', shape(mean_handle%vars(:,:))
-print*, my_task_id(), 'shape(group_mean_handle%copies(:,:))', shape(group_mean_handle%copies(:,:))
 
 mnv = group_mean_handle%my_num_vars
 mpe = group_mean_handle%my_pe
@@ -1570,7 +1561,6 @@ deallocate(var_list, transfer_temp, copy_list)
 
 if (ens_handle%transpose_type == 3) then
    ! duplicate a single ensmeble member on all tasks
-   print*, 'called broadcast_copy'
    call broadcast_copy(ens_handle, 1, ens_handle%vars(:, 1))
 endif
 
@@ -1906,7 +1896,6 @@ integer :: group_size
 integer :: dart_task
 integer :: group_task
 
-print*, 'group_task_to_dart_task'
 !>@ todo FIXME : How often is this accessed?  
 !> Would it be more efficient to store it in the ensemble type?
 !> Also do we even need this here, it does not appear to be used.

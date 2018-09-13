@@ -321,9 +321,9 @@ if (errcode /= MPI_SUCCESS) then
 endif
 
 ! number of tasks (if 10, returns 10.  task id numbers go from 0-9)
-print*, 'myrank =  ', myrank, ' my_local_comm = ', my_local_comm
+!print*, 'myrank =  ', myrank, ' my_local_comm = ', my_local_comm
 call MPI_Comm_size(my_local_comm, total_tasks, errcode)
-print*, 'myrank =  ', myrank, ' my_local_comm = ', my_local_comm, ' total_tasks = ', total_tasks, 'errcode', errcode
+!print*, 'myrank =  ', myrank, ' my_local_comm = ', my_local_comm, ' total_tasks = ', total_tasks, 'errcode', errcode
 if (errcode /= MPI_SUCCESS) then
    write(errstring, '(a,i8)') 'MPI_Comm_size returned error code ', errcode
    call error_handler(E_ERR,'initialize_mpi_utilities', errstring, source, revision, revdate)
@@ -523,11 +523,11 @@ endif
 task_count = total_tasks
 
 if (present(mpi_comm)) then
-   print*, 'CALLING TASK_COUNT() WITH MPI_COMM'
-   print*, 'my_task_id() =',  my_task_id(), ' mpi_comm =  ', mpi_comm
+   !print*, 'CALLING TASK_COUNT() WITH MPI_COMM'
+   !print*, 'my_task_id() =',  my_task_id(), ' mpi_comm =  ', mpi_comm
    call MPI_Comm_size(mpi_comm, my_num_tasks, errcode)
-   print*, 'my_task_id() =',  my_task_id(), ' mpi_comm =  ', &
-           mpi_comm, ' my_num_tasks = ', my_num_tasks, ' errcode ', errcode
+   !print*, 'my_task_id() =',  my_task_id(), ' mpi_comm =  ', &
+   !        mpi_comm, ' my_num_tasks = ', my_num_tasks, ' errcode ', errcode
    if (errcode /= MPI_SUCCESS) then
       write(errstring, '(a,i8)') 'MPI_Comm_rank returned error code ', errcode
       call error_handler(E_ERR,'mpi_task_id', errstring, source, revision, revdate)
@@ -2034,7 +2034,7 @@ integer(KIND=MPI_ADDRESS_KIND) :: target_disp
 ! Note to programmer: openmpi 1.10.0 does not
 ! allow scalars in mpi calls. openmpi 1.10.1 fixes
 ! this.
-print*, 'mpi_utilities window ', window
+!print*, 'mpi_utilities window ', window
 target_disp = (mindex - 1)
 call mpi_win_lock(MPI_LOCK_SHARED, owner, 0, window, errcode)
 call mpi_get(x, 1, datasize, owner, target_disp, 1, datasize, window, errcode)
@@ -2115,8 +2115,8 @@ call mpi_comm_create( my_local_comm, sub_group,      my_group_comm,            e
 call mpi_group_rank(  sub_group,  group_rank,                               errcode)
 call mpi_group_size(  sub_group,  group_size,                               errcode)
 
-print*, 'my_local_comm = ', my_local_comm, ' my_group_comm = ', my_group_comm, &
-        'group_rank = ', group_rank 
+!print*, 'my_local_comm = ', my_local_comm, ' my_group_comm = ', my_group_comm, &
+!        'group_rank = ', group_rank 
 
 !if (verbose) then
 if (.true.) then

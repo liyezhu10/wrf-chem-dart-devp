@@ -106,14 +106,14 @@ call find_namelist_in_file("input.nml", "simple_test_nml", iunit)
 read(iunit, nml = simple_test_nml, iostat = io)
 call check_namelist_read(iunit, io, "simple_test_nml")
 
-print*, 'SETTING group_size = ', group_size
+!print*, 'SETTING group_size = ', group_size
 if (group_size == -1) group_size = task_count()
 
 !----------------------------------------------------------------------
 ! create groups
 !----------------------------------------------------------------------
 t1 = MPI_WTIME()
-print*, 'CALLING create_groups'
+!print*, 'CALLING create_groups'
 !call local_create_groups()
 call create_groups(group_size, group_comm)
 t2 = MPI_WTIME() - t1
@@ -121,19 +121,13 @@ t2 = MPI_WTIME() - t1
 call MPI_REDUCE(t2, max_time, 1, MPI_REAL8, MPI_MAX, 0, get_dart_mpi_comm(), ierr)
 call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, get_dart_mpi_comm(), ierr)
 
-if (my_task_id() == 0) then
-   print*, 'group_size = ', group_size, ', NX = ', NX
-   print*, 'create_groups : Max Time = ', max_time
-   print*, 'create_groups : Min Time = ', min_time
-endif
-
 !----------------------------------------------------------------------
 ! create data array on task 0
 !----------------------------------------------------------------------
 ! distribution_type_in :: 1 - round robin, 2 - pair round robin, 3 - block
 ! layout_type          :: 1 - standard,    2 - round-robbin,     3 - distribute mean in groups
 ! transpose_type       :: 1 - no vars,     2 - transposable,     3 - transpose and duplicate
-print*, 'INIT_ENSEMBLE_MANAGER state_handle'
+!print*, 'INIT_ENSEMBLE_MANAGER state_handle'
 call init_ensemble_manager(state_handle,              &
                            num_copies           = 1,  &
                            num_vars             = NX, &
@@ -143,7 +137,7 @@ call init_ensemble_manager(state_handle,              &
                            mpi_comm             = get_dart_mpi_comm())  
                            
 ! Set up the ensemble storage for mean
-print*, 'INIT_ENSEMBLE_MANAGER group_mean_handle'
+!print*, 'INIT_ENSEMBLE_MANAGER group_mean_handle'
 call init_ensemble_manager(group_mean_handle,            &
                            num_copies           = 1,     &
                            num_vars             = NX,    &
@@ -156,7 +150,7 @@ call init_ensemble_manager(group_mean_handle,            &
 ! first task has the state_handle vars then sends copies to 
 ! other tasks doing a transpose (i.e all_vars_to_all_copies)
 if (my_task_id() == 0) then
-   print*, 'SETTING VALUES FOR state_handle%vars'
+   !print*, 'SETTING VALUES FOR state_handle%vars'
    do i = 1, NX
       ! Dimensioned (num_vars, my_num_copies)
       state_handle%vars(i, 1) = i
@@ -167,10 +161,11 @@ endif
 call all_vars_to_all_copies(state_handle, label='all_vars_to_all_copies')
 call task_sync()
 
-call print_ens_handle(state_handle,             &
-                      force    = .true.,        &
-                      label    = 'state_handle', &
-                      contents = .true.)
+if (debug) &
+   call print_ens_handle(state_handle,             &
+                         force    = .true.,        &
+                         label    = 'state_handle', &
+                         contents = .true.)
 
 call task_sync()
 
@@ -179,10 +174,11 @@ call create_mean_window(state_handle, mean_copy=1, distribute_mean=.false., retu
 
 call task_sync()
 
-call print_ens_handle(mean_handle,             &
-                      force    = .true.,        &
-                      label    = 'mean_handle', &
-                      contents = .true.)
+if (debug) &
+   call print_ens_handle(mean_handle,             &
+                         force    = .true.,        &
+                         label    = 'mean_handle', &
+                         contents = .true.)
 
 call task_sync()
 
@@ -197,10 +193,11 @@ call my_vars_to_group_copies(mean_handle, group_mean_handle, label='my_vars_to_g
 
 call task_sync()
 
-call print_ens_handle(group_mean_handle,             &
-                      force    = .true.,        &
-                      label    = 'group_mean_handle', &
-                      contents = .true.)
+if (debug) &
+   call print_ens_handle(group_mean_handle,             &
+                         force    = .true.,        &
+                         label    = 'group_mean_handle', &
+                         contents = .true.)
 
 call task_sync()
 
@@ -209,31 +206,39 @@ call free_mean_window()
 ! want to create the mean window so it uses the group communicator
 call mpi_type_size(datasize, sizedouble, ierr)
 window_size = (NX/group_size)*sizedouble
+
 !>@todo group_mean_handle needs to be contiguous
 call mpi_win_create(group_mean_handle%copies(1,:), window_size, &
                     sizedouble, MPI_INFO_NULL, group_comm, my_window, ierr)
 
 
-do ii = 1, NX ! max_iter
+do ii = 1, max_iter
    do rank = 0, task_count()-1
-      !call random_number(u)
-      jj = ii!FLOOR(NX*u)+1
-      t1 = MPI_WTIME()
-      if (rank == my_task_id()) then
+      call random_number(u)
+      jj = FLOOR(NX*u)+1
+      !if (rank == my_task_id()) then
+         t1 = MPI_WTIME()
          my_val = get_my_val(jj)
          t2 = t2 + (MPI_WTIME() - t1)
          if (my_val /= jj) then
             print*, 'jj /= my_val', jj, my_val
-         else
-            print*, 'jj == my_val', jj, my_val
          endif
         call task_sync()
-      else
-        call task_sync()
-     endif
+     !else
+     !  call task_sync()
+     !endif
    enddo
 enddo
 
+!----------------------------------------------------------------------
+! timing test
+!----------------------------------------------------------------------
+call MPI_REDUCE(t2, max_time, 1, MPI_REAL8, MPI_MAX, 0, get_dart_mpi_comm(), ierr)
+call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, get_dart_mpi_comm(), ierr)
+if (my_task_id() == 0) then
+   print*, 'get_value     : Max Time = ', max_time
+   print*, 'get_value     : Min Time = ', min_time
+endif
 
 
 !print*, 'actav state_handle%copies(:,:)',state_handle%copies(:,:)
@@ -262,17 +267,6 @@ enddo
 ! !----------------------------------------------------------------------
 ! call create_window()
 ! 
-! !----------------------------------------------------------------------
-! ! timing test
-! !----------------------------------------------------------------------
-! t2 = 0.0_r8
-! 
-! call MPI_REDUCE(t2, max_time, 1, MPI_REAL8, MPI_MAX, 0, get_dart_mpi_comm(), ierr)
-! call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, get_dart_mpi_comm(), ierr)
-! if (my_task_id() == 0) then
-!    print*, 'get_value     : Max Time = ', max_time
-!    print*, 'get_value     : Min Time = ', min_time
-! endif
 ! 
 ! !----------------------------------------------------------------------
 ! ! print array
@@ -449,29 +443,25 @@ integer :: num_vars
 num_groups = NX / group_size
 num_vars   = NX / num_groups
 
-!get_owner  = (i-1)/num_groups
 my_group = (pe/group_size) * group_size
 get_owner  = my_group+mod(i-1,group_size)
 
-!get_owner  = mod((i-1), num_vars)
-
 end function get_owner
 
+!----------------------------------------------------------------------
 !> initialize modules that need it
-
 subroutine initialize_modules_used()
 
-print*, 'initialize_mpi_utilities'
+!print*, 'initialize_mpi_utilities'
 call initialize_mpi_utilities('simple_test')
 
-print*, 'register_module'
+!print*, 'register_module'
 call register_module(source,revision,revdate)
 
 end subroutine initialize_modules_used
 
 !----------------------------------------------------------------------
 !> clean up before exiting
-
 subroutine finalize_modules_used()
 
 ! this must be last, and you can't print/write anything
