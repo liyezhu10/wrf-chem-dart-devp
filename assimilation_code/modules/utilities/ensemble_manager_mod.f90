@@ -1141,6 +1141,7 @@ mpe = group_mean_handle%my_pe
 gs  = group_mean_handle%num_pes
 nv  = group_mean_handle%num_vars
 
+! copy over every group_size element to the group_mean_handle
 group_mean_handle%copies(1,1:mnv) = mean_handle%vars(1+mpe:nv:gs,1)
 
 !#! ! Loop to give each pe a turn to receive its copies

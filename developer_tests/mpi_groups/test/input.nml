@@ -17,9 +17,9 @@
    NX         = 180000000 
 
 &simple_test_nml
-   max_iter   = 100000
-   NX         = 16 
-   group_size = 4 
+   max_iter   = 10
+   NX         = 8
+   group_size = 2 
    dtype      = 1
    ltype      = 1
    ttype      = 1

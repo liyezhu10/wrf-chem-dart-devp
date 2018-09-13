@@ -70,7 +70,7 @@ type(ensemble_type)   :: mean_handle
 type(ensemble_type)   :: group_mean_handle
 
 ! misc. variables
-integer  :: i
+integer  :: i, j
 real(r8) ::  u, my_val
 
 integer, allocatable :: group_members(:)
@@ -79,8 +79,10 @@ integer :: sub_group
 integer :: group_comm
 integer :: group_rank
 
-! grid window
+! group window
+integer               :: rank
 integer               :: my_window
+integer(KIND=MPI_ADDRESS_KIND) :: window_size
 real(r8), allocatable :: my_array(:) !< local get_my_val info
 real(r8)              :: duplicate_array(*)
 pointer(aa, duplicate_array)
@@ -93,6 +95,7 @@ real(r8) :: t1, t2, max_time, min_time
 
 ! MPI variables
 integer :: ierr
+integer :: sizedouble
 
 !======================================================================
 ! start of executable code
@@ -144,9 +147,9 @@ print*, 'INIT_ENSEMBLE_MANAGER group_mean_handle'
 call init_ensemble_manager(group_mean_handle,            &
                            num_copies           = 1,     &
                            num_vars             = NX,    &
-                           distribution_type_in = dtype, &
-                           layout_type          = ltype, &
-                           transpose_type_in    = ttype, &
+                           distribution_type_in = dtype, & ! 1
+                           layout_type          = ltype, & ! 1
+                           transpose_type_in    = ttype, & ! 1
                            mpi_comm             = group_comm)  
 
 
@@ -172,7 +175,7 @@ call print_ens_handle(state_handle,             &
 call task_sync()
 
 ! mean_handle is optionally returned when creating mean window.
-call create_mean_window(state_handle, mean_copy=1, distribute_mean=.false., state_mean_ens_handle=mean_handle)
+call create_mean_window(state_handle, mean_copy=1, distribute_mean=.false., return_mean_ens_handle=mean_handle)
 
 call task_sync()
 
@@ -189,6 +192,7 @@ call task_sync()
 
 ! vars   is from the mean_handle
 ! copies is from the group_mean_handle
+!>@todo FIXME : this should be in the create_mean_window routine
 call my_vars_to_group_copies(mean_handle, group_mean_handle, label='my_vars_to_group_copies')
 
 call task_sync()
@@ -200,6 +204,38 @@ call print_ens_handle(group_mean_handle,             &
 
 call task_sync()
 
+call free_mean_window()
+
+! want to create the mean window so it uses the group communicator
+call mpi_type_size(datasize, sizedouble, ierr)
+window_size = (NX/group_size)*sizedouble
+!>@todo group_mean_handle needs to be contiguous
+call mpi_win_create(group_mean_handle%copies(1,:), window_size, &
+                    sizedouble, MPI_INFO_NULL, group_comm, my_window, ierr)
+
+
+do ii = 1, NX ! max_iter
+   do rank = 0, task_count()-1
+      !call random_number(u)
+      jj = ii!FLOOR(NX*u)+1
+      t1 = MPI_WTIME()
+      if (rank == my_task_id()) then
+         my_val = get_my_val(jj)
+         t2 = t2 + (MPI_WTIME() - t1)
+         if (my_val /= jj) then
+            print*, 'jj /= my_val', jj, my_val
+         else
+            print*, 'jj == my_val', jj, my_val
+         endif
+        call task_sync()
+      else
+        call task_sync()
+     endif
+   enddo
+enddo
+
+
+
 !print*, 'actav state_handle%copies(:,:)',state_handle%copies(:,:)
 !print*, 'actav state_handle%vars  (:,:)',state_handle%vars(:,:)
 
@@ -208,7 +244,6 @@ call task_sync()
 !print*, 'avtac state_handle%copies(:,:)',state_handle%copies(:,:)
 !print*, 'avtac state_handle%vars  (:,:)',state_handle%vars(:,:)
 
-!#! call free_mean_window()
 
 ! call print_ens_handle(mean_handle,              &
 !                       force    = .true.,        &
@@ -231,16 +266,6 @@ call task_sync()
 ! ! timing test
 ! !----------------------------------------------------------------------
 ! t2 = 0.0_r8
-! do ii = 1, max_iter
-!    call random_number(u)
-!    jj = FLOOR(NX*u)+1
-!    t1 = MPI_WTIME()
-!    my_val = get_my_val(jj)
-!    t2 = t2 + (MPI_WTIME() - t1)
-!    if (my_val /= jj) then
-!       print*, 'jj /= my_val', jj, my_val
-!    endif
-! enddo
 ! 
 ! call MPI_REDUCE(t2, max_time, 1, MPI_REAL8, MPI_MAX, 0, get_dart_mpi_comm(), ierr)
 ! call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, get_dart_mpi_comm(), ierr)
@@ -347,11 +372,11 @@ integer                          :: owner !< which task has the part of get_my_v
 integer(KIND=MPI_ADDRESS_KIND)   :: target_disp !< displacement
 
 ! caluclate who has the info
-owner = get_owner(i, my_task_id())
-target_disp = mod(i,NX/group_size)
+owner = get_owner(i, my_task_id(group_comm))
+target_disp = (i-1)/(group_size)
 
 if (debug) then
-   print*, 'my_task_id(), owner, my_window', my_task_id(), owner, my_window
+   print*, 'my_task_id() = ', my_task_id(), ' i = ', i, 'owner = ', owner, 'target_disp', target_disp
 endif
 
 ! grab the info
@@ -418,9 +443,13 @@ integer, intent(in) :: pe
 integer :: get_owner
 
 integer :: num_groups
+integer :: num_vars
 
 num_groups = NX / group_size
-get_owner  = (i-1)/num_groups
+num_vars   = NX / num_groups
+
+!get_owner  = (i-1)/num_groups
+get_owner  = mod((i-1), num_vars)
 
 end function get_owner
 
@@ -443,7 +472,6 @@ subroutine finalize_modules_used()
 
 ! this must be last, and you can't print/write anything
 ! after this is called.
-print*, my_task_id(), ' calling mpi_finialize'
 call finalize_mpi_utilities()
 
 end subroutine finalize_modules_used

@@ -101,12 +101,12 @@ end subroutine create_state_window
 !-------------------------------------------------------------
 !> Using a mean ensemble handle.
 !> 
-subroutine create_mean_window(state_ens_handle, mean_copy, distribute_mean, state_mean_ens_handle)
+subroutine create_mean_window(state_ens_handle, mean_copy, distribute_mean, return_mean_ens_handle)
 
 type(ensemble_type), intent(in)  :: state_ens_handle
 integer,             intent(in)  :: mean_copy
 logical,             intent(in)  :: distribute_mean
-type(ensemble_type), intent(out), optional  :: state_mean_ens_handle
+type(ensemble_type), intent(out), optional  :: return_mean_ens_handle
 
 integer :: ierr
 integer :: bytesize
@@ -115,11 +115,19 @@ integer :: my_num_vars !< number of elements a task owns
 ! create an ensemble handle of just the mean copy.
 use_distributed_mean = distribute_mean
 
+! three options
+! 1. fully distribution
+! 2. group distribution
+! 3. not   distribution
 if (use_distributed_mean) then
-   call init_ensemble_manager(mean_ens_handle, 1, state_ens_handle%num_vars) ! distributed ensemble
+   ! distributed ensemble
+   call init_ensemble_manager(mean_ens_handle, 1, state_ens_handle%num_vars) 
    call set_num_extra_copies(mean_ens_handle, 0)
+   !call my_vars_to_group_copies(mean_handle, group_mean_handle, label='my_vars_to_group_copies')
    mean_ens_handle%copies(1,:) = state_ens_handle%copies(mean_copy, :)
    allocate(mean_1d(state_ens_handle%my_num_vars))
+
+   !copies (num_copies, my_num_vars)
    mean_1d(:) = mean_ens_handle%copies(1,:)
 
    ! find out how many variables I have
@@ -129,13 +137,15 @@ if (use_distributed_mean) then
 
    ! Need a simply contiguous piece of memory to pass to mpi_win_create
    ! Expose local memory to RMA operation by other processes in a communicator.
+   !>@todo FIXME : here we want the communicator to be from the group.
+   !> and the window_size = num_vars/group_size
    call mpi_win_create(mean_1d, window_size, bytesize, MPI_INFO_NULL, mean_ens_handle%my_communicator, mean_win, ierr)
 else
    call init_ensemble_manager(mean_ens_handle, 1, state_ens_handle%num_vars, transpose_type_in = 3)
    call set_num_extra_copies(mean_ens_handle, 0)
    mean_ens_handle%copies(1,:) = state_ens_handle%copies(mean_copy, :)
    call all_copies_to_all_vars(mean_ens_handle) ! this is a transpose-duplicate
-   print*, 'CALLED ALL_COPIES_TO_ALL_VARS'
+   print*, 'called all_copies_to_all_vars'
 endif
    
 ! grabbing mean directly, no windows are being used
@@ -143,9 +153,8 @@ current_win = MEAN_WINDOW
 
 data_count = copies_in_window(mean_ens_handle) ! One.
 
-if (present(state_mean_ens_handle)) then
-   state_mean_ens_handle = mean_ens_handle
-   !call duplicate_ens(mean_ens_handle, state_mean_ens_handle, duplicate_time=.true.)
+if (present(return_mean_ens_handle)) then
+   return_mean_ens_handle = mean_ens_handle
 endif
 
 call print_ens_handle(mean_ens_handle,             &
