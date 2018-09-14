@@ -6,7 +6,7 @@
 
 program simple_test
 
-use             types_mod, only : r8
+use             types_mod, only : r8, i8
 
 use         utilities_mod, only : register_module, E_MSG, &
                                   initialize_utilities, finalize_utilities,     &
@@ -24,7 +24,7 @@ use      io_filenames_mod, only : io_filenames_init, file_info_type,       &
                                   stage_metadata_type, get_stage_metadata, &
                                   get_restart_filename, set_file_metadata
 
-use distributed_state_mod, only : create_mean_window, free_mean_window
+use distributed_state_mod, only : create_mean_window, free_mean_window, get_state
 
 use netcdf
 
@@ -71,7 +71,7 @@ type(ensemble_type)   :: group_mean_handle
 
 ! misc. variables
 integer  :: i, j
-real(r8) ::  u, my_val
+real(r8) ::  u, my_val(1)
 
 integer, allocatable :: group_members(:)
 integer :: dart_group
@@ -88,7 +88,7 @@ real(r8)              :: duplicate_array(*)
 pointer(aa, duplicate_array)
 
 ! index variables
-integer :: ii, jj
+integer(i8) :: ii, jj
 
 ! timing variables
 real(r8) :: t1, t2, max_time, min_time
@@ -126,14 +126,14 @@ call init_ensemble_manager(state_handle,              &
                            transpose_type_in    = 2,  & 
                            mpi_comm             = get_dart_mpi_comm())  
                            
-! Set up the ensemble storage for mean
-call init_ensemble_manager(group_mean_handle,            &
-                           num_copies           = 1,     &
-                           num_vars             = NX,    &
-                           distribution_type_in = dtype, & ! 1
-                           layout_type          = ltype, & ! 1
-                           transpose_type_in    = ttype, & ! 1
-                           mpi_comm             = group_comm)  
+!#! ! Set up the ensemble storage for mean
+!#! call init_ensemble_manager(group_mean_handle,            &
+!#!                            num_copies           = 1,     &
+!#!                            num_vars             = NX,    &
+!#!                            distribution_type_in = dtype, & ! 1
+!#!                            layout_type          = ltype, & ! 1
+!#!                            transpose_type_in    = ttype, & ! 1
+!#!                            mpi_comm             = group_comm)  
 
 
 ! first task has the state_handle vars then sends copies to 
@@ -159,17 +159,47 @@ if (debug) &
 call task_sync()
 
 ! temp_mean_handle is optionally returned when creating mean window.
-call create_mean_window(state_handle, mean_copy=1, distribute_mean=.false., return_handle=temp_mean_handle)
+call create_mean_window(state_handle, mean_copy=1, distribute_mean=.true., return_handle=group_mean_handle)
+print*, 'FINISHED - create_mean_window' 
 
 call task_sync()
 
 if (debug) &
-   call print_ens_handle(temp_mean_handle,             &
-                         force    = .true.,        &
+   call print_ens_handle(group_mean_handle,             &
+                         force    = .true.,             &
                          label    = 'temp_mean_handle', &
                          contents = .true.)
 
-call task_sync()
+print*, 'FINISHED - print group_mean_handle' 
+
+!----------------------------------------------------------------------
+! timing test
+!----------------------------------------------------------------------
+do ii = 1, NX
+   do rank = 0, task_count()-1
+      !call random_number(u)
+      jj = ii !FLOOR(NX*u)+1
+      !if (rank == my_task_id()) then
+         t1 = MPI_WTIME()
+         my_val = get_state(jj, group_mean_handle)!get_my_val(jj)
+         t2 = t2 + (MPI_WTIME() - t1)
+         if (my_val(1) /= jj) then
+            print*, 'jj /= my_val', jj, my_val(1)
+         endif
+        call task_sync()
+     !else
+     !  call task_sync()
+     !endif
+   enddo
+enddo
+call MPI_REDUCE(t2, max_time, 1, MPI_REAL8, MPI_MAX, 0, get_dart_mpi_comm(), ierr)
+call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, get_dart_mpi_comm(), ierr)
+if (my_task_id() == 0) then
+   print*, 'get_value     : Max Time = ', max_time
+   print*, 'get_value     : Min Time = ', min_time
+endif
+
+!#! call task_sync()
 
 ! task_count = 4, NX = 8
 ! num_copies_to_receive = 1
@@ -179,54 +209,45 @@ call task_sync()
 ! copies is from the group_mean_handle
 !call my_vars_to_group_copies(temp_mean_handle, group_mean_handle, label='my_vars_to_group_copies')
 
-call task_sync()
+!#!call task_sync()
 
-if (debug) &
-   call print_ens_handle(group_mean_handle,             &
-                         force    = .true.,        &
-                         label    = 'group_mean_handle', &
-                         contents = .true.)
-
-call task_sync()
+!#! if (debug) &
+!#!    call print_ens_handle(group_mean_handle,             &
+!#!                          force    = .true.,        &
+!#!                          label    = 'group_mean_handle', &
+!#!                          contents = .true.)
+!#! 
+!#! call task_sync()
 
 call free_mean_window()
 
-! want to create the mean window so it uses the group communicator
-call mpi_type_size(datasize, sizedouble, ierr)
-window_size = (NX/group_size)*sizedouble
+!#! ! want to create the mean window so it uses the group communicator
+!#! call mpi_type_size(datasize, sizedouble, ierr)
+!#! window_size = (NX/group_size)*sizedouble
 
-!>@todo group_mean_handle needs to be contiguous
-call mpi_win_create(group_mean_handle%copies(1,:), window_size, &
-                    sizedouble, MPI_INFO_NULL, group_comm, my_window, ierr)
+!#! !>@todo group_mean_handle needs to be contiguous
+!#! call mpi_win_create(group_mean_handle%copies(1,:), window_size, &
+!#!                     sizedouble, MPI_INFO_NULL, group_comm, my_window, ierr)
 
 
-do ii = 1, max_iter
-   do rank = 0, task_count()-1
-      call random_number(u)
-      jj = FLOOR(NX*u)+1
-      !if (rank == my_task_id()) then
-         t1 = MPI_WTIME()
-         my_val = get_my_val(jj)
-         t2 = t2 + (MPI_WTIME() - t1)
-         if (my_val /= jj) then
-            print*, 'jj /= my_val', jj, my_val
-         endif
-        call task_sync()
-     !else
-     !  call task_sync()
-     !endif
-   enddo
-enddo
+!#! do ii = 1, max_iter
+!#!    do rank = 0, task_count()-1
+!#!       call random_number(u)
+!#!       jj = FLOOR(NX*u)+1
+!#!       !if (rank == my_task_id()) then
+!#!          t1 = MPI_WTIME()
+!#!          my_val = get_my_val(jj)
+!#!          t2 = t2 + (MPI_WTIME() - t1)
+!#!          if (my_val /= jj) then
+!#!             print*, 'jj /= my_val', jj, my_val
+!#!          endif
+!#!         call task_sync()
+!#!      !else
+!#!      !  call task_sync()
+!#!      !endif
+!#!    enddo
+!#! enddo
 
-!----------------------------------------------------------------------
-! timing test
-!----------------------------------------------------------------------
-call MPI_REDUCE(t2, max_time, 1, MPI_REAL8, MPI_MAX, 0, get_dart_mpi_comm(), ierr)
-call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, get_dart_mpi_comm(), ierr)
-if (my_task_id() == 0) then
-   print*, 'get_value     : Max Time = ', max_time
-   print*, 'get_value     : Min Time = ', min_time
-endif
 
 
 !print*, 'actav state_handle%copies(:,:)',state_handle%copies(:,:)

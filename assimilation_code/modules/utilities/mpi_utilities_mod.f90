@@ -71,16 +71,16 @@ private
 ! this directory.  It is a sed script that comments in and out the interface
 ! block below.  Please leave the BLOCK comment lines unchanged.
 
-! !!SYSTEM_BLOCK_EDIT START COMMENTED_OUT
-! ! interface block for getting return code back from system() routine
-! interface
-!  function system(string)
-!   character(len=*) :: string
-!   integer :: system
-!  end function system
-! end interface
-! ! end block
-! !!SYSTEM_BLOCK_EDIT END COMMENTED_OUT
+ !!SYSTEM_BLOCK_EDIT START COMMENTED_IN
+ ! interface block for getting return code back from system() routine
+ interface
+  function system(string)
+   character(len=*) :: string
+   integer :: system
+  end function system
+ end interface
+ ! end block
+ !!SYSTEM_BLOCK_EDIT END COMMENTED_IN
 
 
 ! allow global sum to be computed for integers, r4, and r8s
@@ -2096,7 +2096,7 @@ end subroutine broadcast_flag
 
 subroutine create_groups(my_group_size, my_comm)
 integer, intent(inout) :: my_group_size
-integer, intent(inout), optional :: my_comm
+integer, intent(out)   :: my_comm
 
 integer, allocatable :: group_members(:)
 integer :: i
@@ -2135,11 +2135,7 @@ endif
 
 deallocate(group_members)! this is module global
 
-! JPH, NOT SURE WE NEED THIS, WE CAN PROBABLY GET AWAY WITH USING THE LOCAL COMMUNICATOR
-! 
-if (present(my_comm)) then
-   my_comm = my_group_comm
-endif 
+my_comm = my_group_comm
 
 end subroutine create_groups
 

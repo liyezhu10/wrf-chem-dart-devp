@@ -13,12 +13,12 @@
    debug = .false.
 /
 
-   max_iter   = 10
-   NX         = 8
+   max_iter   = 1000000
+   NX         = 180000000 
 
 &simple_test_nml
    max_iter   = 10
-   NX         = 180000000 
+   NX         = 8
    group_size = 2 
    dtype      = 1
    ltype      = 1

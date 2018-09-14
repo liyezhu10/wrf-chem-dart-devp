@@ -127,7 +127,8 @@ if (use_distributed_mean) then
    ! create groups of MPI processors to store
    ! the ensemble mean
    call create_groups(group_size, group_comm)
-
+   print*, 'FINISHED - create_groups', group_size, group_comm
+   num_vars = state_ens_handle%num_vars
    ! Set up the ensemble storage for mean
    call init_ensemble_manager(group_mean_handle,               &
                               num_copies           = 1,        &
@@ -136,6 +137,8 @@ if (use_distributed_mean) then
                               layout_type          = 1,        & ! 1
                               transpose_type_in    = 1,        & ! 1
                               mpi_comm             = group_comm)  
+
+   print*, 'FINISHED - init_ensemble_manager,  num_vars = ', num_vars
 
    call set_num_extra_copies(group_mean_handle, 0)
 
@@ -155,15 +158,19 @@ if (use_distributed_mean) then
    call my_vars_to_group_copies(mean_ens_handle,  &
                                 group_mean_handle, &
                                 label = 'my_vars_to_group_copies')
-
+   print*, 'FINISHED - my_vars_to_group_copies'
 
    !copies (num_copies, my_num_vars)
    mean_1d(:) = group_mean_handle%copies(1,:)
+   print*, 'FINISHED - assigning mean_1d'
 
    ! find out how many variables I have
    my_num_vars = state_ens_handle%num_vars/group_size
+   print*, 'FINISHED - assigning my_num_vars'
    call mpi_type_size(datasize, bytesize, ierr)
+   print*, 'FINISHED - mpi_type_size'
    window_size = my_num_vars*bytesize
+   print*, 'FINISHED - window_size'
 
    ! Need a simply contiguous piece of memory to pass to mpi_win_create
    ! Expose local memory to RMA operation by other processes in a communicator.
@@ -171,6 +178,7 @@ if (use_distributed_mean) then
    !> and the window_size = num_vars/group_size
    call mpi_win_create(mean_1d, window_size, bytesize, MPI_INFO_NULL, &
                        group_comm, mean_win, ierr)
+   print*, 'FINISHED - mpi_win_create', window_size, group_comm, mean_win
 else
    call init_ensemble_manager(mean_ens_handle, 1, state_ens_handle%num_vars, transpose_type_in = 3)
    call set_num_extra_copies(mean_ens_handle, 0)
@@ -185,7 +193,7 @@ current_win = MEAN_WINDOW
 data_count = copies_in_window(mean_ens_handle) ! One.
 
 if (present(return_handle)) then
-   return_handle = mean_ens_handle
+   return_handle = group_mean_handle
 endif
 
 end subroutine create_mean_window
