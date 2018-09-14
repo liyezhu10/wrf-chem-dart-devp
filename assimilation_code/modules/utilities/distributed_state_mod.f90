@@ -81,9 +81,9 @@ real(r8) :: x(data_count) !> all copies of an element of the state vector
 integer(i8),         intent(in)  :: my_index !> index into state vector
 type(ensemble_type), intent(in)  :: ens_handle
 
-if (current_win == MEAN_WINDOW) then
-   call get_mean(x, my_index, ens_handle)
-else if (current_win == STATE_WINDOW) then
+if (      current_win == MEAN_WINDOW ) then
+   call get_mean(x, my_index, ens_handle )
+else if ( current_win == STATE_WINDOW) then
    call get_fwd(x, my_index, ens_handle)
 else
    call error_handler(E_ERR, 'get_state',' No window currently open')
@@ -133,8 +133,11 @@ real(r8),            intent(out) :: x(1) !> only grabing the mean
 integer(i8),         intent(in)  :: my_index !> index into state vector
 type(ensemble_type), intent(in)  :: state_ens_handle
 
-integer                        :: owner_of_state !> task who owns the state
-integer                        :: element_index !> local index of element
+integer :: owner_of_state !> task who owns the state
+integer :: element_index  !> local index of element
+integer :: my_comm        !> local communicator for state_ens_handle
+
+my_comm= mean_ens_handle%my_communicator
 
 if (get_allow_transpose(mean_ens_handle)) then
    x(1) = mean_ens_handle%vars(my_index, 1)
@@ -144,7 +147,7 @@ else
 
    owner_of_state = map_pe_to_task(state_ens_handle, owner_of_state)        ! task
 
-   if (my_task_id() == owner_of_state) then
+   if (my_task_id(my_comm) == owner_of_state) then
       x(1) = mean_ens_handle%copies(1, element_index)
    else
       call get_from_mean(owner_of_state, mean_win, element_index, x(1))

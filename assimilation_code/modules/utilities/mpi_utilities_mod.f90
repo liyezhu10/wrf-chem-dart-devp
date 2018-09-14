@@ -2034,7 +2034,6 @@ integer(KIND=MPI_ADDRESS_KIND) :: target_disp
 ! Note to programmer: openmpi 1.10.0 does not
 ! allow scalars in mpi calls. openmpi 1.10.1 fixes
 ! this.
-!print*, 'mpi_utilities window ', window
 target_disp = (mindex - 1)
 call mpi_win_lock(MPI_LOCK_SHARED, owner, 0, window, errcode)
 call mpi_get(x, 1, datasize, owner, target_disp, 1, datasize, window, errcode)
@@ -2094,6 +2093,7 @@ end subroutine broadcast_flag
 !> of all of the dart communicator tasks that are in the same
 !> group, and sub_group is a handle to the group that is the
 !> same across all processors.
+
 subroutine create_groups(my_group_size, my_comm)
 integer, intent(inout) :: my_group_size
 integer, intent(inout), optional :: my_comm

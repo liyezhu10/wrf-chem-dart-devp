@@ -66,7 +66,7 @@ integer                   :: iunit, io
 
 ! model state variables
 type(ensemble_type)   :: state_handle
-type(ensemble_type)   :: mean_handle
+type(ensemble_type)   :: temp_mean_handle
 type(ensemble_type)   :: group_mean_handle
 
 ! misc. variables
@@ -106,20 +106,11 @@ call find_namelist_in_file("input.nml", "simple_test_nml", iunit)
 read(iunit, nml = simple_test_nml, iostat = io)
 call check_namelist_read(iunit, io, "simple_test_nml")
 
-!print*, 'SETTING group_size = ', group_size
-if (group_size == -1) group_size = task_count()
 
 !----------------------------------------------------------------------
 ! create groups
 !----------------------------------------------------------------------
-t1 = MPI_WTIME()
-!print*, 'CALLING create_groups'
-!call local_create_groups()
-call create_groups(group_size, group_comm)
-t2 = MPI_WTIME() - t1
-
-call MPI_REDUCE(t2, max_time, 1, MPI_REAL8, MPI_MAX, 0, get_dart_mpi_comm(), ierr)
-call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, get_dart_mpi_comm(), ierr)
+if (group_size == -1) group_size = task_count()
 
 !----------------------------------------------------------------------
 ! create data array on task 0
@@ -127,7 +118,6 @@ call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, get_dart_mpi_comm(), ier
 ! distribution_type_in :: 1 - round robin, 2 - pair round robin, 3 - block
 ! layout_type          :: 1 - standard,    2 - round-robbin,     3 - distribute mean in groups
 ! transpose_type       :: 1 - no vars,     2 - transposable,     3 - transpose and duplicate
-!print*, 'INIT_ENSEMBLE_MANAGER state_handle'
 call init_ensemble_manager(state_handle,              &
                            num_copies           = 1,  &
                            num_vars             = NX, &
@@ -137,7 +127,6 @@ call init_ensemble_manager(state_handle,              &
                            mpi_comm             = get_dart_mpi_comm())  
                            
 ! Set up the ensemble storage for mean
-!print*, 'INIT_ENSEMBLE_MANAGER group_mean_handle'
 call init_ensemble_manager(group_mean_handle,            &
                            num_copies           = 1,     &
                            num_vars             = NX,    &
@@ -169,24 +158,15 @@ if (debug) &
 
 call task_sync()
 
-! mean_handle is optionally returned when creating mean window.
-t1 = MPI_WTIME()
-call create_mean_window(state_handle, mean_copy=1, distribute_mean=.false., return_mean_ens_handle=mean_handle)
-t2 = t2 + (MPI_WTIME() - t1)
-
-call MPI_REDUCE(t2, max_time, 1, MPI_REAL8, MPI_MAX, 0, get_dart_mpi_comm(), ierr)
-call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, get_dart_mpi_comm(), ierr)
-if (my_task_id() == 0) then
-   print*, 'create_mean_window : Max Time = ', max_time
-   print*, 'create_mean_window : Min Time = ', min_time
-endif
+! temp_mean_handle is optionally returned when creating mean window.
+call create_mean_window(state_handle, mean_copy=1, distribute_mean=.false., return_handle=temp_mean_handle)
 
 call task_sync()
 
 if (debug) &
-   call print_ens_handle(mean_handle,             &
+   call print_ens_handle(temp_mean_handle,             &
                          force    = .true.,        &
-                         label    = 'mean_handle', &
+                         label    = 'temp_mean_handle', &
                          contents = .true.)
 
 call task_sync()
@@ -195,19 +175,9 @@ call task_sync()
 ! num_copies_to_receive = 1
 ! num_vars_to_receive = 4
 
-! vars   is from the mean_handle
+! vars   is from the temp_mean_handle
 ! copies is from the group_mean_handle
-!>@todo FIXME : this should be in the create_mean_window routine
-t1 = MPI_WTIME()
-call my_vars_to_group_copies(mean_handle, group_mean_handle, label='my_vars_to_group_copies')
-t2 = t2 + (MPI_WTIME() - t1)
-
-call MPI_REDUCE(t2, max_time, 1, MPI_REAL8, MPI_MAX, 0, get_dart_mpi_comm(), ierr)
-call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, get_dart_mpi_comm(), ierr)
-if (my_task_id() == 0) then
-   print*, 'create_mean_window : Max Time = ', max_time
-   print*, 'create_mean_window : Min Time = ', min_time
-endif
+!call my_vars_to_group_copies(temp_mean_handle, group_mean_handle, label='my_vars_to_group_copies')
 
 call task_sync()
 
@@ -262,15 +232,15 @@ endif
 !print*, 'actav state_handle%copies(:,:)',state_handle%copies(:,:)
 !print*, 'actav state_handle%vars  (:,:)',state_handle%vars(:,:)
 
-!call all_vars_to_all_copies(mean_handle)
+!call all_vars_to_all_copies(temp_mean_handle)
 
 !print*, 'avtac state_handle%copies(:,:)',state_handle%copies(:,:)
 !print*, 'avtac state_handle%vars  (:,:)',state_handle%vars(:,:)
 
 
-! call print_ens_handle(mean_handle,              &
+! call print_ens_handle(temp_mean_handle,              &
 !                       force    = .true.,        &
-!                       label    = 'mean_handle', &
+!                       label    = 'temp_mean_handle', &
 !                       contents = .true.)
 ! print*, my_task_id(), 'AFTER PRINT'
 
@@ -470,10 +440,8 @@ end function get_owner
 !> initialize modules that need it
 subroutine initialize_modules_used()
 
-!print*, 'initialize_mpi_utilities'
+call initialize_utilities()
 call initialize_mpi_utilities('simple_test')
-
-!print*, 'register_module'
 call register_module(source,revision,revdate)
 
 end subroutine initialize_modules_used
@@ -482,6 +450,7 @@ end subroutine initialize_modules_used
 !> clean up before exiting
 subroutine finalize_modules_used()
 
+call finalize_utilities()
 ! this must be last, and you can't print/write anything
 ! after this is called.
 call finalize_mpi_utilities()

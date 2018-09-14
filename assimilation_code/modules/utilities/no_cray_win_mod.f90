@@ -9,13 +9,14 @@ module window_mod
 
 !> \defgroup window window_mod
 !> @{
-use mpi_utilities_mod,    only : datasize, my_task_id, get_dart_mpi_comm, get_group_comm
+use mpi_utilities_mod,    only : datasize, my_task_id, get_dart_mpi_comm, &
+                                 create_groups, get_group_comm
 use types_mod,            only : r8, i8
 use ensemble_manager_mod, only : ensemble_type, map_pe_to_task, get_var_owner_index, &
                                  copies_in_window, init_ensemble_manager, &
                                  get_allow_transpose, end_ensemble_manager, &
                                  set_num_extra_copies, all_copies_to_all_vars, &
-                                 all_vars_to_all_copies
+                                 my_vars_to_group_copies, all_vars_to_all_copies
 
 use mpi
 
@@ -56,6 +57,7 @@ real(r8), allocatable :: contiguous_fwd(:)
 real(r8), allocatable :: mean_1d(:)
 
 type(ensemble_type) :: mean_ens_handle
+type(ensemble_type) :: group_mean_handle
 
 contains
 
@@ -101,16 +103,18 @@ end subroutine create_state_window
 !-------------------------------------------------------------
 !> Using a mean ensemble handle.
 !> 
-subroutine create_mean_window(state_ens_handle, mean_copy, distribute_mean, return_mean_ens_handle)
+recursive subroutine create_mean_window(state_ens_handle, mean_copy, distribute_mean, return_handle)
 
 type(ensemble_type), intent(in)  :: state_ens_handle
 integer,             intent(in)  :: mean_copy
 logical,             intent(in)  :: distribute_mean
-type(ensemble_type), intent(out), optional  :: return_mean_ens_handle
+type(ensemble_type), intent(out), optional  :: return_handle
 
 integer :: ierr
 integer :: bytesize
-integer :: my_num_vars !< number of elements a task owns
+integer :: my_num_vars
+integer :: group_size = 2, group_comm
+integer(i8) :: num_vars
 
 ! create an ensemble handle of just the mean copy.
 use_distributed_mean = distribute_mean
@@ -120,18 +124,44 @@ use_distributed_mean = distribute_mean
 ! 2. group distribution
 ! 3. not   distribution
 if (use_distributed_mean) then
-   ! distributed ensemble
-   call init_ensemble_manager(mean_ens_handle, 1, state_ens_handle%num_vars) 
-   call set_num_extra_copies(mean_ens_handle, 0)
-   !call my_vars_to_group_copies(mean_handle, group_mean_handle, label='my_vars_to_group_copies')
+   ! create groups of MPI processors to store
+   ! the ensemble mean
+   call create_groups(group_size, group_comm)
+
+   ! Set up the ensemble storage for mean
+   call init_ensemble_manager(group_mean_handle,               &
+                              num_copies           = 1,        &
+                              num_vars             = num_vars, &
+                              distribution_type_in = 1,        & ! 1
+                              layout_type          = 1,        & ! 1
+                              transpose_type_in    = 1,        & ! 1
+                              mpi_comm             = group_comm)  
+
+   call set_num_extra_copies(group_mean_handle, 0)
+
+   ! temp_mean_handle is optionally returned when creating mean window.
+   ! NOTE : this step should not be necessary if we are only sending
+   ! the bits of information that we need
+   call create_mean_window(state_ens_handle,          &
+                           mean_copy       = 1,       &
+                           distribute_mean = .false., &
+                           return_handle   = mean_ens_handle)
+
    mean_ens_handle%copies(1,:) = state_ens_handle%copies(mean_copy, :)
-   allocate(mean_1d(state_ens_handle%my_num_vars))
+   allocate(mean_1d(state_ens_handle%num_vars/group_size))
+
+   !>@todo FIXME : this is expecting temp_mean_handle to have a full
+   !> copy of the mean on each processor
+   call my_vars_to_group_copies(mean_ens_handle,  &
+                                group_mean_handle, &
+                                label = 'my_vars_to_group_copies')
+
 
    !copies (num_copies, my_num_vars)
-   mean_1d(:) = mean_ens_handle%copies(1,:)
+   mean_1d(:) = group_mean_handle%copies(1,:)
 
    ! find out how many variables I have
-   my_num_vars = mean_ens_handle%my_num_vars
+   my_num_vars = state_ens_handle%num_vars/group_size
    call mpi_type_size(datasize, bytesize, ierr)
    window_size = my_num_vars*bytesize
 
@@ -139,13 +169,14 @@ if (use_distributed_mean) then
    ! Expose local memory to RMA operation by other processes in a communicator.
    !>@todo FIXME : here we want the communicator to be from the group.
    !> and the window_size = num_vars/group_size
-   call mpi_win_create(mean_1d, window_size, bytesize, MPI_INFO_NULL, mean_ens_handle%my_communicator, mean_win, ierr)
+   call mpi_win_create(mean_1d, window_size, bytesize, MPI_INFO_NULL, &
+                       group_comm, mean_win, ierr)
 else
    call init_ensemble_manager(mean_ens_handle, 1, state_ens_handle%num_vars, transpose_type_in = 3)
    call set_num_extra_copies(mean_ens_handle, 0)
    mean_ens_handle%copies(1,:) = state_ens_handle%copies(mean_copy, :)
-   call all_copies_to_all_vars(mean_ens_handle) ! this is a transpose-duplicate
-   print*, 'called all_copies_to_all_vars'
+   ! this is a transpose-duplicate
+   call all_copies_to_all_vars(mean_ens_handle) 
 endif
    
 ! grabbing mean directly, no windows are being used
@@ -153,8 +184,8 @@ current_win = MEAN_WINDOW
 
 data_count = copies_in_window(mean_ens_handle) ! One.
 
-if (present(return_mean_ens_handle)) then
-   return_mean_ens_handle = mean_ens_handle
+if (present(return_handle)) then
+   return_handle = mean_ens_handle
 endif
 
 end subroutine create_mean_window
