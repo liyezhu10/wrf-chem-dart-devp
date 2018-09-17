@@ -2124,7 +2124,7 @@ call MPI_Barrier(my_local_comm, errcode)
    do i = 0, (task_count()-1)
       call MPI_Barrier(my_local_comm, errcode)
       if(my_task_id() == i) then
-         write(*,'(''WORLD RANK/SIZE:'',I2,''/'',I2,'' GROUP RANK/SIZE:'',I2,''/'',I2,'' SUB GROUP '',I10)') &
+         write(*,'(''WORLD RANK/SIZE:'',I4,''/'',I4,'' GROUP RANK/SIZE:'',I4,''/'',I4,'' SUB GROUP '',I10)') &
             my_task_id(), task_count(), group_rank, group_size, sub_group
             !my_task_id(my_local_comm), task_count(my_local_comm), &
             !my_task_id(my_group_comm), task_count(my_group_comm), &

@@ -23,7 +23,7 @@ use ensemble_manager_mod, only : ensemble_type, map_pe_to_task, get_var_owner_in
 use window_mod,           only : create_mean_window, create_state_window, free_mean_window, &
                                  free_state_window, mean_ens_handle, data_count, &
                                  NO_WINDOW, MEAN_WINDOW, STATE_WINDOW, &
-                                 mean_win, state_win, current_win
+                                 mean_win, state_win, current_win, group_mean_handle
 use utilities_mod,        only : error_handler, E_ERR
 
 implicit none
@@ -135,21 +135,25 @@ type(ensemble_type), intent(in)  :: state_ens_handle
 
 integer :: owner_of_state !> task who owns the state
 integer :: element_index  !> local index of element
-integer :: my_comm        !> local communicator for state_ens_handle
+integer :: my_comm        !> local communicator for group_mean_handle
 
-my_comm= mean_ens_handle%my_communicator
+my_comm= group_mean_handle%my_communicator
 
-if (get_allow_transpose(mean_ens_handle)) then
+if (get_allow_transpose(group_mean_handle)) then
+   print*, 'allow transpose'
    x(1) = mean_ens_handle%vars(my_index, 1)
 else
 
-   call get_var_owner_index(state_ens_handle, my_index, owner_of_state, element_index) ! pe
+   call get_var_owner_index(group_mean_handle, my_index, owner_of_state, element_index) ! pe
 
-   owner_of_state = map_pe_to_task(state_ens_handle, owner_of_state)        ! task
+   owner_of_state = map_pe_to_task(group_mean_handle, owner_of_state)        ! task
 
    if (my_task_id(my_comm) == owner_of_state) then
-      x(1) = mean_ens_handle%copies(1, element_index)
+      x(1) = group_mean_handle%copies(1, element_index)
    else
+      print*, 'rank =', my_task_id(), &
+              ' owner = ', owner_of_state, &
+              ' index = ', element_index
       call get_from_mean(owner_of_state, mean_win, element_index, x(1))
    endif
 

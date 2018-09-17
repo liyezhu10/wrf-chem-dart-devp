@@ -400,6 +400,8 @@ real(digits12), allocatable :: elapse_array(:)
 
 integer, allocatable :: n_close_state_items(:), n_close_obs_items(:)
 
+integer :: group_size = 1
+
 ! timing disabled by default
 timing(:)  = .false.
 t_base(:)  = 0.0_r8
@@ -458,7 +460,7 @@ if (.not. module_initialized) call assim_tools_init()
 !HK make window for mpi one-sided communication
 ! used for vertical conversion in get_close_obs
 ! Need to give create_mean_window the mean copy
-call create_mean_window(ens_handle, ENS_MEAN_COPY, distribute_mean)
+call create_mean_window(ens_handle, ENS_MEAN_COPY, distribute_mean, group_size)
 
 ! filter kinds 1 and 8 return sorted increments, however non-deterministic
 ! inflation can scramble these. the sort is expensive, so help users get better 

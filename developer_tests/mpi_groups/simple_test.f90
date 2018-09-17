@@ -62,12 +62,12 @@ integer                       :: ttype = 1
 namelist /simple_test_nml/ NX, group_size, max_iter, dtype, ltype, ttype, debug
 
 ! io variables
-integer                   :: iunit, io
+integer :: iunit, io
 
 ! model state variables
-type(ensemble_type)   :: state_handle
-type(ensemble_type)   :: temp_mean_handle
-type(ensemble_type)   :: group_mean_handle
+type(ensemble_type) :: state_handle
+type(ensemble_type) :: temp_mean_handle
+type(ensemble_type) :: group_mean_handle
 
 ! misc. variables
 integer  :: i, j
@@ -112,6 +112,8 @@ call check_namelist_read(iunit, io, "simple_test_nml")
 !----------------------------------------------------------------------
 if (group_size == -1) group_size = task_count()
 
+if (my_task_id() == 0) print*, 'group_size = ', group_size
+
 !----------------------------------------------------------------------
 ! create data array on task 0
 !----------------------------------------------------------------------
@@ -126,16 +128,6 @@ call init_ensemble_manager(state_handle,              &
                            transpose_type_in    = 2,  & 
                            mpi_comm             = get_dart_mpi_comm())  
                            
-!#! ! Set up the ensemble storage for mean
-!#! call init_ensemble_manager(group_mean_handle,            &
-!#!                            num_copies           = 1,     &
-!#!                            num_vars             = NX,    &
-!#!                            distribution_type_in = dtype, & ! 1
-!#!                            layout_type          = ltype, & ! 1
-!#!                            transpose_type_in    = ttype, & ! 1
-!#!                            mpi_comm             = group_comm)  
-
-
 ! first task has the state_handle vars then sends copies to 
 ! other tasks doing a transpose (i.e all_vars_to_all_copies)
 if (my_task_id() == 0) then
@@ -147,7 +139,19 @@ if (my_task_id() == 0) then
 endif
 
 ! let all tasks have a subset of the mean copy
-call all_vars_to_all_copies(state_handle, label='all_vars_to_all_copies')
+t1 = MPI_WTIME()
+call all_vars_to_all_copies(state_handle)
+t2 = MPI_WTIME() - t1
+
+call MPI_REDUCE(t2, max_time, 1, MPI_REAL8, MPI_MAX, 0, get_dart_mpi_comm(), ierr)
+call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, get_dart_mpi_comm(), ierr)
+if (my_task_id() == 0) then
+   print*, ''
+   print*, 'all_vars_to_all_copies : Max Time = ', max_time
+   print*, 'all_vars_to_all_copies : Min Time = ', min_time
+   print*, ''
+endif
+
 call task_sync()
 
 if (debug) &
@@ -159,8 +163,24 @@ if (debug) &
 call task_sync()
 
 ! temp_mean_handle is optionally returned when creating mean window.
-call create_mean_window(state_handle, mean_copy=1, distribute_mean=.true., return_handle=group_mean_handle)
-print*, 'FINISHED - create_mean_window' 
+t1 = MPI_WTIME()
+call create_mean_window(state_handle, &
+                        mean_copy=1, &
+                        distribute_mean=.true., &
+                        group_size=group_size, &
+                        return_handle=group_mean_handle)
+t2 = MPI_WTIME() - t1
+
+call MPI_REDUCE(t2, max_time, 1, MPI_REAL8, MPI_MAX, 0, get_dart_mpi_comm(), ierr)
+call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, get_dart_mpi_comm(), ierr)
+if (my_task_id() == 0) then
+   print*, ''
+   print*, 'create_mean_window : Max Time = ', max_time
+   print*, 'create_mean_window : Min Time = ', min_time
+   print*, ''
+endif
+
+!print*, 'FINISHED - create_mean_window' 
 
 call task_sync()
 
@@ -170,33 +190,38 @@ if (debug) &
                          label    = 'temp_mean_handle', &
                          contents = .true.)
 
-print*, 'FINISHED - print group_mean_handle' 
+!print*, 'FINISHED - print group_mean_handle' 
 
 !----------------------------------------------------------------------
 ! timing test
 !----------------------------------------------------------------------
-do ii = 1, NX
-   do rank = 0, task_count()-1
-      !call random_number(u)
-      jj = ii !FLOOR(NX*u)+1
+t2 = 0
+do ii = 1, max_iter
+   !do rank = 0, task_count()-1
+      call random_number(u)
+      jj = FLOOR(NX*u)+1
       !if (rank == my_task_id()) then
          t1 = MPI_WTIME()
          my_val = get_state(jj, group_mean_handle)!get_my_val(jj)
          t2 = t2 + (MPI_WTIME() - t1)
+         !if (my_task_id() == 0) print*, t2
          if (my_val(1) /= jj) then
             print*, 'jj /= my_val', jj, my_val(1)
          endif
-        call task_sync()
+        !call task_sync()
      !else
      !  call task_sync()
      !endif
-   enddo
+   !enddo
 enddo
+
 call MPI_REDUCE(t2, max_time, 1, MPI_REAL8, MPI_MAX, 0, get_dart_mpi_comm(), ierr)
 call MPI_REDUCE(t2, min_time, 1, MPI_REAL8, MPI_MIN, 0, get_dart_mpi_comm(), ierr)
 if (my_task_id() == 0) then
+   print*, ''
    print*, 'get_value     : Max Time = ', max_time
    print*, 'get_value     : Min Time = ', min_time
+   print*, ''
 endif
 
 !#! call task_sync()
@@ -461,7 +486,7 @@ end function get_owner
 !> initialize modules that need it
 subroutine initialize_modules_used()
 
-call initialize_utilities()
+!call initialize_utilities()
 call initialize_mpi_utilities('simple_test')
 call register_module(source,revision,revdate)
 

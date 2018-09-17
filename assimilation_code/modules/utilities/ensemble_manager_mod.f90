@@ -798,7 +798,6 @@ if(ens_handle%transpose_type == 2) then
 endif
 
 if(ens_handle%transpose_type == 3) then
-   print*, my_task_id(), 'allocating space for vars on every task'
    allocate(ens_handle%vars(ens_handle%num_vars,1))
 endif
 
