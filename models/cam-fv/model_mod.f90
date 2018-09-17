@@ -1877,7 +1877,7 @@ call nc_add_attribute_to_variable(ncid, 'lat', 'long_name', 'latitude',      rou
 call nc_add_attribute_to_variable(ncid, 'lat', 'units',     'degrees_north', routine)
 
 
-call nc_define_real_variable(     ncid, 'slat', (/ 'slon' /),                      routine)
+call nc_define_real_variable(     ncid, 'slat', (/ 'slat' /),                      routine)
 call nc_add_attribute_to_variable(ncid, 'slat', 'long_name', 'staggered latitude', routine)
 call nc_add_attribute_to_variable(ncid, 'slat', 'units',     'degrees_north',      routine)
 
@@ -2490,6 +2490,9 @@ type(cam_grid), intent(in) :: grid
 !>@todo FIXME the cam fv grid is really evenly spaced in lat and lon,
 !>even though they provide full lon() and lat() arrays.  providing the deltas
 !>between each pair would be slightly faster inside the interp code.
+
+!print *, 'setting up interpolation: lon/lat sizes = ', grid%lon%nsize, grid%lat%nsize,  &
+!                                                       grid%slon%nsize, grid%slat%nsize
 
 ! mass points at cell centers
 call init_quad_interp(GRID_QUAD_IRREG_SPACED_REGULAR, grid%lon%nsize, grid%lat%nsize, &
