@@ -1573,6 +1573,10 @@ do i = 2, nlons
    if(dist_bot <= 0 .and. dist_top > 0) then
       bot = i - 1
       top = i
+      if ((abs(dist_bot) + dist_top) == 0) then
+         istatus = 2
+         return
+      endif
       fract = abs(dist_bot) / (abs(dist_bot) + dist_top)
       if (debug > 3) print *, 'lon: returning bot, top, fract', bot, top, fract
       return
@@ -1586,6 +1590,10 @@ if (cyclic) then
    top = 1
    dist_bot = lon_dist(lon, lon_array(bot))
    dist_top = lon_dist(lon, lon_array(top))
+   if ((abs(dist_bot) + dist_top) == 0) then
+      istatus = 2
+      return
+   endif
    fract = abs(dist_bot) / (abs(dist_bot) + dist_top)
 else
    string1 = 'end reached. internal error, should not happen'
