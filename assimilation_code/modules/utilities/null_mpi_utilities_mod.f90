@@ -19,6 +19,19 @@ use time_manager_mod, only : time_type, set_time
 
 ! !!NAG_BLOCK_EDIT START COMMENTED_OUT
 ! use F90_unix_proc, only : sleep, system, exit
+ !! block for NAG compiler
+ !  PURE SUBROUTINE SLEEP(SECONDS,SECLEFT)
+ !    INTEGER,INTENT(IN) :: SECONDS
+ !    INTEGER,OPTIONAL,INTENT(OUT) :: SECLEFT
+ !
+ !  SUBROUTINE SYSTEM(STRING,STATUS,ERRNO)
+ !    CHARACTER*(*),INTENT(IN) :: STRING
+ !    INTEGER,OPTIONAL,INTENT(OUT) :: STATUS,ERRNO
+ !
+ !!also used in exit_all outside this module
+ !  SUBROUTINE EXIT(STATUS)
+ !    INTEGER,OPTIONAL :: STATUS
+ !! end block
 ! !!NAG_BLOCK_EDIT END COMMENTED_OUT
 
 
@@ -36,12 +49,12 @@ private
 ! !!SYSTEM_BLOCK_EDIT START COMMENTED_OUT
 ! ! interface block for getting return code back from system() routine
 ! interface
-!  function system(string)    
+!  function system(string)
 !   character(len=*) :: string
-!   integer :: system         
+!   integer :: system
 !  end function system
 ! end interface
-! ! end block                 
+! ! end block
 ! !!SYSTEM_BLOCK_EDIT END COMMENTED_OUT
 
 
@@ -63,7 +76,7 @@ public :: initialize_mpi_utilities, finalize_mpi_utilities,                  &
           broadcast_send, broadcast_recv, shell_execute, sleep_seconds,      &
           sum_across_tasks, send_minmax_to, datasize,                        &
           get_from_fwd, get_from_mean, broadcast_minmax, broadcast_flag,     &
-          start_mpi_timer, read_mpi_timer, &
+          start_mpi_timer, read_mpi_timer, send_sum_to,                      &
           all_reduce_min_max   ! deprecated, replace with broadcast_minmax
 
 ! version controlled file description for error handling, do not edit
@@ -542,6 +555,23 @@ get_dart_mpi_comm = 0
 
 end function get_dart_mpi_comm
 
+!-----------------------------------------------------------------------------
+!-----------------------------------------------------------------------------
+! Collect sum across tasks for a given array.
+subroutine send_sum_to(local_val, task, global_val)
+
+real(r8), intent(in)  :: local_val(:) !> min max on each task
+integer,  intent(in)  :: task !> task to collect on
+real(r8), intent(out) :: global_val(:) !> only concerned with this on task collecting result
+
+integer :: errcode
+
+! collect values on a single given task 
+global_val(:) = local_val(:) ! only one task.
+
+end subroutine send_sum_to
+
+!-----------------------------------------------------------------------------
 
 !-----------------------------------------------------------------------------
 ! Collect min and max on task. This is for adaptive_inflate_mod

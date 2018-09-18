@@ -42,6 +42,19 @@ use mpi
 
 ! !!NAG_BLOCK_EDIT START COMMENTED_OUT
 ! use F90_unix_proc, only : sleep, system, exit
+ !! block for NAG compiler
+ !  PURE SUBROUTINE SLEEP(SECONDS,SECLEFT)
+ !    INTEGER,INTENT(IN) :: SECONDS
+ !    INTEGER,OPTIONAL,INTENT(OUT) :: SECLEFT
+ !
+ !  SUBROUTINE SYSTEM(STRING,STATUS,ERRNO)
+ !    CHARACTER*(*),INTENT(IN) :: STRING
+ !    INTEGER,OPTIONAL,INTENT(OUT) :: STATUS,ERRNO
+ !
+ !!also used in exit_all outside this module
+ !  SUBROUTINE EXIT(STATUS)
+ !    INTEGER,OPTIONAL :: STATUS
+ !! end block
 ! !!NAG_BLOCK_EDIT END COMMENTED_OUT
 
 implicit none
@@ -92,7 +105,7 @@ public :: initialize_mpi_utilities, finalize_mpi_utilities,                  &
           broadcast_send, broadcast_recv, shell_execute, sleep_seconds,      &
           sum_across_tasks, get_dart_mpi_comm, datasize, send_minmax_to,     &
           get_from_fwd, get_from_mean, broadcast_minmax, broadcast_flag,     &
-          start_mpi_timer, read_mpi_timer, &
+          start_mpi_timer, read_mpi_timer, send_sum_to,                      &
           all_reduce_min_max  ! deprecated, replace by broadcast_minmax
 
 ! version controlled file description for error handling, do not edit
@@ -108,7 +121,7 @@ character(len = 129) :: shell_name = ''   ! if needed, add ksh, tcsh, bash, etc
 integer :: head_task = 0         ! def 0, but N-1 if reverse_task_layout true
 logical :: print4status = .true. ! minimal messages for async4 handshake
 
-character(len = 256) :: errstring
+character(len = 256) :: errstring, errstring1
 
 ! for broadcasts, pack small messages into larger ones.  remember that the
 ! byte size will be this count * 8 because we only communicate r8s.  (unless
@@ -1750,6 +1763,27 @@ function get_dart_mpi_comm()
  get_dart_mpi_comm = my_local_comm
 
 end function get_dart_mpi_comm
+
+!-----------------------------------------------------------------------------
+!-----------------------------------------------------------------------------
+! Collect sum across tasks for a given array.
+subroutine send_sum_to(local_val, task, global_val)
+
+real(r8), intent(in)  :: local_val(:) !> min max on each task
+integer,  intent(in)  :: task !> task to collect on
+real(r8), intent(out) :: global_val(:) !> only concerned with this on task collecting result
+
+integer :: errcode
+
+if ( .not. module_initialized ) then
+   write(errstring, *) 'initialize_mpi_utilities() must be called first'
+   call error_handler(E_ERR,'send_sum_to', errstring, source, revision, revdate)
+endif
+
+! collect values on a single given task 
+call mpi_reduce(local_val(:), global_val(:), size(global_val), datasize, MPI_SUM, task, get_dart_mpi_comm(), errcode)
+
+end subroutine send_sum_to
 
 !-----------------------------------------------------------------------------
 !-----------------------------------------------------------------------------
