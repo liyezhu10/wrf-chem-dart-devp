@@ -751,10 +751,12 @@ allocate(ens_handle%my_copies(ens_handle%my_num_copies),              &
 
 if(ens_handle%transpose_type == 2) then
    allocate(ens_handle%vars(ens_handle%num_vars, ens_handle%my_num_copies))
+   ens_handle%vars = MISSING_R8
 endif
 
 if(ens_handle%transpose_type == 3) then
    allocate(ens_handle%vars(ens_handle%num_vars,1))
+   ens_handle%vars = MISSING_R8
 endif
 
 ! Set everything to missing value
