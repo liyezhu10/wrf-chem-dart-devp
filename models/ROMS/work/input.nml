@@ -195,16 +195,22 @@
 #    only variables marked 'UPDATE' will be modified for ROMS.
 
 &model_nml
-   roms_filename               = 'roms_input.nc'
+   roms_filename               = '/glade/scratch/romaines/dart/tmpdir_NWA-RE.REANA44/Outputs/Prior/m001/NWA-RE.REANA44_rst_20110611.nc'
+   roms_grid_file              = '/glade/p/work/romaines/Data/NWA_grd_newwtypechl.nc'
    assimilation_period_days    = 8
    assimilation_period_seconds = 0
    vert_localization_coord     = 3
+   vert_transform              = 2
    debug                       = 1
    variables = 'temp',   'QTY_TEMPERATURE',          'NA', 'NA', 'update',
                'salt',   'QTY_SALINITY',            '0.0', 'NA', 'update',
                'u',      'QTY_U_CURRENT_COMPONENT',  'NA', 'NA', 'update',
                'v',      'QTY_V_CURRENT_COMPONENT',  'NA', 'NA', 'update',
                'zeta',   'QTY_SEA_SURFACE_HEIGHT'    'NA', 'NA', 'update',
+  /
+
+&quad_interpolate_nml
+   debug = 100
   /
 
 
@@ -335,17 +341,17 @@
 &model_mod_check_nml
    x_ind                 = 87370
    num_ens               = 1
-   loc_of_interest       = 231.0, 40.0, 10.0
-   kind_of_interest      = 'QTY_SEA_SURFACE_HEIGHT'
+   loc_of_interest       = 275.48575456693635, 25.773736052471712, 76.6467
+   kind_of_interest      = 'QTY_TEMPERATURE'
    interp_test_dlon      = 0.1
    interp_test_dlat      = 0.1
-   interp_test_dvert     = 5.0
-   interp_test_lonrange  = 205.0,  226.0
-   interp_test_latrange  =  30.0,   47.0
-   interp_test_vertrange =  0.0,    10.0
+   interp_test_dvert     = 10.0
+   interp_test_lonrange  = 280.0,  290.0
+   interp_test_latrange  = 30.0,   40.0
+   interp_test_vertrange = 0.0,    50.0
    interp_test_vertcoord = 'VERTISHEIGHT'
-   test1thru             = 4
-   input_state_files     = 'Data/wc13_ini.nc'
+   test1thru             = 5
+   input_state_files     = '/glade/scratch/romaines/test/NWA-RE.REANA44_rst_20110611_nozeta.nc'
    output_state_files    = 'roms_output.nc'
    verbose               = .true.
   /

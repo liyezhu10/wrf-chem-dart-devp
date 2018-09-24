@@ -923,7 +923,7 @@ end function get_num_dims
 
 
 !-------------------------------------------------------------------------------
-!> Return and array containing the dimension lengths, excluding the UNLIMITED dim
+!> Return an array containing the dimension lengths, excluding the UNLIMITED dim
 
 
 function get_dim_lengths(dom_id, ivar)

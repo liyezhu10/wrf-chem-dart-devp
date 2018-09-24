@@ -132,7 +132,7 @@ else
    \rm -f *.o *.mod 
 endif
 
-\rm -f input.nml*_default
+#\rm -f input.nml*_default
 
 echo "Success: All single task DART programs compiled."  
 
@@ -173,7 +173,7 @@ if ( $cdebug ) then
 else
    \rm -f *.o *.mod 
 endif
-\rm -f input.nml*_default
+#\rm -f input.nml*_default
 
 echo "Success: All MPI parallel DART programs compiled."  
 
