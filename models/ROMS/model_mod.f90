@@ -50,8 +50,8 @@ use     location_mod, only : location_type, set_location, get_location,         
                              VERTISHEIGHT, VERTISSURFACE, is_vertical
 
 use    utilities_mod, only : register_module, error_handler, do_nml_term,       &
-                             E_ERR, E_WARN, E_MSG, logfileunit, get_unit,       &
-                             do_output, to_upper, do_nml_file,                  &
+                             E_ERR, E_WARN, E_MSG, logfileunit, nmlfileunit,    &
+                             get_unit, do_output, to_upper, do_nml_file,        &
                              find_namelist_in_file, check_namelist_read,        &
                              open_file, file_exist, find_textfile_dims,         &
                              file_to_text, do_output, close_file,               &
@@ -71,8 +71,7 @@ use     mpi_utilities_mod, only : my_task_id
 
 use        random_seq_mod, only : random_seq_type, init_random_seq, random_gaussian
 
-use  ensemble_manager_mod, only : ensemble_type, map_pe_to_task, get_copy_owner_index, &
-                                  get_var_owner_index
+use  ensemble_manager_mod, only : ensemble_type
 
 use distributed_state_mod, only : get_state
 
@@ -86,8 +85,9 @@ use   state_structure_mod, only : add_domain, get_model_variable_indices, &
                                   get_long_name, get_xtype, get_has_missing_value, &
                                   get_dim_lengths
 
-use netcdf_utilities_mod, only : nc_add_global_attribute, nc_sync, nc_check, &
-                                 nc_add_global_creation_time, nc_redef, nc_enddef
+use netcdf_utilities_mod, only : nc_add_global_attribute, nc_synchronize_file, nc_check, &
+                                 nc_add_global_creation_time, nc_begin_define_mode, &
+                                 nc_end_define_mode
 
 use location_io_mod,      only : nc_write_location_atts, nc_get_location_varids, &
                                  nc_write_location
@@ -148,6 +148,7 @@ logical, save :: module_initialized = .false.
 type(quad_interp_handle) :: ugrid_handle, vgrid_handle, tgrid_handle
 
 ! things which can/should be in the model_nml
+!>@todo FIXME ... replace remaining references to VERTISHEIGHT with vert_localization_coord
 logical  :: output_state_vector          = .false.
 integer  :: assimilation_period_days     = 1
 integer  :: assimilation_period_seconds  = 0
@@ -332,14 +333,14 @@ end subroutine get_state_meta_data
 !> @param istatus interpolation status ... 0 == success, /=0 is a failure
 !>
 
-subroutine model_interpolate(state_handle, ens_size, location, obs_type, interp_val, istatus)
+subroutine model_interpolate(state_handle, ens_size, location, obs_type, expected_obs, istatus)
 
-type(ensemble_type), intent(in) :: state_handle
-integer,             intent(in) :: ens_size
-type(location_type), intent(in) :: location
-integer,             intent(in) :: obs_type
-integer,            intent(out) :: istatus(ens_size)
-real(r8),           intent(out) :: interp_val(ens_size) !< array of interpolated values
+type(ensemble_type), intent(in)  :: state_handle
+integer,             intent(in)  :: ens_size
+type(location_type), intent(in)  :: location
+integer,             intent(in)  :: obs_type
+real(r8),            intent(out) :: expected_obs(:)
+integer,             intent(out) :: istatus(:)
 
 ! Local storage
 integer       :: icorn, imem, ilev, N_lev_un
@@ -360,7 +361,7 @@ real(r8)      :: depths_tmp(Ns_rho)
 if ( .not. module_initialized ) call static_init_model
 
 ! Successful istatus is 0
-interp_val = MISSING_R8
+expected_obs = MISSING_R8
 istatus = 99
 
 var_id = get_varid_from_kind(domain_id, obs_type)
@@ -1085,7 +1086,7 @@ read(iunit, nml = model_nml, iostat = io)
 call check_namelist_read(iunit, io, 'model_nml')
 
 ! Record the namelist values used for the run
-if (do_nml_file()) write(logfileunit, nml=model_nml)
+if (do_nml_file()) write(nmlfileunit, nml=model_nml)
 if (do_nml_term()) write(     *     , nml=model_nml)
 
 model_timestep = set_model_time_step()
@@ -1210,7 +1211,7 @@ write(filename,*) 'ncid', ncid
 
 ! Write Global Attributes
 
-call nc_redef(ncid)
+call nc_begin_define_mode(ncid)
 
 call nc_add_global_creation_time(ncid)
 
@@ -1332,7 +1333,7 @@ call nc_check(nf90_put_att(ncid,  VarID, 'units', 'm'), &
 
 ! Finished with dimension/variable definitions, must end 'define' mode to fill.
 
-call nc_enddef(ncid)
+call nc_end_define_mode(ncid)
 
 ! Fill the coordinate variable values
 ! the RHO grid
@@ -1372,7 +1373,7 @@ call nc_check(nf90_put_var(ncid, VarID, VLAT ), &
              'nc_write_model_atts', 'lat_v put_var '//trim(filename))
 
 ! Flush the buffer and leave netCDF file open
-call nc_sync(ncid)
+call nc_synchronize_file(ncid)
 
 
 end subroutine nc_write_model_atts
@@ -1744,7 +1745,7 @@ MyLoop : do i = 1, MAX_STATE_VARIABLES
    ! Make sure DART kind is valid
 
    if( get_index_for_quantity(dartstr) < 0 ) then
-      write(string1,'(''there is no obs_kind <'',a,''> in obs_kind_mod.f90'')') trim(dartstr)
+      write(string1,'(''there is no quantity <'',a,''> in obs_kind_mod.f90'')') trim(dartstr)
       call error_handler(E_ERR,'parse_variable_input:',string1,source,revision,revdate)
    endif
 
@@ -1831,14 +1832,20 @@ if (present(myvarid)) myvarid = VarID
 ! assume gregorian calendar unless there's a calendar attribute saying elsewise
 rc = nf90_get_att(ncid, VarID, 'calendar', calendarstring)
 if (rc /= nf90_noerr) calendarstring = 'gregorian'
-if (present(calendar)) calendar = trim(calendarstring)
 
-if (trim(calendarstring) /= 'gregorian') then
+if (index(calendarstring,'gregorian') == 0) then
    write(string1,*)'expecting '//trim(var_name)//' calendar of "gregorian"'
    write(string2,*)'got '//trim(calendarstring)
+   write(string3,*)'from file "'//trim(filename)//'"'
    call error_handler(E_MSG,'get_time_information:', string1, &
              source, revision, revdate, text2=string2, text3=string3)
+else
+   ! coerce all forms of gregorian to the one DART supports
+   ! 'gregorian_proleptic' needs to be changed, for example.
+   calendarstring = 'gregorian'
 endif
+
+if (present(calendar)) calendar = trim(calendarstring)
 
 if (present(last_time) .or. present(origin_time) .or. present(all_times)) then
 
@@ -1847,6 +1854,7 @@ if (present(last_time) .or. present(origin_time) .or. present(all_times)) then
 
    ! We need to set the calendar to interpret the time values
    ! do we need to preserve the original calendar setting if there is one?
+
    call set_calendar_type( trim(calendarstring) )
 
    ! Make sure the calendar is expected form
