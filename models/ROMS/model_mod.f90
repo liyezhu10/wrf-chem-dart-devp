@@ -320,7 +320,7 @@ end subroutine get_state_meta_data
 !> (i.e. S, T, U, V, Eta) to the given location given a state vector.
 !> The type of the variable being interpolated is obs_type since
 !> normally this is used to find the expected value of an observation
-!> at some location. The interpolated value is returned in interp_vals
+!> at some location. The interpolated value is returned in expected_obs
 !> and istatus is 0 for success. NOTE: This is a workhorse routine and is
 !> the basis for all the forward observation operator code.
 !>
@@ -328,7 +328,7 @@ end subroutine get_state_meta_data
 !> @param ens_size DART ensemble size
 !> @param location the location of interest
 !> @param obs_type the DART KIND of interest
-!> @param interp_val the estimated value of the DART state at the location
+!> @param expected_obs the estimated value of the DART state at the location
 !>          of interest (the interpolated value).
 !> @param istatus interpolation status ... 0 == success, /=0 is a failure
 !>
@@ -381,8 +381,8 @@ if (debug > 1) print *, 'requesting interpolation of ', obs_type, ' at ', llon, 
 if(obs_type == QTY_TEMPERATURE) then
    ! we know how to interpolate this from potential temp,
    ! salinity, and pressure based on depth.
-   call compute_temperature(state_handle, ens_size, llon, llat, lheight, interp_val, istatus)
-   if (debug > 1) print *, 'interp val, istatus = ', interp_val, istatus
+   call compute_temperature(state_handle, ens_size, llon, llat, lheight, expected_obs, istatus)
+   if (debug > 1) print *, 'expected_obs, istatus = ', expected_obs, istatus
    return
 endif
 
@@ -452,13 +452,13 @@ endif
 ! Do the horizontal interpolation
 if(obs_type == QTY_U_CURRENT_COMPONENT) then
    call quad_lon_lat_evaluate(ugrid_handle, llon, llat, lon_corner, lat_corner,&
-                              ens_size, val_corners, interp_val, lstatus)
+                              ens_size, val_corners, expected_obs, lstatus)
 elseif(obs_type == QTY_V_CURRENT_COMPONENT) then
    call quad_lon_lat_evaluate(vgrid_handle, llon, llat, lon_corner, lat_corner,&
-                              ens_size, val_corners, interp_val, lstatus)
+                              ens_size, val_corners, expected_obs, lstatus)
 else
    call quad_lon_lat_evaluate(tgrid_handle, llon, llat, lon_corner, lat_corner,&
-                              ens_size, val_corners, interp_val, lstatus)
+                              ens_size, val_corners, expected_obs, lstatus)
 endif
 
 istatus = lstatus
