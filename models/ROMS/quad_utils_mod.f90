@@ -75,7 +75,6 @@ character(len=*), parameter :: revdate  = "$Date$"
 ! message strings
 character(len=512) :: string1, string2, string3
 
-character(len=*), parameter :: routine = "quad_utils_mod"
 logical, save :: module_initialized = .false.
 
 integer  :: debug = 0   ! turn up for more and more debug messages
@@ -351,7 +350,7 @@ select case (grid_type)
       interp_handle%ir%lons_1D(num_lons) = MISSING_R8
 
    case(GRID_QUAD_FULLY_IRREGULAR)
-      allocate(interp_handle%ii%lats_2D(num_lons,num_lats), &
+      allocate(interp_handle%ii%lats_2D(num_lons, num_lats), &
                interp_handle%ii%lons_2D(num_lons, num_lats))
       interp_handle%ii%lats_2D(num_lons, num_lats) = MISSING_R8
       interp_handle%ii%lons_2D(num_lons, num_lats) = MISSING_R8
@@ -365,7 +364,7 @@ select case (grid_type)
       if (num_lats * num_lons > 6 * 1000 * 1000) then  ! ~1/10th degree
          interp_handle%ii%num_reg_x = 900
          interp_handle%ii%num_reg_y = 900
-         interp_handle%ii%max_reg_list_num = 800   !>@TODO  what is good val?
+         interp_handle%ii%max_reg_list_num = 800   !>@todo  what is good val?
 !print *, 'case 1: ', interp_handle%ii%num_reg_x, interp_handle%ii%num_reg_y, &
 !                     interp_handle%ii%max_reg_list_num
 
@@ -1309,13 +1308,13 @@ endif
 
 ! the 4 return values set here are:  lon_bot, lat_bot, lon_top, lat_top
 four_lons(1) = lon_bot
-four_lons(2) = lon_bot
+four_lons(2) = lon_top
 four_lons(3) = lon_top
-four_lons(4) = lon_top
+four_lons(4) = lon_bot
 
 four_lats(1) = lat_bot
-four_lats(2) = lat_top
-four_lats(3) = lat_bot
+four_lats(2) = lat_bot
+four_lats(3) = lat_top
 four_lats(4) = lat_top
 
 end subroutine quad_lon_lat_locate_ii
@@ -2283,7 +2282,6 @@ integer,                  intent(out) :: istatus
 
 real(r8) :: x_corners(4), y_corners(4)
 integer  :: e
-integer  :: lon_bot, lat_bot, lon_top, lat_top
 
 character(len=*), parameter :: routine = 'quad_lon_lat_evaluate:quad_lon_lat_evaluate_ii_array'
 

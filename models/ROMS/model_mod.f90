@@ -1687,15 +1687,15 @@ deallocate(mask)
 if (do_output() .and. debug > 0) then
     write(string1,*)'    min/max ULON ',minval(ULON), maxval(ULON)
     write(string2,*)    'min/max ULAT ',minval(ULAT), maxval(ULAT)
-    call error_handler(E_MSG,'get_grid',string1, text2=string2, text3=string3)
+    call error_handler(E_MSG,'get_grid',string1, text2=string2)
 
     write(string1,*)'    min/max VLON ',minval(VLON), maxval(VLON)
     write(string2,*)    'min/max VLAT ',minval(VLAT), maxval(VLAT)
-    call error_handler(E_MSG,'get_grid',string1, text2=string2, text3=string3)
+    call error_handler(E_MSG,'get_grid',string1, text2=string2)
 
     write(string1,*)'    min/max TLON ',minval(TLON), maxval(TLON)
     write(string2,*)    'min/max TLAT ',minval(TLAT), maxval(TLAT)
-    call error_handler(E_MSG,'get_grid',string1, text2=string2, text3=string3)
+    call error_handler(E_MSG,'get_grid',string1, text2=string2)
 
     write(string1,*)    'min/max BATHY ',minval(BATHY), maxval(BATHY)
     call error_handler(E_MSG,'get_grid',string1)
