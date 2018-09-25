@@ -33,7 +33,6 @@ module quad_utils_mod
 
 ! This code will interpolate in a logically rectangular but deformed lat/lon grid.
 
-! Only modules and routines that are absolutely required for use are listed
 use        types_mod, only : r8, i8, MISSING_R8, PI, deg2rad
 
 use     location_mod, only : location_type, get_location
@@ -46,12 +45,12 @@ use    utilities_mod, only : register_module, error_handler,         &
 implicit none
 private
 
-public :: quad_interp_handle,    & ! type - will need one for T grid, one for V grid
-          init_quad_interp,      & ! pass in grid type and counts here
-          finalize_quad_interp,  & ! release storage and reset vals
-          set_quad_coords,       & ! overload these 3: set_reg_xx, set_1d_xx, set_2d_xx
-          quad_lon_lat_locate,   & ! given lat,lon return above and below Is and Js
-          quad_lon_lat_evaluate, & ! given i,j and all 4 corner values, return interp val
+public :: quad_interp_handle,              & ! type - will need one for T grid, one for V grid
+          init_quad_interp,                & ! pass in grid type and counts here
+          finalize_quad_interp,            & ! release storage and reset vals
+          set_quad_coords,                 & ! overload these 3: set_reg_xx, set_1d_xx, set_2d_xx
+          quad_lon_lat_locate,             & ! given lat,lon return above and below Is and Js
+          quad_lon_lat_evaluate,           & !given i,j and all 4 corner values, return interp val
           GRID_QUAD_FULLY_REGULAR,         &
           GRID_QUAD_IRREG_SPACED_REGULAR,  &
           GRID_QUAD_FULLY_IRREGULAR,       &
