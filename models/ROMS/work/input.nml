@@ -218,7 +218,8 @@
   /
 
 &quad_interpolate_nml
-   debug = 1
+   do_rotate = .true.
+   debug = 0
   /
 
 
