@@ -3092,7 +3092,7 @@ else
                                         iloc, jloc, level_one, surface_pressure, status1)
       if (status1 /= 0) goto 200
    
-      scaleheight_val = scale_height(surface_pressure(1), pressure_array(vloc))
+      scaleheight_val = scale_height(pressure_array(vloc), surface_pressure(1), no_normalization_of_scale_heights)
 
    endif
 
@@ -3453,7 +3453,7 @@ else
          return
       endif
       
-      scaleheight_val = scale_height(surface_pressure_array(1), pressure_array(1))
+      scaleheight_val = scale_height(pressure_array(1),surface_pressure_array(1), no_normalization_of_scale_heights)
 
    endif
 
@@ -3507,7 +3507,7 @@ character(len=*), parameter :: routine = 'init_discard_high_obs'
 integer :: my_status
 
 integer :: table_type
-character(len=16) :: out_fmt, pres_fmt
+character(len=16) :: out_fmt, out_fmt1, pres_fmt
 real(r8) :: no_assim_above_scaleh
 
 ! pick the better table: 
@@ -3518,19 +3518,19 @@ table_type = store_std_atm_tables(ref_model_top_pressure)
 ! set formatting which is easiest to read in the log.
 ! the very high top table has very small numbers that need
 ! exponential notation.
-out_fmt = '(A,F12.5,A)'
+out_fmt  = '(A,F12.5,A)'
+out_fmt1 = '(A,I5)'
 pres_fmt = out_fmt
 if (table_type == HIGH_TOP_TABLE) pres_fmt = '(A,E12.5,A)'
 
-! be consistent in our variable types.  obs could have vert w/fractional levels.
-no_assim_above_level = real(no_obs_assim_above_level, r8)
-write(string1, out_fmt) &
-   'Discarding observations higher than model level      ', no_assim_above_level
+! levels can be fractional but the namelist only allows integer, so simplify the formatting
+write(string1, out_fmt1) &
+   'Discarding observations higher than model level ', no_obs_assim_above_level
 call error_handler(E_MSG, 'init_discard_high_obs', string1, source, revision, revdate)
 
 no_assim_above_pressure = single_pressure_value(ref_surface_pressure, no_obs_assim_above_level)
 write(string1, pres_fmt) &
-   'Discarding observations higher than pressure level ', no_assim_above_pressure, ' Pascals' 
+   ' ... which is equivalent to pressure level ', no_assim_above_pressure, ' Pascals' 
 call error_handler(E_MSG, 'init_discard_high_obs', string1, source, revision, revdate)
 
 no_assim_above_height = generic_pressure_to_height(no_assim_above_pressure, my_status)
@@ -3540,12 +3540,13 @@ if (my_status /= 0) then
 endif
  
 write(string1, out_fmt) &
-   'Discarding observations higher than               ', no_assim_above_height, ' meters' 
+   ' ... which is equivalent to height         ', no_assim_above_height, ' meters' 
 call error_handler(E_MSG, 'init_discard_high_obs', string1, source, revision, revdate)
 
-no_assim_above_scaleh = scale_height(ref_surface_pressure, no_assim_above_pressure)
+! special for this - normalize by Ps for printing out
+no_assim_above_scaleh = scale_height(no_assim_above_pressure, ref_surface_pressure, .false.)
 write(string1, out_fmt) &
-   'Discarding observations higher than scale height ', no_assim_above_scaleh, ' (unitless)' 
+   ' ... which is equivalent to scale height   ', no_assim_above_scaleh
 call error_handler(E_MSG, 'init_discard_high_obs', string1, source, revision, revdate)
 
 end subroutine init_discard_high_obs
@@ -3580,7 +3581,7 @@ if (table_type == HIGH_TOP_TABLE .and. &
 
 ! convert to vertical localization units
 call convert_vertical_level_generic(real(model_damping_ends_at_level, r8), &
-                                         vertical_localization_type, ramp_end, string3)
+                                         vertical_localization_type, ramp_end, string3, no_norm=.false.)
 
 ! check for conversion errors
 if (ramp_end == MISSING_R8) then
@@ -3589,9 +3590,9 @@ if (ramp_end == MISSING_R8) then
                       source, revision, revdate, text2=string1)
 endif
 
-! FIXME: not sure we actually need model_top - remove if unused.
+! this value only used for print statement, unused otherwise
 call convert_vertical_level_generic(1.0_r8, vertical_localization_type, &
-                                    model_top, string3)
+                                    model_top, string3, no_norm=.false.)
 
 ! check for conversion errors
 if (model_top == MISSING_R8) then
@@ -3603,11 +3604,11 @@ endif
 ! at this point, ramp_end and model_top are in the localization units
 
 ! let the log know what we're doing
-write(string1, '(A,I5)') 'Increments will go to 0 at model level ', model_damping_ends_at_level
+write(string1, '(A,I5)') 'Increments will go to 0.0 at model level ', model_damping_ends_at_level
 write(string2, out_fmt) 'which is ', ramp_end, ' '//trim(string3)
 call error_handler(E_MSG, routine, &
-   'Decreasing increments on state near the damped area at the model top', &
-   string1, source, revision, revdate, text2=string2, text3=string1)
+   'Decreasing increments in region damped in the model', &
+   string1, source, revision, revdate, text2=string1, text3=string2)
 
 write(string1, out_fmt) 'For reference, model top is ', model_top, ' '//trim(string3)
 call error_handler(E_MSG, routine, string1, source, revision, revdate)
@@ -3776,16 +3777,24 @@ end function v_difference
 !> are the same for all ensemble members at all locations. 
 !> it uses generic values to do a vertical conversion.
 
-subroutine convert_vertical_level_generic(level_value, want_vert_type, out_value, out_label)
+subroutine convert_vertical_level_generic(level_value, want_vert_type, out_value, out_label, no_norm)
 real(r8),         intent(in)            :: level_value
 integer,          intent(in)            :: want_vert_type
 real(r8),         intent(out)           :: out_value
 character(len=*), intent(out), optional :: out_label
+logical,          intent(in),  optional :: no_norm
 
 character(len=*), parameter :: routine = 'convert_vertical_level_generic'
 
-integer :: status
+integer  :: status
 real(r8) :: tmp_val
+logical  :: no_norm_flag
+
+if (present(no_norm)) then
+   no_norm_flag = no_norm
+else
+   no_norm_flag = no_normalization_of_scale_heights
+endif
 
 if (want_vert_type == VERTISLEVEL) then
     out_value = level_value
@@ -3800,7 +3809,7 @@ else
        if (present(out_label)) out_label = 'pascals'
    
      case (VERTISSCALEHEIGHT)
-       out_value = scale_height(ref_surface_pressure, tmp_val)
+       out_value = scale_height(tmp_val, ref_surface_pressure, no_norm_flag)
        if (present(out_label)) out_label = 'scale heights'
    
      case (VERTISHEIGHT)
@@ -4014,21 +4023,37 @@ ref_nlevels = grid_data%lev%nsize
 end subroutine init_globals
 
 !--------------------------------------------------------------------
-! Function to calculate scale height given a surface pressure and a pressure.
+! Function to calculate scale height given a pressure and optionally
+! a surface pressure.  (See the namelist item which controls whether to
+! normalize the pressure value aloft with the surface pressure or not.
+! We currently only use scale height for computing distances between
+! two locations, so the surface pressure terms cancel out - exactly if
+! the two locations are co-located horizontally, almost if they are not.
+! Normalizing by the surface pressure means in areas of high orography
+! the surface differences propagate all the way to the model top.  
+! To be backwards-compatible, do this normalization; the current thinking 
+! is we shouldn't do it both for scientific reasons and because it 
+! doubles the work if it's expensive to find the correct horizontal 
+! location, i.e. mpas irregular grids. In this model we always have
+! the surface pressure at a location so it's not a performance issue.)
+!
 ! Watch out for unusual cases that could crash the log() function
-! Generally if we are not normalizing by the surface pressure we don't
-! want to compute it in the first place.  But if it is already available
-! pass it in here and we'll check to see whether to normalize or not.
+! We pass in the surface pressure here even if it isn't going to be
+! used because in all the cases above we seem to have it (or the stanard
+! reference pressure) everywhere we are going to compute this value.
+! The "skip_norm" parameter controls whether this code uses the 
+! surface pressure or not. 
 
-function scale_height(p_surface, p_above)
-real(r8), intent(in) :: p_surface
+function scale_height(p_above, p_surface, skip_norm)
 real(r8), intent(in) :: p_above
+real(r8), intent(in) :: p_surface
+logical,  intent(in) :: skip_norm
 real(r8)             :: scale_height
 
 real(r8), parameter :: tiny = epsilon(1.0_r8)
 real(r8) :: diff
 
-if (no_normalization_of_scale_heights) then
+if (skip_norm) then
    scale_height = log(p_above)
    return
 endif
