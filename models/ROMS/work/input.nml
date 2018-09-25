@@ -201,9 +201,10 @@
 #    all these variables will be updated INTERNALLY IN DART
 #    only variables marked 'UPDATE' will be modified for ROMS.
 
-&model_nml
    roms_filename               = '/glade/scratch/romaines/dart/tmpdir_NWA-RE.REANA44/Outputs/Prior/m001/NWA-RE.REANA44_rst_20110611.nc'
-   roms_grid_file              = '/glade/p/work/romaines/Data/NWA_grd_newwtypechl.nc'
+&model_nml
+   roms_filename               = '../data/NWA-RE.REANA36_rstana_20101231.nc'
+   roms_grid_file              = '../data/NWA_grd_newwtypechl.nc'
    assimilation_period_days    = 8
    assimilation_period_seconds = 0
    vert_localization_coord     = 3
@@ -217,7 +218,7 @@
   /
 
 &quad_interpolate_nml
-   debug = 100
+   debug = 1
   /
 
 
@@ -243,6 +244,7 @@
 
 
 &preprocess_nml
+   overwrite_output        = .true.
     input_obs_def_mod_file = '../../../observations/forward_operators/DEFAULT_obs_def_mod.F90'
    output_obs_def_mod_file = '../../../observations/forward_operators/obs_def_mod.f90'
    input_obs_kind_mod_file = '../../../assimilation_code/modules/observations/DEFAULT_obs_kind_mod.F90'
@@ -346,38 +348,20 @@
 
 
 &model_mod_check_nml
-   input_state_files     = 'NWA-RE.REANA44_rst_20110611_nozeta.nc'
+   input_state_files     = '../data/NWA-RE.REANA36_rstana_20101231.nc'
    output_state_files    = 'mmc_output.nc'
    test1thru             = 0
-   run_tests             = 1,2,3,4
+   run_tests             = 1,2,3,4,5
    x_ind                 = 87370
    loc_of_interest       = 275.48575456693635, 25.773736052471712, 76.6467
    quantity_of_interest  = 'QTY_U_CURRENT_COMPONENT'
-   interp_test_dlon      = 0.1
-   interp_test_dlat      = 0.1
+   interp_test_dlon      = 0.01
+   interp_test_dlat      = 0.01
    interp_test_dvert     = 10.0
-   interp_test_lonrange  = 280.0,  290.0
-   interp_test_latrange  = 30.0,   40.0
-   interp_test_vertrange = 0.0,    50.0
+   interp_test_lonrange  = 280.0,  285.0
+   interp_test_latrange  = 30.0,   35.0
+   interp_test_vertrange = 50.0,    50.0
    interp_test_vertcoord = 'VERTISHEIGHT'
-   verbose               = .true.
-  /
-
-
-&test_grid_nml
-   x_ind                 = 87370
-   loc_of_interest       = 16.0500, 35.1000, 2.5
-   kind_of_interest      = 'QTY_CLOUD_ICE'
-   interp_test_di        = 0.5
-   interp_test_dj        = 0.5
-   interp_test_dk        = 1.0
-   interp_test_irange    = 0.0, 56.0
-   interp_test_jrange    = 0.0, 56.0
-   interp_test_krange    = 0.0, 31.0
-   interp_test_vertcoord = 'VERTISHEIGHT'
-   test1thru             = 5
-   restart_in_file_name  = '../Data/wc13_ini.nc'
-   restart_out_file_name = 'roms_output'
    verbose               = .false.
   /
 

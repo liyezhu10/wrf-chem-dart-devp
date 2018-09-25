@@ -33,9 +33,11 @@ module quad_utils_mod
 
 ! This code will interpolate in a logically rectangular but deformed lat/lon grid.
 
-! Modules that are absolutely required for use are listed
+! Only modules and routines that are absolutely required for use are listed
 use        types_mod, only : r8, i8, MISSING_R8, PI, deg2rad
+
 use     location_mod, only : location_type, get_location
+
 use    utilities_mod, only : register_module, error_handler,         &
                              E_ERR, E_WARN, E_MSG, nmlfileunit,      &
                              do_output, do_nml_file, do_nml_term,    &
@@ -44,12 +46,12 @@ use    utilities_mod, only : register_module, error_handler,         &
 implicit none
 private
 
-public :: quad_interp_handle,              & ! type - will need one for T grid, one for V grid
-          init_quad_interp,                & ! pass in grid type and counts here
-          finalize_quad_interp,            & ! release storage and reset vals
-          set_quad_coords,                 & ! overload these 3: set_reg_xx, set_1d_xx, set_2d_xx
-          quad_lon_lat_locate,             & ! given lat,lon return above and below Is and Js
-          quad_lon_lat_evaluate,           & !given i,j and all 4 corner values, return interp val
+public :: quad_interp_handle,    & ! type - will need one for T grid, one for V grid
+          init_quad_interp,      & ! pass in grid type and counts here
+          finalize_quad_interp,  & ! release storage and reset vals
+          set_quad_coords,       & ! overload these 3: set_reg_xx, set_1d_xx, set_2d_xx
+          quad_lon_lat_locate,   & ! given lat,lon return above and below Is and Js
+          quad_lon_lat_evaluate, & ! given i,j and all 4 corner values, return interp val
           GRID_QUAD_FULLY_REGULAR,         &
           GRID_QUAD_IRREG_SPACED_REGULAR,  &
           GRID_QUAD_FULLY_IRREGULAR,       &
@@ -65,14 +67,15 @@ public :: quad_interp_handle,              & ! type - will need one for T grid, 
 
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
+character(len=*), parameter :: source   = &
    "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 ! message strings
 character(len=512) :: string1, string2, string3
 
+character(len=*), parameter :: routine = "quad_utils_mod"
 logical, save :: module_initialized = .false.
 
 integer  :: debug = 0   ! turn up for more and more debug messages
@@ -113,7 +116,7 @@ type quad_grid_options
    logical :: uses_mask = .false.
    logical, allocatable :: grid_mask(:,:)
 
-   ! is this a global grid?  if yes, both spans_lon_zero and pole_wrap are true as well.
+   ! global grid?  if yes, both spans_lon_zero and pole_wrap are true as well.
    ! if not, either or both could still be true but we can't assume.
    logical :: global_grid = .false.
 
@@ -324,7 +327,7 @@ if (.not. module_initialized) call initialize_module()
 interp_handle%nlat = num_lats
 interp_handle%nlon = num_lons
 
-!>@todo  FIXME: add sanity checking between global, spans_lon_zero, pole_wrap settings
+!>@todo  : add sanity checking between global, spans_lon_zero, pole_wrap settings
 
 if (global) then
    interp_handle%opt%global_grid = .true.
@@ -362,7 +365,7 @@ select case (grid_type)
       if (num_lats * num_lons > 6 * 1000 * 1000) then  ! ~1/10th degree
          interp_handle%ii%num_reg_x = 900
          interp_handle%ii%num_reg_y = 900
-         interp_handle%ii%max_reg_list_num = 800   ! FIXME!!!  what is good val?
+         interp_handle%ii%max_reg_list_num = 800   !>@TODO  what is good val?
 !print *, 'case 1: ', interp_handle%ii%num_reg_x, interp_handle%ii%num_reg_y, &
 !                     interp_handle%ii%max_reg_list_num
 
@@ -381,8 +384,10 @@ select case (grid_type)
 !                     interp_handle%ii%max_reg_list_num
       endif
 
-      allocate(interp_handle%ii%grid_start(interp_handle%ii%num_reg_x,interp_handle%ii%num_reg_y), &
-               interp_handle%ii%grid_num(  interp_handle%ii%num_reg_x,interp_handle%ii%num_reg_y))
+      allocate(interp_handle%ii%grid_start(interp_handle%ii%num_reg_x, &
+                                           interp_handle%ii%num_reg_y))
+      allocate(interp_handle%ii%grid_num(  interp_handle%ii%num_reg_x, &
+                                           interp_handle%ii%num_reg_y))
 
       interp_handle%ii%grid_num = 0
 
@@ -432,7 +437,8 @@ select case (interp_handle%grid_type)
                 interp_handle%ir%lons_1D(interp_handle%nlon)
 
    case(GRID_QUAD_FULLY_IRREGULAR)
-      print * !, interp_handle%ii%lats_2D(num_lons,num_lats), interp_handle%ii%lons_2D(num_lons, num_lats)
+      print * !, interp_handle%ii%lats_2D(num_lons, num_lats), &
+              !  interp_handle%ii%lons_2D(num_lons, num_lats)
 
    case default
       write(string1, *) 'unrecognized grid type: ', interp_handle%grid_type
@@ -478,7 +484,8 @@ end subroutine finalize_quad_interp
 
 !------------------------------------------------------------
 
-subroutine set_reg_quad_coords(interp_handle, lon_start, lon_delta, lat_start, lat_delta)
+subroutine set_reg_quad_coords(interp_handle, lon_start, lon_delta, &
+                                              lat_start, lat_delta)
 
 type(quad_interp_handle), intent(inout) :: interp_handle
 real(r8),                 intent(in)    :: lon_start, lon_delta
@@ -569,12 +576,13 @@ endif
 end subroutine shapecheck
 
 !------------------------------------------------------------
+!> Build the data structure for interpolation for an irregular quad grid
 
 subroutine init_irreg_interp(h)
 
 type(quad_interp_handle), intent(inout) :: h
 
-! Build the data structure for interpolation for an irregular quad grid
+character(len=*), parameter :: routine = 'init_irreg_interp'
 
 ! Need a temporary data structure to build this.
 ! These arrays keep a list of the x and y indices of dipole quads
@@ -614,8 +622,8 @@ if (.not. h%opt%global_grid) then
       else
          write(string1,*)'min_lon, max_lon, lon_width, spans_lon_zero: ', &
                     h%ii%min_lon, h%ii%max_lon, h%ii%lon_width, h%opt%spans_lon_zero
-         call error_handler(E_ERR,'init_irreg_interp','regional grid with bad longitudes', &                            
-                            source, revision, revdate, text2=string1)
+         call error_handler(E_ERR,routine,'regional grid with bad longitudes', &
+                          source, revision, revdate, text2=string1)
       endif
    endif
 
@@ -663,11 +671,16 @@ do i = 1, xlim
    do j = 1, ny - 1
 
       if( all_corners_valid(h%opt, i,j, nx) ) then
+
+ !>@todo is istatus /= 0 a failure condition
+
          ! Set up array of lons and lats for the corners of these u quads
          call get_quad_corners(h%ii%lons_2d, i, j, cyclic, nx, ny, u_c_lons, istatus)
          if (istatus /= 0) print *, 'get_quad_corners for lons returns failure'
+
          call get_quad_corners(h%ii%lats_2d, i, j, cyclic, nx, ny, u_c_lats, istatus)
          if (istatus /= 0) print *, 'get_quad_corners for lats returns failure'
+
          !print *, 'get_quad_corners returns ', u_c_lons, u_c_lats, ' for ', &
          !          h%ii%lons_2d(i,j), h%ii%lats_2d(i,j), ' index ', i, j
 
@@ -675,8 +688,8 @@ do i = 1, xlim
          ! false indicates that for the u grid there's nothing special about pole
          call reg_box_overlap(h, u_c_lons, u_c_lats, .false., reg_lon_ind, reg_lat_ind)
          ! Update the temporary data structures for the u quad
-         call update_reg_list(h%ii%grid_num, reg_list_lon, reg_list_lat, reg_lon_ind, &
-                              reg_lat_ind, nrx, nry, h%ii%max_reg_list_num, i, j)
+         call update_reg_list(h%ii%grid_num, reg_list_lon, reg_list_lat, &
+                    reg_lon_ind, reg_lat_ind, nrx, nry, h%ii%max_reg_list_num, i, j)
       endif
 
    enddo
@@ -684,7 +697,7 @@ enddo
 
 write(string1,*)'to determine (minimum) max_reg_list_num values for new grids ...'
 write(string2,*)'interp_handle%ii%grid_num is ',maxval(h%ii%grid_num)
-call error_handler(E_MSG,'init_irreg_interp',string1, text2=string2)
+call error_handler(E_MSG, routine, string1, text2=string2)
 
 ! Invert the temporary data structure. The total number of entries will be
 ! the sum of the number of dipole cells for each regular cell.
@@ -716,7 +729,7 @@ enddo
 ! Confirm that the indices come out okay as debug
 if(u_index /= u_total + 1) then
    string1 = 'Storage indices did not balance for U grid: : contact DART developers'
-   call error_handler(E_ERR, 'init_irreg_interp', string1, source, revision, revdate)
+   call error_handler(E_ERR, routine, string1, source, revision, revdate)
 endif
 
 deallocate(reg_list_lon, reg_list_lat)
@@ -880,10 +893,9 @@ end subroutine init_irreg_interp
 !> to have this routine or the next one.
 
 subroutine get_quad_grid_size(interp_handle, nlon, nlat)
- type(quad_interp_handle), intent(in)  :: interp_handle
- integer,                  intent(out) :: nlon, nlat
 
-! accessor function
+type(quad_interp_handle), intent(in)  :: interp_handle
+integer,                  intent(out) :: nlon, nlat
 
 nlon = interp_handle%nlon
 nlat = interp_handle%nlat
@@ -893,33 +905,31 @@ end subroutine get_quad_grid_size
 !------------------------------------------------------------
 
 function get_quad_global(interp_handle)
- type(quad_interp_handle), intent(in)  :: interp_handle
- logical                               :: get_quad_global
 
-! accessor function
+type(quad_interp_handle), intent(in)  :: interp_handle
+logical                               :: get_quad_global
 
 get_quad_global = interp_handle%opt%global_grid
 
 end function get_quad_global
 
 !------------------------------------------------------------
+!> Given a longitude and latitude in degrees returns the index of the regular
+!> lon-lat box that contains the point.  if this a global grid it cannot fail.
+!> if this is a regional grid, the given (lon,lat) might be outside of the region.
+!> if istatus=0, good return.  istatus=1 bad box numbers.
 
 subroutine get_reg_box_indices(h, lon, lat, x_ind, y_ind, istatus)
- type(quad_interp_handle), intent(in)  :: h
- real(r8),                 intent(in)  :: lon, lat
- integer,                  intent(out) :: x_ind, y_ind
- integer,                  intent(out) :: istatus
 
-! Given a longitude and latitude in degrees returns the index of the regular
-! lon-lat box that contains the point.  if this a global grid it cannot fail.
-! if this is a regional grid, the given (lon,lat) might be outside of the region.
-! if istatus=0, good return.  istatus=1 bad box numbers.
+type(quad_interp_handle), intent(in)  :: h
+real(r8),                 intent(in)  :: lon, lat
+integer,                  intent(out) :: x_ind, y_ind
+integer,                  intent(out) :: istatus
+
+istatus = 0
 
 call get_reg_lon_box(h, lon, x_ind)
 call get_reg_lat_box(h, lat, y_ind)
-!print *, 'get_reg_box_indices: ', lon, lat, x_ind, y_ind
-
-istatus = 0
 
 if ( (.not. get_quad_global(h)) .and. &
      (x_ind < 1 .or. x_ind > h%ii%num_reg_x .or. &
@@ -937,7 +947,6 @@ subroutine get_reg_lon_box(h, lon, x_ind)
 type(quad_interp_handle), intent(in)  :: h
 real(r8),                 intent(in)  :: lon
 integer,                  intent(out) :: x_ind
-
 
 !>@todo FIXME: IS THIS RIGHT?
 x_ind = int(h%ii%num_reg_x * (lon - h%ii%min_lon) / h%ii%lon_width) + 1
@@ -970,7 +979,8 @@ end subroutine get_reg_lat_box
 !> a dipole grid qaud whose corners are given by the dimension four x_corners
 !> and y_corners arrays.
 
-subroutine reg_box_overlap(h, x_corners, y_corners, is_pole, reg_lon_ind, reg_lat_ind)
+subroutine reg_box_overlap(h, x_corners, y_corners, is_pole, &
+                           reg_lon_ind, reg_lat_ind)
 
 type(quad_interp_handle), intent(in) :: h
 real(r8),                 intent(in)  :: x_corners(4), y_corners(4)
@@ -1099,17 +1109,20 @@ istatus = 0
 end subroutine get_quad_corners
 
 !------------------------------------------------------------
+!> Updates the data structure listing dipole quads that are in a given regular box
 
 subroutine update_reg_list(reg_list_num, reg_list_lon, reg_list_lat, &
                            reg_lon_ind, reg_lat_ind, nrx, nry, maxlist, &
                            grid_lon_index, grid_lat_index)
 
-integer, intent(inout) :: reg_list_num(:, :), reg_list_lon(:, :, :), reg_list_lat(:, :, :)
-integer, intent(inout) :: reg_lon_ind(2), reg_lat_ind(2)
+integer, intent(inout) :: reg_list_num(:, :)
+integer, intent(inout) :: reg_list_lon(:, :, :)
+integer, intent(inout) :: reg_list_lat(:, :, :)
+integer, intent(inout) :: reg_lon_ind(2)
+integer, intent(inout) :: reg_lat_ind(2)
 integer, intent(in)    :: nrx, nry, maxlist
 integer, intent(in)    :: grid_lon_index, grid_lat_index
 
-! Updates the data structure listing dipole quads that are in a given regular box
 integer :: ind_x, index_x, ind_y, index_y
 
 !print *, 'update_reg_list called for ', grid_lon_index, grid_lat_index
@@ -1241,12 +1254,12 @@ if (debug > 10) print *, 'get_grid_quad returns lon/lat bot: ', lon_bot, lat_bot
    if (istatus /= 0) return
 
    ! Getting corners for accurate interpolation
-   call get_quad_corners(interp_handle%ii%lons_2d, lon_bot, lat_bot, cyclic, nx, ny, &
-                         x_corners, istatus)
+   call get_quad_corners(interp_handle%ii%lons_2d, lon_bot, lat_bot, cyclic, &
+                         nx, ny, x_corners, istatus)
 if (debug > 10) print *, 'get_quad_corners returns x_corners: ', x_corners
    if (istatus /= 0) return
-   call get_quad_corners(interp_handle%ii%lats_2d, lon_bot, lat_bot, cyclic, nx, ny, &
-                         y_corners, istatus)
+   call get_quad_corners(interp_handle%ii%lats_2d, lon_bot, lat_bot, cyclic, &
+                         nx, ny, y_corners, istatus)
 if (debug > 10) print *, 'get_quad_corners returns y_corners: ', y_corners
    if (istatus /= 0) return
 
@@ -1316,7 +1329,7 @@ end subroutine quad_lon_lat_locate_ii
 !>@todo FIXME should this still return lon_fract, lat_fract?
 !>(thinking yes)
 subroutine quad_lon_lat_locate_ir(interp_handle, lon, lat, &
-                                  four_lons, four_lats, lon_fract, lat_fract, istatus)
+                four_lons, four_lats, lon_fract, lat_fract, istatus)
 
 type(quad_interp_handle), intent(in)  :: interp_handle
 real(r8),                 intent(in)  :: lon, lat
@@ -1385,7 +1398,7 @@ endif
 
 ! the 6 values set so far in this routine are:
 !    lon_bot, lat_bot, lon_top, lat_top, lon_fract, lat_fract
-! 
+!
 ! now fill arrays so they are easy to process in the calling
 ! code in the right order, which is counterclockwise around the quad:
 !
@@ -1427,7 +1440,8 @@ istatus = 0
 
 ! Get latitude box boundaries and fraction
 ! FIXME: is .false. for the pole??
-call lat_bounds(lat, ny, lat_array(1,:), .false., found_y, lat_top, lat_fract, lat_status)
+call lat_bounds(lat, ny, lat_array(1,:), .false., &
+                found_y, lat_top, lat_fract, lat_status)
 
 ! Check for error on the latitude interpolation
 if(lat_status /= 0) then
@@ -1435,7 +1449,8 @@ if(lat_status /= 0) then
    return
 endif
 
-call lon_bounds(lon, nx, lon_array(1,:), cyclic, found_x, lon_top, lon_fract, istatus)
+call lon_bounds(lon, nx, lon_array(1,:), cyclic, &
+                found_x, lon_top, lon_fract, istatus)
 
 end subroutine get_irreg_box
 
@@ -1891,9 +1906,9 @@ end subroutine line_intercept
 subroutine quad_bilinear_interp(lon_in, lat_in, x_corners_in, y_corners_in, cyclic, &
                                 p, expected_obs)
 
- real(r8),  intent(in) :: lon_in, lat_in, x_corners_in(4), y_corners_in(4), p(4)
- logical,   intent(in) :: cyclic
- real(r8), intent(out) :: expected_obs
+real(r8),  intent(in) :: lon_in, lat_in, x_corners_in(4), y_corners_in(4), p(4)
+logical,   intent(in) :: cyclic
+real(r8), intent(out) :: expected_obs
 
 ! Given a longitude and latitude (lon_in, lat), the longitude and
 ! latitude of the 4 corners of a quadrilateral and the values at the
@@ -1974,7 +1989,7 @@ if (do_rotate) then
    lat = lat - y_corners(1)
    x_corners(1) = 0.0_r8
    y_corners(1) = 0.0_r8
-   
+
    !do i=1, 4
    !   print *,  'xform ', i, x_corners(i), y_corners(i)
    !enddo
@@ -1991,7 +2006,7 @@ if (do_rotate) then
       c(1) = 0.0_r8
       c(2) = y_corners(2)
    endif
-   
+
 !print *, b, c
    angle = angle2(b, c)
    !print *, 'angle = ', angle
@@ -2053,7 +2068,8 @@ if (debug > 10)  write(*,'(A,8F12.3)') 'test corners: a, r(1), r(2), r(3)', a, r
 do i = 1, 4
    interp_val = a + r(1)*x_corners(i) + r(2)*y_corners(i)+ r(3)*x_corners(i)*y_corners(i)
 
-   if(abs(interp_val - p(i)) > 1e-9) write(*, *) 'large interp residual ', i, interp_val, p(i), interp_val - p(i)
+   if(abs(interp_val - p(i)) > 1e-9) &
+      write(*, *) 'large interp residual ', i, interp_val, p(i), interp_val - p(i)
 if (debug > 10)  write(*,'(A,I3,8F12.5)') 'test corner: i, interp_val, x_corn, y_corn: ',  &
                                                         i, interp_val, x_corners(i), y_corners(i)
 enddo
@@ -2365,7 +2381,7 @@ endif
 !> it costs time and for grids that don't have missing data it is
 !> not needed.  should it call allow_missing_in_state() on init and
 !> key off that?  (i think yes.)
- 
+
 if (.false.) then
 
    ! have to do the items individually because some items might
@@ -2384,7 +2400,7 @@ if (.false.) then
    return
 
 else
- 
+
    ! can use array syntax and do them all at once.  no missing vals.
    xbot = invals(1, :) + lon_fract * (invals(2, :) - invals(1, :))
    xtop = invals(4, :) + lon_fract * (invals(3, :) - invals(4, :))

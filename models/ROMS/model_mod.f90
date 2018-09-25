@@ -85,9 +85,9 @@ use   state_structure_mod, only : add_domain, get_model_variable_indices, &
                                   get_long_name, get_xtype, get_has_missing_value, &
                                   get_dim_lengths
 
-use netcdf_utilities_mod, only : nc_add_global_attribute, nc_synchronize_file, nc_check, &
+use netcdf_utilities_mod, only : nc_add_global_attribute, nc_synchronize_file, &
                                  nc_add_global_creation_time, nc_begin_define_mode, &
-                                 nc_end_define_mode
+                                 nc_end_define_mode, nc_check
 
 use location_io_mod,      only : nc_write_location_atts, nc_get_location_varids, &
                                  nc_write_location
@@ -95,9 +95,9 @@ use location_io_mod,      only : nc_write_location_atts, nc_get_location_varids,
 use default_model_mod,    only : pert_model_copies, nc_write_model_vars, init_conditions, &
                                  init_time, adv_1step
 
-use quad_utils_mod,       only : quad_interp_handle, init_quad_interp, &
-                                 finalize_quad_interp, set_quad_coords, quad_lon_lat_locate, &
-                                 quad_lon_lat_evaluate, print_quad_handle, &
+use quad_utils_mod,       only : quad_interp_handle, print_quad_handle, set_quad_coords, &
+                                 init_quad_interp, finalize_quad_interp, &
+                                 quad_lon_lat_locate, quad_lon_lat_evaluate, &
                                  GRID_QUAD_FULLY_IRREGULAR, QUAD_LOCATED_CELL_CENTERS, &
                                  QUAD_LOCATED_LON_EDGES, QUAD_LOCATED_LAT_EDGES
 
@@ -137,10 +137,10 @@ public :: get_time_information!,          &
 !          get_location_from_ijk
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
+character(len=*), parameter :: source   = &
    "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 character(len=512) :: string1, string2, string3
 logical, save :: module_initialized = .false.
@@ -149,7 +149,6 @@ type(quad_interp_handle) :: ugrid_handle, vgrid_handle, tgrid_handle
 
 ! things which can/should be in the model_nml
 !>@todo FIXME ... replace remaining references to VERTISHEIGHT with vert_localization_coord
-logical  :: output_state_vector          = .false.
 integer  :: assimilation_period_days     = 1
 integer  :: assimilation_period_seconds  = 0
 integer  :: vert_localization_coord      = VERTISHEIGHT
@@ -182,14 +181,7 @@ integer :: nfields   ! This is the number of variables in the DART state vector.
 
 integer :: domain_id ! global variable for state_structure_mod routines
 
-!> Everything needed to describe a variable. Basically all the metadata from
-!> a netCDF file is stored here as well as all the information about where
-!> the variable is stored in the DART state vector.
-!>
-
-! Grid parameters - the values will be read from a
-! standard ROMS namelist and filled in here.
-
+! Grid parameters
 ! nx, ny and nz are the size of the rho grids.
 integer :: Nx = -1, Ny = -1, Nz = -1
 
@@ -206,7 +198,6 @@ integer :: Ns_w
 real(r8) :: theta_s, theta_b
 real(r8) :: Tcline,  hc
  
-
 !>@todo FIXME ... nancy suggested creating pointers for each of these so
 !    we could simply use the myvarid as the index in the pointer ...
 
@@ -224,10 +215,6 @@ logical, allocatable, target :: UMASK(:,:), VMASK(:,:), TMASK(:,:)
 type(time_type) :: model_timestep
 
 integer :: model_size    ! the state vector length
-
-!> Reshapes a part of the DART vector back to the original variable shape.
-!>@todo FIXME Replaces the DART MISSING value with the original _FillValue value.
-
 
 contains
 
@@ -297,7 +284,7 @@ if (myqty == QTY_U_CURRENT_COMPONENT) then
 elseif (myqty == QTY_V_CURRENT_COMPONENT) then
    mybathy = 0.5*(BATHY(iloc,jloc)+BATHY(iloc,jloc+1))
    call get_depths(mybathy, 0.0_r8, depths, 1, Ns_rho)
-   location = set_location(VLON(iloc,jloc), VLAT(iloc,jloc), depths(vloc),VERTISHEIGHT)
+   location = set_location(VLON(iloc,jloc), VLAT(iloc,jloc), depths(vloc), VERTISHEIGHT)
 
 elseif (myqty == QTY_SEA_SURFACE_HEIGHT) then
    location = set_location(TLON(iloc,jloc), TLAT(iloc,jloc), 0.0_r8, VERTISSURFACE)
@@ -333,7 +320,8 @@ end subroutine get_state_meta_data
 !> @param istatus interpolation status ... 0 == success, /=0 is a failure
 !>
 
-subroutine model_interpolate(state_handle, ens_size, location, obs_type, expected_obs, istatus)
+subroutine model_interpolate(state_handle, ens_size, location, obs_type, &
+                             expected_obs, istatus)
 
 type(ensemble_type), intent(in)  :: state_handle
 integer,             intent(in)  :: ens_size
@@ -344,7 +332,6 @@ integer,             intent(out) :: istatus(:)
 
 ! Local storage
 integer       :: icorn, imem, ilev, N_lev_un
-integer       :: lat_bot, lat_top, lon_bot, lon_top
 integer       :: lstatus, hstatus
 integer       :: Ns_var
 integer       :: var_id, ssh_id
@@ -372,7 +359,8 @@ llon    = loc_array(1)
 llat    = loc_array(2)
 lheight = loc_array(3)
 
-if (debug > 1) print *, 'requesting interpolation of ', obs_type, ' at ', llon, llat, lheight
+if (debug > 1) print *, 'requesting interpolation of ', obs_type, ' at ', &
+                         llon, llat, lheight
 
 ! kind (in-situ) temperature is a combination of potential temp,
 ! salinity, and pressure based on depth.  call a routine that
@@ -381,7 +369,8 @@ if (debug > 1) print *, 'requesting interpolation of ', obs_type, ' at ', llon, 
 if(obs_type == QTY_TEMPERATURE) then
    ! we know how to interpolate this from potential temp,
    ! salinity, and pressure based on depth.
-   call compute_temperature(state_handle, ens_size, llon, llat, lheight, expected_obs, istatus)
+   call compute_temperature(state_handle, ens_size, llon, llat, lheight, &
+                            expected_obs, istatus)
    if (debug > 1) print *, 'expected_obs, istatus = ', expected_obs, istatus
    return
 endif
@@ -413,28 +402,34 @@ if( is_vertical(location, "SURFACE") ) then
       Ns_var = 1
    endif
    do icorn = 1,4
-      dart_idx = get_dart_vector_index(lon_corner(icorn), lat_corner(icorn), Ns_var, domain_id, var_id)
+      dart_idx = get_dart_vector_index(lon_corner(icorn), lat_corner(icorn), &
+                                       Ns_var, domain_id, var_id)
       val_corners(icorn,:) = get_state(dart_idx, state_handle)
    enddo
 else
    ssh_id = get_varid_from_kind(domain_id, QTY_SEA_SURFACE_HEIGHT)
    do icorn = 1,4
       ! get SSH at corners location for all members
-      dart_idx = get_dart_vector_index(lon_corner(icorn), lat_corner(icorn),1, domain_id, ssh_id)
+      dart_idx = get_dart_vector_index(lon_corner(icorn), lat_corner(icorn), 1, &
+                                       domain_id, ssh_id)
       ssh_corners = get_state(dart_idx, state_handle)
       ! Loop on ensemble members to get all indices of depth
       do imem = 1,ens_size
-         call get_depths(BATHY(lon_corner(icorn), lat_corner(icorn)), ssh_corners(imem), depths_tmp, 1, Ns_rho)
-         call height_bounds(lheight, Ns_rho, depths_tmp, hgt_bot(imem), hgt_top(imem), hgt_fract(imem), hstatus)
+         call get_depths(BATHY(lon_corner(icorn), lat_corner(icorn)), &
+                         ssh_corners(imem), depths_tmp, 1, Ns_rho)
+         call height_bounds(lheight, Ns_rho, depths_tmp, &
+                            hgt_bot(imem), hgt_top(imem), hgt_fract(imem), hstatus)
          if (hstatus > 0) then
             istatus = hstatus
             return
          endif
       enddo
+
       ! Get the levels needed for the vertical interpolation
       call unique_vec_from_two(hgt_bot, hgt_top, ens_size, hgt_bot_un, N_lev_un)
       do ilev = 1, N_lev_un
-         dart_idx = get_dart_vector_index(lon_corner(icorn), lat_corner(icorn),hgt_bot_un(ilev),domain_id, var_id)
+         dart_idx = get_dart_vector_index(lon_corner(icorn), lat_corner(icorn), &
+                                          hgt_bot_un(ilev), domain_id, var_id)
          val_alldepths(hgt_bot_un(ilev),:) = get_state(dart_idx, state_handle)
       enddo
       ! Loop on ensemble members to do the vertical interpolation and get values at
@@ -482,28 +477,28 @@ integer,  intent(in)  :: vtype          ! type of data
 real(r8), intent(out) :: depths(N_vert) ! output
 
 ! Local storage
-INTEGER  :: ik                      ! index for loops
-REAL(r8) :: sc(N_vert),Cs(N_vert)   ! s-curves in domain [-1 < sc < 0] at vertical RHO-points.
-REAL(r8) :: ds 
-REAL(r8) :: h2,z0                   ! Useful temporary variables
+integer  :: ik                      ! index for loops
+real(r8) :: sc(N_vert),Cs(N_vert)   ! s-curves in domain [-1 < sc < 0] at vertical RHO-points.
+real(r8) :: ds 
+real(r8) :: h2,z0                   ! Useful temporary variables
 
 
 ! Set S-Curves in domain [-1 < sc < 0] at vertical W- and RHO-points.
 if (vert_transform == 2) then
     if (vtype == 2) then
-        ds=1.0/(N_vert-1)
-        sc(1) = -1.0;
-        sc(N_vert) = 0.0;
-        Cs(1) = -1.0;
-        Cs(N_vert) = 0.0;
+        ds=1.0_r8/(N_vert-1)
+        sc(1) = -1.0_r8;
+        sc(N_vert) = 0.0_r8;
+        Cs(1) = -1.0_r8;
+        Cs(N_vert) = 0.0_r8;
         do ik = 2,N_vert-1
             sc(ik) = ds*(ik-2-N_vert)
         enddo
         Cs=csf(sc, N_vert)
    else
-        ds=1.0/N_vert
+        ds=1.0_r8/N_vert
         do ik = 1,N_vert
-            sc(ik)= ds*(ik-N_vert-0.5)
+            sc(ik)= ds*(ik-N_vert-0.5_r8)
         enddo
         Cs=csf(sc,N_vert);
     endif
@@ -514,28 +509,28 @@ else
         enddo
     else
         do ik = 1,N_vert
-            sc(ik)=(ik-N_vert-0.1)/N_vert
+            sc(ik)=(ik-N_vert-0.1_r8)/N_vert
         enddo
     endif
-    Cs=(1.-theta_b)*(1.0/sinh(theta_s))*sinh(theta_s*sc)+theta_b*((0.5/tanh(0.5*theta_s))*tanh(theta_s*(sc+0.5))-0.5);
+    Cs = (1.0_r8 - theta_b) * (1.0_r8/sinh(theta_s)) * sinh(theta_s*sc)+theta_b * &
+         ((0.5_r8/tanh(0.5_r8*theta_s)) * tanh(theta_s*(sc+0.5_r8))-0.5_r8)
 endif
 
-!
 ! Create S-coordinate system: based on model topography h(i,j),
 ! fast-time-averaged free-surface field and vertical coordinate
 ! transformation metrics compute evolving depths of of the three-
 ! dimensional model grid.
-!
+
 if (vert_transform == 2) then
     h2=(H+hc)
     do ik = 1,N_vert
         z0=hc*sc(ik)+Cs(ik)*H
-        depths(ik) = z0*H/h2 + zeta*(1.0+z0*1.0/h2)
+        depths(ik) = z0*H/h2 + zeta*(1.0_r8+z0*1.0_r8/h2)
     enddo
 else
     do ik = 1,N_vert
         z0=hc*(sc(ik)-Cs(ik))+Cs(ik)*H;
-        depths(ik) = z0 + zeta*(1.0+z0*1.0/H)
+        depths(ik) = z0 + zeta*(1.0_r8+z0*1.0_r8/H)
     enddo
 endif
 
@@ -553,27 +548,26 @@ end subroutine get_depths
 
 function csf (sc, N_vert)
 
-! Argument declaration
-real(r8), dimension(N_vert), intent(in)    :: sc                  !s-curves in domain [-1 < sc < 0]
-integer,  intent(in)                       :: N_vert                 !size of the input variable
+real(r8), intent(in) :: sc(N_vert)   !s-curves in domain [-1 < sc < 0]
+integer,  intent(in) :: N_vert       !size of the input variable
 
 ! variables declaration
-real(r8), dimension(N_vert)           :: csf                 !returned value
-integer(r8)                           :: ik                  !index for loops
-real(r8), dimension(N_vert)           :: csurf               ! Csurface
+real(r8), dimension(N_vert) :: csf                 !returned value
+integer(r8)                 :: ik                  !index for loops
+real(r8), dimension(N_vert) :: csurf               ! Csurface
 
-IF (theta_s > 0 ) THEN
+IF (theta_s > 0.0_r8 ) THEN
     DO ik = 1,N_vert
-        csurf(ik)=(1-COSH(sc(ik)*theta_s))/(COSH(theta_s)-1)
+        csurf(ik)=(1.0_r8-COSH(sc(ik)*theta_s))/(COSH(theta_s)-1.0_r8)
     ENDDO
 ELSE
     DO ik = 1,N_vert
         csurf(ik)=-(sc(ik)**2)
     ENDDO
 ENDIF
-IF (theta_b > 0) THEN
+IF (theta_b > 0.0_r8) THEN
     DO ik = 1,N_vert
-        csf(ik) = (EXP(theta_b*csurf(ik))-1)/(1-EXP(-theta_b))
+        csf(ik) = (EXP(theta_b*csurf(ik))-1.0_r8)/(1.0_r8-EXP(-theta_b))
     ENDDO
 ELSE
     csf  = csurf
@@ -588,10 +582,8 @@ end function csf
 !> Get the top and bottom levels for a given depth.
 !>
 
-
 subroutine height_bounds(lheight, nheights, hgt_array, bot, top, fract, istatus)
-!=======================================================================
-!
+
 real(r8),             intent(in) :: lheight
 integer,              intent(in) :: nheights
 real(r8),             intent(in) :: hgt_array(nheights)
@@ -648,7 +640,7 @@ end subroutine height_bounds
 !>
 
 
-function  rho2u (var_rho,ctype,size_x,size_y)
+function  rho2u(var_rho, ctype, size_x, size_y)
 !!---------------------------------------------------------------------
 !!                  ***  FUNCTION  rho2u  ***
 !!
@@ -673,14 +665,14 @@ SELECT CASE (ctype )
       ALLOCATE ( rho2u(size_x-1,size_y))
       DO ij=1,size_y
          DO ii=1,size_x-1
-            rho2u(ii,ij)=0.5*(var_rho(ii,ij)+var_rho(ii+1,ij))
+            rho2u(ii,ij)=0.5_r8*(var_rho(ii,ij)+var_rho(ii+1,ij))
          ENDDO
       ENDDO
    CASE ('V','v')
       ALLOCATE ( rho2u(size_x,size_y-1))
       DO ij=1,size_y-1
          DO ii=1,size_x
-            rho2u(ii,ij)=0.5*(var_rho(ii,ij)+var_rho(ii,ij+1))
+            rho2u(ii,ij)=0.5_r8*(var_rho(ii,ij)+var_rho(ii,ij+1))
          ENDDO
       ENDDO
 END SELECT
@@ -692,6 +684,7 @@ end function rho2u
 !>
 !> Return vector with unique values of vect
 !>
+!>@todo this function appears to be unused ... remove
 
 subroutine unique_vec(val, N, val_un, N_un)
 
@@ -755,7 +748,8 @@ end subroutine unique_vec_from_two
 !> use potential temp, depth, and salinity to compute a sensible (in-situ)
 !> temperature
 
-subroutine compute_temperature(state_handle, ens_size, llon, llat, lheight, expected_obs, istatus)
+subroutine compute_temperature(state_handle, ens_size, llon, llat, lheight, &
+                               expected_obs, istatus)
 
 type(ensemble_type), intent(in)  :: state_handle
 integer,             intent(in)  :: ens_size
@@ -767,7 +761,6 @@ integer,             intent(out) :: istatus(ens_size)
 integer     :: icorn, imem, ilev, N_lev_un
 integer     :: ssh_id, temp_id, salt_id
 integer     :: lstatus, hstatus
-integer     :: lat_bot, lat_top, lon_bot, lon_top
 integer     :: lon_corner(4), lat_corner(4)
 integer     :: hgt_bot(ens_size), hgt_top(ens_size), hgt_bot_un(2*ens_size)
 integer(i8) :: dart_idx
@@ -798,11 +791,14 @@ if (lstatus /= 0) return
 ! Get values of T and S at corners
 do icorn = 1,4
    ! get SSH at corners location for all members
-   dart_idx = get_dart_vector_index(lon_corner(icorn), lat_corner(icorn),1,domain_id, ssh_id)
+   dart_idx = get_dart_vector_index(lon_corner(icorn), lat_corner(icorn), 1, &
+                                    domain_id, ssh_id)
    ssh_corners = get_state(dart_idx, state_handle)
    do imem = 1,ens_size
-      call get_depths(BATHY(lon_corner(icorn), lat_corner(icorn)),ssh_corners(imem), depths_tmp, 1, Ns_rho)
-      call height_bounds(lheight, Ns_rho, depths_tmp, hgt_bot(imem),hgt_top(imem), hgt_fract(imem), hstatus)
+      call get_depths(BATHY(lon_corner(icorn), lat_corner(icorn)), &
+                      ssh_corners(imem), depths_tmp, 1, Ns_rho)
+      call height_bounds(lheight, Ns_rho, depths_tmp, hgt_bot(imem), &
+                         hgt_top(imem), hgt_fract(imem), hstatus)
       if (hstatus > 0) then
          istatus = hstatus
          return
@@ -811,9 +807,11 @@ do icorn = 1,4
    ! Get the levels needed for the vertical interpolation
    call unique_vec_from_two(hgt_bot, hgt_top, ens_size, hgt_bot_un, N_lev_un)
    do ilev = 1, N_lev_un
-      dart_idx = get_dart_vector_index(lon_corner(icorn),lat_corner(icorn),hgt_bot_un(ilev),domain_id, temp_id)
+      dart_idx = get_dart_vector_index(lon_corner(icorn), lat_corner(icorn), &
+                                       hgt_bot_un(ilev),domain_id, temp_id)
       temp_alldepths(hgt_bot_un(ilev),:) = get_state(dart_idx, state_handle)
-      dart_idx = get_dart_vector_index(lon_corner(icorn),lat_corner(icorn),hgt_bot_un(ilev),domain_id, salt_id)
+      dart_idx = get_dart_vector_index(lon_corner(icorn), lat_corner(icorn), &
+                                       hgt_bot_un(ilev),domain_id, salt_id)
       salt_alldepths(hgt_bot_un(ilev),:) = get_state(dart_idx, state_handle)
    enddo
    ! Loop on ensemble members to do the vertical interpolation and get values at
@@ -829,9 +827,9 @@ do icorn = 1,4
 enddo
 
 ! Do the horizontal interpolation: get T and S at position
-call quad_lon_lat_evaluate(tgrid_handle, llon, llat, lon_corner, lat_corner,&
+call quad_lon_lat_evaluate(tgrid_handle, llon, llat, lon_corner, lat_corner, &
                            ens_size, temp_corners, potential_temp, lstatus)
-call quad_lon_lat_evaluate(tgrid_handle, llon, llat, lon_corner, lat_corner,&
+call quad_lon_lat_evaluate(tgrid_handle, llon, llat, lon_corner, lat_corner, &
                            ens_size, salt_corners, salt_val, lstatus)
 
 if (lstatus > 0) then
@@ -843,14 +841,13 @@ endif
 ! potential temp in degrees C, pressure in decibars, salinity in psu or pss
 ! (g/kg).
 do imem = 1, ens_size !> @todo should this vectorize inside insitu_temp?
-   call insitu_temp(potential_temp(imem), salt_val(imem),pres_val*10.0_r8, expected_obs(imem))
+   call insitu_temp(potential_temp(imem), salt_val(imem), pres_val*10.0_r8, &
+                      expected_obs(imem))
 enddo
 
 istatus = 0
 
-
 end subroutine compute_temperature
-
 
 
 !-----------------------------------------------------------------------
@@ -891,7 +888,7 @@ real(r8), parameter :: c1 = 1.0_r8
 !  convert depth in meters to pressure in bars
 ! -----------------------------------------------------------------------
 
-dpth2pres = 0.059808_r8*(exp(-0.025_r8*depth) - c1)  &
+dpth2pres = 0.059808_r8 * (exp(-0.025_r8*depth) - c1)  &
               + 0.100766_r8*depth + 2.28405e-7_r8*depth**2
 
 if (debug > 2 .and. do_output()) then
@@ -986,8 +983,10 @@ real(r8) :: dp,p,q,r1,r2,r3,r4,r5,s1,t,x
             r1 = ((-2.1687e-16_r8 * t + 1.8676e-14_r8) * t - 4.6206e-13_r8) * p
             r2 = (2.7759e-12_r8*t - 1.1351e-10_r8) * s1
             r3 = ((-5.4481e-14_r8 * t + 8.733e-12_r8) * t - 6.7795e-10_r8) * t
-            r4 = (r1 + (r2 + r3 + 1.8741e-8_r8)) * p + (-4.2393e-8_r8 * t+1.8932e-6_r8) * s1
-            r5 = r4 + ((6.6228e-10_r8 * t-6.836e-8_r8) * t + 8.5258e-6_r8) * t + 3.5803e-5_r8
+            r4 = (r1 + (r2 + r3 + 1.8741e-8_r8)) * p + &
+                 (-4.2393e-8_r8 * t+1.8932e-6_r8) * s1
+            r5 = r4 + ((6.6228e-10_r8 * t-6.836e-8_r8) * t + 8.5258e-6_r8) * t + &
+                 3.5803e-5_r8
 
             x  = dp*r5
 
@@ -1109,15 +1108,23 @@ call get_grid_dimensions()
 call get_grid()
 
 ! initialize the quad interp code
-call init_quad_interp(grid_type=GRID_QUAD_FULLY_IRREGULAR, num_lons=Nxi_u, num_lats=Neta_u, &
-                      cell_relative=QUAD_LOCATED_LON_EDGES, global=.false.,spans_lon_zero=.false., &
-                      pole_wrap=.false., interp_handle=ugrid_handle)
-call init_quad_interp(grid_type=GRID_QUAD_FULLY_IRREGULAR, num_lons=Nxi_v, num_lats=Neta_v, &
-                      cell_relative=QUAD_LOCATED_LAT_EDGES, global=.false.,spans_lon_zero=.false., &
-                      pole_wrap=.false., interp_handle=vgrid_handle)
-call init_quad_interp(grid_type=GRID_QUAD_FULLY_IRREGULAR, num_lons=Nxi_rho, num_lats=Neta_rho, &
-                      cell_relative=QUAD_LOCATED_CELL_CENTERS, global=.false.,spans_lon_zero=.false., &
-                      pole_wrap=.false., interp_handle=tgrid_handle)
+call init_quad_interp(grid_type = GRID_QUAD_FULLY_IRREGULAR, &
+                      num_lons = Nxi_u, num_lats = Neta_u, &
+                      cell_relative = QUAD_LOCATED_LON_EDGES, &
+                      global = .false., spans_lon_zero = .false., &
+                      pole_wrap = .false., interp_handle = ugrid_handle)
+
+call init_quad_interp(grid_type = GRID_QUAD_FULLY_IRREGULAR, &
+                      num_lons = Nxi_v, num_lats = Neta_v, &
+                      cell_relative = QUAD_LOCATED_LAT_EDGES, &
+                      global = .false., spans_lon_zero = .false., &
+                      pole_wrap = .false., interp_handle = vgrid_handle)
+
+call init_quad_interp(grid_type = GRID_QUAD_FULLY_IRREGULAR, &
+                      num_lons = Nxi_rho, num_lats = Neta_rho, &
+                      cell_relative = QUAD_LOCATED_CELL_CENTERS, &
+                      global = .false., spans_lon_zero = .false., &
+                      pole_wrap = .false., interp_handle = tgrid_handle)
 
 call set_quad_coords(ugrid_handle, ULON, ULAT, UMASK)
 call set_quad_coords(vgrid_handle, VLON, VLAT, VMASK)
@@ -1188,8 +1195,6 @@ subroutine nc_write_model_atts(ncid, domain_id)
 integer, intent(in) :: ncid      ! netCDF file identifier
 integer, intent(in) :: domain_id
 
-integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
-
 ! for the dimensions and coordinate variables
 integer :: nxirhoDimID, nxiuDimID, nxivDimID
 integer :: netarhoDimID, netauDimID, netavDimID
@@ -1214,10 +1219,6 @@ write(filename,*) 'ncid', ncid
 call nc_begin_define_mode(ncid)
 
 call nc_add_global_creation_time(ncid)
-
-call nc_add_global_attribute(ncid, "model_source", source)
-call nc_add_global_attribute(ncid, "model_revision", revision)
-call nc_add_global_attribute(ncid, "model_revdate", revdate)
 
 call nc_add_global_attribute(ncid, "model", "ROMS")
 
@@ -1459,7 +1460,8 @@ endif
 call nc_check( nf90_open(trim(filename), NF90_NOWRITE, ncid), &
                   'read_model_time', 'open '//trim(filename))
 
-call get_time_information(filename, ncid, 'ocean_time', 'ocean_time', last_time=read_model_time)
+call get_time_information(filename, ncid, 'ocean_time', 'ocean_time', &
+                          last_time=read_model_time)
 
 call nc_check( nf90_close(ncid), 'read_model_time', 'close '//trim(filename))
 
@@ -1703,9 +1705,6 @@ endif
 end subroutine get_grid
 
 
-
-
-
 !-----------------------------------------------------------------------
 !>
 !> Fill the array of requested variables, dart kinds, possible min/max
@@ -1719,6 +1718,7 @@ subroutine parse_variable_input( state_variables, ngood )
 character(len=*), intent(in)  :: state_variables(:)
 integer,          intent(out) :: ngood
 
+character(len=*), parameter :: routine = 'parse_variable_input'
 integer :: i
 character(len=NF90_MAX_NAME) :: varname       ! column 1
 character(len=NF90_MAX_NAME) :: dartstr       ! column 2
@@ -1739,14 +1739,14 @@ MyLoop : do i = 1, MAX_STATE_VARIABLES
 
    if ( varname == ' ' .or. dartstr == ' ' ) then
       string1 = 'model_nml:model "variables" not fully specified'
-      call error_handler(E_ERR,'parse_variable_input:',string1,source,revision,revdate)
+      call error_handler(E_ERR,routine,string1,source,revision,revdate)
    endif
 
    ! Make sure DART kind is valid
 
    if( get_index_for_quantity(dartstr) < 0 ) then
       write(string1,'(''there is no quantity <'',a,''> in obs_kind_mod.f90'')') trim(dartstr)
-      call error_handler(E_ERR,'parse_variable_input:',string1,source,revision,revdate)
+      call error_handler(E_ERR,routine,string1,source,revision,revdate)
    endif
 
    call to_upper(minvalstring)
@@ -1766,7 +1766,7 @@ enddo MyLoop
 if (ngood == MAX_STATE_VARIABLES) then
    string1 = 'WARNING: There is a possibility you need to increase ''MAX_STATE_VARIABLES'''
    write(string2,'(''WARNING: you have specified at least '',i4,'' perhaps more.'')')ngood
-   call error_handler(E_MSG,'parse_variable_input:',string1,source,revision,revdate,text2=string2)
+   call error_handler(E_MSG,routine,string1,source,revision,revdate,text2=string2)
 endif
 
 end subroutine parse_variable_input
@@ -1804,6 +1804,8 @@ type(time_type),   optional, intent(out) :: last_time
 type(time_type),   optional, intent(out) :: origin_time
 type(time_type),   optional, intent(out) :: all_times(:)
 
+
+character(len=*), parameter :: routine = 'get_time_information'
 integer :: ios, DimID, VarID, dimlen, i
 character(len=64) :: unitstring
 character(len=32) :: calendarstring
@@ -1819,14 +1821,14 @@ integer :: original_calendar_type
 !>@todo FIXME get the variable length from the varid and remove the need for the dimension name
 
 call nc_check(nf90_inq_dimid(ncid,dim_name,dimid=DimID), &
-       'get_time_information','cannot find "'//trim(dim_name)//'" dimension in '//trim(filename))
+       routine,'cannot find "'//trim(dim_name)//'" dimension in '//trim(filename))
 
 call nc_check(nf90_inquire_dimension(ncid, DimID, len=dimlen), &
-       'get_time_information', 'inquire_dimension '//trim(dim_name)//' from '//trim(filename))
+       routine, 'inquire_dimension '//trim(dim_name)//' from '//trim(filename))
 if (present(last_time_index)) last_time_index = dimlen
 
 call nc_check(nf90_inq_varid(ncid, var_name, VarID), &
-       'get_time_information', 'inq_varid '//trim(var_name)//' from '//trim(filename))
+       routine, 'inq_varid '//trim(var_name)//' from '//trim(filename))
 if (present(myvarid)) myvarid = VarID
 
 ! assume gregorian calendar unless there's a calendar attribute saying elsewise
@@ -1837,7 +1839,7 @@ if (index(calendarstring,'gregorian') == 0) then
    write(string1,*)'expecting '//trim(var_name)//' calendar of "gregorian"'
    write(string2,*)'got '//trim(calendarstring)
    write(string3,*)'from file "'//trim(filename)//'"'
-   call error_handler(E_MSG,'get_time_information:', string1, &
+   call error_handler(E_MSG,routine, string1, &
              source, revision, revdate, text2=string2, text3=string3)
 else
    ! coerce all forms of gregorian to the one DART supports
@@ -1865,7 +1867,7 @@ if (present(last_time) .or. present(origin_time) .or. present(all_times)) then
    !                      1234567890
 
    call nc_check(nf90_get_att(ncid, VarID, 'units', unitstring), &
-          'get_time_information', 'get_att '//trim(var_name)//' units '//trim(filename))
+          routine, 'get_att '//trim(var_name)//' units '//trim(filename))
 
    ! decode the start time of the time variable - expecting time to be coded
    ! as an offset to some base
@@ -1876,7 +1878,7 @@ if (present(last_time) .or. present(origin_time) .or. present(all_times)) then
          write(string1,*)'Unable to read time variable units. Error status was ',ios
          write(string2,*)'expected "seconds since YYYY-MM-DD HH:MM:SS"'
          write(string3,*)'was      "'//trim(unitstring)//'"'
-         call error_handler(E_ERR, 'get_time_information:', string1, &
+         call error_handler(E_ERR, routine, string1, &
                 source, revision, revdate, text2=string2, text3=string3)
       endif
       offset_in_seconds = .true.
@@ -1887,7 +1889,7 @@ if (present(last_time) .or. present(origin_time) .or. present(all_times)) then
          write(string1,*)'Unable to read time variable units. Error status was ',ios
          write(string2,*)'expected "days since YYYY-MM-DD HH:MM:SS"'
          write(string3,*)'was      "'//trim(unitstring)//'"'
-         call error_handler(E_ERR, 'get_time_information:', string1, &
+         call error_handler(E_ERR, routine, string1, &
                 source, revision, revdate, text2=string2, text3=string3)
       endif
       offset_in_seconds = .false.
@@ -1896,7 +1898,7 @@ if (present(last_time) .or. present(origin_time) .or. present(all_times)) then
       write(string1,*)'expecting time attribute units of "seconds since ..." -OR-'
       write(string2,*)'                              "days since ..."'
       write(string3,*)'got "'//trim(unitstring)//'"'
-      call error_handler(E_ERR,'get_time_information:', string1, &
+      call error_handler(E_ERR,routine, string1, &
                 source, revision, revdate, text2=string2, text3=string3)
    endif
 
@@ -1913,7 +1915,7 @@ if (present(last_time) .or. present(origin_time) .or. present(all_times)) then
       allocate(these_times(dimlen))
 
       call nc_check(nf90_get_var( ncid, VarID, these_times), &
-             'get_time_information', 'get_var '//trim(var_name)//' from '//trim(filename))
+             routine, 'get_var '//trim(var_name)//' from '//trim(filename))
 
       if (present(last_time)) then
          time_offset = convert_to_time_offset(these_times(dimlen), offset_in_seconds)
@@ -2086,7 +2088,8 @@ base_time = model_time
 call nc_check( nf90_open(trim(roms_filename), NF90_NOWRITE, ncid), &
                   'write_roms_time_information', 'open '//trim(roms_filename))
 
-call get_time_information(roms_filename, ncid, 'ocean_time', 'ocean_time', origin_time=base_time)
+call get_time_information(roms_filename, ncid, 'ocean_time', 'ocean_time', &
+                          origin_time=base_time)
 
 call nc_check( nf90_close(ncid), &
                  'write_roms_time_information', 'close '//trim(roms_filename))
