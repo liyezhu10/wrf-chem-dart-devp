@@ -8,8 +8,8 @@
 !WATER_TABLE_DEPTH,              QTY_WATER_TABLE_DEPTH,          COMMON_CODE
 !SOIL_TEMPERATURE,               QTY_SOIL_TEMPERATURE,           COMMON_CODE
 !SOIL_MOISTURE,                  QTY_SOIL_MOISTURE,              COMMON_CODE
-!LAYER_LIQUID_WATER,             QTY_LIQUID_WATER,               COMMON_CODE
-!LAYER_ICE,                      QTY_ICE,                        COMMON_CODE
+!LAYER_LIQUID_WATER,             QTY_SOIL_LIQUID_WATER,          COMMON_CODE
+!LAYER_ICE,                      QTY_SOIL_ICE,                   COMMON_CODE
 !SNOW_THICKNESS,                 QTY_SNOW_THICKNESS,             COMMON_CODE
 !SNOW_WATER,                     QTY_SNOW_WATER,                 COMMON_CODE
 !MODIS_SNOWCOVER_FRAC,           QTY_SNOWCOVER_FRAC,             COMMON_CODE

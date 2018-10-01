@@ -63,8 +63,8 @@ use netcdf_utilities_mod, only : nc_add_global_attribute, nc_synchronize_file, &
 
 use     obs_kind_mod, only : QTY_SOIL_TEMPERATURE,       &
                              QTY_SOIL_MOISTURE,          &
-                             QTY_LIQUID_WATER,           &
-                             QTY_ICE,                    &
+                             QTY_SOIL_LIQUID_WATER,      &
+                             QTY_SOIL_ICE,               &
                              QTY_SNOWCOVER_FRAC,         &
                              QTY_SNOW_THICKNESS,         &
                              QTY_LEAF_CARBON,            &
@@ -417,6 +417,7 @@ if (present(var_type)) then
       if((indx >= get_index_start(progvar(n)%domain, varstring)) .and. &
          (indx <= get_index_end(  progvar(n)%domain, varstring))) then
          var_type = progvar(n)%dart_qty
+       ! TJH maybe modify that if it is not 'land', it should be ???
          exit FINDTYPE
       endif
    enddo FINDTYPE
@@ -2046,17 +2047,17 @@ select case( obs_kind )
 
       ! TJH FIXME : make sure this is consistent with the COSMOS operator
       ! This is terrible ... the COSMOS operator wants m3/m3 ... CLM is kg/m2
-      call get_grid_vertval(state_handle, ens_size, location, QTY_LIQUID_WATER, interp_val_liq, istatus_liq)
+      call get_grid_vertval(state_handle, ens_size, location, QTY_SOIL_LIQUID_WATER, interp_val_liq, istatus_liq)
       call track_status(ens_size, istatus_liq, interp_val_liq, istatus, return_now)
       if (return_now) return
     
-      call get_grid_vertval(state_handle, ens_size, location, QTY_ICE,          interp_val_ice, istatus_ice)
+      call get_grid_vertval(state_handle, ens_size, location, QTY_SOIL_ICE,          interp_val_ice, istatus_ice)
       call track_status(ens_size, istatus_ice, interp_val_ice, istatus, return_now)
       if (return_now) return
 
       where (istatus == 0) expected_obs = interp_val_liq + interp_val_ice
 
-   case ( QTY_SOIL_TEMPERATURE, QTY_LIQUID_WATER, QTY_ICE )
+   case ( QTY_SOIL_TEMPERATURE, QTY_SOIL_LIQUID_WATER, QTY_SOIL_ICE )
 
       call get_grid_vertval(state_handle, ens_size, location, obs_kind, expected_obs, istatus)
 
