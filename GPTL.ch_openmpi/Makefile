@@ -41,9 +41,9 @@ ifeq ($(strip $(MPILIB)), mpi-serial)
   MPICC   := $(SCC)
   INCLDIR += -I$(EXEROOT)/mct/mpi-serial
 else
-  CC := $(MPICC)
-  FC := $(MPIFC)
-  CPPDEFS += -DHAVE_MPI -DFORTRANUNDERSCORE 
+  CC := $(MPICC) -qopenmp
+  FC := $(MPIFC) -qopenmp
+  CPPDEFS += -DHAVE_MPI -DFORTRANUNDERSCORE  -DHAVE_NANOTIME -DBIT64
 endif
 ifdef CPRE
   FPPDEFS := $(patsubst -D%,$(CPRE)%,$(CPPDEFS)) 

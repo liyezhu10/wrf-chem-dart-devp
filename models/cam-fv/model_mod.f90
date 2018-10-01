@@ -3171,6 +3171,8 @@ real(r8) :: p_surf(ens_size), threshold
 integer  :: imem
 real(r8), allocatable :: p_col(:)
 
+write(*,*) "DEBUG_RC : get_val_level"
+
 ! Start with failure condition
 istatus(:) = 1
 vstatus(:) = 1
@@ -3256,8 +3258,10 @@ integer,  dimension(ens_size) :: top_lev, bot_lev, vstatus, cur_vstatus
 ! RMA-KR; cur_vstatus was explicitly dimensioned (ens_size), which was redundant.
 integer               :: fld_index
 integer(i8)           :: i, imem
-real(r8), allocatable :: p_col(:,:)
+real(r8) :: p_col(30, 10)
+!bpd6 - real(r8), allocatable :: p_col(:,:)
 
+write(*,*) "DEBUG_RC : get_val_pressure", ens_size
 ! Start with error condition.
 istatus(:) = 1
 cur_vstatus(:) = 1
@@ -3301,7 +3305,7 @@ endif
 ! Assuming we'll only need pressures on model mid-point levels, not interface levels.
 ! This pressure column will be for the correct grid for obs_qty, since p_surf was taken
 !     from the grid-correct ps[_stagr] grid
-allocate(p_col(lev%length, ens_size))
+!bpd6 - allocate(p_col(lev%length, ens_size))
 p_col(:,:) = MISSING_R8
 do imem = 1, ens_size
    call plevs_cam(p_surf(imem), lev%length, p_col(:, imem))
@@ -3367,7 +3371,7 @@ if (pressure < highest_obs_pressure_Pa) then
    where (istatus == 0) istatus = 2
 endif
 
-deallocate(p_col)
+!bpd6 -deallocate(p_col)
 
 end subroutine get_val_pressure
 
@@ -3406,6 +3410,7 @@ logical     :: stagr_lon, stagr_lat
 real(r8), allocatable :: p_col(:, :), model_h(:, :) !(lev%length, ens_size)
 integer :: imem
 
+write(*,*) "DEBUG_RC : get_val_height"
 ! Start with error condition.
 ! RMA-KR; should vstatus start with 1?  Then change comment to 'start with error condition'.
 !         vstatus is first passed to model_heights, which sets it to 1, so this is irrelevant.
@@ -3642,6 +3647,7 @@ subroutine set_highest_obs_limit()
 integer  :: i, lowest_ok
 real(r8) :: p_surf, top
 real(r8), allocatable :: p_col(:)
+write(*,*) "DEBUG_RC : set_highest_obs_limit"
 ! This assumes that all variables are defined on model levels, not on interface levels.
 allocate(p_col(lev%length))
 
@@ -3967,6 +3973,11 @@ real(r8) :: base_array(3), local_base_array(3), obs_array(3), local_obs_array(3)
 real(r8) :: damping_dist, threshold, thresh_wght
 type(location_type) :: local_base_loc, local_loc, vert_only_loc
 
+! bpd6 debugging:
+integer :: mythread
+integer :: OMP_GET_THREAD_NUM
+integer :: OMP_GET_NUM_THREADS
+
 if (.not. module_initialized) call static_init_model()
 
 ! If base_obs vert type is not pressure; convert it to pressure
@@ -3981,20 +3992,33 @@ base_obs_kind = get_quantity_for_type_of_obs(base_type)
 ! is higher than highest_XXX_Pa.  That modification tapers to 0,
 ! so any errors introduced by this approx will be continuous and random,
 ! introducing no bias.
+
+  !! !$OMP BARRIER
+  write(*,'(A,I4,G14.8,G14.8,G14.8)') "Debug GC1: base_array     : ", mythread, base_array(1), base_array(2), base_array(3)
 if (base_which == VERTISPRESSURE .and. vert_coord == 'pressure') then
+   write(*,*) "Huh..", mythread
    local_base_loc = base_loc
    local_base_array   = get_location(base_loc)  ! needed in num_close loop
    local_base_which   = base_which
 else
+   write(*,*) "Calling convert_vert  ", mythread
    call convert_vert(state_handle, base_array, base_which, base_loc, base_obs_kind, &
                      local_base_array, local_base_which)
+
    local_base_loc = set_location(base_array(1), base_array(2), local_base_array(3), &
                                      local_base_which)
+
 endif
+
+  !  !$OMP BARRIER
+  write(*,'(A,I4,G14.8,G14.8,G14.8)') "Debug GC2: local_base_loc : ", mythread, local_base_loc%lon, local_base_loc%lat, local_base_loc%vloc
 
 ! Get all the potentially close obs but no distances. 
 call loc_get_close(filt_gc, local_base_loc, base_type, locs, loc_qtys, &
                    num_close, close_indices)
+  !  !$OMP BARRIER
+  write(*,'(A,I4,I10,I10)') "Debug GC3:            : ", mythread, num_close, maxval(close_indices(1:num_close))
+
 
 do k = 1, num_close
 
@@ -4005,6 +4029,11 @@ do k = 1, num_close
 
    t_ind = close_indices(k)
    obs_array = get_location(locs(t_ind))
+
+    mythread =  OMP_GET_THREAD_NUM()
+
+
+
    ! query_location returns location%which_vert, if no 'attr' argument is given.
    obs_which = nint(query_location(locs(t_ind)))
 
@@ -4026,6 +4055,9 @@ do k = 1, num_close
       local_obs_which    = local_base_which
 
    else
+           if ((obs_which == VERTISLEVEL) .and. (obs_array(3) > 30.0)) then
+              write(*,'(A,I4,G14.8,G14.8,G14.8)') "Debug GC4: obs_array     : ", mythread, obs_array(1), obs_array(2), obs_array(3)
+            endif
       call convert_vert(state_handle, obs_array, obs_which, locs(t_ind), loc_qtys(t_ind), &
                         local_obs_array, local_obs_which)
 
@@ -4232,10 +4264,18 @@ integer               :: slon_index
 
 character(len=8) :: cam_varname
 integer :: ens_size ! To call interp_lonlat with ens_size of 1
-real(r8), allocatable :: p_col(:)
-real(r8), allocatable :: model_h(:)
+!bpd6 - real(r8), allocatable :: model_h(:)
+
+!bpd6 changed on 9/27/2018 - see note below
+real(r8) :: p_col(30)
+real(r8) :: model_h(30)
+
+!bpd6
+integer :: i
 
 ens_size = 1
+
+
 
 !HK not building ps arrays.
 slon_index = find_name('slon',dim_names)
@@ -4248,7 +4288,11 @@ new_array(2) = old_array(2)
 ! these should be set by the code below; it's an error if not.
 new_which    = MISSING_I
 new_array(3) = MISSING_R8
-allocate(p_col(lev%length))
+
+! Edit by bpd6 on 9/27/2018 - changing allocate to static array to see if fixes
+! OMP issue:
+!write(*,*) "DEBUG: pcol size = ", lev%length
+!allocate(p_col(lev%length))
 
 if (.not. (old_which == VERTISPRESSURE .or. old_which == VERTISHEIGHT  .or. &
            old_which == VERTISLEVEL    .or. old_which == VERTISSURFACE .or. &
@@ -4380,6 +4424,11 @@ elseif (old_which == VERTISLEVEL) then
    ! OR do this for all columns in static_init_model_dist, which would make PS (and P)
    ! globally available for all regions?
    if (vert_coord == 'pressure') then
+      !debug bpd6
+      if (old_array(3) > 30.0) then
+          write(*,*) "PCOL BUG - error! : ", old_array(3), shape(p_col)
+      endif
+        
       new_array(3) =            p_col(nint(old_array(3)))
       new_which = VERTISPRESSURE
    elseif (vert_coord == 'log_invP') then
@@ -4389,7 +4438,7 @@ elseif (old_which == VERTISLEVEL) then
 
 elseif (old_which == VERTISHEIGHT) then
 
-   allocate(model_h(lev%length))
+   !bpd6 - allocate(model_h(lev%length))
    call model_heights(state_handle, ens_size, lev%length, p_surf(1), old_loc,  model_h, istatus(1))
    if (istatus(1) == 1) then
       write(string1, *) 'model_heights failed'
@@ -4439,14 +4488,15 @@ elseif (old_which == VERTISHEIGHT) then
       new_which = VERTISSCALEHEIGHT
    endif
 
-   deallocate(model_h)
+   !bpd6 - deallocate(model_h)
 
 else
    write(string1, *) 'model which_vert = ',old_which,' not handled in convert_vert '
    call error_handler(E_ERR, 'convert_vert', string1,source,revision,revdate)
 endif
 
-deallocate(p_col)
+!bpd6
+!deallocate(p_col)
 
 return
 

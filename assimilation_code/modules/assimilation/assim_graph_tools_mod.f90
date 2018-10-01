@@ -5,7 +5,7 @@
 ! $Id: assim_tools_mod.f90 11799 2017-07-07 21:08:09Z nancy@ucar.edu $
 
 !>  A variety of operations required by assimilation.
-module assim_tools_mod
+module assim_graph_tools_mod
 
 !> \defgroup assim_tools assim_tools_mod
 !> 
@@ -131,7 +131,7 @@ type colors_type
 !   integer, dimension(:), allocatable :: owner       ! Rank that owns this observation (computed from data)
 end type colors_type
 
-integer, parameter :: max_chunk_size = 128! for now
+integer, parameter :: max_chunk_size = 256! for now
 type chunk_type
     integer :: num_obs
     integer :: owner
@@ -376,7 +376,7 @@ subroutine filter_assim(ens_handle, obs_ens_handle, obs_seq, keys,           &
    OBS_PRIOR_MEAN_START, OBS_PRIOR_MEAN_END, OBS_PRIOR_VAR_START,            &
    OBS_PRIOR_VAR_END, inflate_only)
 use mpi
-use ifport
+!use ifport
 type(ensemble_type),         intent(inout) :: ens_handle, obs_ens_handle
 type(obs_sequence_type),     intent(in)    :: obs_seq
 integer,                     intent(in)    :: keys(:)
@@ -521,6 +521,10 @@ integer :: debug_loop
 
 !debug
 real(kind=8) :: checksum, checksum_total
+
+integer :: mythread
+integer :: OMP_GET_THREAD_NUM
+integer :: OMP_GET_NUM_THREADS
 
 !packed sends (into a buffer)?
 !logical :: packed_sends = .true.
@@ -775,9 +779,13 @@ endif
     do j = 1, original_chunk_size
        ob_index = chunks(i)%obs_list(j)
        owner = chunks(i)%owner
-       owners_index = graph_owners_index(chunks, i, j) 
-       obs_qc = obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, owners_index)
-       call MPI_Bcast(obs_qc, 1, MPI_DOUBLE_PRECISION, owner, MPI_COMM_WORLD, iError) 
+       if (my_task_id() == owner) then
+         owners_index = graph_owners_index(chunks, i, j) 
+         obs_qc = obs_ens_handle%copies(OBS_GLOBAL_QC_COPY, owners_index)
+         call MPI_Bcast(obs_qc, 1, MPI_DOUBLE_PRECISION, owner, MPI_COMM_WORLD, iError) 
+       else
+         call MPI_Bcast(obs_qc, 1, MPI_DOUBLE_PRECISION, owner, MPI_COMM_WORLD, iError) 
+       endif
        ! Now everyone has the QC value
        if (nint(obs_qc) /= 0) then
            chunks(i)%comm_obs = chunks(i)%comm_obs - 1
@@ -787,18 +795,23 @@ endif
   end do
   call t_stopf('QC_Prep_Loop')
 
+if (sync_between_timers) then
+  call task_sync()
+endif
+
 call t_startf('Full Loop')
 
 CHUNK_LOOP: do i = 1, size(chunks)
+   call t_startf('ASSIMILATE:Header')
    if (debug_mode) then
       if (my_task_id() == 0) then
-        write(*,'(A5,I6,A7,I6,A4,I6,A3,I9,A3,I9)'), "Rank",my_task_id(),"C#",i,"Own",chunks(i)%owner,"St",chunks(i)%obs_list(1),"En",chunks(i)%obs_list(chunks(i)%num_obs)
+        write(*,'(A5,I6,A7,I6,A4,I6,A3,I9,A3,I9)') "Rank",my_task_id(),"C#",i,"Own",chunks(i)%owner,"St",chunks(i)%obs_list(1),"En",chunks(i)%obs_list(chunks(i)%num_obs)
       endif
    endif
 
    if (mod(i,nth_obs) == 0) then
        if (my_task_id() == 0) then
-        write(*,'(A5,I6,A7,I6,A4,I6,A3,I9,A3,I9)'), "Rank",my_task_id(),"C#",i,"Own",chunks(i)%owner,"St",chunks(i)%obs_list(1),"En",chunks(i)%obs_list(chunks(i)%num_obs)
+        write(*,'(A5,I6,A7,I6,A4,I6,A3,I9,A3,I9)') "Rank",my_task_id(),"C#",i,"Own",chunks(i)%owner,"St",chunks(i)%obs_list(1),"En",chunks(i)%obs_list(chunks(i)%num_obs)
        endif
    endif
 
@@ -806,8 +819,9 @@ CHUNK_LOOP: do i = 1, size(chunks)
     chunk_data%comm_obs = chunks(i)%comm_obs
     chunk_data%comm_size = chunks(i)%comm_size
    ! This section is only done by one process - the 'owner' of this chunk:
+   call t_stopf('ASSIMILATE:Header')
    if (sync_between_timers) then
-       call task_sync_filter()
+       call task_sync_filter('SYNC:Header')
    endif
    if (ens_handle%my_pe == chunks(i)%owner) then
       call t_startf('ASSIMILATE:Owned(Compute)')
@@ -828,7 +842,9 @@ CHUNK_LOOP: do i = 1, size(chunks)
         !test correctness on >1 core:
         owner = chunks(i)%owner
         !owners_index = j
+        call t_startf('GraphOwnerIndex')
         owners_index = graph_owners_index(chunks, i, j) ! This can be optimized
+        call t_stopf('GraphOwnerIndex')
         !write(*,*) "DEBUG: Ob_Index  = ", int(ob_index,i8), owner, owners_index
 
         ! Get the QC value for this ob:
@@ -875,7 +891,7 @@ CHUNK_LOOP: do i = 1, size(chunks)
 
     call t_stopf('ASSIMILATE:Owned(Compute)')
     if (sync_between_timers) then
-      call task_sync_filter()
+      call task_sync_filter('SYNC:Owned(Compute)')
     endif
     call t_startf('ASSIMILATE:Owned(Broadcast)')
 
@@ -888,12 +904,12 @@ CHUNK_LOOP: do i = 1, size(chunks)
     call t_stopf('ASSIMILATE:Owned(Broadcast)')
 
     if (sync_between_timers) then
-      call task_sync_filter()
+      call task_sync_filter('SYNC:Owned(Broadcast)')
    endif
 
    else ! (not the owner):
      if (sync_between_timers) then
-       call task_sync_filter()
+       call task_sync_filter('SYNC:Owned(Broadcast)')
      endif
      call t_startf('ASSIMILATE:NotOwned(Broadcast)')
      if (packed_sends) then
@@ -903,14 +919,14 @@ CHUNK_LOOP: do i = 1, size(chunks)
      endif
      call t_stopf('ASSIMILATE:NotOwned(Broadcast)')
      if (sync_between_timers) then
-       call task_sync_filter()
+       call task_sync_filter('SYNC:NotOwned(Broadcast)')
      endif
      call t_startf('ASSIMILATE:NotOwned(Compute)')
      call t_stopf('ASSIMILATE:NotOwned(Compute)')
   endif
 
   if (sync_between_timers) then
-    call task_sync_filter()
+    call task_sync_filter('SYNC:NotOwned(Compute)')
   endif
 
   call t_startf('ASSIMILATE:QC_CHECK')
@@ -973,11 +989,21 @@ CHUNK_LOOP: do i = 1, size(chunks)
   call t_stopf('ASSIMILATE:QC_CHECK')
 
   if (sync_between_timers) then
-       call task_sync_filter()
+       call task_sync_filter('SYNC:QC_Check')
   endif
+
+!  write(*,*) "Debug: chunk_data%comm_obs = ", chunk_data%comm_obs,  OMP_GET_NUM_THREADS()
 
   !write(*,*) "DEBUG: Num_groups = ", num_groups, chunk_data%num_obs
   !do j = 1, chunk_data%num_obs
+  !$OMP  PARALLEL DO schedule(runtime) default(none) &
+  !$OMP& shared(chunk_data, num_groups, grp_beg, grp_end, grp_size, sync_between_timers, obs_seq, keys, chunks, i, close_obs_caching, ens_handle, cutoff, allow_missing_in_clm, ens_size, local_varying_ss_inflate, adjust_obs_impact, ENS_INF_COPY, ENS_INF_SD_COPY) &
+  !$OMP& shared(obs_ens_handle, inflate_only, obs_impact_table, my_obs_indx, gc_obs, my_obs_loc, my_obs_kind, my_obs_type, gc_state, my_state_loc, my_state_kind, my_state_indx) &
+  !$OMP& private(grp_bot, grp_top, obs_prior_mean, obs_prior_var, observation, obs_def, base_obs_loc, obs_err_var, base_obs_type, base_obs_kind, dummyloc, base, num_close_obs, close_obs_ind, close_obs_dist, elapsed) &
+  !$OMP& private(last_base_obs_loc, last_num_close_obs, last_close_obs_ind, last_close_obs_dist, num_close_obs_cached, num_close_obs_calls_made, num_close_states, close_state_ind, close_state_dist) &
+  !$OMP& private(last_base_states_loc, last_num_close_states, last_close_state_ind, num_close_states_cached, num_close_states_calls_made, cutoff_orig, last_close_state_dist, cutoff_list, cutoff_rev, state_index, missing_in_state, skipped_missing) &
+  !$OMP& private(skipped_covfactor, varying_ss_inflate, varying_ss_inflate_sd, reg_factor, obs_index, cov_factor, impact_factor, increment, reg_coef, obs_time) &
+  !$OMP& private(mythread)
   do j = 1, chunk_data%comm_obs
     call t_startf('ASSIMILATE:ComputePriors')
    ! Can compute prior mean and variance of obs for each group just once here
@@ -996,7 +1022,7 @@ CHUNK_LOOP: do i = 1, size(chunks)
 
    call t_stopf('ASSIMILATE:ComputePriors')
    if (sync_between_timers) then
-      call task_sync_filter()
+      call task_sync_filter('SYNC:ComputePriors')
    endif
    !call task_sync()
    ! -------------- NOTE: Skipping all adaptive localization stuff for now ---------
@@ -1015,9 +1041,20 @@ CHUNK_LOOP: do i = 1, size(chunks)
    !if (chunks(i)%obs_list(j) > 192895) then
    !    write(*,*) "Trace: ", i, j
    ! endif
-   call get_obs_from_key(obs_seq, keys(chunks(i)%obs_list(j)), observation)
-   !write(*,*) "DEBUG: get_obs_from_key : ", keys(chunks(i)%obs_list(j))
+   !! OpenMP issue - race condition?  bpd6
+   !write(*,*) "Debug-A: LOC(observation) : ", mythread, loc(observation), observation%key
+   !call get_obs_from_key(obs_seq, keys(chunks(i)%obs_list(j)), observation)
+   observation = obs_seq%obs(keys(chunks(i)%obs_list(j)))
+    mythread =  OMP_GET_THREAD_NUM()
+    !call sleep(5)
+    write(*,'(A,I4,I9,I9,I4,I4)') "Debug2: chunk_data%comm_obs = ", mythread, j, observation%key, chunk_data%comm_obs, OMP_GET_NUM_THREADS()
+   !write(*,*) "Debug-C: LOC(observation) : ", mythread, loc(observation), observation%key
+   !!  $OMP BARRIER
+   !write(*,*) "Debug-D: LOC(observation) : ", mythread, loc(observation), observation%key
+   !! $OMP BARRIER
    call get_obs_def(observation, obs_def)
+   !write(*,*) "Debug-ObsDef : ", mythread, obs_def%location%lon, obs_def%location%lat
+
    base_obs_loc = get_obs_def_location(obs_def)
    obs_err_var = get_obs_def_error_variance(obs_def)
    base_obs_type = get_obs_def_type_of_obs(obs_def)
@@ -1026,7 +1063,7 @@ CHUNK_LOOP: do i = 1, size(chunks)
    else
      call get_state_meta_data(-1*int(base_obs_type,i8),dummyloc, base_obs_kind)  ! identity obs
    endif
-  
+
    if (.not. close_obs_caching) then
       if (timing) call start_mpi_timer(base)
       call get_close_obs(gc_obs, base_obs_loc, base_obs_type, &
@@ -1078,6 +1115,8 @@ CHUNK_LOOP: do i = 1, size(chunks)
 ! Checking close obs error, disabling states for now - fix this later!
 ! num_close_states = 0
 
+   !!  !$OMP BARRIER
+    write(*,'(A,I4,I8,I8,G4.8,G14.8,G14.8,I8)') "Debug3: base_obs_loc  = ", mythread, j, observation%key, base_obs_loc%lon, base_obs_loc%lat, base_obs_loc%vloc, base_obs_loc%which_vert
    if (.not. close_obs_caching) then
       call get_close_state(gc_state, base_obs_loc, base_obs_type, &
                            my_state_loc, my_state_kind, my_state_indx, &
@@ -1160,7 +1199,7 @@ CHUNK_LOOP: do i = 1, size(chunks)
 !endif
 
   if (sync_between_timers) then
-     call task_sync_filter()
+     call task_sync_filter('SYNC:AdaptiveLocalization')
   endif
 
    call t_startf('ASSIMILATE:UpdateState')
@@ -1173,10 +1212,13 @@ CHUNK_LOOP: do i = 1, size(chunks)
   !testval = 0.0
   !testval2 = 0.0
   ! debug values:
-  stateindex_sum = 0
-  regfactor_sum = 0.0D0
-  increment_sum = 0.0D0
+  !stateindex_sum = 0
+  !regfactor_sum = 0.0D0
+  !increment_sum = 0.0D0
   !write(*,*) "StateUpdate0 : ", size(close_state_ind), sum(close_state_ind)
+   !! !$OMP BARRIER
+    !write(*,'(A,I,I,I,G,G,G,I)') "Debug4: base_obs_loc  = ", mythread, j, observation%key, base_obs_loc%lon, base_obs_loc%lat, base_obs_loc%vloc, base_obs_loc%which_vert
+    write(*,'(A,I4,I8,I8)') "Debug4: --------------- ", mythread, j, observation%key
    STATE_UPDATE: do k = 1, num_close_states
       state_index = close_state_ind(k)
       !write(my_task_id()+15,'(A,I,I,I,I,I)') "SU_TraceA : ", get_ob_id(chunks, i, j), i, j, ens_handle%my_vars(state_index), state_index
@@ -1203,8 +1245,10 @@ CHUNK_LOOP: do i = 1, size(chunks)
       endif
      
       ! Compute the distance and covariance factor 
-      cov_factor = comp_cov_factor(close_state_dist(k), cutoff_rev, &
-         base_obs_loc, base_obs_type, my_state_loc(state_index), my_state_kind(state_index))
+!      cov_factor = comp_cov_factor(close_state_dist(k), cutoff_rev, &
+!         base_obs_loc, base_obs_type, my_state_loc(state_index), my_state_kind(state_index))
+!bpd6 - debug
+cov_factor = 0.01
       !testval = testval + cov_factor !debug
       
       ! if external impact factors supplied, factor them in here
@@ -1241,7 +1285,7 @@ CHUNK_LOOP: do i = 1, size(chunks)
             call update_from_obs_inc(chunk_data%obs_prior(grp_bot:grp_top,j), obs_prior_mean(group), &
                obs_prior_var(group), chunk_data%obs_inc(grp_bot:grp_top,j), &
                ens_handle%copies(grp_bot:grp_top, state_index), grp_size, &
-               increment(grp_bot:grp_top), reg_coef(group), net_a(group))
+               increment(grp_bot:grp_top), reg_coef(group), chunk_data%net_a(group,j))
            !write(*,*) "Inc: ", increment(1)
 !!         endif
       end do
@@ -1272,9 +1316,9 @@ CHUNK_LOOP: do i = 1, size(chunks)
       endif
 
 
-      stateindex_sum = stateindex_sum + ens_handle%my_vars(state_index)
-      regfactor_sum = regfactor_sum + reg_factor
-      increment_sum = increment_sum + SUM(increment)
+      !stateindex_sum = stateindex_sum + ens_handle%my_vars(state_index)
+      !regfactor_sum = regfactor_sum + reg_factor
+      !increment_sum = increment_sum + SUM(increment)
 
 
       ! Compute spatially-varying state space inflation
@@ -1384,7 +1428,7 @@ CHUNK_LOOP: do i = 1, size(chunks)
    call t_stopf('ASSIMILATE:UpdateState')
 
    if (sync_between_timers) then
-      call task_sync_filter()
+      call task_sync_filter('SYNC:UpdateState')
    endif
 
    !write(*,*) "DEBUG: num_close_obs = ", num_close_obs
@@ -1417,7 +1461,8 @@ CHUNK_LOOP: do i = 1, size(chunks)
          if (any(obs_ens_handle%copies(1:ens_size, obs_index) == MISSING_R8)) cycle OBS_UPDATE
 
          ! Compute the distance and the covar_factor
-         cov_factor = comp_cov_factor(close_obs_dist(k), cutoff_rev, base_obs_loc, base_obs_type, my_obs_loc(obs_index), my_obs_kind(obs_index))
+         !cov_factor = comp_cov_factor(close_obs_dist(k), cutoff_rev, base_obs_loc, base_obs_type, my_obs_loc(obs_index), my_obs_kind(obs_index))
+         cov_factor = 0.01
 
          ! if external impact factors supplied, factor them in here
          ! FIXME: this would execute faster for 0.0 impact factors if
@@ -1443,7 +1488,7 @@ CHUNK_LOOP: do i = 1, size(chunks)
             call update_from_obs_inc(chunk_data%obs_prior(grp_bot:grp_top,j), obs_prior_mean(group), &
                obs_prior_var(group), chunk_data%obs_inc(grp_bot:grp_top,j), &
                 obs_ens_handle%copies(grp_bot:grp_top, obs_index), grp_size, &
-                increment(grp_bot:grp_top), reg_coef(group), net_a(group))
+                increment(grp_bot:grp_top), reg_coef(group), chunk_data%net_a(group,j))
          end do
 
          ! FIXME: could we move the if test for inflate only to here?
@@ -1470,6 +1515,10 @@ CHUNK_LOOP: do i = 1, size(chunks)
       !write(*,*) "Obs Update Checksum : ", sum(chunk_data%obs_prior(j,:)), my_obs_indx(obs_index), chunks(i)%obs_list(j)
    end do OBS_UPDATE
    call t_stopf('ASSIMILATE:UpdateObs')
+
+   if (sync_between_timers) then
+      call task_sync_filter('SYNC:UpdateObs') !-- filter3
+    endif
 
 !!   if (timing .and. i < 1000) then
 !!      elapsed = read_mpi_timer(base)
@@ -1588,6 +1637,7 @@ function graph_owners_index(chunks, current_chunk, ob_in_chunk)
 
   integer :: pe
 
+
   pe = my_task_id()
 
   tally = 0
@@ -1602,6 +1652,53 @@ function graph_owners_index(chunks, current_chunk, ob_in_chunk)
 
   graph_owners_index = tally
 end function graph_owners_index
+
+
+function graph_owner_index(current_chunk, ob_in_chunk, chunk_size, index_map)
+  integer, intent(in) :: current_chunk
+  integer, intent(in) :: ob_in_chunk
+  integer, intent(in) :: chunk_size
+  integer, intent(in), dimension(*) :: index_map
+  integer  :: graph_owner_index
+
+  integer :: pos
+
+  pos = (current_chunk * chunk_size) + ob_in_chunk
+  graph_owner_index = index_map(pos)
+end function graph_owner_index
+
+
+!subroutine build_graph_owners_index(chunks, current_chunk, ob_in_chunk)
+subroutine build_graph_owners_index(chunks, chunk_size, graph_owner_index_array)
+  type(chunk_type), dimension(:), intent(in) :: chunks
+  integer, intent(in) :: chunk_size
+  integer, intent(out), dimension(:), allocatable :: graph_owner_index_array
+
+  integer :: index_size
+  integer :: pe
+  integer :: tally
+  integer :: i, j
+
+  index_size = size(chunks) * chunk_size
+  allocate(graph_owner_index_array(index_size))
+
+  graph_owner_index_array = 0
+  pe = my_task_id()
+
+  tally = 0
+  do i = 1, size(chunks)
+    if (pe == chunks(i)%owner) then
+
+      !graph_owner_index_array((i * chunk_size))
+    endif
+  end do
+
+  !tally = tally + ob_in_chunk
+
+
+  !graph_owner_index_array = tally
+end subroutine build_graph_owners_index
+
 
 function get_ob_id(chunks, i, j)
   type(chunk_type), dimension(*), intent(in) :: chunks
@@ -1955,11 +2052,11 @@ subroutine broadcast_send_chunk_packed_opt(from, chunk_data, ens_size, num_group
    !chunk_data%bcast_buffer(start_offset:start_offset+size(chunk_data%obs_prior)) = reshape(chunk_data%obs_prior, [ size(chunk_data%obs_prior) ])
    !start_offset = start_offset + size(chunk_data%obs_prior)
    do i = 1, num_obs
-     chunk_data%bcast_buffer(start_offset:start_offset + ens_size) = chunk_data%obs_prior(:,i)
+     chunk_data%bcast_buffer(start_offset:start_offset + ens_size -1) = chunk_data%obs_prior(:,i)
      start_offset = start_offset + ens_size
-     chunk_data%bcast_buffer(start_offset:start_offset + ens_size) = chunk_data%obs_inc(:,i)
+     chunk_data%bcast_buffer(start_offset:start_offset + ens_size -1) = chunk_data%obs_inc(:,i)
      start_offset = start_offset + ens_size
-     chunk_data%bcast_buffer(start_offset:start_offset + num_groups) = chunk_data%net_a(:,i)
+     chunk_data%bcast_buffer(start_offset:start_offset + num_groups -1) = chunk_data%net_a(:,i)
      start_offset = start_offset + num_groups
      chunk_data%bcast_buffer(start_offset+0) = chunk_data%obs_qc(i)
      chunk_data%bcast_buffer(start_offset+1) = chunk_data%vertvalue_obs_in_localization_coord(i)
@@ -1988,7 +2085,6 @@ subroutine broadcast_send_chunk_packed_opt(from, chunk_data, ens_size, num_group
   if (detailed_timers) then
     call t_stopf('DETAIL:bcast_send_chunk_call')
   endif
-
 
 end subroutine broadcast_send_chunk_packed_opt
 
@@ -2157,13 +2253,13 @@ subroutine broadcast_recv_chunk_packed_opt(from, chunk_data, ens_size, num_group
   num_obs = chunk_data%bcast_buffer(chunk_data%comm_size)
   !write(*,*) "Receive : num_obs = ", num_obs, chunk_data%comm_size, ens_size
    do i = 1, num_obs
-     chunk_data%obs_prior(:,i) = chunk_data%bcast_buffer(start_offset:start_offset + ens_size)
+     chunk_data%obs_prior(:,i) = chunk_data%bcast_buffer(start_offset:start_offset + ens_size -1)
      start_offset = start_offset + ens_size
 
-     chunk_data%obs_inc(:,i) = chunk_data%bcast_buffer(start_offset:start_offset + ens_size)
+     chunk_data%obs_inc(:,i) = chunk_data%bcast_buffer(start_offset:start_offset + ens_size -1 )
      start_offset = start_offset + ens_size
 
-     chunk_data%net_a(:,i) = chunk_data%bcast_buffer(start_offset:start_offset + num_groups)
+     chunk_data%net_a(:,i) = chunk_data%bcast_buffer(start_offset:start_offset + num_groups -1)
      start_offset = start_offset + num_groups
 
      chunk_data%obs_qc(i) = chunk_data%bcast_buffer(start_offset+0)
@@ -3998,11 +4094,11 @@ subroutine write_obdata(obdata_unit, i, num_close_states, skipped_missing, skipp
 
   ! State updates:
   if (mpiRank == 0) then
-    write(obdata_unit, '(A,I,A,I,A,I)', advance="no") "StateUpdateInfo: ", i, " ", count(state_updates_per_rank/=0), " ", statesupdated_total
-    do k = 1, mpiSize
-      write(obdata_unit, '(A,I)', advance="no") " ", state_updates_per_rank(k)
-    enddo 
-    write(obdata_unit,'(A)'), " " 
+    !write(obdata_unit, '(A,I,A,I,A,I)', advance="no") "StateUpdateInfo: ", i, " ", count(state_updates_per_rank/=0), " ", statesupdated_total
+    !do k = 1, mpiSize
+    !  write(obdata_unit, '(A,I)', advance="no") " ", state_updates_per_rank(k)
+    !enddo 
+    !write(obdata_unit,'(A)'), " " 
   endif
 
   ! COV skip:
@@ -4019,11 +4115,11 @@ subroutine write_obdata(obdata_unit, i, num_close_states, skipped_missing, skipp
 
   ! Timing info:
   if (mpiRank == 0) then
-    write(obdata_unit, '(A,I,A,I,A,I)', advance="no") "TimingInfo: ", i, " ", count(state_updates_per_rank/=0), " ", statesupdated_total
-    do k = 1, mpiSize
-      write(obdata_unit, '(A,F)', advance="no") " ", time_per_rank(k)
-    enddo 
-    write(obdata_unit,'(A)'), " " 
+    !write(obdata_unit, '(A,I,A,I,A,I)', advance="no") "TimingInfo: ", i, " ", count(state_updates_per_rank/=0), " ", statesupdated_total
+    !do k = 1, mpiSize
+    !  write(obdata_unit, '(A,F)', advance="no") " ", time_per_rank(k)
+    !enddo 
+    !write(obdata_unit,'(A)'), " " 
   endif
 
 
@@ -4038,17 +4134,17 @@ subroutine write_obdata2(obdata_unit2, i)
   if (unitnum == -1) then
     unitnum = obdata_unit2
   else
-    write(unitnum, '(A)') ""
+    !write(unitnum, '(A)') ""
   endif
 
-  write(unitnum, '(I)', advance="no") i
+  !write(unitnum, '(I)', advance="no") i
 end subroutine write_obdata2
 
 subroutine append_obdata2(obdata_unit2, j)
   implicit none
   integer, intent(in) :: obdata_unit2, j
 
-  write(obdata_unit2, '(A,I)', advance="no") ",", j
+  !write(obdata_unit2, '(A,I)', advance="no") ",", j
 end subroutine append_obdata2
 
 
@@ -4067,7 +4163,7 @@ subroutine list_close(obs_id, fileunit, total, num_close, index_list, my_types, 
  ! allocate an array of that size:
  !allocate(list(fullcount))
 
-  write(fileunit,'(I,A,I,A)',advance="no")  obs_id, " ", total, " "
+  !write(fileunit,'(I,A,I,A)',advance="no")  obs_id, " ", total, " "
 !  write(fileunit,'(I,A)',advance="no")   total, ", "
 
  ! Loop over 
@@ -4085,15 +4181,15 @@ do k=1, num_close
    ! you'd be using a negative index if it was an identity obs.
    thistype = my_types(index_list(k))
    if (thistype < 0) then
-      write(fileunit, '(I,A)',advance="no") index_list(k), " "
-      !local_count = local_count + 1
+      !write(fileunit, '(I,A)',advance="no") index_list(k), " "
+      !!local_count = local_count + 1
    else if (assimilate_this_type_of_obs(thistype)) then
-      write(fileunit, '(I,A)',advance="no") index_list(k), " "
-      !local_count = local_count + 1
+      !write(fileunit, '(I,A)',advance="no") index_list(k), " "
+      !!local_count = local_count + 1
    endif
 end do
 
-  write(fileunit,'(A)') ""
+  !write(fileunit,'(A)') ""
 
 end subroutine list_close
 
@@ -4104,9 +4200,9 @@ subroutine list_close_state(i, list_unit, num_close_states, close_state_ind)
  integer :: k
 
  do k = 1, num_close_states
-   write(list_unit, '(I,A)', advance="no") close_state_ind(k), " "
+   !write(list_unit, '(I,A)', advance="no") close_state_ind(k), " "
 end do
-  write(list_unit,'(A)') ""
+  !write(list_unit,'(A)') ""
 
 end subroutine list_close_state
 
@@ -4355,7 +4451,7 @@ end subroutine test_close_obs_dist
 ! end module assim_tools_mod
 !========================================================================
 
-end module assim_tools_mod
+end module assim_graph_tools_mod
 
 ! <next few lines under version control, do not edit>
 ! $URL: https://svn-dares-dart.cgd.ucar.edu/DART/releases/Manhattan/assimilation_code/modules/assimilation/assim_tools_mod.f90 $

@@ -74,6 +74,7 @@ integer, parameter :: VERTISSCALEHEIGHT =  4  ! by scale height (unitless)
 
 type location_type
    !private
+   ! made public by bpd6 for debugging
    real(r8) :: lon, lat        ! lon, lat are stored in radians
    real(r8) :: vloc            ! units vary based on value of which_vert
    integer  :: which_vert      ! determines if vert is level, height, pressure, ...
@@ -253,6 +254,7 @@ subroutine initialize_module()
 
 integer :: iunit, io, i, k, typecount, type_index
 
+write(*,*) "INITIALIZE_MODULE()..."
 
 if (module_initialized) return
 
@@ -1172,6 +1174,8 @@ integer :: i, j, n, cum_start, lon_box(num), lat_box(num), tstart(nlon, nlat), t
 integer :: typecount, distcount
 real(r8), allocatable :: distlist(:)
 
+write(*,*) "GET_CLOSE_INIT() ..."
+
 if ( .not. module_initialized ) call initialize_module()
 
 ! Support per-loc-type localization more efficiently.
@@ -1583,6 +1587,12 @@ do j = 1, nlat
             ! SHOULD ADD IN OPTIONAL ARGUMENT FOR DOING THIS!!!
             ! Could avoid adding any that have nums lower than base_ob???
             t_ind = gc%gtt(bt)%loc_box(st - 1 + k)
+
+            ! debug by bpd6
+            if (t_ind > 10000000) then
+              write(*,*) "t_ind error: ", bt, st, k
+            endif
+
             !write(*,*) "n_in_box = ", n_in_box, i, j, t_ind
 
             if(.not. present(dist)) then

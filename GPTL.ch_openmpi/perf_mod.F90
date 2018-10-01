@@ -108,14 +108,14 @@ module perf_mod
    integer, private   :: cur_timing_detail = init_timing_detail
                          ! current timing detail level
 
-   logical, parameter :: def_perf_single_file = .true.         ! default
+   logical, parameter :: def_perf_single_file = .false.         ! default
    logical, private   :: perf_single_file = def_perf_single_file
                          ! flag indicating whether the performance timer
                          ! output should be written to a single file 
                          ! (per component communicator) or to a 
                          ! separate file for each process
 
-   integer, parameter :: def_perf_outpe_num = -1                ! default
+   integer, parameter :: def_perf_outpe_num = 0                ! default
    integer, private   :: perf_outpe_num = def_perf_outpe_num
                          ! maximum number of processes writing out 
                          ! timing data (for this component communicator)

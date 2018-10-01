@@ -53,7 +53,7 @@ character(len=*), parameter :: source   = &
 character(len=*), parameter :: revision = "$Revision$"
 character(len=*), parameter :: revdate  = "$Date$"
 
-integer, parameter :: max_chunk_size =128 
+integer, parameter :: max_chunk_size = 256
 type chunk_type
   integer :: num_obs
   integer :: owner
@@ -1196,11 +1196,12 @@ if (ens_handle%distribution_type == 2) then
 
     if (chunk /= 0) then
       num_obs_in_chunk = ens_handle%graph_info%chunks(chunk)%num_obs
-      var_list(current:current+num_obs_in_chunk) = ens_handle%graph_info%chunks(chunk)%obs_list(1:num_obs_in_chunk)
-      current = current + num_obs_in_chunk 
-      pes_num_vars = current - 1
-    endif
+      !err: var_list(current:current+num_obs_in_chunk) = ens_handle%graph_info%chunks(chunk)%obs_list(1:num_obs_in_chunk)
+      var_list(current:current+num_obs_in_chunk-1) = ens_handle%graph_info%chunks(chunk)%obs_list(1:num_obs_in_chunk)
+      current = current + num_obs_in_chunk   
+     endif
   end do
+      pes_num_vars = current - 1
 else
   ! Figure out number of vars stored by pe
   num_per_pe_below = num_vars / num_pes
@@ -2110,7 +2111,7 @@ call calc_tasks_on_each_node(num_nodes, last_node_task_number)
 !write(*,*) "INFO: CHUNK_ROUND_ROBIN : ", num_nodes, last_node_task_number
 !stop
 
-if (direct_mode == .true.) then
+if (direct_mode .eqv. .true.) then
   do i = 1, num_pes
     ens_handle%task_to_pe_list(i) = i-1
   enddo

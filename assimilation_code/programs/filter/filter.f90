@@ -22,7 +22,8 @@ implicit none
 logical :: masterproc
 integer :: rank
 integer :: comm
-integer :: maxthreads = 1
+!integer :: maxthreads = 1
+integer :: maxthreads = 8  ! modified by bpd6 (Sep 26, 2018 - for omp version)
 
 !----------------------------------------------------------------
 

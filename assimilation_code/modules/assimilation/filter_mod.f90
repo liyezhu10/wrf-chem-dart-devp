@@ -39,8 +39,10 @@ use utilities_mod,         only : register_module,  error_handler, E_ERR, E_MSG,
 use assim_model_mod,       only : static_init_assim_model, get_model_size,                    &
                                   end_assim_model,  pert_model_copies
 
-use assim_tools_mod,       only : filter_assim, set_assim_tools_trace, test_state_copies
-use assim_graph_tools_mod, only : filter_assim_chunks
+!use assim_tools_mod,       only : filter_assim, set_assim_tools_trace, test_state_copies
+!use assim_tools_mod,       only : set_assim_tools_trace, test_state_copies
+use assim_graph_tools_mod, only : filter_assim, set_assim_tools_trace, test_state_copies
+
 use obs_model_mod,         only : move_ahead, advance_state, set_obs_model_trace
 
 use ensemble_manager_mod,  only : init_ensemble_manager, end_ensemble_manager,                &
@@ -927,7 +929,8 @@ AdvanceTime : do
 
    call timestamp_message('After  observation assimilation')
    call     trace_message('After  observation assimilation')
-
+   ! This is a short circuit hack 
+   return
    ! Do the update for the smoother lagged fields, too.
    ! Would be more efficient to do these all at once inside filter_assim
    ! in the future

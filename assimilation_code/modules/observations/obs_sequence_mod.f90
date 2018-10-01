@@ -75,7 +75,8 @@ character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
 type obs_sequence_type
-   private
+   !private
+   ! made public by bpd6 for debugging
    integer :: num_copies
    integer :: num_qc
    integer :: num_obs
@@ -93,7 +94,7 @@ type obs_sequence_type
 end type obs_sequence_type
 
 type obs_type
-   private
+   !private edited by bpd6 for debugging
 ! The key is needed to indicate the element number in the storage for the obs_sequence
 ! Do I want to enforce the identity of the particular obs_sequence?
    integer :: key
@@ -457,7 +458,11 @@ type(obs_type) :: obs
 
 !write(*,*) "DEBUG: get_obs_from_key - ", key
 
+   !write(*,*) "Debug-B1: LOC(observation) : ", loc(obs), obs%key
 obs = seq%obs(key)
+   !write(*,*) "Debug-B2: LOC(observation) : ", loc(obs), obs%key
+
+
 
 end subroutine get_obs_from_key
 

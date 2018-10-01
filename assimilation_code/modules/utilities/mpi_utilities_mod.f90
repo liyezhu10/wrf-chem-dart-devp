@@ -76,13 +76,13 @@ private
 
  !!SYSTEM_BLOCK_EDIT START COMMENTED_IN
  ! interface block for getting return code back from system() routine
- interface
-  function system(string)
-   character(len=*) :: string
-   integer :: system
-  end function system
- end interface
- ! end block
+! interface
+!  function system(string)
+!   character(len=*) :: string
+!   integer :: system
+!  end function system
+! end interface
+! ! end block
  !!SYSTEM_BLOCK_EDIT END COMMENTED_IN
 
 
@@ -508,14 +508,15 @@ call t_stopf('MPI:task_sync')
 
 end subroutine task_sync
 
-subroutine task_sync_filter()
+subroutine task_sync_filter(timer_name)
 
 ! Synchronize all tasks.  This subroutine does not return until all tasks
 ! execute this line of code.
 
+character(len=*), intent(in) :: timer_name
 integer :: errcode
 
-call t_startf('MPI:task_sync_filter')
+call t_startf(timer_name)
 
 if ( .not. module_initialized ) then
    write(errstring, *) 'initialize_mpi_utilities() must be called first'
@@ -523,15 +524,19 @@ if ( .not. module_initialized ) then
 endif
 
 if (verbose) write(*,*) "PE", myrank, ": waiting at MPI Barrier"
+
+!! !$OMP BARRIER
+!! !$OMP MASTER
 call MPI_Barrier(my_local_comm, errcode)
 if (errcode /= MPI_SUCCESS) then
    write(errstring, '(a,i8)') 'MPI_Barrier returned error code ', errcode
    call error_handler(E_ERR,'task_sync', errstring, source, revision, revdate)
 endif
+!! !$OMP END MASTER
 
 if (verbose) write(*,*) "PE", myrank, ": MPI Barrier released"
 
-call t_stopf('MPI:task_sync_filter')
+call t_stopf(timer_name)
 
 
 end subroutine task_sync_filter
