@@ -11,7 +11,7 @@ program clean_forcing
 !             CAM_DATM.cpl_0055.ha2x1dx6h.2008.nc
 !             CAM_DATM.cpl_0055.ha2x1dx6h.2009.nc
 !             CAM_DATM.cpl_0055.ha2x1dx6h.2010.nc
-!              a2x6h_Faxa_rainc     rainc
+!               a2x6h_Faxa_rainc     rainc
 !               a2x6h_Faxa_rainl     rainl
 !               a2x6h_Faxa_snowc     snowc
 !               a2x6h_Faxa_snowl     snowl
@@ -43,6 +43,10 @@ program clean_forcing
 use            types_mod, only : r8,i8
 
 use             sort_mod, only : index_sort
+
+use       random_seq_mod, only : random_seq_type, &
+                                 init_random_seq, &
+                                 random_gaussian
 
 use        utilities_mod, only : initialize_utilities, &
                                  finalize_utilities, &
@@ -82,24 +86,27 @@ character(len=*), parameter :: directory = '/glade/p_old/image/thoar/CAM_DATM/4x
 
 character(len=16) :: varname
 character(len=16) :: variables(10) = (/'a2x6h_Faxa_lwdn ', &
-                                       'a2x6h_Faxa_swndr', &
-                                       'a2x6h_Faxa_swvdr', &
                                        'a2x6h_Faxa_swndf', &
                                        'a2x6h_Faxa_swvdf', &
+                                       'a2x6h_Faxa_swndr', &
+                                       'a2x6h_Faxa_swvdr', &
                                        'null            ', &
                                        'a2x6h_Faxa_rainc', &
                                        'a2x6h_Faxa_rainl', &
                                        'a2x6h_Faxa_snowc', &
                                        'a2x6h_Faxa_snowl'/)
 
-integer :: indices(ensemble_size)
-integer ::    ncid(ensemble_size)
+integer  :: indices(ensemble_size)
+integer  ::    ncid(ensemble_size)
+real(r8) ::  sorted(ensemble_size)
 character(len=256) :: input_file(ensemble_size)
 
 real(r8), allocatable :: tensor(:,:,:) ! nx,ny,ensemble_size
 real(r8) :: minvalue, maxvalue, q1, q2, q3, iqr
-real(r8) :: newhigh, newlow, original_variance, new_variance
-logical :: suspicious, newmin, newmax
+real(r8) :: mean, stddev, noise
+real(r8) :: newhigh, newlow, variance, new_variance
+logical  :: suspicious, newmin, newmax
+type(random_seq_type) :: r
 
 integer :: imember, itime, iy, ix, nT, ny, nx
 integer :: ncstart(3)
@@ -110,16 +117,16 @@ integer :: varid
 integer            :: iunit, io
 character(len=512) :: string1, string2, string3
 
-integer(i8) :: icount
+integer(i8) :: num_outliers
 
 !-------------------------------------------------------------------------------
 ! namelist
 !-------------------------------------------------------------------------------
 
 integer :: year = 2008
-real(r8) :: iqr_multiplier = 20.0_r8
+real(r8) :: criterion = 100.0_r8
 
-namelist /clean_forcing_nml/ year, iqr_multiplier
+namelist /clean_forcing_nml/ year, criterion
 
 !======================================================================
 
@@ -134,6 +141,8 @@ if (do_nml_term()) write(     *     , nml=clean_forcing_nml)
 
 call initialize_utilities(progname=routine)
 
+call init_random_seq(r,1)
+
 100 format('/glade/p_old/image/thoar/CAM_DATM/4xdaily/CAM_DATM.cpl_',i4.4,'.ha2x1dx6h.',i4.4,'.nc')
 
 do imember = 1,ensemble_size
@@ -142,32 +151,32 @@ do imember = 1,ensemble_size
    ncid(imember) = nc_open_file_readwrite(input_file(imember),routine)
 enddo
 
-varname = variables(1)
+varname = variables(5)
 
 call nc_get_variable_num_dimensions(ncid(1), varname, numdims)
 call nc_get_variable_size(ncid(1), varname, dimlens)
 
-if ( .false. ) write(*,*)'dimlens are ',dimlens(1:numdims)
+if ( .true. ) write(*,*)'dimlens are ',dimlens(1:numdims)
 nx = dimlens(1)
 ny = dimlens(2)
 nT = dimlens(3)
 
 allocate(tensor(ensemble_size,nx,ny))
 
-! TIMESTEP : do itime = 1,nT
-TIMESTEP : do itime = 1169,1169
+TIMESTEP : do itime = 1,nT
 
    call fill_tensor(itime)
 
-   icount = 0_i8
+   num_outliers = 0_i8
 
    LATITUDE : do iy=1,ny
    LONGITUDE : do ix=1,nx
-!  LATITUDE : do iy=33,33
-!  LONGITUDE : do ix=1,nx
 
-      q2 = sum(tensor(:,ix,iy))/ensemble_size
-      original_variance = sum((tensor(:,ix,iy) - q2)**2)/(ensemble_size -1)
+      mean     = sum( tensor(:,ix,iy))/ensemble_size
+      variance = sum((tensor(:,ix,iy) - mean)**2)/(ensemble_size-1)
+
+      ! some gridcells are all identical values
+      if (variance < tiny(variance)) cycle LONGITUDE
 
       suspicious = .true.
 
@@ -177,70 +186,80 @@ TIMESTEP : do itime = 1169,1169
          newmax = .false.
 
          call index_sort(tensor(:,ix,iy), indices, ensemble_size)
+         sorted = tensor(indices,ix,iy)
 
-!        q1  = tensor(indices(20),ix,iy)
-         q2  = tensor(indices(40),ix,iy) * 0.5_r8 + &
-               tensor(indices(41),ix,iy) * 0.5_r8
-!        q3  = tensor(indices(60),ix,iy)
+         ! calculate quantiles
 
-!        iqr = q3 - q1
+         q1  =  sorted(20)
+         q2  = (sorted(40) + sorted(41)) / 2.0_r8
+         q3  =  sorted(60)
+         iqr = q3 - q1
 
-!        minvalue = tensor(indices( 1),ix,iy)
-!        maxvalue = tensor(indices(80),ix,iy)
+         ! See if this cell has an outlier or not by
+         ! replacing extremes with new values and recalculate variance
 
-!        newlow   = tensor(indices(10),ix,iy) * 0.5_r8 + &
-!                   tensor(indices(11),ix,iy) * 0.5_r8
-!        newhigh  = tensor(indices(70),ix,iy) * 0.5_r8 + &
-!                   tensor(indices(71),ix,iy) * 0.5_r8
+         sorted(80)   = q2
+         mean         = sum(sorted)/ensemble_size
+         new_variance = sum((sorted - mean)**2)/(ensemble_size-1)
 
-!        if (minvalue < (q1 - iqr_multiplier*iqr)) then
-!           write(*,*)'low ',itime, ix, iy, iqr, minvalue, newlow
-!           newmin = .true.
+!        if (new_variance < tiny(new_variance)) then
+!           write(*,*)itime,ix,iy,tensor(:,ix,iy)
+!           stop
 !        endif
 
-!        if (maxvalue > (q3 + iqr_multiplier*iqr)) then
-!           write(*,*)'high ',itime, ix, iy, iqr, maxvalue, newhigh
-!           newmax = .true.
-!        endif
-
-!        if ( newmin .or. newmax ) then
-!           suspicious = .true.
-!           icount = icount + 1_i8
-!        else
-!           suspicious = .false.
-!        endif
-
-!        if (suspicious) then
-!           do imember = 1,ensemble_size
-!              write(*,*)        imember,  tensor(        imember ,ix,iy), &
-!                        indices(imember), tensor(indices(imember),ix,iy)
-!           enddo
-!        endif
-
-!        if (newmin) tensor(indices( 1),ix,iy) = newlow
-!        if (newmax) tensor(indices(80),ix,iy) = newhigh
-
-         ! replace high value with median and recalculate variance
-
-         tensor(indices(80),ix,iy) = q2
-
-         q2 = sum(tensor(:,ix,iy))/ensemble_size
-         new_variance = sum((tensor(:,ix,iy) - q2)**2)/(ensemble_size -1)
-
-         if (original_variance/new_variance > 2.0) then
-            write(*,*)itime,iy,ix,original_variance/new_variance
+!        if (variance/new_variance > criterion) then
+         if (variance > new_variance * criterion) then
+            write(*,*)'suspicious ',itime,ix,iy,variance,new_variance*criterion
             suspicious = .true.
+            variance   = new_variance
          else
+!           write(*,*)'clean ',itime,ix,iy,variance/new_variance
             suspicious = .false.
          endif
+
+         if (suspicious) then
+            do imember = 1,ensemble_size
+               write(*,*)        imember,  tensor(        imember ,ix,iy), &
+                         indices(imember), tensor(indices(imember),ix,iy)
+            enddo
+         else
+            exit CLEAN
+         endif
+
+         ! If we get this far, the maximum is an outlier.
+         ! replace it with a noisy estimate of the median value.
+         ! The noise distribution is estimated from the 
+         ! center of the ensemble.
+         ! The correct way is to estimate the distribution and 
+         ! replace the outlier with the expected value for that quantile.
+         ! The correct way is overkill. The really correct way may
+         ! borrow strength from the surrounding gridcells.
+         ! Another way may be to simply design and apply a filter.
+
+         num_outliers = num_outliers + 1_i8
+
+         mean   = sum(sorted(10:70))/61.0_r8
+         stddev = sqrt(sum(sorted(10:70) - mean)**2)/60.0_r8
+
+         write(*,*)'ix,iy,stddev,iqr = ',ix,iy,stddev,iqr
+
+!        noise = random_gaussian(r, 0.0_r8, 3.0_r8*stddev)
+         noise = random_gaussian(r, 0.0_r8, iqr)
+
+         tensor(indices(80),ix,iy) = q2 + abs(noise) 
+
+         do imember = 1,ensemble_size
+            write(*,*)        imember,  tensor(        imember ,ix,iy), &
+                      indices(imember), tensor(indices(imember),ix,iy)
+         enddo
 
       enddo CLEAN
 
    enddo LONGITUDE
    enddo LATITUDE
 
-   write(*,*)'timestep ',itime,' had ',icount, &
-             ' values replaced when iqr_multiplier is ',iqr_multiplier
+   write(*,*)'timestep ',itime,' had ',num_outliers, &
+             ' values replaced when criterion is ',criterion
 
 enddo TIMESTEP
 
