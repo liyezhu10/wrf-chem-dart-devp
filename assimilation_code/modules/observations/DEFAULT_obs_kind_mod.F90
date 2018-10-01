@@ -443,7 +443,8 @@ integer, parameter, public :: &
   QTY_X_LAMBDA                      = 352, &
   QTY_UNCONFINED_WATER              = 353, &
   QTY_SATURATED_WATER               = 354, &
-  QTY_SNOW_DEPTH                    = 355
+  QTY_SNOW_DEPTH                    = 355, &
+  QTY_SOLAR_INDUCED_FLUORESCENCE    = 356
 
 ! kinds for CICE added by C. Bitz
 integer, parameter, public :: &
@@ -908,6 +909,7 @@ obs_kind_names(352) = obs_kind_type(QTY_X_LAMBDA                   ,'QTY_X_LAMBD
 obs_kind_names(353) = obs_kind_type(QTY_UNCONFINED_WATER           ,'QTY_UNCONFINED_WATER')
 obs_kind_names(354) = obs_kind_type(QTY_SATURATED_WATER            ,'QTY_SATURATED_WATER')
 obs_kind_names(355) = obs_kind_type(QTY_SNOW_DEPTH                 ,'QTY_SNOW_DEPTH')
+obs_kind_names(356) = obs_kind_type(QTY_SOLAR_INDUCED_FLUORESCENCE ,'QTY_SOLAR_INDUCED_FLUORESCENCE')
 
 obs_kind_names(411) = obs_kind_type(QTY_SEAICE_AGREG_CONCENTR ,'QTY_SEAICE_AGREG_CONCENTR')
 obs_kind_names(412) = obs_kind_type(QTY_SEAICE_AGREG_VOLUME   ,'QTY_SEAICE_AGREG_VOLUME')

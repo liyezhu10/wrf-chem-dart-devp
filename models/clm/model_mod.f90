@@ -79,6 +79,7 @@ use     obs_kind_mod, only : QTY_SOIL_TEMPERATURE,       &
                              QTY_FPAR_SUNLIT_DIFFUSE,    &
                              QTY_FPAR_SHADED_DIRECT,     &
                              QTY_FPAR_SHADED_DIFFUSE,    &
+                             QTY_SOLAR_INDUCED_FLUORESCENCE, &
                              get_index_for_quantity,      &
                              get_name_for_quantity
 
@@ -666,7 +667,7 @@ do ivar = 1, nfields
    call nc_close_file(ncid, routine, progvar(ivar)%origin)
    ncid = 0
 
-   if (debug > 0 .and. do_output()) call dump_progvar(ivar)
+!  if (debug > 0 .and. do_output()) call dump_progvar(ivar)
 enddo
 
 model_size = progvar(nfields)%indexN
@@ -2064,7 +2065,8 @@ select case( obs_kind )
           QTY_FRAC_PHOTO_AVAIL_RADIATION, &
           QTY_FPAR_SUNLIT_DIRECT, QTY_FPAR_SUNLIT_DIFFUSE, &
           QTY_FPAR_SHADED_DIRECT, QTY_FPAR_SHADED_DIFFUSE, &
-          QTY_LIVE_STEM_CARBON,   QTY_DEAD_STEM_CARBON)
+          QTY_LIVE_STEM_CARBON,   QTY_DEAD_STEM_CARBON, &
+          QTY_SOLAR_INDUCED_FLUORESCENCE)
 
       call compute_gridcell_value(state_handle, ens_size, location, obs_kind, expected_obs, istatus)
 
@@ -2219,7 +2221,7 @@ ELEMENTS : do indexi = index1, indexN
 enddo ELEMENTS
 
 do imem = 1,ens_size
-   write(*,*)'imem, total_area(imem), istatus(imem)', imem, total_area(imem), istatus(imem)
+!  write(*,*)'imem, total_area(imem), istatus(imem)', imem, total_area(imem), istatus(imem)
    if (total_area(imem) > 0.0_r8 .and. istatus(imem) == 0) then
       interp_val(imem) = total(imem) / total_area(imem)
    else
