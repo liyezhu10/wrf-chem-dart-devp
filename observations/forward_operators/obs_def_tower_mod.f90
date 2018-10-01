@@ -35,6 +35,7 @@
 !TOWER_ER_FLUX,                  QTY_ER_FLUX
 !SOIL_RESPIRATION_FLUX,          QTY_SOIL_RESPIRATION_FLUX
 !SURFACE_ALBEDO,                 QTY_SURFACE_ALBEDO
+!OCO2_SIF,                       QTY_SOLAR_INDUCED_FLUORESCENCE, COMMON_CODE
 ! END DART PREPROCESS KIND LIST
 
 !-----------------------------------------------------------------------------
