@@ -80,7 +80,8 @@ use     obs_kind_mod, only : QTY_SOIL_TEMPERATURE,       &
                              QTY_FPAR_SHADED_DIRECT,     &
                              QTY_FPAR_SHADED_DIFFUSE,    &
                              QTY_SOLAR_INDUCED_FLUORESCENCE, &
-                             get_index_for_quantity,      &
+                             QTY_LANDMASK,               &
+                             get_index_for_quantity,     &
                              get_name_for_quantity
 
  use ensemble_manager_mod, only : ensemble_type, &
@@ -410,6 +411,13 @@ location = set_location( LON(lonixy(indx)), LAT(latjxy(indx)), levels(indx), VER
 
 if (present(var_type)) then
 
+   ! if it is not 'land', is it useful
+   ! We don't have a QTY_WATERMASK, so I am abusing QTY_LANDMASK
+   if (landarea(indx) == 0.0_r8) then
+      var_type = QTY_LANDMASK
+      RETURN
+   endif
+
    var_type = MISSING_I
 
    FINDTYPE : do n = 1,nfields
@@ -417,7 +425,6 @@ if (present(var_type)) then
       if((indx >= get_index_start(progvar(n)%domain, varstring)) .and. &
          (indx <= get_index_end(  progvar(n)%domain, varstring))) then
          var_type = progvar(n)%dart_qty
-       ! TJH maybe modify that if it is not 'land', it should be ???
          exit FINDTYPE
       endif
    enddo FINDTYPE
@@ -429,7 +436,6 @@ if (present(var_type)) then
 
 endif
 
-return
 end subroutine get_state_meta_data
 
 
@@ -668,18 +674,17 @@ do ivar = 1, nfields
    call nc_close_file(ncid, routine, progvar(ivar)%origin)
    ncid = 0
 
-!  if (debug > 0 .and. do_output()) call dump_progvar(ivar)
+   if (debug > 0 .and. do_output()) call dump_progvar(ivar)
 enddo
 
 model_size = progvar(nfields)%indexN
 
 if ((debug > 0) .and. do_output()) then
-  write(logfileunit, *)
-  write(logfileunit,'("grid: nlon, nlat, nz =",2(1x,i6))') nlon, nlat
-  write(logfileunit, *)'model_size = ', model_size
-  write(     *     , *)
-  write(     *     ,'("grid: nlon, nlat, nz =",2(1x,i6))') nlon, nlat
-  write(     *     , *)'model_size = ', model_size
+  write(string1,'(" grid: nlon, nlat =",2(1x,i6))') nlon, nlat
+  write(string2, *)'model_size = ', model_size
+  call say('')
+  call say(string1)
+  call say(string2)
 endif
 
 ! Must group the variables according to the file they come from.
@@ -1757,7 +1762,7 @@ do ivar=1, numvars
       endif
 
       call nc_check(nf90_put_var(ncid_dart, clmVarID, data_2d_array), &
-                   'get_var_2d', 'put_var '//trim(varname))
+                   routine, 'put_var '//trim(varname))
 
       deallocate(data_2d_array)
 
@@ -2222,7 +2227,6 @@ ELEMENTS : do indexi = index1, indexN
 enddo ELEMENTS
 
 do imem = 1,ens_size
-!  write(*,*)'imem, total_area(imem), istatus(imem)', imem, total_area(imem), istatus(imem)
    if (total_area(imem) > 0.0_r8 .and. istatus(imem) == 0) then
       interp_val(imem) = total(imem) / total_area(imem)
    else
@@ -2246,7 +2250,7 @@ enddo
 !# if ((debug > 99)) then
 !#    write(string1,*)'counter, total_area', counter(1), total_area(1)
 !#    write(string2,*)'interp_val, istatus', interp_val(1), istatus(1)
-!#    call error_handler(E_MSG,routine, string1, text2=string2)
+!#    call error_handler(E_MSG, routine, string1, text2=string2)
 !# endif
 
 end subroutine compute_gridcell_value
@@ -2326,7 +2330,7 @@ varstring = progvar(ivar)%varname ! used in error messages
 index1    = get_index_start(progvar(ivar)%domain, progvar(ivar)%varname)
 indexN    = get_index_end(  progvar(ivar)%domain, progvar(ivar)%varname)
 
-! BOMBPROOFING - check for a vertical dimension for this variable
+! check applicability
 if (progvar(ivar)%maxlevels < 2) then
    write(string1, *)'Variable '//trim(varstring)//' should not use this routine.'
    write(string2, *)'use compute_gridcell_value() instead.'
@@ -4581,7 +4585,7 @@ end subroutine cluster_variables
 !------------------------------------------------------------------
 !>@todo FIXME: now that we have the state structure, do we still
 !> need all of this in the progvar?  some may still be specific
-!> to CLM, but maybe not all?l
+!> to CLM, but maybe not all?
 
 subroutine dump_progvar(ivar)
 
@@ -4596,57 +4600,59 @@ integer :: i
 
 call say('')   ! same as: write(logfileunit,*) and write(*,*) 
 
-write(logfileunit,*) trim(progvar(ivar)%varname),' variable number ',ivar
-write(logfileunit,*) '  filename    ',trim(progvar(ivar)%origin)
-write(logfileunit,*) '  update      ',progvar(ivar)%update
-write(logfileunit,*) '  long_name   ',trim(progvar(ivar)%long_name)
-write(logfileunit,*) '  units       ',trim(progvar(ivar)%units)
-write(logfileunit,*) '  xtype       ',progvar(ivar)%xtype
-write(logfileunit,*) '  dimnames    ',(/ (trim(progvar(ivar)%dimnames(i))//' ', i=1,progvar(ivar)%numdims ) /)
-write(logfileunit,*) '  dimlens     ',progvar(ivar)%dimlens( 1:progvar(ivar)%numdims)
-write(logfileunit,*) '  numdims     ',progvar(ivar)%numdims
-write(logfileunit,*) '  varsize     ',progvar(ivar)%varsize
-write(logfileunit,*) '  index1      ',progvar(ivar)%index1
-write(logfileunit,*) '  indexN      ',progvar(ivar)%indexN
-write(logfileunit,*) '  dart_qty    ',progvar(ivar)%dart_qty
-write(logfileunit,*) '  kind_string ',progvar(ivar)%kind_string
-write(logfileunit,*) '  spvalINT    ',progvar(ivar)%spvalINT
-write(logfileunit,*) '  spvalR4     ',progvar(ivar)%spvalR4
-write(logfileunit,*) '  spvalR8     ',progvar(ivar)%spvalR8
-write(logfileunit,*) '  missingINT  ',progvar(ivar)%missingINT
-write(logfileunit,*) '  missingR4   ',progvar(ivar)%missingR4
-write(logfileunit,*) '  missingR8   ',progvar(ivar)%missingR8
-write(logfileunit,*) '  has_fill_value    ',progvar(ivar)%has_fill_value
-write(logfileunit,*) '  has_missing_value ',progvar(ivar)%has_missing_value
-write(logfileunit,*)'   rangeRestricted   ',progvar(ivar)%rangeRestricted
-write(logfileunit,*)'   minvalue          ',progvar(ivar)%minvalue
-write(logfileunit,*)'   maxvalue          ',progvar(ivar)%maxvalue
+write(string1,*)'"'//trim(progvar(ivar)%varname)//'" variable number ',ivar
+write(string2,*)'  filename    '//trim(progvar(ivar)%origin)
+write(string3,*)'  update      ',progvar(ivar)%update
+call say(string1)
+call say(string2)
+call say(string3)
+write(string1,*) '  long_name   ',trim(progvar(ivar)%long_name)
+write(string2,*) '  units       ',trim(progvar(ivar)%units)
+write(string3,*) '  xtype       ',progvar(ivar)%xtype
+call say(string1)
+call say(string2)
+call say(string3)
+write(string1,*) '  numdims     ',progvar(ivar)%numdims
+write(string2,*) '  varsize     ',progvar(ivar)%varsize
+write(string3,*) '  index1      ',progvar(ivar)%index1
+call say(string1)
+call say(string2)
+call say(string3)
+write(string1,*) '  indexN      ',progvar(ivar)%indexN
+write(string2,*) '  dart_qty    ',progvar(ivar)%dart_qty
+write(string3,*) '  kind_string ',progvar(ivar)%kind_string
+call say(string1)
+call say(string2)
+call say(string3)
+write(string1,*) '  spvalINT    ',progvar(ivar)%spvalINT
+write(string2,*) '  spvalR4     ',progvar(ivar)%spvalR4
+write(string3,*) '  spvalR8     ',progvar(ivar)%spvalR8
+call say(string1)
+call say(string2)
+call say(string3)
+write(string1,*) '  missingINT  ',progvar(ivar)%missingINT
+write(string2,*) '  missingR4   ',progvar(ivar)%missingR4
+write(string3,*) '  missingR8   ',progvar(ivar)%missingR8
+call say(string1)
+call say(string2)
+call say(string3)
+write(string1,*) '  has_fill_value    ',progvar(ivar)%has_fill_value
+write(string2,*) '  has_missing_value ',progvar(ivar)%has_missing_value
+write(string3,*) '  rangeRestricted   ',progvar(ivar)%rangeRestricted
+call say(string1)
+call say(string2)
+call say(string3)
+write(string1,*) '  minvalue          ',progvar(ivar)%minvalue
+write(string2,*) '  maxvalue          ',progvar(ivar)%maxvalue
+call say(string1)
+call say(string2)
 
-write(     *     ,*) trim(progvar(ivar)%varname),' variable number ',ivar
-write(     *     ,*) '  filename    ',trim(progvar(ivar)%origin)
-write(     *     ,*) '  update      ',progvar(ivar)%update
-write(     *     ,*) '  long_name   ',trim(progvar(ivar)%long_name)
-write(     *     ,*) '  units       ',trim(progvar(ivar)%units)
-write(     *     ,*) '  xtype       ',progvar(ivar)%xtype
-write(     *     ,*) '  dimnames    ',(/ (trim(progvar(ivar)%dimnames(i))//' ', i=1,progvar(ivar)%numdims ) /)
-write(     *     ,*) '  dimlens     ',progvar(ivar)%dimlens( 1:progvar(ivar)%numdims)
-write(     *     ,*) '  numdims     ',progvar(ivar)%numdims
-write(     *     ,*) '  varsize     ',progvar(ivar)%varsize
-write(     *     ,*) '  index1      ',progvar(ivar)%index1
-write(     *     ,*) '  indexN      ',progvar(ivar)%indexN
-write(     *     ,*) '  dart_qty    ',progvar(ivar)%dart_qty
-write(     *     ,*) '  kind_string ',progvar(ivar)%kind_string
-write(     *     ,*) '  spvalINT    ',progvar(ivar)%spvalINT
-write(     *     ,*) '  spvalR4     ',progvar(ivar)%spvalR4
-write(     *     ,*) '  spvalR8     ',progvar(ivar)%spvalR8
-write(     *     ,*) '  missingINT  ',progvar(ivar)%missingINT
-write(     *     ,*) '  missingR4   ',progvar(ivar)%missingR4
-write(     *     ,*) '  missingR8   ',progvar(ivar)%missingR8
-write(     *     ,*) '  has_fill_value    ',progvar(ivar)%has_fill_value
-write(     *     ,*) '  has_missing_value ',progvar(ivar)%has_missing_value
-write(     *     ,*)'   rangeRestricted   ',progvar(ivar)%rangeRestricted
-write(     *     ,*)'   minvalue          ',progvar(ivar)%minvalue
-write(     *     ,*)'   maxvalue          ',progvar(ivar)%maxvalue
+do i = 1,progvar(ivar)%numdims
+   write(string1,'(1x,A,i3,A,i8,A)') &
+      '  dimension(', i, ') length = ', progvar(ivar)%dimlens(i), &
+      ' "'//trim(progvar(ivar)%dimnames(i))//'"'
+   call say(string1)
+enddo
 
 end subroutine dump_progvar
 

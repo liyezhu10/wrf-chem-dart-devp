@@ -252,7 +252,7 @@ integer, parameter, public :: &
     QTY_SNOW_THICKNESS              = 107, &
     QTY_SNOW_WATER                  = 108, &
     QTY_SNOWCOVER_FRAC              = 109, &
-    QTY_SOIL_LIQUID_WATER           = 110, &
+    QTY_LIQUID_WATER                = 110, &
     QTY_SOIL_ICE                    = 111, &
     QTY_CARBON                      = 112, &
     QTY_SOIL_CARBON                 = 113, &
@@ -750,7 +750,7 @@ obs_kind_names(106) = obs_kind_type(QTY_FLASH_RATE_2D, 'QTY_FLASH_RATE_2D')
 obs_kind_names(107) = obs_kind_type(QTY_SNOW_THICKNESS        ,'QTY_SNOW_THICKNESS')
 obs_kind_names(108) = obs_kind_type(QTY_SNOW_WATER            ,'QTY_SNOW_WATER')
 obs_kind_names(109) = obs_kind_type(QTY_SNOWCOVER_FRAC        ,'QTY_SNOWCOVER_FRAC')
-obs_kind_names(110) = obs_kind_type(QTY_SOIL_LIQUID_WATER     ,'QTY_SOIL_LIQUID_WATER')
+obs_kind_names(110) = obs_kind_type(QTY_LIQUID_WATER          ,'QTY_LIQUID_WATER')
 obs_kind_names(111) = obs_kind_type(QTY_SOIL_ICE              ,'QTY_SOIL_ICE')
 obs_kind_names(112) = obs_kind_type(QTY_CARBON                ,'QTY_CARBON')
 obs_kind_names(113) = obs_kind_type(QTY_SOIL_CARBON           ,'QTY_SOIL_CARBON')
