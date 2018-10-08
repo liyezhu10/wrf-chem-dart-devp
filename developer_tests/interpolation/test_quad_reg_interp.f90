@@ -10,9 +10,10 @@ program test_quad_reg_interp
 
 !>@todo FIXME include the state struct or fold this into a version of model_mod_check
 
-! Modules that are absolutely required for use are listed
 use        types_mod, only : r8, i8, MISSING_R8, deg2rad, rad2deg
-use    utilities_mod, only : error_handler, initialize_utilities, finalize_utilities
+use    utilities_mod, only : error_handler, initialize_utilities, finalize_utilities, &
+                             find_namelist_in_file, check_namelist_read, open_file, close_file, &
+                             logfileunit, nmlfileunit, do_output, do_nml_file, do_nml_term
 use   random_seq_mod, only : init_random_seq, random_seq_type, &
                              random_uniform, random_gaussian
 
@@ -25,16 +26,103 @@ use quad_utils_mod, only : quad_interp_handle, init_quad_interp, finalize_quad_i
 
 implicit none
 
+! ! data grid.  these are the values we will interpolate from.
+! 
+! ! data grid size 
+! ! (we compute delta lon, delta lat based on these vals)
+! integer, parameter :: ndx = 90
+! integer, parameter :: ndy = 50
+! 
+! ! extents of the data grid (these mimic a regional model's grid)
+! real(r8) :: data_start_lon = 100.0_r8
+! real(r8) :: data_end_lon   = 150.5_r8
+! real(r8) :: data_start_lat = -11.4_r8
+! real(r8) :: data_end_lat   =  34.1_r8
+! 
+! ! these aren't needed for the interpolation, but they're written
+! ! out for ease of plotting the results
+! real(r8) :: grid_lons(ndx)
+! real(r8) :: grid_lats(ndy)
+! 
+! ! data values on the grid
+! real(r8) :: grid_data(ndx, ndy) = MISSING_R8
+! integer  :: data_choice = 0   ! see code for selection values
+! 
+! ! percent of data values that should be marked 'missing data'
+! !real(r8) :: miss_percent =   0.0_r8    ! none
+!  real(r8) :: miss_percent =   3.0_r8    ! 3%
+! !real(r8) :: miss_percent = 100.0_r8    ! all
+! 
+! 
+! ! interpolation test grid.  we construct a different grid
+! ! and call the interpolation code on each corner of this
+! ! other grid.  called 'sampling grid' to differentiate it
+! ! from the 'data grid'.  usually much denser so we can look
+! ! for discontinuties or errors in the interp code.
+! 
+! ! sampling grid size
+! integer, parameter :: nsx = 210
+! integer, parameter :: nsy = 150
+! 
+! ! locations of sampling grid
+! real(r8) :: sample_lons(nsx, nsy) = MISSING_R8
+! real(r8) :: sample_lats(nsx, nsy) = MISSING_R8
+! 
+! ! extents of the sampling grid
+! real(r8) :: sample_start_lon = 110.0_r8
+! real(r8) :: sample_end_lon   = 140.0_r8
+! real(r8) :: sample_start_lat = -20.0_r8
+! real(r8) :: sample_end_lat   =  30.0_r8
+! 
+! ! angle to rotate sampling grid in degrees
+! ! positive is counterclockwise; will rotate
+! ! around lower left grid point (start lon/lat).
+! !real(r8) :: angle =  10.0_r8
+! !real(r8) :: angle =  45.0_r8
+!  real(r8) :: angle = -65.0_r8
+! !real(r8) :: angle =  30.0_r8
+! !real(r8) :: angle =  90.0_r8
+! !real(r8) :: angle = -30.0_r8
+! !real(r8) :: angle = -10.0_r8
+! !real(r8) :: angle =   0.0_r8
+! 
+! ! deform grid by this fraction of the deltas
+! !real(r8) :: lon_def = 0.25_r8
+! !real(r8) :: lat_def = 0.25_r8
+!  real(r8) :: lon_def = 0.01_r8
+!  real(r8) :: lat_def = 0.01_r8
+! !real(r8) :: lon_def = 0.0_r8
+! !real(r8) :: lat_def = 0.0_r8
+! 
+! ! where interpolated values are stored on reg grid
+! real(r8) :: interp_data(nsx, nsy) = MISSING_R8
+
+
 integer :: debug = 0
-
 type(quad_interp_handle) :: h
+type(random_seq_type) :: ran
 
-! data grid.  these are the values we will interpolate from.
+integer  :: i, j
+real(r8) :: data_del_lon, data_del_lat, sample_del_lon, sample_del_lat
+integer  :: lon_indices(4), lat_indices(4)
+real(r8) :: lon_fract, lat_fract
+integer  :: istatus, iunit, io
+real(r8) :: invals(4), outval
+real(r8) :: prev_data = 0, next_data
+
+! allocatable arrays for grid/data.  lons are x, lats are y.
+real(r8), allocatable :: grid_lons(:)
+real(r8), allocatable :: grid_lats(:)
+real(r8), allocatable :: grid_data(:, :)
+real(r8), allocatable :: sample_lons(:, :)
+real(r8), allocatable :: sample_lats(:, :)
+real(r8), allocatable :: interp_data(:, :)
+
+! variables changing the test; added to a namelist.
 
 ! data grid size 
-! (we compute delta lon, delta lat based on these vals)
-integer, parameter :: ndx = 9
-integer, parameter :: ndy = 5
+integer :: ndx = 90    ! lons
+integer :: ndy = 50    ! lats
 
 ! extents of the data grid (these mimic a regional model's grid)
 real(r8) :: data_start_lon = 100.0_r8
@@ -42,19 +130,11 @@ real(r8) :: data_end_lon   = 150.5_r8
 real(r8) :: data_start_lat = -11.4_r8
 real(r8) :: data_end_lat   =  34.1_r8
 
-! these aren't needed for the interpolation, but they're written
-! out for ease of plotting the results
-real(r8) :: grid_lons(ndx)
-real(r8) :: grid_lats(ndy)
-
 ! data values on the grid
-real(r8) :: grid_data(ndx, ndy) = MISSING_R8
 integer  :: data_choice = 0   ! see code for selection values
 
 ! percent of data values that should be marked 'missing data'
-!real(r8) :: miss_percent =   0.0_r8    ! none
- real(r8) :: miss_percent =   3.0_r8    ! 3%
-!real(r8) :: miss_percent = 100.0_r8    ! all
+real(r8) :: miss_percent =   3.0_r8    ! 3%
 
 
 ! interpolation test grid.  we construct a different grid
@@ -64,12 +144,8 @@ integer  :: data_choice = 0   ! see code for selection values
 ! for discontinuties or errors in the interp code.
 
 ! sampling grid size
-integer, parameter :: nsx = 210
-integer, parameter :: nsy = 150
-
-! locations of sampling grid
-real(r8) :: sample_lons(nsx, nsy) = MISSING_R8
-real(r8) :: sample_lats(nsx, nsy) = MISSING_R8
+integer :: nsx = 210
+integer :: nsy = 150
 
 ! extents of the sampling grid
 real(r8) :: sample_start_lon = 110.0_r8
@@ -80,39 +156,39 @@ real(r8) :: sample_end_lat   =  30.0_r8
 ! angle to rotate sampling grid in degrees
 ! positive is counterclockwise; will rotate
 ! around lower left grid point (start lon/lat).
-!real(r8) :: angle =  10.0_r8
-!real(r8) :: angle =  45.0_r8
- real(r8) :: angle = -65.0_r8
-!real(r8) :: angle =  30.0_r8
-!real(r8) :: angle =  90.0_r8
-!real(r8) :: angle = -30.0_r8
-!real(r8) :: angle = -10.0_r8
-!real(r8) :: angle =   0.0_r8
+real(r8) :: angle = -65.0_r8
 
 ! deform grid by this fraction of the deltas
-!real(r8) :: lon_def = 0.25_r8
-!real(r8) :: lat_def = 0.25_r8
- real(r8) :: lon_def = 0.01_r8
- real(r8) :: lat_def = 0.01_r8
-!real(r8) :: lon_def = 0.0_r8
-!real(r8) :: lat_def = 0.0_r8
-
-! where interpolated values are stored on reg grid
-real(r8) :: interp_data(nsx, nsy) = MISSING_R8
+real(r8) :: lon_def = 0.01_r8
+real(r8) :: lat_def = 0.01_r8
 
 
-type(random_seq_type) :: ran
+namelist /test_quad_reg_interp_nml/ ndx, ndy, &
+   data_start_lon, data_end_lon, data_start_lat, data_end_lat,   &
+   data_choice, miss_percent,   &
+   nsx, nsy,   &
+   sample_start_lon, sample_end_lon, sample_start_lat, sample_end_lat,   &
+   angle, lon_def, lat_def
+  
 
-integer  :: i, j
-real(r8) :: data_del_lon, data_del_lat, sample_del_lon, sample_del_lat
-integer  :: lon_indices(4), lat_indices(4)
-real(r8) :: lon_fract, lat_fract
-integer  :: istatus
-real(r8) :: invals(4), outval
-integer  :: iunit_orig, iunit_interp
 
 call initialize_utilities('test_quad_reg_interp')
 call init_random_seq(ran)
+
+! Read the namelist entry
+call find_namelist_in_file("input.nml", "test_quad_reg_interp_nml", iunit)
+read(iunit, nml = test_quad_reg_interp_nml, iostat = io)
+call check_namelist_read(iunit, io, "test_quad_reg_interp_nml")
+
+! Record the namelist values
+if (do_nml_file()) write(nmlfileunit, nml=test_quad_reg_interp_nml)
+if (do_nml_term()) write(    *      , nml=test_quad_reg_interp_nml)
+
+
+
+! allocate space for grids/data
+allocate(grid_lons(ndx), grid_lats(ndy), grid_data(ndx, ndy), &
+         sample_lons(nsx, nsy), sample_lats(nsx, nsy), interp_data(nsx, nsy))
 
 
 ! "data grid" corners and data vals
@@ -142,6 +218,12 @@ do i=1, ndx
       case (6)
          ! random between (0-10)
          grid_data(i, j) = random_uniform(ran) * 10.0_r8
+      case (7)
+         ! running average with gaussian noise added
+         next_data = random_gaussian(ran, 0.0_r8, 1.0_r8)
+         next_data = prev_data + (0.1 * next_data)
+         grid_data(i, j) = next_data
+         prev_data = next_data
       case default
          ! gaussian with mean 0 and stddev 1
          grid_data(i, j) = random_gaussian(ran, 0.0_r8, 1.0_r8)
@@ -238,6 +320,10 @@ call writeit_2d('sample_data_2d_reg_test.txt', nsx, nsy, interp_data)
 call finalize_quad_interp(h)
 if (debug > 0) print *, 'closed files and finalized interp handle'
 
+deallocate(grid_lons, grid_lats, grid_data, &
+         sample_lons, sample_lats, interp_data)
+
+
 call finalize_utilities('test_quad_reg_interp')
 
 
@@ -280,12 +366,10 @@ end subroutine rotate
 
 function deform(width, fraction, seq)
 
-use random_seq_mod
-
- real(r8), intent(in) :: width
- real(r8), intent(in) :: fraction
- type(random_seq_type), intent(inout) :: seq
- real(r8)             :: deform
+real(r8), intent(in) :: width
+real(r8), intent(in) :: fraction
+type(random_seq_type), intent(inout) :: seq
+real(r8)             :: deform
 
 real(r8) :: val
 
@@ -299,9 +383,6 @@ end function deform
 !------------------------------------------------------------
 
 subroutine writeit_1d(fname, nx, dataarray)
-
-use    utilities_mod
-
  character(len=*), intent(in) :: fname
  integer, intent(in) :: nx
  real(r8), intent(in) :: dataarray(:)
@@ -321,9 +402,6 @@ end subroutine writeit_1d
 !------------------------------------------------------------
 
 subroutine writeit_2d(fname, nx, ny, dataarray)
-
-use    utilities_mod
-
  character(len=*), intent(in) :: fname
  integer, intent(in) :: nx, ny
  real(r8), intent(in) :: dataarray(nx, ny)

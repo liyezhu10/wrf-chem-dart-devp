@@ -1,0 +1,89 @@
+quad_test file
+version 1.0
+
+#GRID_QUAD_FULLY_REGULAR
+#GRID_QUAD_IRREG_SPACED_REGULAR
+#GRID_QUAD_FULLY_IRREGULAR
+#GRID_QUAD_UNKNOWN_TYPE
+
+#QUAD_LOCATED_CELL_CENTERS
+#QUAD_LOCATED_LON_EDGES
+#QUAD_LOCATED_LAT_EDGES
+#QUAD_LOCATED_CELL_CORNERS
+#QUAD_LOCATED_UNKNOWN
+
+###
+start_test 1
+grid_type GRID_QUAD_FULLY_REGULAR
+data_loc QUAD_LOCATED_CELL_CENTERS
+
+lon_count 10
+lon_start 300
+lon_end   310
+
+lat_count 20
+lat_start 10
+lat_end   50
+
+data_pattern 7
+
+end_test 1
+
+###
+start_test 2
+grid_type GRID_QUAD_FULLY_REGULAR
+data_loc QUAD_LOCATED_CELL_CENTERS
+
+lon_count 50
+lon_start 100
+lon_end   310
+
+lat_count 50
+lat_start -50
+lat_end   50
+
+data_pattern 5
+
+end_test 2
+
+###
+start_test 3
+grid_type GRID_QUAD_FULLY_REGULAR
+data_loc QUAD_LOCATED_CELL_CENTERS
+
+lon_count 500
+lon_start 100
+lon_end   310
+
+lat_count 500
+lat_start -10
+lat_end   50
+
+angle 15
+
+data_pattern 5
+
+end_test 3
+
+###
+start_test 4
+grid_type GRID_QUAD_FULLY_REGULAR
+data_loc QUAD_LOCATED_CELL_CENTERS
+
+lon_count 500
+lon_start 50
+lon_end   310
+
+lat_count 500
+lat_start -30
+lat_end   80
+
+lon_def 0.1
+lat_def 0.3
+
+data_pattern 7
+
+end_test 4
+
+##
+end_file
