@@ -11,8 +11,6 @@ program dart_to_clm
 !
 ! method: Read DART state vector and overwrite values in a CLM restart file.
 !
-! author:   Tim Hoar 12 Jul 2011
-! modified: Tim Hoar 26 Mar 2018
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8
