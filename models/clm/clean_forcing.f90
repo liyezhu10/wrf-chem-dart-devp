@@ -82,7 +82,7 @@ character(len=*), parameter :: revdate  = '$Date$'
 character(len=*), parameter :: routine  = 'clean_forcing'
 
 integer, parameter :: ensemble_size = 80
-character(len=*), parameter :: directory = '/glade/p_old/image/thoar/CAM_DATM/4xdaily'
+character(len=*), parameter :: directory = '/glade/p/cisl/dares/thoar/CAM_DATM/4xdaily'
 
 character(len=16) :: varname
 character(len=16) :: variables(10) = (/'a2x6h_Faxa_lwdn ', &
@@ -128,7 +128,7 @@ real(r8) :: criterion = 100.0_r8
 
 namelist /clean_forcing_nml/ year, criterion
 
-!======================================================================
+!===============================================================================
 
 ! Read the namelist entry
 call find_namelist_in_file('input.nml', 'clean_forcing_nml', iunit)
@@ -143,15 +143,15 @@ call initialize_utilities(progname=routine)
 
 call init_random_seq(r,1)
 
-100 format('/glade/p_old/image/thoar/CAM_DATM/4xdaily/CAM_DATM.cpl_',i4.4,'.ha2x1dx6h.',i4.4,'.nc')
+100 format(A,'/CAM_DATM.cpl_',i4.4,'.ha2x1dx6h.',i4.4,'.nc')
 
 do imember = 1,ensemble_size
-   write(input_file(imember),100) imember, year
-
+   write(input_file(imember),100) directory, imember, year
    ncid(imember) = nc_open_file_readwrite(input_file(imember),routine)
+   write(*,*)'Opened '//trim(input_file(imember))
 enddo
 
-varname = variables(5)
+varname = variables(1)
 
 call nc_get_variable_num_dimensions(ncid(1), varname, numdims)
 call nc_get_variable_size(ncid(1), varname, dimlens)
@@ -165,7 +165,7 @@ allocate(tensor(ensemble_size,nx,ny))
 
 TIMESTEP : do itime = 1,nT
 
-   call fill_tensor(itime)
+   call read_tensor(itime)
 
    num_outliers = 0_i8
 
@@ -238,10 +238,9 @@ TIMESTEP : do itime = 1,nT
 
          num_outliers = num_outliers + 1_i8
 
-         mean   = sum(sorted(10:70))/61.0_r8
-         stddev = sqrt(sum(sorted(10:70) - mean)**2)/60.0_r8
-
-         write(*,*)'ix,iy,stddev,iqr = ',ix,iy,stddev,iqr
+!        mean   = sum(sorted(10:70))/61.0_r8
+!        stddev = sqrt(sum(sorted(10:70) - mean)**2)/60.0_r8
+!        write(*,*)'ix,iy,stddev,iqr = ',ix,iy,stddev,iqr
 
 !        noise = random_gaussian(r, 0.0_r8, 3.0_r8*stddev)
          noise = random_gaussian(r, 0.0_r8, iqr)
@@ -260,12 +259,13 @@ TIMESTEP : do itime = 1,nT
 
    write(*,*)'timestep ',itime,' had ',num_outliers, &
              ' values replaced when criterion is ',criterion
+   call write_tensor(itime)
 
 enddo TIMESTEP
 
-
 do imember = 1,ensemble_size
    call nc_close_file(ncid(imember),routine)
+   write(*,*)'Closed '//trim(input_file(imember))
 enddo
 
 call finalize_utilities(routine)
@@ -274,10 +274,10 @@ call finalize_utilities(routine)
 contains
 !-------------------------------------------------------------------------------
 
-subroutine fill_tensor(itime)
+subroutine read_tensor(itime)
 integer, intent(in) :: itime
 
-character(len=*), parameter :: routine = 'fill_tensor'
+character(len=*), parameter :: routine = 'read_tensor'
 integer :: imember, io
 
 MEMBER : do imember = 1,ensemble_size
@@ -292,15 +292,32 @@ MEMBER : do imember = 1,ensemble_size
                       start=ncstart, count=nccount)
    call nc_check(io, routine, 'get_var '//trim(varname))
 
-!     minvalue = minval(tensor(imember,:,:))
-!     maxvalue = maxval(tensor(imember,:,:))
-!
-!     write(*,*)'timestep ',itime,' member ',imember, &
-!               ' min,max ', minvalue, maxvalue
+enddo MEMBER
+
+end subroutine read_tensor
+
+
+subroutine write_tensor(itime)
+integer, intent(in) :: itime
+
+character(len=*), parameter :: routine = 'write_tensor'
+integer :: imember, io
+
+MEMBER : do imember = 1,ensemble_size
+
+   ncstart = (/ 1,  1, itime/)
+   nccount = (/nx, ny,     1/)
+
+   io = nf90_inq_varid(ncid(imember), varname, varid)
+   call nc_check(io, routine, 'inq_var_id '//trim(varname))
+
+   io = nf90_put_var(ncid(imember), varid, tensor(imember,:,:), &
+                      start=ncstart, count=nccount)
+   call nc_check(io, routine, 'put_var '//trim(varname))
 
 enddo MEMBER
 
-end subroutine fill_tensor
+end subroutine write_tensor
 
 
 end program clean_forcing
