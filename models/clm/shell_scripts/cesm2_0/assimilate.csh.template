@@ -311,13 +311,12 @@ echo "`date` -- END FILTER"
 # Tag the output with the valid time of the model state.
 # TODO could move each ensemble-member file to the respective member dir.
 
-foreach FILE ( input_*mean.nc      input_*sd.nc \
-            forecast_*mean.nc   forecast_*sd.nc  forecast_member_????.nc \
-            preassim_*mean.nc   preassim_*sd.nc  preassim_member_????.nc \
-           postassim_*mean.nc  postassim_*sd.nc postassim_member_????.nc \
-            analysis_*mean.nc   analysis_*sd.nc  analysis_member_????.nc \
-              output_*mean.nc     output_*sd.nc \
-              output_*mean_d0?.nc output_*sd_d0?.nc )
+foreach FILE ( input*mean*nc      input*sd*nc \
+            forecast*mean*nc   forecast*sd*nc  forecast_member_????.nc \
+            preassim*mean*nc   preassim*sd*nc  preassim_member_????.nc \
+           postassim*mean*nc  postassim*sd*nc postassim_member_????.nc \
+            analysis*mean*nc   analysis*sd*nc  analysis_member_????.nc \
+              output*mean*nc     output*sd*nc )
 
    if (  -e $FILE ) then
       set FEXT  = $FILE:e

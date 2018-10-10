@@ -27,11 +27,11 @@
 # num_instances The number of ensemble members.
 # ==============================================================================
 
-setenv CASE           clm5_f09_spinup80
 setenv resolution     f09_f09
 setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
-setenv cesmtag        clm_dev
+setenv cesmtag        ctsm
 setenv num_instances  80
+setenv CASE           clm5_f09_freerun_${num_instances}
 
 setenv RUN_TYPE       startup
 setenv RUN_STARTDATE  1998-01-01
@@ -63,14 +63,14 @@ setenv RUN_STARTDATE  1998-01-01
 
 setenv project      P86850054
 setenv machine      cheyenne
-setenv cesmdata     /glade/p/cesm/cseg/inputdata
-setenv cesmroot     /glade/p/work/${USER}/CESM/$cesmtag
-setenv caseroot     /glade/p/work/${USER}/cases/$cesmtag/${CASE}
+setenv cesmdata     /glade/p/cesmdata/cseg/inputdata
+setenv cesmroot     /glade/work/${USER}/CESM/$cesmtag
+setenv caseroot     /glade/work/${USER}/cases/$cesmtag/${CASE}
 setenv rundir       /glade/scratch/${USER}/$cesmtag/${CASE}/run
 setenv exeroot      /glade/scratch/${USER}/$cesmtag/${CASE}/bld
 setenv archdir      /glade/scratch/${USER}/$cesmtag/${CASE}/archive
 
-setenv dartroot     /glade/p/work/thoar/DART/cesm_clm
+setenv dartroot     /glade/work/thoar/DART/cesm_clm
 
 # ==============================================================================
 # job settings:
@@ -88,7 +88,7 @@ setenv timewall            01:00:00
 setenv short_term_archiver off
 
 setenv stop_option         nmonths
-setenv stop_n              1
+setenv stop_n              12
 setenv resubmit            11
 
 #> @TODO stream template files & multiple years. Do we need to specify
@@ -128,6 +128,14 @@ switch ("`hostname`")
       breaksw
 endsw
 
+# ==============================================================================
+# Create the case - this creates the CASEROOT directory.
+#
+# For list of the pre-defined component sets: ./create_newcase -list
+# To create a variant compset, see the CESM documentation and carefully
+# incorporate any needed changes into this script.
+# ==============================================================================
+
 # FATAL idea to make caseroot the same dir as where this setup script is
 # since the build process removes all files in the caseroot dir before
 # populating it.  try to prevent shooting yourself in the foot.
@@ -157,9 +165,6 @@ ${cesmroot}/cime/scripts/create_newcase  --res  ${resolution} \
 
 # ==============================================================================
 # Preserve a copy of this script as it was run.
-# Copy the DART setup script (CESM_DART_config) to CASEROOT.
-# Since we know the DARTROOT and BASEOBSDIR now, record them into
-# CASEROOT/CESM_DART_config now.
 # ==============================================================================
 
 set ThisFileName = $0:t
@@ -200,10 +205,6 @@ endif
 ./xmlchange RUN_TYPE=${RUN_TYPE}
 ./xmlchange RUN_STARTDATE=${RUN_STARTDATE}
 
-./xmlchange CALENDAR=GREGORIAN
-./xmlchange EXEROOT=${exeroot}
-./xmlchange RUNDIR=${rundir}
-
 ./xmlchange STOP_OPTION=$stop_option
 ./xmlchange STOP_N=$stop_n
 ./xmlchange RESUBMIT=$resubmit
@@ -211,10 +212,26 @@ endif
 ./xmlchange REST_OPTION=nmonths
 ./xmlchange REST_N=1
 
-./xmlchange DATM_MODE=CPLHISTForcing
+./xmlchange CALENDAR=GREGORIAN
+./xmlchange EXEROOT=${exeroot}
+./xmlchange RUNDIR=${rundir}
+
+# This comes from http://esmci.github.io/cime/data_models/data-atm.html
+# "Note If DATM_MODE is set to CPLHIST, it is normally assumed that the model 
+# domain will be identical to all of the stream domains. To ensure this, the 
+# xml variables ATM_DOMAIN_PATH and ATM_DOMAIN_FILE are ignored and a valid 
+# setting must be given for DATM_CPLHIST_DOMAIN_FILE. If DATM_CPLHIST_DOMAIN_FILE 
+# is set to null, then the datm component domain information is read in from 
+# the first coupler history file in the target stream and it is assumed that the 
+# first coupler stream file that is pointed to contains the domain information 
+# for that stream. This is the default that should be used for this mode."
+
+./xmlchange DATM_MODE=CPLHIST
+./xmlchange DATM_CPLHIST_DOMAIN_FILE=null
+./xmlchange DATM_CPLHIST_YR_ALIGN=$stream_year_align
 ./xmlchange DATM_CPLHIST_YR_START=$stream_year_first
 ./xmlchange DATM_CPLHIST_YR_END=$stream_year_last
-./xmlchange DATM_CPLHIST_YR_ALIGN=$stream_year_align
+
 
 # pnetcdf is default
 ./xmlchange PIO_TYPENAME=pnetcdf
@@ -249,16 +266,15 @@ endif
 ./xmlchange ROOTPE_LND=0,NTHRDS_LND=$nthreads,NTASKS_LND=$lnd_tasks
 ./xmlchange ROOTPE_ESP=0,NTHRDS_ESP=$nthreads,NTASKS_ESP=$esp_tasks
 
-./case.setup || exit 6
-
-echo "case setup finished"
-
-# ====================================
-
 ./xmlchange --subgroup case.run        --id JOB_QUEUE          --val ${queue}
 ./xmlchange --subgroup case.run        --id JOB_WALLCLOCK_TIME --val ${timewall}
 ./xmlchange --subgroup case.st_archive --id JOB_WALLCLOCK_TIME --val 8:00
 
+./case.setup || exit 6
+
+echo "case setup finished"
+
+# ==============================================================================
 # These are archiving options that may be used.
 # You can turn the short/long term archivers on or off ({short,long}_term_archiver),
 # but these settings should be made in either event.
@@ -291,7 +307,9 @@ while ( $inst <= $num_instances )
    set FILE2 = datm.streams.txt.CPLHISTForcing.nonSolarFlux${inst_string}
    set FILE3 = datm.streams.txt.CPLHISTForcing.State1hr${inst_string}
    set FILE4 = datm.streams.txt.CPLHISTForcing.State3hr${inst_string}
+   set DOMAINFILE = '/glade/p/cesmdata/cseg/inputdata/share/domains/domain.lnd.fv0.9x1.25_gx1v7.151020.nc'
 
+   echo "domainfile = '${DOMAINFILE}'" >> ${fname}
    echo "streams = '$FILE1 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
    echo "          '$FILE2 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
    echo "          '$FILE3 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
@@ -371,7 +389,7 @@ Time to check the case.
 
 3) check things
 
-4) run a single day, verify that it works 
+4) run a single job, verify that it works 
    ./case.submit
 
 5) If that works

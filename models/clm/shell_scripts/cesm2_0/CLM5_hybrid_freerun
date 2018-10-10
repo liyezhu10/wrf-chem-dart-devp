@@ -27,18 +27,16 @@
 # incorporate any needed changes into this script.
 # ==============================================================================
 
-setenv resolution     f09_f09_mg17
-setenv compset        2000_DATM%CPLHIST_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
-setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
 setenv cesmtag        ctsm
-setenv num_instances  4
-setenv CASE           clm5.0.06_f09_mv2_$num_instances
+setenv resolution     f09_f09_mg17
+setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
+setenv num_instances  80
+setenv CASE           clm5.0.06_f09_${num_instances}
 
 # ==============================================================================
 # Directories:
 # cesmdata     Location of some supporting CESM data files.
-# cesmroot     Location of the CESM code base.  This version of the script
-#              only supports version cesm1_5_beta06c.
+# cesmroot     Location of the CESM code base.
 # caseroot     Defines the CESM case directory - where the CESM+DART
 #              configuration files will be stored.  This should probably not
 #              be in scratch (on yellowstone, your 'work' partition is suggested).
@@ -60,7 +58,7 @@ setenv CASE           clm5.0.06_f09_mv2_$num_instances
 
 setenv project      P86850054
 setenv machine      cheyenne
-setenv cesmdata     /glade/p_old/cesm/cseg/inputdata
+setenv cesmdata     /glade/p/cesmdata/cseg/inputdata
 setenv cesmroot     /glade/work/${USER}/CESM/$cesmtag
 setenv caseroot     /glade/work/${USER}/cases/$cesmtag/${CASE}
 setenv rundir       /glade/scratch/${USER}/$cesmtag/${CASE}/run
@@ -92,7 +90,7 @@ setenv reftod       00000
 setenv refdate      $refyear-$refmon-$refday
 setenv reftimestamp $refyear-$refmon-$refday-$reftod
 
-setenv stagedir /glade/p_old/image/RDA_strawman/CESM_ensembles/CLM/CLM5BGC-Crop/ctsm_${reftimestamp}
+setenv stagedir /glade/p/cisl/dares/RDA_strawman/CESM_ensembles/CLM/CLM5BGC-Crop/ctsm_${reftimestamp}
 
 setenv startdate    2001-07-01
 
@@ -102,7 +100,7 @@ setenv startdate    2001-07-01
 # the stop_option to be 'nhours', and the stop_n to be accurate.
 
 setenv stop_option  nmonths
-setenv stop_n       1
+setenv stop_n       12
 setenv resubmit     0
 
 @ clm_dtime = 1800
@@ -120,12 +118,12 @@ set stream_year_last  = 2010
 # job settings:
 #
 # queue      can be changed during a series by changing the case.run
-# timewall   can be changed during a series by changing the case.run
+# timewall   can be changed during a series by changing the case.run HH:MM:SS
 #
 # ==============================================================================
 
-setenv queue        premium
-setenv timewall     00:20:00
+setenv queue        regular
+setenv timewall     03:00:00
 setenv short_term_archiver off
 
 # ==============================================================================
@@ -145,24 +143,20 @@ switch ("`hostname`")
          # NCAR "yellowstone"
          set   MOVE = '/bin/mv -v'
          set   COPY = '/bin/cp -v --preserve=timestamps'
-         set   LINK = '/bin/ln -vsf'
+         set   LINK = '/bin/ln -vs'
          set REMOVE = '/bin/rm -rf'
       breaksw
    default:
          # NERSC "hopper", TACC "stampede" ... many more
          set   MOVE = 'mv -v'
          set   COPY = 'cp -v --preserve=timestamps'
-         set   LINK = 'ln -vsf'
+         set   LINK = 'ln -vs'
          set REMOVE = 'rm -rf'
       breaksw
 endsw
 
 # ==============================================================================
 # Create the case - this creates the CASEROOT directory.
-#
-# For list of the pre-defined component sets: ./create_newcase -list
-# To create a variant compset, see the CESM documentation and carefully
-# incorporate any needed changes into this script.
 # ==============================================================================
 
 # FATAL idea to make caseroot the same dir as where this setup script is
@@ -234,31 +228,28 @@ endif
 ./xmlchange STOP_OPTION=$stop_option
 ./xmlchange STOP_N=$stop_n
 ./xmlchange RESUBMIT=$resubmit
-./xmlchange REST_OPTION=$stop_option
-./xmlchange REST_N=$stop_n
+
+# A year's worth of run-time is about 2.6Tb and should take less than 3 hours w/320 nodes of cheyenne
+# That's about 10,800 CPU-hours.
+./xmlchange REST_OPTION=nmonths
+./xmlchange REST_N=1
 
 ./xmlchange CALENDAR=GREGORIAN
 ./xmlchange EXEROOT=${exeroot}
 ./xmlchange RUNDIR=${rundir}
 
 # This comes from http://esmci.github.io/cime/data_models/data-atm.html
-# Note If DATM_MODE is set to CPLHIST, it is normally assumed that the model 
+# "Note If DATM_MODE is set to CPLHIST, it is normally assumed that the model 
 # domain will be identical to all of the stream domains. To ensure this, the 
 # xml variables ATM_DOMAIN_PATH and ATM_DOMAIN_FILE are ignored and a valid 
 # setting must be given for DATM_CPLHIST_DOMAIN_FILE. If DATM_CPLHIST_DOMAIN_FILE 
 # is set to null, then the datm component domain information is read in from 
 # the first coupler history file in the target stream and it is assumed that the 
 # first coupler stream file that is pointed to contains the domain information 
-# for that stream. This is the default that should be used for this mode. 
-# Alternatively, DATM_CPLHIST_DOMAIN_FILE can be set to 
-# $ATM_DOMAIN_PATH/$ATM_DOMAIN_FILE in a non-default configuration.
+# for that stream. This is the default that should be used for this mode."
 
 ./xmlchange DATM_MODE=CPLHIST
-#./xmlchange ATM_DOMAIN_PATH=/glade/p_old/image/thoar/CAM_DATM/4xdaily
-#./xmlchange ATM_DOMAIN_FILE=CAM_DATM.cpl_NINST.ha2x1dx6h.RUNYEAR.nc
-#./xmlchange DATM_CPLHIST_DOMAIN_FILE=/glade/p_old/image/thoar/CAM_DATM/4xdaily/CAM_DATM.cpl_0001.ha2x1dx6h.2001.nc
 ./xmlchange DATM_CPLHIST_DOMAIN_FILE=null
-
 ./xmlchange DATM_CPLHIST_YR_ALIGN=$stream_year_align
 ./xmlchange DATM_CPLHIST_YR_START=$stream_year_first
 ./xmlchange DATM_CPLHIST_YR_END=$stream_year_last
@@ -413,7 +404,7 @@ while ( $inst <= $num_instances )
 
    echo "use_init_interp = .true."                           >> ${fname}
    echo "init_interp_fill_missing_with_natveg = .true."      >> ${fname}
-   echo "hist_empty_htapes = .true."                         >> ${fname}
+#  echo "hist_empty_htapes = .true."                         >> ${fname}
 
    @ inst ++
 end
@@ -447,11 +438,11 @@ set restart_time = $init_time
 # get the settings for this case from the CESM environment
 cd ${caseroot}
 
-setenv CONTINUE_RUN   `./xmlquery CONTINUE_RUN     --value`
-setenv RUNDIR         `./xmlquery RUNDIR           --value`
-setenv DOUT_S         `./xmlquery DOUT_S           --value`
-setenv DOUT_S_ROOT    `./xmlquery DOUT_S_ROOT      --value`
-setenv CASE           `./xmlquery CASE             --value`
+setenv CONTINUE_RUN \`./xmlquery CONTINUE_RUN --value\`
+setenv RUNDIR       \`./xmlquery RUNDIR       --value\`
+setenv DOUT_S       \`./xmlquery DOUT_S       --value\`
+setenv DOUT_S_ROOT  \`./xmlquery DOUT_S_ROOT  --value\`
+setenv CASE         \`./xmlquery CASE         --value\`
 
 cd \${RUNDIR}
 
@@ -525,7 +516,7 @@ if ( \${CONTINUE_RUN} == TRUE ) then
 
       # If the multi-driver is not being used,
       # there is only a single coupler restart file.
-      echo "\${case}.cpl.r.\${restart_time}.nc" >! rpointer.drv
+      echo "\${CASE}.cpl.r.\${restart_time}.nc" >! rpointer.drv
 
    endif
 
@@ -566,6 +557,10 @@ chmod 0755 stage_cesm_files
 #===============================================================================
 
 ./case.build || exit 7
+
+# ==============================================================================
+# What to do next
+# ==============================================================================
 
 cat << EndOfText >! CESM_instructions.txt
 

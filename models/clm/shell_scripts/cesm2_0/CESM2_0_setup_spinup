@@ -25,13 +25,17 @@
 # resolution    Defines the horizontal resolution and dynamics; see CESM docs.
 # cesmtag       The version of the CESM source code to use when building the code.
 # num_instances The number of ensemble members.
+#
+# For list of the pre-defined component sets: ./query_config --compsets
+# To create a variant compset, see the CESM documentation and carefully
+# incorporate any needed changes into this script.
 # ==============================================================================
 
-setenv CASE           clm45_spinup_e4_n2
+setenv cesmtag        clm_dev_branch
 setenv resolution     f09_g16
 setenv compset        2000_DATM%GSWP3v1_CLM45%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
-setenv cesmtag        clm_dev_branch
 setenv num_instances  80
+setenv CASE           clm45_spinup_${num_instances}
 
 setenv RUN_TYPE       startup
 setenv RUN_STARTDATE  1998-01-01
@@ -39,8 +43,7 @@ setenv RUN_STARTDATE  1998-01-01
 # ==============================================================================
 # Directories:
 # cesmdata     Location of some supporting CESM data files.
-# cesmroot     Location of the CESM code base.  This version of the script
-#              only supports version cesm1_5_beta06c.
+# cesmroot     Location of the CESM code base.
 # caseroot     Defines the CESM case directory - where the CESM+DART
 #              configuration files will be stored.  This should probably not
 #              be in scratch (on yellowstone, your 'work' partition is suggested).
@@ -63,14 +66,14 @@ setenv RUN_STARTDATE  1998-01-01
 
 setenv project      P86850054
 setenv machine      cheyenne
-setenv cesmdata     /glade/p/cesm/cseg/inputdata
-setenv cesmroot     /glade/p/work/${USER}/CESM/$cesmtag
-setenv caseroot     /glade/p/work/${USER}/cases/$cesmtag/${CASE}
+setenv cesmdata     /glade/p/cesmdata/cseg/inputdata
+setenv cesmroot     /glade/work/${USER}/CESM/$cesmtag
+setenv caseroot     /glade/work/${USER}/cases/$cesmtag/${CASE}
 setenv rundir       /glade/scratch/${USER}/$cesmtag/${CASE}/run
 setenv exeroot      /glade/scratch/${USER}/$cesmtag/${CASE}/bld
 setenv archdir      /glade/scratch/${USER}/$cesmtag/${CASE}/archive
 
-setenv dartroot     /glade/p/work/thoar/DART/cesm_clm
+setenv dartroot     /glade/work/thoar/DART/cesm_clm
 
 # ==============================================================================
 # job settings:
@@ -88,7 +91,7 @@ setenv short_term_archiver off
 
 setenv resubmit            0
 setenv stop_option         nmonths
-setenv stop_n              1
+setenv stop_n              12
 
 #> @TODO stream template files & multiple years. Do we need to specify
 #> year 1 and year N (performance penalty?). Can we change years on-the-fly
@@ -115,17 +118,21 @@ switch ("`hostname`")
          # NCAR "yellowstone"
          set   MOVE = '/bin/mv -v'
          set   COPY = '/bin/cp -v --preserve=timestamps'
-         set   LINK = '/bin/ln -vsf'
+         set   LINK = '/bin/ln -vs'
          set REMOVE = '/bin/rm -rf'
       breaksw
    default:
          # NERSC "hopper", TACC "stampede" ... many more
          set   MOVE = 'mv -v'
          set   COPY = 'cp -v --preserve=timestamps'
-         set   LINK = 'ln -vsf'
+         set   LINK = 'ln -vs'
          set REMOVE = 'rm -rf'
       breaksw
 endsw
+
+# ==============================================================================
+# Create the case - this creates the CASEROOT directory.
+# ==============================================================================
 
 # FATAL idea to make caseroot the same dir as where this setup script is
 # since the build process removes all files in the caseroot dir before
@@ -156,9 +163,6 @@ ${cesmroot}/cime/scripts/create_newcase  --res  ${resolution} \
 
 # ==============================================================================
 # Preserve a copy of this script as it was run.
-# Copy the DART setup script (CESM_DART_config) to CASEROOT.
-# Since we know the DARTROOT and BASEOBSDIR now, record them into
-# CASEROOT/CESM_DART_config now.
 # ==============================================================================
 
 set ThisFileName = $0:t
@@ -199,10 +203,6 @@ endif
 ./xmlchange RUN_TYPE=${RUN_TYPE}
 ./xmlchange RUN_STARTDATE=${RUN_STARTDATE}
 
-./xmlchange CALENDAR=GREGORIAN
-./xmlchange EXEROOT=${exeroot}
-./xmlchange RUNDIR=${rundir}
-
 ./xmlchange STOP_OPTION=$stop_option
 ./xmlchange STOP_N=$stop_n
 ./xmlchange RESUBMIT=0
@@ -210,10 +210,25 @@ endif
 ./xmlchange REST_OPTION=nmonths
 ./xmlchange REST_N=1
 
-./xmlchange DATM_MODE=CPLHISTForcing
+./xmlchange CALENDAR=GREGORIAN
+./xmlchange EXEROOT=${exeroot}
+./xmlchange RUNDIR=${rundir}
+
+# This comes from http://esmci.github.io/cime/data_models/data-atm.html
+# "Note If DATM_MODE is set to CPLHIST, it is normally assumed that the model 
+# domain will be identical to all of the stream domains. To ensure this, the 
+# xml variables ATM_DOMAIN_PATH and ATM_DOMAIN_FILE are ignored and a valid 
+# setting must be given for DATM_CPLHIST_DOMAIN_FILE. If DATM_CPLHIST_DOMAIN_FILE 
+# is set to null, then the datm component domain information is read in from 
+# the first coupler history file in the target stream and it is assumed that the 
+# first coupler stream file that is pointed to contains the domain information 
+# for that stream. This is the default that should be used for this mode."
+
+./xmlchange DATM_MODE=CPLHIST
+./xmlchange DATM_CPLHIST_DOMAIN_FILE=null
+./xmlchange DATM_CPLHIST_YR_ALIGN=$stream_year_align
 ./xmlchange DATM_CPLHIST_YR_START=$stream_year_first
 ./xmlchange DATM_CPLHIST_YR_END=$stream_year_last
-./xmlchange DATM_CPLHIST_YR_ALIGN=$stream_year_align
 
 # pnetcdf is default
 ./xmlchange PIO_TYPENAME=pnetcdf
@@ -248,16 +263,15 @@ endif
 ./xmlchange ROOTPE_LND=0,NTHRDS_LND=$nthreads,NTASKS_LND=$lnd_tasks
 ./xmlchange ROOTPE_ESP=0,NTHRDS_ESP=$nthreads,NTASKS_ESP=$esp_tasks
 
-./case.setup || exit 6
-
-echo "case setup finished"
-
-# ====================================
-
 ./xmlchange --subgroup case.run        --id JOB_QUEUE          --val ${queue}
 ./xmlchange --subgroup case.run        --id JOB_WALLCLOCK_TIME --val ${timewall}
 ./xmlchange --subgroup case.st_archive --id JOB_WALLCLOCK_TIME --val 1:00
 
+./case.setup || exit 6
+
+echo "case setup finished"
+
+# ==============================================================================
 # These are archiving options that may be used.
 # You can turn the short/long term archivers on or off ({short,long}_term_archiver),
 # but these settings should be made in either event.
@@ -324,7 +338,8 @@ while ( $inst <= $num_instances )
    set fname = "user_nl_clm${inst_string}"
    # ===========================================================================
 
-   echo "hist_empty_htapes = .true."                                    >> ${fname}
+   # nothing to be done, really 
+   echo "hist_empty_htapes = .false." >> ${fname}
 
    @ inst ++
 end
@@ -348,7 +363,7 @@ Time to check the case.
 
 3) check things
 
-4) run a single day, verify that it works 
+4) run a single job, verify that it works 
    ./case.submit
 
 5) If that works

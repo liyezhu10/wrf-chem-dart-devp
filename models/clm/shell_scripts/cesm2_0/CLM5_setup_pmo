@@ -10,7 +10,7 @@
 # Purpose, describe things here, etc.
 #-----------------------------------------------------------------------
 #
-# CESM2_0_setup_pmo takes a single instance from a spun-up ensemble and
+# CLM5_setup_pmo    takes a single instance from a spun-up ensemble and
 #                   advances CLM in 24hour segments. If that works,
 #                   the setup can be modified to run perfect_model_obs to
 #                   harvest synthetic observations from the single instance,
@@ -35,17 +35,16 @@
 # the supported compset does not work because CISM only uses a no_leap calendar
 # 2000_DATM%GSWP3v1_CLM45%BGC-CROP_SICE_SOCN_RTM_CISM2%NOEVOLVE_SWAV (I2000Clm45BgcCrop)
 
-setenv CASE           clm5bgc-crop_pmo
+setenv cesmtag        ctsm
 setenv resolution     f09_f09
 setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
-setenv cesmtag        ctsm
 setenv num_instances  1
+setenv CASE           clm5bgc-crop_pmo
 
 # ==============================================================================
 # Directories:
 # cesmdata     Location of some supporting CESM data files.
-# cesmroot     Location of the CESM code base.  This version of the script
-#              only supports version cesm1_5_beta06c.
+# cesmroot     Location of the CESM code base.
 # caseroot     Defines the CESM case directory - where the CESM+DART
 #              configuration files will be stored.  This should probably not
 #              be in scratch (on yellowstone, your 'work' partition is suggested).
@@ -63,22 +62,16 @@ setenv num_instances  1
 #              invoked to move these files to permanent storage.
 #
 # dartroot     Location of the root of _your_ DART installation
-# baseobsdir   Part of the directory name containing the obs_seq.out files to be used in the
-#              assimilation. The year, month, and filename will be provided in assimilate.csh.
-#              Will be inherited by CESM#_#_DART_config and inserted into assimilate.csh
 # ==============================================================================
 
 setenv project      P86850054
 setenv machine      cheyenne
-setenv cesmdata     /glade/p/cesm/cseg/inputdata
-setenv cesmroot     /glade/p/work/${USER}/CESM/$cesmtag
-setenv caseroot     /glade/p/work/${USER}/cases/$cesmtag/${CASE}
+setenv cesmdata     /glade/p/cesmdata/cseg/inputdata
+setenv cesmroot     /glade/work/${USER}/CESM/$cesmtag
+setenv caseroot     /glade/work/${USER}/cases/$cesmtag/${CASE}
 setenv rundir       /glade/scratch/${USER}/$cesmtag/${CASE}/run
 setenv exeroot      /glade/scratch/${USER}/$cesmtag/${CASE}/bld
 setenv archdir      /glade/scratch/${USER}/$cesmtag/${CASE}/archive
-
-setenv dartroot     /glade/p/work/thoar/DART/cesm_clm
-setenv baseobsdir   /glade/p/image/Observations/land/SMAP
 
 # ==============================================================================
 # configure settings:
@@ -114,7 +107,7 @@ setenv reftod       00000
 setenv refdate      $refyear-$refmon-$refday
 setenv reftimestamp $refyear-$refmon-$refday-$reftod
 
-setenv stagedir /glade/p/image/RDA_strawman/CESM_ensembles/CLM/CLM5BGC-Crop/ctsm_${reftimestamp}
+setenv stagedir /glade/p/cisl/dares/RDA_strawman/CESM_ensembles/CLM/CLM5BGC-Crop/ctsm_${reftimestamp}
 
 setenv SingleInstanceRefcase 0
 setenv TRUTHinstance 3
@@ -195,14 +188,14 @@ switch ("`hostname`")
          # NCAR "yellowstone"
          set   MOVE = '/bin/mv -v'
          set   COPY = '/bin/cp -v --preserve=timestamps'
-         set   LINK = '/bin/ln -vsf'
+         set   LINK = '/bin/ln -vs'
          set REMOVE = '/bin/rm -rf'
       breaksw
    default:
          # NERSC "hopper", TACC "stampede" ... many more
          set   MOVE = 'mv -v'
          set   COPY = 'cp -v --preserve=timestamps'
-         set   LINK = 'ln -vsf'
+         set   LINK = 'ln -vs'
          set REMOVE = 'rm -rf'
       breaksw
 endsw
@@ -239,25 +232,25 @@ ${cesmroot}/cime/scripts/create_newcase  --res  ${resolution} \
 # ==============================================================================
 # Preserve a copy of this script as it was run.
 # Copy the DART setup script (CESM_DART_config) to CASEROOT.
-# Since we know the DARTROOT and BASEOBSDIR now, record them into
-# CASEROOT/CESM_DART_config now.
 # ==============================================================================
 
 set ThisFileName = $0:t
-${COPY} $ThisFileName ${caseroot}/${ThisFileName}.original
+${COPY} $ThisFileName       ${caseroot}/${ThisFileName}.original
+${COPY} DART_params.csh     ${caseroot}
+${COPY} CESM2_0_DART_config ${caseroot}
 
-set TEMPLATE = ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config.template
-if ( -e ${TEMPLATE} ) then
-   sed -e "s#BOGUS_DART_ROOT_STRING#${dartroot}#" \
-       -e "s#BOGUS_DART_OBS_STRING#${baseobsdir}#" \
-       -e "s#BOGUS_CASEROOT_STRING#${caseroot}#" ${TEMPLATE} \
-           >! ${caseroot}/CESM_DART_config  || exit 3
-   chmod 755  ${caseroot}/CESM_DART_config
-else
-   echo "ERROR: the script to configure for data assimilation is not available."
-   echo "       ${TEMPLATE} MUST exist."
-   exit 4
-endif
+#set TEMPLATE = ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config.template
+#if ( -e ${TEMPLATE} ) then
+#   sed -e "s#BOGUS_DART_ROOT_STRING#${dartroot}#" \
+#       -e "s#BOGUS_DART_OBS_STRING#${baseobsdir}#" \
+#       -e "s#BOGUS_CASEROOT_STRING#${caseroot}#" ${TEMPLATE} \
+#           >! ${caseroot}/CESM_DART_config  || exit 3
+#   chmod 755  ${caseroot}/CESM_DART_config
+#else
+#   echo "ERROR: the script to configure for data assimilation is not available."
+#   echo "       ${TEMPLATE} MUST exist."
+#   exit 4
+#endif
 
 # ==============================================================================
 cd ${caseroot}
@@ -265,8 +258,8 @@ cd ${caseroot}
 
 # Save a copy for debug purposes
 foreach FILE ( *xml )
-   if ( ! -e        ${FILE}.original ) then
-      ${COPY} $FILE ${FILE}.original
+   if ( ! -e          ${FILE}.original ) then
+      ${COPY} ${FILE} ${FILE}.original
    endif
 end
 
@@ -291,11 +284,6 @@ if ( (${COMP_OCN} != socn) || (${COMP_ATM} != datm) ) then
    exit 5
 endif
 
-
-./xmlchange CALENDAR=GREGORIAN
-./xmlchange EXEROOT=${exeroot}
-./xmlchange RUNDIR=${rundir}
-
 ./xmlchange STOP_OPTION=$stop_option
 ./xmlchange STOP_N=$stop_n
 ./xmlchange RESUBMIT=$resubmit
@@ -303,7 +291,22 @@ endif
 ./xmlchange REST_OPTION=ndays
 ./xmlchange REST_N=1
 
-./xmlchange DATM_MODE=CPLHISTForcing
+./xmlchange CALENDAR=GREGORIAN
+./xmlchange EXEROOT=${exeroot}
+./xmlchange RUNDIR=${rundir}
+
+# This comes from http://esmci.github.io/cime/data_models/data-atm.html
+# "Note If DATM_MODE is set to CPLHIST, it is normally assumed that the model 
+# domain will be identical to all of the stream domains. To ensure this, the 
+# xml variables ATM_DOMAIN_PATH and ATM_DOMAIN_FILE are ignored and a valid 
+# setting must be given for DATM_CPLHIST_DOMAIN_FILE. If DATM_CPLHIST_DOMAIN_FILE 
+# is set to null, then the datm component domain information is read in from 
+# the first coupler history file in the target stream and it is assumed that the 
+# first coupler stream file that is pointed to contains the domain information 
+# for that stream. This is the default that should be used for this mode."
+
+./xmlchange DATM_MODE=CPLHIST
+./xmlchange DATM_CPLHIST_DOMAIN_FILE=null
 ./xmlchange DATM_CPLHIST_YR_ALIGN=$stream_year_align
 ./xmlchange DATM_CPLHIST_YR_START=$stream_year_first
 ./xmlchange DATM_CPLHIST_YR_END=$stream_year_last
@@ -373,15 +376,15 @@ endif
 ./xmlchange ROOTPE_LND=0,NTHRDS_LND=$nthreads,NTASKS_LND=$lnd_tasks
 ./xmlchange ROOTPE_ESP=0,NTHRDS_ESP=$nthreads,NTASKS_ESP=$esp_tasks
 
+./xmlchange --subgroup case.run        --id JOB_QUEUE          --val ${queue}
+./xmlchange --subgroup case.run        --id JOB_WALLCLOCK_TIME --val ${timewall}
+./xmlchange --subgroup case.st_archive --id JOB_WALLCLOCK_TIME --val 6:00
+
 ./case.setup || exit 6
 
 echo "case setup finished"
 
-# ====================================
-
-./xmlchange --subgroup case.run        --id JOB_QUEUE          --val ${queue}
-./xmlchange --subgroup case.run        --id JOB_WALLCLOCK_TIME --val ${timewall}
-./xmlchange --subgroup case.st_archive --id JOB_WALLCLOCK_TIME --val 6:00
+# ==============================================================================
 
 if ($short_term_archiver == 'off') then
    ./xmlchange DOUT_S=FALSE
@@ -422,7 +425,9 @@ while ( $inst <= $num_instances )
    set FILE2 = datm.streams.txt.CPLHISTForcing.nonSolarFlux${inst_string}
    set FILE3 = datm.streams.txt.CPLHISTForcing.State1hr${inst_string}
    set FILE4 = datm.streams.txt.CPLHISTForcing.State3hr${inst_string}
+   set DOMAINFILE = '/glade/p/cesmdata/cseg/inputdata/share/domains/domain.lnd.fv0.9x1.25_gx1v7.151020.nc'
 
+   echo "domainfile = '${DOMAINFILE}'" >> ${fname}
    echo "streams = '$FILE1 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
    echo "          '$FILE2 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
    echo "          '$FILE3 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
@@ -499,11 +504,11 @@ set restart_time = $init_time
 # get the settings for this case from the CESM environment
 cd ${caseroot}
 
-setenv CONTINUE_RUN   `./xmlquery CONTINUE_RUN     --value`
-setenv RUNDIR         `./xmlquery RUNDIR           --value`
-setenv DOUT_S         `./xmlquery DOUT_S           --value`
-setenv DOUT_S_ROOT    `./xmlquery DOUT_S_ROOT      --value`
-setenv CASE           `./xmlquery CASE             --value`
+setenv CONTINUE_RUN \`./xmlquery CONTINUE_RUN --value\`
+setenv RUNDIR       \`./xmlquery RUNDIR       --value\`
+setenv DOUT_S       \`./xmlquery DOUT_S       --value\`
+setenv DOUT_S_ROOT  \`./xmlquery DOUT_S_ROOT  --value\`
+setenv CASE         \`./xmlquery CASE         --value\`
 
 cd \${RUNDIR}
 
@@ -577,7 +582,7 @@ if ( \${CONTINUE_RUN} == TRUE ) then
 
       # If the multi-driver is not being used,
       # there is only a single coupler restart file.
-      echo "\${case}.cpl.r.\${restart_time}.nc" >! rpointer.drv
+      echo "\${CASE}.cpl.r.\${restart_time}.nc" >! rpointer.drv
 
    endif
 
@@ -606,9 +611,10 @@ else     # CONTINUE_RUN == FALSE
       endif
 
       ${LINK} ${stagedir}/${refcase}.clm2\${true_string}.r.${init_time}.nc \
-                          ${refcase}.clm2\${inst_string}.r.${init_time}.nc
+                          ${refcase}.clm2\${inst_string}.r.${init_time}.nc || exit 2
+
       ${LINK} ${stagedir}/${refcase}.mosart\${true_string}.r.${init_time}.nc \
-                          ${refcase}.mosart\${inst_string}.r.${init_time}.nc
+                          ${refcase}.mosart\${inst_string}.r.${init_time}.nc || exit 3
       @ inst ++
    end
 
@@ -621,72 +627,6 @@ EndOfText
 chmod 0755 stage_cesm_files
 
 ./stage_cesm_files || exit 2
-
-#===============================================================================
-# Copy modified CLM codes into SourceMods
-# src.clm
-# |-- clm4_0
-# |   |-- biogeochem
-# |   |   `-- CNBalanceCheckMod.F90
-# |   `-- biogeophys
-# |       |-- BalanceCheckMod.F90
-# |       |-- SnowHydrologyMod.F90
-# |       `-- UrbanMod.F90
-# `-- clm5_0
-#     |-- biogeochem
-#     |   `-- CNBalanceCheckMod.F90
-#     `-- biogeophys
-#         `-- BalanceCheckMod.F90
-# ==============================================================================
-
-if (    -d     ~/${cesmtag}/SourceMods ) then
-
-   ${COPY} -r ~/${cesmtag}/SourceMods/src.clm ${caseroot}/SourceMods/
-
-   set clm_opts = `echo $CLM_CONFIG_OPTS | sed -e "s/-//"`
-
-   @ iarg = 1
-   while ($iarg <= $#clm_opts)
-
-      @ iargp1 = $iarg + 1
-      set option = $clm_opts[$iarg]
-      set  value = $clm_opts[$iargp1]
-
-      switch ( ${option} )
-         case "phys":
-            if ( -e    SourceMods/src.clm/${value} ) then
-               cd      SourceMods/src.clm
-               ${LINK} ${value}/*/*F90 .
-               cd      ../..
-            else
-               echo "No SourceMods for CLM <${value}>."
-               echo "Got the version from CLM_CONFIG_OPTS ...  <${CLM_CONFIG_OPTS}>"
-            endif
-         breaksw
-      #  case "bgc":  no special action needed here at this time
-      #  breaksw
-
-         default:
-         breaksw
-      endsw
-
-      @ iarg = $iarg + 2
-   end
-
-else
-   echo "ERROR - No SourceMods for this case."
-   echo "ERROR - No SourceMods for this case."
-   echo "DART requires modifications to several src files."
-   echo "Download the appropriate files for CESM 1_2_1 from:"
-   echo "http://www.image.ucar.edu/pub/DART/CESM"
-   echo "untar these into your HOME directory - they will create a"
-   echo "~/cesm1_2_1  directory with the appropriate SourceMods structure."
-#  exit 4
-
-   echo "MESSAGE - No SourceMods for this case."
-   echo "MESSAGE - No SourceMods for this case."
-
-endif
 
 ./case.build || exit 7
 

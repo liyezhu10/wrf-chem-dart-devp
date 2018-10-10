@@ -9,10 +9,10 @@
 # This file is just to see if CESM can be bullt on whatever architecture.
 # Single instance ... nothing fancy ... no DART ... just something simple.
 
-/glade/p/work/thoar/CESM/clm_dev/cime/scripts/query_config  --compsets clm
+/glade/work/thoar/CESM/ctsm/cime/scripts/query_config  --compsets clm
 
-set CASE = clm5bgc-crop_simple_pnetcdf
-set CASEDIR = /glade/p/work/thoar/cases
+set CASE = clm5bgc-crop_simple_pnetcdf2
+set CASEDIR = /glade/work/thoar/cases
 set COMPSET = 2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
 set CASEROOT = ${CASEDIR}/${CASE}
 
@@ -22,11 +22,11 @@ set CASEROOT = ${CASEDIR}/${CASE}
 
 echo "TJH: Starting create_newcase ..."
 
-/glade/p/work/thoar/CESM/clm_dev/cime/scripts/create_newcase \
+/glade/work/thoar/CESM/ctsm/cime/scripts/create_newcase \
     --case ${CASEROOT} \
     --compset ${COMPSET} \
     --mach cheyenne \
-    --res f09_f09 \
+    --res f09_f09_mg17 \
     --project P86850054 \
     --run-unsupported || exit 1
 
@@ -35,16 +35,21 @@ cd ${CASEROOT}
 echo "TJH: Finished create_newcase ..."
 echo "TJH: Starting case.setup     ..."
 
+foreach FILE ( *xml )
+   cp -v ${FILE} ${FILE}.original
+end
+
 ./xmlchange RUN_TYPE=startup
 ./xmlchange RUN_STARTDATE=2000-01-01
 ./xmlchange DOUT_S=FALSE
 ./xmlchange CALENDAR=GREGORIAN
 
-./case.setup || exit 2
-
-# These seemed to have no effect when run before case.setup
+# At one point these had no effect when run before case.setup
+# With release-clm5.0.04,  these are best _before_ case.setup
 ./xmlchange --subgroup case.run --id JOB_QUEUE          --val economy
 ./xmlchange --subgroup case.run --id JOB_WALLCLOCK_TIME --val 0:20
+
+./case.setup || exit 2
 
 set fname = "user_nl_clm"
 setenv stop_option         nhours
@@ -76,7 +81,7 @@ echo "  if that works, try a do_nothing assimilation cycle."
 
 # These modify env_run.xml so they can be executed AFTER a successful clm cycle.
 if ( 1 == 2 ) then
-   ./xmlchange DATA_ASSIMILATION=TRUE
+   ./xmlchange DATA_ASSIMILATION_LND=TRUE
    ./xmlchange DATA_ASSIMILATION_CYCLES=1
    ./xmlchange DATA_ASSIMILATION_SCRIPT=do_nothing.csh
    echo "echo Hello from `hostname`" >! do_nothing.csh

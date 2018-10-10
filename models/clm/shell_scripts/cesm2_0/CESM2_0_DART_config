@@ -66,7 +66,7 @@ setenv num_instances `./xmlquery NINST_LND --value`
 # When the job (not each cycle) is finished the short_term archiver will run and,
 # if RESUBMIT > 0, resubmit a new case.run job.
 
-./xmlchange DATA_ASSIMILATION=TRUE
+./xmlchange DATA_ASSIMILATION_LND=TRUE
 ./xmlchange DATA_ASSIMILATION_CYCLES=1
 ./xmlchange DATA_ASSIMILATION_SCRIPT=${CASEROOT}/assimilate.csh
 

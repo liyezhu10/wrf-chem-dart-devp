@@ -27,11 +27,11 @@
 # incorporate any needed changes into this script.
 # ==============================================================================
 
-setenv num_instances  40
-setenv CASE           clm5_f09_e${num_instances}
+setenv cesmtag        ctsm
 setenv resolution     f09_f09
 setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
-setenv cesmtag        ctsm
+setenv num_instances  40
+setenv CASE           clm5_f09_e${num_instances}
 
 # ==============================================================================
 # Directories:
@@ -63,15 +63,15 @@ setenv cesmtag        ctsm
 
 setenv project      P86850054
 setenv machine      cheyenne
-setenv cesmdata     /glade/p/cesm/cseg/inputdata
-setenv cesmroot     /glade/p/work/${USER}/CESM/$cesmtag
-setenv caseroot     /glade/p/work/${USER}/cases/$cesmtag/${CASE}
+setenv cesmdata     /glade/p/cesmdata/cseg/inputdata
+setenv cesmroot     /glade/work/${USER}/CESM/$cesmtag
+setenv caseroot     /glade/work/${USER}/cases/$cesmtag/${CASE}
 setenv rundir       /glade/scratch/${USER}/$cesmtag/${CASE}/run
 setenv exeroot      /glade/scratch/${USER}/$cesmtag/${CASE}/bld
 setenv archdir      /glade/scratch/${USER}/$cesmtag/${CASE}/archive
 
-setenv dartroot     /glade/p/work/thoar/DART/cesm_clm
-setenv baseobsdir   /glade/p/image/Observations/land
+setenv dartroot     /glade/work/thoar/DART/cesm_clm
+setenv baseobsdir   /glade/p/cisl/dares/Observations/land
 
 # ==============================================================================
 # configure settings:
@@ -96,7 +96,7 @@ setenv reftod       00000
 setenv refdate      $refyear-$refmon-$refday
 setenv reftimestamp $refyear-$refmon-$refday-$reftod
 
-setenv stagedir /glade/p/image/RDA_strawman/CESM_ensembles/CLM/CLM5BGC-Crop/ctsm_${reftimestamp}
+setenv stagedir /glade/p/cisl/dares/RDA_strawman/CESM_ensembles/CLM/CLM5BGC-Crop/ctsm_${reftimestamp}
 
 setenv startdate    2001-07-01
 
@@ -198,9 +198,6 @@ ${cesmroot}/cime/scripts/create_newcase  --res  ${resolution} \
 
 # ==============================================================================
 # Preserve a copy of this script as it was run.
-# Copy the DART setup script (CESM_DART_config) to CASEROOT.
-# Since we know the DARTROOT and BASEOBSDIR now, record them into
-# CASEROOT/CESM_DART_config now.
 # ==============================================================================
 
 set ThisFileName = $0:t
@@ -261,7 +258,18 @@ endif
 ./xmlchange EXEROOT=${exeroot}
 ./xmlchange RUNDIR=${rundir}
 
-./xmlchange DATM_MODE=CPLHISTForcing
+# This comes from http://esmci.github.io/cime/data_models/data-atm.html
+# "Note If DATM_MODE is set to CPLHIST, it is normally assumed that the model 
+# domain will be identical to all of the stream domains. To ensure this, the 
+# xml variables ATM_DOMAIN_PATH and ATM_DOMAIN_FILE are ignored and a valid 
+# setting must be given for DATM_CPLHIST_DOMAIN_FILE. If DATM_CPLHIST_DOMAIN_FILE 
+# is set to null, then the datm component domain information is read in from 
+# the first coupler history file in the target stream and it is assumed that the 
+# first coupler stream file that is pointed to contains the domain information 
+# for that stream. This is the default that should be used for this mode."
+
+./xmlchange DATM_MODE=CPLHIST
+./xmlchange DATM_CPLHIST_DOMAIN_FILE=null
 ./xmlchange DATM_CPLHIST_YR_ALIGN=$stream_year_align
 ./xmlchange DATM_CPLHIST_YR_START=$stream_year_first
 ./xmlchange DATM_CPLHIST_YR_END=$stream_year_last
@@ -320,16 +328,15 @@ endif
 ./xmlchange ROOTPE_LND=0,NTHRDS_LND=$nthreads,NTASKS_LND=$lnd_tasks
 ./xmlchange ROOTPE_ESP=0,NTHRDS_ESP=$nthreads,NTASKS_ESP=$esp_tasks
 
-./case.setup || exit 6
-
-echo "case setup finished"
-
-# ====================================
-
 ./xmlchange --subgroup case.run        --id JOB_QUEUE          --val ${queue}
 ./xmlchange --subgroup case.run        --id JOB_WALLCLOCK_TIME --val ${timewall}
 ./xmlchange --subgroup case.st_archive --id JOB_WALLCLOCK_TIME --val 6:00
 
+./case.setup || exit 6
+
+echo "case setup finished"
+
+# ==============================================================================
 # These are archiving options that may be used.
 # You can turn the short/long term archivers on or off ({short,long}_term_archiver),
 # but these settings should be made in either event.
@@ -362,7 +369,9 @@ while ( $inst <= $num_instances )
    set FILE2 = datm.streams.txt.CPLHISTForcing.nonSolarFlux${inst_string}
    set FILE3 = datm.streams.txt.CPLHISTForcing.State1hr${inst_string}
    set FILE4 = datm.streams.txt.CPLHISTForcing.State3hr${inst_string}
+   set DOMAINFILE = '/glade/p/cesmdata/cseg/inputdata/share/domains/domain.lnd.fv0.9x1.25_gx1v7.151020.nc'
 
+   echo "domainfile = '${DOMAINFILE}'" >> ${fname}
    echo "streams = '$FILE1 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
    echo "          '$FILE2 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
    echo "          '$FILE3 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
@@ -439,11 +448,11 @@ set restart_time = $init_time
 # get the settings for this case from the CESM environment
 cd ${caseroot}
 
-setenv CONTINUE_RUN   `./xmlquery CONTINUE_RUN     --value`
-setenv RUNDIR         `./xmlquery RUNDIR           --value`
-setenv DOUT_S         `./xmlquery DOUT_S           --value`
-setenv DOUT_S_ROOT    `./xmlquery DOUT_S_ROOT      --value`
-setenv CASE           `./xmlquery CASE             --value`
+setenv CONTINUE_RUN \`./xmlquery CONTINUE_RUN --value\`
+setenv RUNDIR       \`./xmlquery RUNDIR       --value\`
+setenv DOUT_S       \`./xmlquery DOUT_S       --value\`
+setenv DOUT_S_ROOT  \`./xmlquery DOUT_S_ROOT  --value\`
+setenv CASE         \`./xmlquery CASE         --value\`
 
 cd \${RUNDIR}
 
@@ -517,7 +526,7 @@ if ( \${CONTINUE_RUN} == TRUE ) then
 
       # If the multi-driver is not being used,
       # there is only a single coupler restart file.
-      echo "\${case}.cpl.r.\${restart_time}.nc" >! rpointer.drv
+      echo "\${CASE}.cpl.r.\${restart_time}.nc" >! rpointer.drv
 
    endif
 
