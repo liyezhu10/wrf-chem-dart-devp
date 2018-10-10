@@ -259,7 +259,7 @@ TIMESTEP : do itime = 1,nT
 
    write(*,*)'timestep ',itime,' had ',num_outliers, &
              ' values replaced when criterion is ',criterion
-   call write_tensor(itime)
+   if (num_outliers > 0_i8) call write_tensor(itime)
 
 enddo TIMESTEP
 
