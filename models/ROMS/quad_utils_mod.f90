@@ -168,11 +168,11 @@ type quad_irreg_grid_coords
    integer  :: num_reg_x = 180
    integer  :: num_reg_y = 180
    integer  :: max_reg_list_num = 800
-   real(r8) :: min_lon =   0.0_r8
-   real(r8) :: max_lon = 360.0_r8
+   real(r8) :: min_lon =     0.0_r8
+   real(r8) :: max_lon =   360.0_r8
    real(r8) :: lon_width = 360.0_r8
-   real(r8) :: min_lat = -90.0_r8
-   real(r8) :: max_lat =  90.0_r8
+   real(r8) :: min_lat =   -90.0_r8
+   real(r8) :: max_lat =    90.0_r8
    real(r8) :: lat_width = 180.0_r8
 
    ! these next 2 should be allocated num_reg_x, num_reg_y
@@ -494,6 +494,13 @@ interp_handle%rr%lon_delta = lon_delta
 interp_handle%rr%lat_start = lat_start
 interp_handle%rr%lat_delta = lat_delta
 
+if (lon_delta == 0.0_r8 .or. lat_delta == 0.0_r8) then
+   write(string1, *) 'neither lon_delta nor lat_delta can equal 0'
+   write(string2, *) 'lon_delta: ', lon_delta, ' lat_delta: ', lat_delta
+   call error_handler(E_ERR, 'set_quad_coords', string1, &
+                      source, revision, revdate, text2=string2)
+endif
+
 end subroutine set_reg_quad_coords
 
 !------------------------------------------------------------
@@ -520,6 +527,30 @@ endif
 
 interp_handle%ir%lons_1D(:) = lons
 interp_handle%ir%lats_1D(:) = lats
+
+!>@todo FIXME i would like to put something like this to check
+!>for degenerate grids, but i don't know how to avoid throwing
+!>an error at the poles, for example.  i'm leaving this here
+!>but commented out to remind me to try to add some way of 
+!>catching bad values at init time.
+!do i=1, nlons-1
+!   lon_delta = interp_handle%ir%lons_1d(i+1) - interp_handle%ir%lons_1d(i)
+!   if (lon_delta == 0.0_r8) then
+!      write(string1, *) 'no lon_deltas can equal 0'
+!      write(string2, *) 'i, lons_1d(i), lons_1d(i+1): ', i, lons_1d(i), lons_1d(i+1)
+!      call error_handler(E_ERR, 'set_quad_coords', string1, &
+!                         source, revision, revdate, text2=string2)
+!   endif
+!enddo
+!do j=1, nlats-1
+!   lat_delta = interp_handle%ir%lats_1d(j+1) - interp_handle%ir%lats_1d(j)
+!   if (lat_delta == 0.0_r8) then
+!      write(string1, *) 'no lat_deltas can equal 0'
+!      wrjte(string2, *) 'j, lats_1d(j), lats_1d(j+1): ', j, lats_1d(j), lats_1d(j+1)
+!      call error_handler(E_ERR, 'set_quad_coords', string1, &
+!                         source, revision, revdate, text2=string2)
+!   endif
+!enddo
 
 end subroutine set_irregspaced_quad_coords
 
@@ -1034,7 +1065,7 @@ else
       ! degrees larger than the min, then there must be wraparound.
       ! Then, find the smallest value > 180 and the largest < 180 to get range.
       lon_min = 360.0_r8
-      lon_max = 0.0_r8
+      lon_max =   0.0_r8
       do i=1, 4
          if(x_corners(i) > 180.0_r8 .and. x_corners(i) < lon_min) lon_min = x_corners(i)
          if(x_corners(i) < 180.0_r8 .and. x_corners(i) > lon_max) lon_max = x_corners(i)
@@ -1583,10 +1614,10 @@ do i = 2, nlons
    dist_bot = lon_dist(lon, lon_array(i - 1))
    dist_top = lon_dist(lon, lon_array(i))
    if (debug > 3) print *, 'lon: i, bot, top: ', i, dist_bot, dist_top
-   if(dist_bot <= 0 .and. dist_top > 0) then
+   if(dist_bot <= 0.0_r8 .and. dist_top > 0.0_r8) then
       bot = i - 1
       top = i
-      if ((abs(dist_bot) + dist_top) == 0) then
+      if ((abs(dist_bot) + dist_top) == 0.0_r8) then
          istatus = 2
          return
       endif
@@ -1603,7 +1634,7 @@ if (cyclic) then
    top = 1
    dist_bot = lon_dist(lon, lon_array(bot))
    dist_top = lon_dist(lon, lon_array(top))
-   if ((abs(dist_bot) + dist_top) == 0) then
+   if ((abs(dist_bot) + dist_top) == 0.0_r8) then
       istatus = 2
       return
    endif
@@ -1661,6 +1692,10 @@ do i = 2, nlats
    if(lat <= lat_array(i)) then
       bot = i - 1
       top = i
+      if (lat_array(top) - lat_array(bot) == 0.0_r8) then
+         istatus = 2
+         return
+      endif
       fract = (lat - lat_array(bot)) / (lat_array(top) - lat_array(bot))
       if (debug > 3) print *, 'lat: returning bot, top, fract', bot, top, fract
       return
