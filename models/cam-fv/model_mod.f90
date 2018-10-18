@@ -4039,7 +4039,7 @@ end subroutine init_globals
 !
 ! Watch out for unusual cases that could crash the log() function
 ! We pass in the surface pressure here even if it isn't going to be
-! used because in all the cases above we seem to have it (or the stanard
+! used because in all the cases above we seem to have it (or the standard
 ! reference pressure) everywhere we are going to compute this value.
 ! The "skip_norm" parameter controls whether this code uses the 
 ! surface pressure or not. 
