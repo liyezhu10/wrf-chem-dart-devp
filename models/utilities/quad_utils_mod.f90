@@ -40,7 +40,8 @@ use     location_mod, only : location_type, get_location
 use    utilities_mod, only : register_module, error_handler,         &
                              E_ERR, E_WARN, E_MSG, nmlfileunit,      &
                              do_output, do_nml_file, do_nml_term,    &
-                             find_namelist_in_file, check_namelist_read
+                             find_namelist_in_file, check_namelist_read, &
+                             log_it, array_dump
 
 implicit none
 private
@@ -168,11 +169,11 @@ type quad_irreg_grid_coords
    integer  :: num_reg_x = 180
    integer  :: num_reg_y = 180
    integer  :: max_reg_list_num = 800
-   real(r8) :: min_lon =   0.0_r8
-   real(r8) :: max_lon = 360.0_r8
+   real(r8) :: min_lon =     0.0_r8
+   real(r8) :: max_lon =   360.0_r8
    real(r8) :: lon_width = 360.0_r8
-   real(r8) :: min_lat = -90.0_r8
-   real(r8) :: max_lat =  90.0_r8
+   real(r8) :: min_lat =   -90.0_r8
+   real(r8) :: max_lat =    90.0_r8
    real(r8) :: lat_width = 180.0_r8
 
    ! these next 2 should be allocated num_reg_x, num_reg_y
@@ -364,22 +365,32 @@ select case (grid_type)
          interp_handle%ii%num_reg_x = 900
          interp_handle%ii%num_reg_y = 900
          interp_handle%ii%max_reg_list_num = 800   !>@todo  what is good val?
-!print *, 'case 1: ', interp_handle%ii%num_reg_x, interp_handle%ii%num_reg_y, &
-!                     interp_handle%ii%max_reg_list_num
+         if(debug > 10) then
+            write(string1, *) 'case 1: ', interp_handle%ii%num_reg_x, interp_handle%ii%num_reg_y, &
+                               interp_handle%ii%max_reg_list_num
+            call log_it(string1)
+         endif
 
       else if (num_lats * num_lons > 250 * 1000) then  ! ~1/2th degree
          interp_handle%ii%num_reg_x = 180
          interp_handle%ii%num_reg_y = 180
          interp_handle%ii%max_reg_list_num = 800
-!print *, 'case 2: ', interp_handle%ii%num_reg_x, interp_handle%ii%num_reg_y, &
-!                     interp_handle%ii%max_reg_list_num
+         if(debug > 10) then
+            write(string1, *) 'case 2: ', interp_handle%ii%num_reg_x, interp_handle%ii%num_reg_y, &
+                               interp_handle%ii%max_reg_list_num
+            call log_it(string1)
+         endif
 
       else
          interp_handle%ii%num_reg_x = 90
          interp_handle%ii%num_reg_y = 90
          interp_handle%ii%max_reg_list_num = 800
-!print *, 'case 3: ', interp_handle%ii%num_reg_x, interp_handle%ii%num_reg_y, &
-!                     interp_handle%ii%max_reg_list_num
+         if(debug > 10) then
+            write(string1, *) 'case 3: ', interp_handle%ii%num_reg_x, interp_handle%ii%num_reg_y, &
+                               interp_handle%ii%max_reg_list_num
+            call log_it(string1)
+         endif
+
       endif
 
       allocate(interp_handle%ii%grid_start(interp_handle%ii%num_reg_x, &
@@ -413,7 +424,10 @@ select case (cell_relative)
 
 end select
 
-!print *, 'calling init for ', num_lons, num_lats, grid_type
+if (debug > 2) then
+   write(string1, *) 'calling init for nlons/nlats/type = ', num_lons, num_lats, grid_type
+   call log_it(string1)
+endif
 
 end subroutine init_quad_interp
 
@@ -422,21 +436,39 @@ end subroutine init_quad_interp
 subroutine print_quad_handle(interp_handle)
 type(quad_interp_handle), intent(in) :: interp_handle
 
-if (debug > 10) print *, interp_handle%nlat, interp_handle%nlon
-if (debug > 10) print *, interp_handle%grid_type
+if (debug > 10) then
+   write(string1, *) 'nlat, nlon, grid type: ', interp_handle%nlat, interp_handle%nlon, &
+                      interp_handle%grid_type
+   call log_it(string1)
+endif
 
 select case (interp_handle%grid_type)
    case(GRID_QUAD_FULLY_REGULAR)
-      print *,  interp_handle%rr%lon_start, interp_handle%rr%lon_delta, &
-                interp_handle%rr%lat_start, interp_handle%rr%lat_delta
+      call log_it('fully regular quad grid')
+      write(string1, *) 'lon start, delta, count: ', interp_handle%rr%lon_start, &
+                         interp_handle%rr%lon_delta, interp_handle%nlon
+      call log_it(string1)
+      write(string1, *) 'lat start, delta, count: ', interp_handle%rr%lat_start, &
+                         interp_handle%rr%lat_delta, interp_handle%nlat
+      call log_it(string1)
 
    case(GRID_QUAD_IRREG_SPACED_REGULAR)
-      print * , interp_handle%ir%lats_1D(interp_handle%nlat), &
-                interp_handle%ir%lons_1D(interp_handle%nlon)
+      call log_it('irregularly spaced but orthogonal quad grid')
+      write(string1, *) 'nlons: ', interp_handle%nlon
+      call log_it(string1)
+      call array_dump(interp_handle%ir%lons_1D, label = 'lon values')
+      write(string1, *) 'nlats: ', interp_handle%nlat
+      call log_it(string1)
+      call array_dump(interp_handle%ir%lats_1D, label = 'lat values')
 
    case(GRID_QUAD_FULLY_IRREGULAR)
-      print * !, interp_handle%ii%lats_2D(num_lons, num_lats), &
-              !  interp_handle%ii%lons_2D(num_lons, num_lats)
+      call log_it('fully irregular quad grid')
+      write(string1, *) 'nlons: ', interp_handle%nlon
+      call log_it(string1)
+      call array_dump(interp_handle%ii%lons_2D, label = 'lon values')
+      write(string1, *) 'nlats: ', interp_handle%nlat
+      call log_it(string1)
+      call array_dump(interp_handle%ii%lats_2D, label = 'lat values')
 
    case default
       write(string1, *) 'unrecognized grid type: ', interp_handle%grid_type
@@ -447,7 +479,10 @@ select case (interp_handle%grid_type)
 
 end select
 
-if (debug > 10) print *, interp_handle%opt%cell_relative
+if (debug > 10) then
+   write(string1, *) 'cell relative flag: ', interp_handle%opt%cell_relative
+   call log_it(string1)
+endif
 
 end subroutine print_quad_handle
 
@@ -494,6 +529,13 @@ interp_handle%rr%lon_delta = lon_delta
 interp_handle%rr%lat_start = lat_start
 interp_handle%rr%lat_delta = lat_delta
 
+if (lon_delta == 0.0_r8 .or. lat_delta == 0.0_r8) then
+   write(string1, *) 'neither lon_delta nor lat_delta can equal 0'
+   write(string2, *) 'lon_delta: ', lon_delta, ' lat_delta: ', lat_delta
+   call error_handler(E_ERR, 'set_quad_coords', string1, &
+                      source, revision, revdate, text2=string2)
+endif
+
 end subroutine set_reg_quad_coords
 
 !------------------------------------------------------------
@@ -520,6 +562,30 @@ endif
 
 interp_handle%ir%lons_1D(:) = lons
 interp_handle%ir%lats_1D(:) = lats
+
+!>@todo FIXME i would like to put something like this to check
+!>for degenerate grids, but i don't know how to avoid throwing
+!>an error at the poles, for example.  i'm leaving this here
+!>but commented out to remind me to try to add some way of 
+!>catching bad values at init time.
+!do i=1, nlons-1
+!   lon_delta = interp_handle%ir%lons_1d(i+1) - interp_handle%ir%lons_1d(i)
+!   if (lon_delta == 0.0_r8) then
+!      write(string1, *) 'no lon_deltas can equal 0'
+!      write(string2, *) 'i, lons_1d(i), lons_1d(i+1): ', i, lons_1d(i), lons_1d(i+1)
+!      call error_handler(E_ERR, 'set_quad_coords', string1, &
+!                         source, revision, revdate, text2=string2)
+!   endif
+!enddo
+!do j=1, nlats-1
+!   lat_delta = interp_handle%ir%lats_1d(j+1) - interp_handle%ir%lats_1d(j)
+!   if (lat_delta == 0.0_r8) then
+!      write(string1, *) 'no lat_deltas can equal 0'
+!      wrjte(string2, *) 'j, lats_1d(j), lats_1d(j+1): ', j, lats_1d(j), lats_1d(j+1)
+!      call error_handler(E_ERR, 'set_quad_coords', string1, &
+!                         source, revision, revdate, text2=string2)
+!   endif
+!enddo
 
 end subroutine set_irregspaced_quad_coords
 
@@ -1034,7 +1100,7 @@ else
       ! degrees larger than the min, then there must be wraparound.
       ! Then, find the smallest value > 180 and the largest < 180 to get range.
       lon_min = 360.0_r8
-      lon_max = 0.0_r8
+      lon_max =   0.0_r8
       do i=1, 4
          if(x_corners(i) > 180.0_r8 .and. x_corners(i) < lon_min) lon_min = x_corners(i)
          if(x_corners(i) < 180.0_r8 .and. x_corners(i) > lon_max) lon_max = x_corners(i)
@@ -1583,10 +1649,10 @@ do i = 2, nlons
    dist_bot = lon_dist(lon, lon_array(i - 1))
    dist_top = lon_dist(lon, lon_array(i))
    if (debug > 3) print *, 'lon: i, bot, top: ', i, dist_bot, dist_top
-   if(dist_bot <= 0 .and. dist_top > 0) then
+   if(dist_bot <= 0.0_r8 .and. dist_top > 0.0_r8) then
       bot = i - 1
       top = i
-      if ((abs(dist_bot) + dist_top) == 0) then
+      if ((abs(dist_bot) + dist_top) == 0.0_r8) then
          istatus = 2
          return
       endif
@@ -1603,7 +1669,7 @@ if (cyclic) then
    top = 1
    dist_bot = lon_dist(lon, lon_array(bot))
    dist_top = lon_dist(lon, lon_array(top))
-   if ((abs(dist_bot) + dist_top) == 0) then
+   if ((abs(dist_bot) + dist_top) == 0.0_r8) then
       istatus = 2
       return
    endif
@@ -1661,6 +1727,10 @@ do i = 2, nlats
    if(lat <= lat_array(i)) then
       bot = i - 1
       top = i
+      if (lat_array(top) - lat_array(bot) == 0.0_r8) then
+         istatus = 2
+         return
+      endif
       fract = (lat - lat_array(bot)) / (lat_array(top) - lat_array(bot))
       if (debug > 3) print *, 'lat: returning bot, top, fract', bot, top, fract
       return
