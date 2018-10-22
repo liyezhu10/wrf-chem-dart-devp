@@ -3638,7 +3638,7 @@ real(r8),             intent(in)  :: total_dist
 real(r8),             intent(out) :: extra_dist
 logical :: above_ramp_start
 
-real(r8) :: cutoff, ramp_start, norm, vert_norm, vert_only_dist
+real(r8) :: vert_localize_dist, ramp_start, norm, vert_norm, vert_only_dist
 real(r8) :: horiz_dist, ramp_dist, ramp_width
 type(location_type) :: this_loc, ramp_start_loc, loc1, loc2
 logical, save :: onetime = .true.
@@ -3650,15 +3650,15 @@ logical, save :: onetime = .true.
 
 ! FIXME: test this!!!
 ! is it above the ramp end? set damp dist to something
-! large enough to turn off all impacts.  is cutoff enough?
-cutoff = get_maxdist(gc, obs_type)
+! large enough to turn off all impacts.  is vert_localize_dist enough?
+vert_localize_dist = get_maxdist(gc, obs_type)
 if (.false. .and. onetime) then
-   print *, 'cutoff = ', cutoff
+   print *, 'vert_localize_dist = ', vert_localize_dist
    onetime = .false.
 endif
 
 if (v_above(test_value, ramp_end)) then
-   extra_dist = cutoff
+   extra_dist = vert_localize_dist
    above_ramp_start = .true.
    return
 endif
@@ -3671,10 +3671,10 @@ loc2 = set_location(0.0_r8, 0.0_r8, 1.0_r8, vertical_localization_type)
 norm = get_dist(loc1, loc2, obs_type)   ! units: rad/loc units
 vert_norm = 1.0_r8 / norm               ! units now: loc units/rad
 
-ramp_start = v_minus(ramp_end, vert_norm * cutoff)
+ramp_start = v_down(ramp_end, vert_norm * vert_localize_dist)
 
-!print *, 'computing ramp start: ramp_end, vert_norm, cutoff', &
-!                    ramp_start, ramp_end, vert_norm, cutoff
+!print *, 'computing ramp start: ramp_end, vert_norm, vert_localize_dist', &
+!                    ramp_start, ramp_end, vert_norm, vert_localize_dist
 
 if (.not. v_above(test_value, ramp_start)) then
    extra_dist = 0.0_r8
@@ -3698,16 +3698,16 @@ vert_only_dist = get_dist(ramp_start_loc, this_loc, obs_type)
 
 ! we need this to compute what?
 if (vert_only_dist > total_dist) then
- !print *, 'unexpected, vert larger than total:  ', vert_only_dist, total_dist
- !print *, 'obs_type, vert_norm = ', obs_type, vert_norm
- horiz_dist = 0.0_r8
+   !print *, 'unexpected, vert larger than total:  ', vert_only_dist, total_dist
+   !print *, 'obs_type, vert_norm = ', obs_type, vert_norm
+   horiz_dist = 0.0_r8
 else
-horiz_dist = sqrt(total_dist**2 - vert_only_dist**2)
+   horiz_dist = sqrt(total_dist**2 - vert_only_dist**2)
 endif
 
 ramp_dist  = v_difference(test_value, ramp_start)
 ramp_width = v_difference(ramp_end,   ramp_start)
-extra_dist = (ramp_dist / ramp_width) * cutoff
+extra_dist = (ramp_dist / ramp_width) * vert_localize_dist
 
 ! DEBUG - disable for now
 if (.false. .and. above_ramp_start) then
@@ -3744,21 +3744,22 @@ endif
 end function v_above
 
 !--------------------------------------------------------------------
-! returns a minus b, where a is higher, b is lower, and the result is
-! yet lower in the atmosphere.
+! returns new value of moving b distance down in the atmosphere
+! starting at a.  for height, this results in a smaller value
+! but for every other vertical type this results in a larger value.
 ! depends on the vertical_localization_type
 
-pure function v_minus(a, b)
+pure function v_down(a, b)
 real(r8), intent(in) :: a, b
-real(r8) :: v_minus
+real(r8) :: v_down
 
 if (vertical_localization_type == VERTISHEIGHT) then
-   v_minus = (a - b)
+   v_down = (a - b)
 else
-   v_minus = (a + b)
+   v_down = (a + b)
 endif
 
-end function v_minus
+end function v_down
 
 !--------------------------------------------------------------------
 ! returns difference of a and b
