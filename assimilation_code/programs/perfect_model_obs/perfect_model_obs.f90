@@ -177,7 +177,7 @@ type(file_info_type) :: file_info_output
 type(file_info_type) :: file_info_true
 
 character(len=256), allocatable :: input_filelist(:), output_filelist(:), true_state_filelist(:)
-integer :: nfilesin, nfilesout
+integer :: nfilesin, nfilesout, ipos
 
 ! Initialize all modules used that require it
 call perfect_initialize_modules_used()
@@ -550,8 +550,14 @@ AdvanceTime: do
          ! If observation is not being evaluated or assimilated, skip it
          ! Ends up setting a 1000 qc field so observation is not used again.
          if( qc_ens_handle%vars(i, 1) == 0 ) then
-            obs_value(1) = random_gaussian(random_seq, true_obs(1), &
-               sqrt(get_obs_def_error_variance(obs_def)))
+
+            ! TJH Emergency ... want soil moisture obs to be positive
+            POSITIVE : do ipos = 1,100
+               obs_value(1) = random_gaussian(random_seq, true_obs(1), &
+                  sqrt(get_obs_def_error_variance(obs_def)))
+               if (obs_value(1) > 0.0_r8) exit POSITIVE
+               obs_value(1) = true_obs(1)  ! in case it goes past 100 cycles
+            enddo POSITIVE
 
             ! FIX ME SPINT: if the foward operater passed can we directly set the
             ! qc status?
@@ -569,7 +575,7 @@ AdvanceTime: do
 
          endif
 
-         ! true obs is fowrard op
+         ! true obs is forward op
          ! obs value is forward op plus noise
          call set_obs_values(obs, obs_value, 1)
          call set_obs_values(obs, true_obs, 2)

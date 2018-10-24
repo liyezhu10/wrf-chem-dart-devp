@@ -52,7 +52,7 @@
    trace_execution          = .true.
    silence                  = .false.
 
-   stages_to_write          = 'preassim', 'output'
+   stages_to_write          = 'input', 'preassim', 'output'
    output_members           = .true.
    output_mean              = .true.
    output_sd                = .true.
@@ -160,7 +160,9 @@
                                 'MODIS_SNOWCOVER_FRAC',
                                 'COSMOS_NEUTRON_INTENSITY',
                                 'MODIS_LEAF_AREA_INDEX',
-                                'OCO2_SIF'
+                                'OCO2_SIF',
+                                'LEAF_NITROGEN',
+                                'ECOSTRESS_ET'
    evaluate_these_obs_types   = 'null'
    /
 

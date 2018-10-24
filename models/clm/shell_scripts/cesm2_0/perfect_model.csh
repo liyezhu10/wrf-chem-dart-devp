@@ -13,15 +13,14 @@
 #=========================================================================
 
 echo "`date` -- BEGIN GENERATE CLM TRUE STATE"
-pwd
-
-set nonomatch       # suppress "rm" warnings if wildcard does not match anything
 
 # As of CESM2.0, the perfect_model.csh is called by CESM - and has
 # two arguments: the CASEROOT and the DATA_ASSIMILATION_CYCLE
 
 setenv CASEROOT $1
 setenv ASSIMILATION_CYCLE $2
+
+source ${CASEROOT}/DART_params.csh || exit 1
 
 # Python uses C indexing on loops; cycle = [0,....,$DATA_ASSIMILATION_CYCLES - 1]
 # "Fix" that here, so the rest of the script isn't confusing.
@@ -39,68 +38,6 @@ setenv STOP_N         `./xmlquery STOP_N      --value`
 setenv DATA_ASSIMILATION_CYCLES `./xmlquery DATA_ASSIMILATION_CYCLES --value`
 setenv TASKS_PER_NODE `./xmlquery MAX_TASKS_PER_NODE --value`
 cd ${RUNDIR}
-
-# string to be replaced by the setup script or by hand once
-set BASEOBSDIR = BOGUSBASEOBSDIR
-
-# some systems don't like the -v option to any of the following
-switch ("`hostname`")
-   case ys*:
-      # NCAR "yellowstone"
-      set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
-      set   LINK = 'ln -fvs'
-      set REMOVE = 'rm -fr'
-      setenv MP_DEBUG_NOTIMEOUT yes
-
-      set  LAUNCHCMD = mpirun.lsf
-   breaksw
-
-   case lone*:
-      # UT lonestar
-      set   MOVE = '/bin/mv -fv'
-      set   COPY = '/bin/cp -fv --preserve=timestamps'
-      set   LINK = '/bin/ln -fvs'
-      set REMOVE = '/bin/rm -fr'
-
-      set  LAUNCHCMD = mpirun.lsf
-   breaksw
-
-   case la*:
-      # LBNL "lawrencium"
-      set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
-      set   LINK = 'ln -fvs'
-      set REMOVE = 'rm -fr'
-
-      set  LAUNCHCMD = "mpiexec -n $NTASKS"
-   breaksw
-
-   case r*:
-      # NCAR "cheyenne"
-      set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
-      set   LINK = 'ln -fvs'
-      set REMOVE = 'rm -fr'
-      setenv MP_DEBUG_NOTIMEOUT yes
-      set  LAUNCHCMD = mpiexec_mpt
-   breaksw
-
-   case example*:
-      set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
-      set   LINK = 'ln -fvs'
-      set REMOVE = 'rm -fr'
-      set LAUNCHCMD = "aprun -n $NTASKS"
-   breaksw
-
-   default:
-      echo "FATAL ERROR: The system-specific environment must be specified."   
-      echo "             Add system-specific info to a case statement in"   
-      echo "             ${CASEROOT}/perfect_model.csh"   
-      exit 1
-   breaksw
-endsw
 
 #=========================================================================
 # Block 1: Determine time of model state ... from file name
@@ -145,14 +82,14 @@ else
    set OBSDIR = `printf %04d%02d_6H ${LND_YEAR} ${LND_MONTH}`
 endif
 
-set OBS_FILE = ${BASEOBSDIR}/${OBSDIR}/obs_seq.${LND_DATE_EXT}
+set OBS_FILE = ${pmo_input_baseobsdir}/${OBSDIR}/obs_seq.${LND_DATE_EXT}
 
 if (  -e   ${OBS_FILE} ) then
    ${LINK} ${OBS_FILE} obs_seq.in
 else
    echo "ERROR ... no observation file $OBS_FILE"
    echo "ERROR ... no observation file $OBS_FILE"
-   exit -1
+   exit 2
 endif
 
 #=========================================================================
@@ -166,7 +103,7 @@ if (  -e   ${CASEROOT}/input.nml ) then
 else
    echo "ERROR ... DART required file ${CASEROOT}/input.nml not found ... ERROR"
    echo "ERROR ... DART required file ${CASEROOT}/input.nml not found ... ERROR"
-   exit -2
+   exit 3
 endif
 
 echo "`date` -- END COPY BLOCK"
@@ -208,14 +145,17 @@ set  LND_VEC_HISTORY_FILENAME = ${CASE}.clm2.h2.${LND_DATE_EXT}.nc
 set     OBS1_HISTORY_FILENAME = ${CASE}.clm2.h1.${LND_DATE_EXT}.nc
 set     OBS2_HISTORY_FILENAME = ${CASE}.clm2_0001.h1.${LND_DATE_EXT}.nc
 
-${LINK} $LND_RESTART_FILENAME clm_restart.nc
-${LINK} $LND_HISTORY_FILENAME clm_history.nc
+# remove any potentially pre-existing linked files 
+${REMOVE} clm_restart.nc clm_history.nc clm_vector_history.nc ${OBS2_HISTORY_FILENAME}
 
-if (  -e   $OBS1_HISTORY_FILENAME) then
-   ${LINK} $OBS1_HISTORY_FILENAME $OBS2_HISTORY_FILENAME
+${LINK} ${LND_RESTART_FILENAME} clm_restart.nc || exit 4
+${LINK} ${LND_HISTORY_FILENAME} clm_history.nc || exit 4
+
+if (  -e   ${OBS1_HISTORY_FILENAME}) then
+   ${LINK} ${OBS1_HISTORY_FILENAME} ${OBS2_HISTORY_FILENAME}
 endif
-if (  -e   $LND_VEC_HISTORY_FILENAME) then
-   ${LINK} $LND_VEC_HISTORY_FILENAME clm_vector_history.nc
+if (  -e   ${LND_VEC_HISTORY_FILENAME}) then
+   ${LINK} ${LND_VEC_HISTORY_FILENAME} clm_vector_history.nc || exit 4
 endif
 
 #=========================================================================
@@ -233,12 +173,12 @@ ${LAUNCHCMD} ${EXEROOT}/perfect_model_obs
 if ($status != 0) then
    echo "ERROR ... DART died in 'perfect_model_obs' ... ERROR"
    echo "ERROR ... DART died in 'perfect_model_obs' ... ERROR"
-   exit -4
+   exit 5
 endif
 
-# ${MOVE} True_State.nc    clm_True_State.${LND_DATE_EXT}.nc
-# ${MOVE} obs_seq.perfect  clm_obs_seq.${LND_DATE_EXT}.perfect
- ${MOVE} dart_log.out     clm_dart_log.${LND_DATE_EXT}.out
+#${MOVE} True_State.nc    clm_True_State.${LND_DATE_EXT}.nc
+${MOVE} obs_seq.out      obs_seq.${LND_DATE_EXT}.perfect
+${MOVE} dart_log.out     dart_log.${LND_DATE_EXT}.out
 
 echo "`date` -- END   CLM PERFECT_MODEL_OBS"
 

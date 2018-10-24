@@ -13,7 +13,7 @@
 # This script integrates DART with a pre-existing CESM multi-instance case.
 # It must be run from a valid CASEROOT directory. If the case was created
 # using one of the DART scripts, this script should be staged in the
-# CASEROOT directory automatically, and DARTROOT is set at that time.
+# CASEROOT directory automatically, and dartroot is set at that time.
 #
 # CLM is the only active model component.
 # CESM starts and stops to allow for CLM to assimilate every 24 hours.
@@ -24,7 +24,7 @@
 # How to set up the script
 # ---------------------
 #
-# -- Ensure DARTROOT references a valid DART directory.
+# -- Ensure dartroot references a valid DART directory.
 # -- Examine the whole script to identify things to change for your experiments.
 # -- Provide any initial files needed by your run:
 #       inflation
@@ -34,26 +34,21 @@
 # -- Submit the job using ${CASEROOT}/${CASE}.submit
 #
 # ==============================================================================
-# Get the environment of the case - defines number of instances/ensemble size ...
-# Each model component has their own number of instances.
+# Get the environment of the case 
 # ==============================================================================
 
-cd BOGUS_CASEROOT_STRING
+source DART_params.csh
 
 # OBSROOT  should reference the stockpile of observation sequence files.
-# DARTROOT should reference the base portion of the DART code tree.
+# dartroot should reference the base portion of the DART code tree.
 # Both of these should be set by the DART CESM setup script.
 
-setenv OBSROOT       BOGUS_DART_OBS_STRING
-setenv DARTROOT      BOGUS_DART_ROOT_STRING
 setenv EXEROOT       `./xmlquery EXEROOT   --value`
 setenv RUNDIR        `./xmlquery RUNDIR    --value`
 setenv CASEROOT      `./xmlquery CASEROOT  --value`
 setenv CASE          `./xmlquery CASE      --value`
 setenv STOP_N        `./xmlquery STOP_N    --value`
 setenv num_instances `./xmlquery NINST_LND --value`
-
-#>@todo ... if num_instances = 1, the we MUST be pmo ...
 
 # ==============================================================================
 # ==============================================================================
@@ -68,44 +63,19 @@ setenv num_instances `./xmlquery NINST_LND --value`
 
 ./xmlchange DATA_ASSIMILATION_LND=TRUE
 ./xmlchange DATA_ASSIMILATION_CYCLES=1
-./xmlchange DATA_ASSIMILATION_SCRIPT=${CASEROOT}/assimilate.csh
 
-# ==============================================================================
-# Some
-# ==============================================================================
-
-set nonomatch       # suppress "rm" warnings if wildcard does not match anything
-
-# The FORCE options are not optional.
-# The VERBOSE options are useful for debugging though
-# some systems don't like the -v option to any of the following
-switch ("`hostname`")
-   case be*:
-      # NCAR "bluefire"
-      set   MOVE = '/usr/local/bin/mv -fv'
-      set   COPY = '/usr/local/bin/cp -fv --preserve=timestamps'
-      set   LINK = '/usr/local/bin/ln -fvs'
-      set REMOVE = '/usr/local/bin/rm -fr'
-
-   breaksw
-   default:
-      # NERSC "hopper", NWSC "yellowstone"
-      set   MOVE = '/bin/mv -fv'
-      set   COPY = '/bin/cp -fv --preserve=timestamps'
-      set   LINK = '/bin/ln -fvs'
-      set REMOVE = '/bin/rm -fr'
-
-   breaksw
-endsw
-
-echo ""
+if ( ${num_instances} == 1 ) then
+   ./xmlchange DATA_ASSIMILATION_SCRIPT=${CASEROOT}/perfect_model.csh
+else
+   ./xmlchange DATA_ASSIMILATION_SCRIPT=${CASEROOT}/assimilate.csh
+endif
 
 # ==============================================================================
 # make sure the required directories exist
 # VAR is the shell variable name, DIR is the value
 # ==============================================================================
 
-foreach VAR ( CASEROOT DARTROOT )
+foreach VAR ( CASEROOT dartroot )
    set DIR = `eval echo \${$VAR}`
    if ( ! -d $DIR ) then
       echo "ERROR: directory '$DIR' not found"
@@ -121,7 +91,7 @@ end
 # ==============================================================================
 
 foreach MODEL ( clm )
-   set targetdir = ${DARTROOT}/models/$MODEL/work
+   set targetdir = ${dartroot}/models/$MODEL/work
    if ( ! -x $targetdir/filter ) then
       echo ""
       echo "WARNING: executable file 'filter' not found."
@@ -139,20 +109,14 @@ foreach MODEL ( clm )
 end
 
 # ==============================================================================
-# Stage the required parts of DART in the CASEROOT directory.
+# Stage the required parts of DART in CASEROOT or RUNDIR.
+# The file needed for SAMPLING ERROR CORRECTION is small and may be needed later.
 # ==============================================================================
 
-set LONGNAME = ${DARTROOT}/models/clm/shell_scripts/cesm2_0/assimilate.csh.template
-sed -e "s#BOGUSBASEOBSDIR#$OBSROOT#" ${LONGNAME} >! assimilate.csh || exit 3
-chmod 755 assimilate.csh
-
-set LONGNAME = ${DARTROOT}/models/clm/shell_scripts/cesm2_0/perfect_model.csh.template
-sed -e "s#BOGUSBASEOBSDIR#$OBSROOT#" ${LONGNAME} >! perfect_model.csh || exit 3
-chmod 755 perfect_model.csh
-
-# The file needed for SAMPLING ERROR CORRECTION is small and may be needed later.
-set LONGNAME = ${DARTROOT}/assimilation_code/programs/gen_sampling_err_table/work
-${COPY} ${LONGNAME}/sampling_error_correction_table.nc ${RUNDIR}          || exit 3
+set LONGNAME = ${dartroot}/assimilation_code/programs/gen_sampling_err_table/work
+${COPY} ${LONGNAME}/sampling_error_correction_table.nc         ${RUNDIR} || exit 3
+${COPY} ${dartroot}/models/clm/shell_scripts/cesm2_0/assimilate.csh    . || exit 3
+${COPY} ${dartroot}/models/clm/shell_scripts/cesm2_0/perfect_model.csh . || exit 3
 
 # ==============================================================================
 # Stage the DART executables in the CESM execution root directory: EXEROOT
@@ -166,7 +130,7 @@ cat << EndOfText >! stage_dart_files
 # Run this script in the ${CASEROOT} directory.
 # This script copies over the dart executables and POSSIBLY a namelist
 # to the proper directory.  If you have to update any dart executables,
-# do it in the ${DARTROOT} directory and then rerun stage_dart_files.
+# do it in the ${dartroot} directory and then rerun stage_dart_files.
 # If an input.nml does not exist in the ${CASEROOT} directory,
 # a default one will be copied into place.
 #
@@ -180,8 +144,8 @@ if [[ -e input.nml ]]; then
       ${COPY} input.nml input.nml.original
    fi
 
-elif [[ -e ${DARTROOT}/models/clm/work/input.nml ]]; then
-   ${COPY} ${DARTROOT}/models/clm/work/input.nml  input.nml
+elif [[ -e ${dartroot}/models/clm/work/input.nml ]]; then
+   ${COPY} ${dartroot}/models/clm/work/input.nml  input.nml
    if [[ -x update_dart_namelists ]]; then
           ./update_dart_namelists
    fi
@@ -190,9 +154,9 @@ else
    exit 4
 fi
 
-${COPY} ${DARTROOT}/models/clm/work/perfect_model_obs ${EXEROOT}
-${COPY} ${DARTROOT}/models/clm/work/filter            ${EXEROOT}
-${COPY} ${DARTROOT}/models/clm/work/dart_to_clm       ${EXEROOT}
+${COPY} ${dartroot}/models/clm/work/perfect_model_obs ${EXEROOT}
+${COPY} ${dartroot}/models/clm/work/filter            ${EXEROOT}
+${COPY} ${dartroot}/models/clm/work/dart_to_clm       ${EXEROOT}
 
 exit 0
 
@@ -224,7 +188,7 @@ ex input.nml <<ex_end
 g;ens_size ;s;= .*;= ${num_instances};
 g;num_output_state_members ;s;= .*;= ${num_instances};
 g;num_output_obs_members ;s;= .*;= ${num_instances};
-g;casename ;s;= .*;= "../${CASE}",;
+g;casename ;s;= .*;= "${CASE}",;
 g;hist_nhtfrq ;s;= .*;= -${STOP_N},;
 g;clm_restart_filename ;s;= .*;= 'clm_restart.nc';
 g;clm_history_filename ;s;= .*;= 'clm_history.nc';
@@ -275,36 +239,29 @@ cat << EndOfText >! DART_instructions.txt
 
 Check the DART configuration:
 
-1) The default behavior is to _not_ invoke DART and simply run CESM.
-   We recommend that you make sure this works before proceeding.
-   ./xmlchange DATA_ASSIMILATION=FALSE
-
-2) When you want to run DART, turn on data assimilation and call 
-   the appropriate script:
+1) When you want to run DART, check that the CESM assimilation script 
+   is correct and then turn on data assimilation (if you need to).
    
    cd ${CASEROOT} 
-   ./xmlchange DATA_ASSIMILATION=TRUE
+   ./xmlquery --partial ASSIMILATION 
+   ./xmlchange DATA_ASSIMILATION_LND=TRUE
 
-   ./xmlchange DATA_ASSIMILATION_SCRIPT=${CASEROOT}/assimilate.csh
-   -or- 
-   ./xmlchange DATA_ASSIMILATION_SCRIPT=${CASEROOT}/perfect_model.csh
+2) Modify what you need to in the DART namelist file, i.e. ${CASEROOT}/input.nml
 
-3) Modify what you need to in the DART namelist file, i.e. ${CASEROOT}/input.nml
-
-4) If you have recompiled any part of the DART system, 'stage_dart_files'
+3) If you have recompiled any part of the DART system, 'stage_dart_files'
    will copy them into the correct places.
 
-5) If you stage your own inflation files, make sure you read the INFLATION section
+4) If you stage your own inflation files, make sure you read the INFLATION section
    in ${CASEROOT}/CESM_DART_config
 
-6) Make sure the observation directory names in 
+5) Make sure the observation directory names in 
    ${CASEROOT}/assimilate.csh and/or
    ${CASEROOT}/perfect_model.csh 
    match those on your system.
 
-7) Submit the CESM job in the normal way.
+6) Submit the CESM job in the normal way.
 
-8) You can use ${CASEROOT}/stage_cesm_files
+7) You can use ${CASEROOT}/stage_cesm_files
     to stage files to restart a run.
 
 -------------------------------------------------------------------------

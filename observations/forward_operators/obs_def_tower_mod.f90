@@ -14,6 +14,8 @@
 !SNOW_WATER,                     QTY_SNOW_WATER,                 COMMON_CODE
 !MODIS_SNOWCOVER_FRAC,           QTY_SNOWCOVER_FRAC,             COMMON_CODE
 !MODIS_LEAF_AREA_INDEX,          QTY_LEAF_AREA_INDEX,            COMMON_CODE
+!GIMMS_LEAF_AREA_INDEX,          QTY_LEAF_AREA_INDEX,            COMMON_CODE
+!SP_LEAF_AREA_INDEX,             QTY_LEAF_AREA_INDEX,            COMMON_CODE
 !MODIS_FPAR,                     QTY_FRACTION_ABSORBED_PAR,      COMMON_CODE
 !BIOMASS,                        QTY_BIOMASS
 !LEAF_CARBON,                    QTY_LEAF_CARBON,                COMMON_CODE
@@ -36,6 +38,7 @@
 !SOIL_RESPIRATION_FLUX,          QTY_SOIL_RESPIRATION_FLUX
 !SURFACE_ALBEDO,                 QTY_SURFACE_ALBEDO
 !OCO2_SIF,                       QTY_SOLAR_INDUCED_FLUORESCENCE, COMMON_CODE
+!ECOSTRESS_ET,                   QTY_LATENT_HEAT_FLUX,           COMMON_CODE
 ! END DART PREPROCESS KIND LIST
 
 !-----------------------------------------------------------------------------

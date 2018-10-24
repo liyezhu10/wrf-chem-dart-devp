@@ -72,6 +72,7 @@ use     obs_kind_mod, only : QTY_SOIL_TEMPERATURE,       &
                              QTY_DEAD_STEM_CARBON,       &
                              QTY_LEAF_AREA_INDEX,        &
                              QTY_WATER_TABLE_DEPTH,      &
+                             QTY_STEM_CARBON,            &
                              QTY_GEOPOTENTIAL_HEIGHT,    &
                              QTY_VEGETATION_TEMPERATURE, &
                              QTY_FRAC_PHOTO_AVAIL_RADIATION, &
@@ -80,6 +81,8 @@ use     obs_kind_mod, only : QTY_SOIL_TEMPERATURE,       &
                              QTY_FPAR_SHADED_DIRECT,     &
                              QTY_FPAR_SHADED_DIFFUSE,    &
                              QTY_SOLAR_INDUCED_FLUORESCENCE, &
+                             QTY_LATENT_HEAT_FLUX,       &
+                             QTY_LEAF_NITROGEN,          &
                              QTY_LANDMASK,               &
                              get_index_for_quantity,     &
                              get_name_for_quantity
@@ -97,7 +100,7 @@ use   state_structure_mod, only : add_domain, state_structure_info,   &
                                   get_num_domains, get_num_variables, &
                                   get_num_dims, get_dim_name,         &
                                   get_dim_length, get_variable_name,  &
-                                  do_io_update
+                                  do_io_update, get_variable_size
 
 use obs_def_utilities_mod, only : track_status
 
@@ -708,12 +711,11 @@ if (nvars > 0) dom_vector_history = add_domain(clm_vector_history_filename, nvar
 ! call state_structure_info(dom_vector_history)
 
 !---------------------------------------------------------------
-! Create the metadata arrays that are the same shape as the state vector.
-! The metadata arrays will provide the ability to determine what grid cell is the parent
-! of the state vector index in question ... as well as the actual surface area.
-! This MUST stride through the state vector the same way the state vector is filled.
-
-!@todo BAD BAD BAD
+!> Create the metadata arrays that are the same shape as the state vector.
+!> The metadata arrays will provide the ability to determine what grid cell is the parent
+!> of the state vector index in question ... as well as the actual surface area.
+!> This MUST stride through the state vector the same way the state vector is filled.
+!>@todo remove these huge allocations
 
 allocate(lonixy(model_size), latjxy(model_size), levels(model_size), landarea(model_size))
 
@@ -1573,9 +1575,7 @@ end subroutine get_gridsize
 
 
 !------------------------------------------------------------------
-!> Reads the current time and state variables from a clm restart
-!> file and packs them into a dart state vector. Except none of
-!> that is true for the rma version.
+!> 
 
 subroutine mark_missing_r8_values(clm_file, restart_time)
 
@@ -1585,13 +1585,13 @@ type(time_type),  intent(out) :: restart_time
 character(len=*), parameter :: routine = 'mark_missing_r8_values'
 
 ! temp space to hold data while we are reading it
-integer  :: i, j, ni, nj, ivar, indx, numsnowlevels
+integer  :: i, j, ni, nj, ivar, numsnowlevels
 integer,  allocatable, dimension(:)         :: snlsno
 real(r8), allocatable, dimension(:)         :: data_1d_array
 real(r8), allocatable, dimension(:,:)       :: data_2d_array
 real(r8), allocatable, dimension(:,:,:)     :: data_3d_array
 
-integer :: io, ncid_clm, ncid_dart, clmVarID, TimeDimID, VarID, ncNdims, dimlen, numvars
+integer :: io, ncid_clm, ncid_dart, clmVarID, VarID, ncNdims, dimlen, numvars
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs
 character     (len=NF90_MAX_NAME)     :: varname
 
@@ -1646,8 +1646,8 @@ numvars = get_num_variables(dom_restart)
 
 do ivar=1, numvars
 
-   varname = trim(progvar(ivar)%varname)
-   string3 = trim(progvar(ivar)%origin)//' '//trim(progvar(ivar)%varname)
+   varname = get_variable_name(dom_restart,ivar)
+   string3 = trim(clm_file)//' '//trim(varname)
 
    io = nf90_inq_varid(ncid_dart, varname, VarID)
    call nc_check(io, routine, 'inq_varid', 'input', string3)
@@ -1663,24 +1663,29 @@ do ivar=1, numvars
 
    ! Check the rank of the variable
 
-   if ( ncNdims /= progvar(ivar)%numdims ) then
-      write(string1, *) 'netCDF rank of '//trim(varname)//' does not match derived type knowledge'
-      write(string2, *) 'netCDF rank is ',ncNdims,' expected ',progvar(ivar)%numdims
+   if ( ncNdims /= get_num_dims(dom_restart,ivar) ) then
+      write(string1, *) 'netCDF rank of '//trim(varname)// &
+                        ' does not match derived type knowledge'
+      write(string2, *) 'netCDF rank is ',ncNdims, &
+                        ' expected ',get_num_dims(dom_restart,ivar)
       call error_handler(E_ERR,routine, string1, &
                         source,revision,revdate,text2=string2)
    endif
 
    ! Check the shape of the variable
+   ! fortunately, none of the variables in a restart file have
+   ! time as a dimension. load_variable_sizes() skips the time dimension
+   ! when populating the state structure.
 
-   do i = 1,progvar(ivar)%numdims
+   do i = 1,get_num_dims(dom_restart,ivar)
 
       write(string1,'(''inquire dimension'',i2,A)') i,trim(string3)
       io = nf90_inquire_dimension(ncid_clm, dimIDs(i), len=dimlen)
       call nc_check(io, routine, string1)
 
-      if ( dimlen /= progvar(ivar)%dimlens(i) ) then
+      if ( dimlen /= get_dim_length(dom_restart,ivar,i)) then
          write(string1,*) trim(string3),' dim/dimlen ',i,dimlen, &
-                              ' not ',progvar(ivar)%dimlens(i)
+                              ' not ', get_dim_length(dom_restart,ivar,i)
          call error_handler(E_ERR,routine,string1,source,revision,revdate)
       endif
 
@@ -1693,11 +1698,9 @@ do ivar=1, numvars
    ! or missing value, and the restart files didn't use the right attributes anyway ...
    ! (bugzilla report 1401)
 
-   indx = progvar(ivar)%index1
-
    if (ncNdims == 1) then
 
-      ni = progvar(ivar)%dimlens(1)
+      ni = get_variable_size(dom_restart,ivar)
       allocate(data_1d_array(ni))
       call DART_get_var(ncid_clm, varname, data_1d_array)
 
@@ -1708,8 +1711,8 @@ do ivar=1, numvars
 
    elseif (ncNdims == 2) then
 
-      ni = progvar(ivar)%dimlens(1)
-      nj = progvar(ivar)%dimlens(2)
+      ni = get_dim_length(dom_restart,ivar,1)
+      nj = get_dim_length(dom_restart,ivar,2)
       allocate(data_2d_array(ni, nj))
       call DART_get_var(ncid_clm, varname, data_2d_array)
 
@@ -1723,9 +1726,9 @@ do ivar=1, numvars
       !>@todo FIXME: Question, what happens to unused levels below ground? Are those
       ! values 'special'?
 
-      if ((trim(progvar(ivar)%dimnames(1)) == 'levsno') .or. &
-          (trim(progvar(ivar)%dimnames(1)) == 'levtot') .and. &
-          (trim(progvar(ivar)%dimnames(2)) == 'column') ) then
+      if ((get_dim_name(dom_restart,ivar,1) == 'levsno') .or. &
+          (get_dim_name(dom_restart,ivar,1) == 'levtot') .and. &
+          (get_dim_name(dom_restart,ivar,2) == 'column') ) then
 
          do j = 1, nj  ! loop over columns
             numsnowlevels = abs(snlsno(j))
@@ -1741,7 +1744,7 @@ do ivar=1, numvars
       ! the missing_value code is not reliably implemented.
       !>@todo CHECKME ... missing value implementation
 
-      if (progvar(ivar)%varname == 'T_SOISNO') then
+      if (varname == 'T_SOISNO') then
          where(data_2d_array < 1.0_r8) data_2d_array = MISSING_R8
          do j = 1,nj  ! T_SOISNO has missing data in lake columns
            if (cols1d_ityplun(j) == LAKE) then
@@ -1751,8 +1754,8 @@ do ivar=1, numvars
            endif
          enddo
       endif
-      if ((progvar(ivar)%varname == 'H2OSOI_LIQ')  .or. &
-          (progvar(ivar)%varname == 'H2OSOI_ICE')) then
+      if ((varname == 'H2OSOI_LIQ')  .or. &
+          (varname == 'H2OSOI_ICE')) then
          where(data_2d_array < 0.0_r8) data_2d_array = MISSING_R8
          do j = 1,nj  ! missing data in lake columns
            if (cols1d_ityplun(j) == LAKE) then
@@ -1774,13 +1777,13 @@ do ivar=1, numvars
       !     exception is float H2OSOI(time, levgrnd, lat, lon) ... but we
       !     have access to restart file h2osoi_[liq,ice]
 
-      if     ( (trim(progvar(ivar)%dimnames(1)) == 'lon')   .and. &
-               (trim(progvar(ivar)%dimnames(2)) == 'lat')   .and. &
-               (trim(progvar(ivar)%dimnames(3)) == 'time') ) then
+      if     ( (get_dim_name(dom_restart,ivar,1) == 'lon')   .and. &
+               (get_dim_name(dom_restart,ivar,2) == 'lat')   .and. &
+               (get_dim_name(dom_restart,ivar,3) == 'time') ) then
 
-         ni = progvar(ivar)%dimlens(1)
-         nj = progvar(ivar)%dimlens(2)
-       ! nk = progvar(ivar)%dimlens(3) not needed ... time is always a singleton
+         ni = get_dim_length(dom_restart,ivar,1)
+         nj = get_dim_length(dom_restart,ivar,2)
+       ! nk = get_dim_length(dom_restart,ivar,3) not needed ... time is always a singleton
 
          allocate(data_3d_array(ni, nj, 1))
          call DART_get_var(ncid_clm, varname, data_3d_array)
@@ -1796,8 +1799,8 @@ do ivar=1, numvars
       else
 
          write(string1, *) '3D variable unexpected shape -- only support nlon, nlat, time(=1)'
-         write(string2, *) 'variable [',trim(progvar(ivar)%varname),']'
-         write(string3, *) 'file [',trim(progvar(ivar)%origin),']'
+         write(string2, *) 'variable [',trim(varname),']'
+         write(string3, *) 'file [',trim(clm_file),']'
          call error_handler(E_ERR,routine, string1, &
                            source, revision, revdate, text2=string2, text3=string3)
 
@@ -1806,18 +1809,10 @@ do ivar=1, numvars
    else
 
       write(string1, *) 'no support for data array of dimension ', ncNdims
-      write(string2, *) 'variable [',trim(progvar(ivar)%varname),']'
-      write(string3, *) 'file [',trim(progvar(ivar)%origin),']'
+      write(string2, *) 'variable [',trim(varname),']'
+      write(string3, *) 'file [',trim(clm_file),']'
       call error_handler(E_ERR,routine, string1, &
                         source, revision, revdate, text2=string2, text3=string3)
-   endif
-
-   indx = indx - 1
-   if ( indx /= progvar(ivar)%indexN ) then
-      write(string1, *)'Variable '//trim(varname)//' filled wrong.'
-      write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',indx
-      call error_handler(E_ERR,routine, string1, &
-                        source,revision,revdate,text2=string2)
    endif
 
 enddo
@@ -1847,7 +1842,7 @@ integer :: dimlens_dart(NF90_MAX_VAR_DIMS), dimlens_clm(NF90_MAX_VAR_DIMS)
 integer :: ncid_dart, varid_dart, numdims_dart
 integer :: ncid_clm,  varid_clm,  numdims_clm
 
-integer         :: dimlen, numvars
+integer         :: numvars
 type(time_type) :: dart_time
 type(time_type) :: file_time
 
@@ -1891,7 +1886,7 @@ if (do_output()) call print_date(file_time,'date of restart file "'//trim(file_d
 numvars = get_num_variables(dom_restart)
 UPDATE : do ivar=1, numvars
 
-   varname = trim(progvar(ivar)%varname)
+   varname = get_variable_name(dom_restart,ivar)
    string2 = trim(file_dart)//' '//trim(varname)
 
    ! skip any variables that are marked NO_UPDATE
@@ -2072,7 +2067,8 @@ select case( obs_kind )
           QTY_FPAR_SUNLIT_DIRECT, QTY_FPAR_SUNLIT_DIFFUSE, &
           QTY_FPAR_SHADED_DIRECT, QTY_FPAR_SHADED_DIFFUSE, &
           QTY_LIVE_STEM_CARBON,   QTY_DEAD_STEM_CARBON, &
-          QTY_SOLAR_INDUCED_FLUORESCENCE)
+          QTY_SOLAR_INDUCED_FLUORESCENCE, &
+          QTY_LATENT_HEAT_FLUX, QTY_LEAF_NITROGEN)
 
       call compute_gridcell_value(state_handle, ens_size, location, obs_kind, expected_obs, istatus)
 
@@ -3209,18 +3205,6 @@ filename = trim(clm_restart_filename)
 end subroutine get_clm_restart_filename
 
 
-
-subroutine get_clm_history_filename( filename )
-
-character(len=*), intent(OUT) :: filename
-
-if ( .not. module_initialized ) call static_init_model
-
-filename = trim(clm_history_filename)
-
-end subroutine get_clm_history_filename
-
-
 !------------------------------------------------------------------
 
 
@@ -3327,96 +3311,6 @@ endif
 ! Check to see if zsno is part of the requested variables
 
 end subroutine parse_variable_table
-
-
-!------------------------------------------------------------------
-
-
-function FindTimeDimension(ncid) result(timedimid)
-
-! Find the Time Dimension ID in a netCDF file.
-! If there is none - (spelled the obvious way) - the routine
-! returns a negative number. You don't HAVE to have a TIME dimension.
-
-integer                      :: timedimid
-integer,          intent(in) :: ncid
-
-integer :: nc_rc
-
-TimeDimID = -1 ! same as the netCDF library routines.
-nc_rc = nf90_inq_dimid(ncid,'TIME',dimid=TimeDimID)
-if ( nc_rc /= NF90_NOERR ) then ! did not find it - try another spelling
-   nc_rc = nf90_inq_dimid(ncid,'Time',dimid=TimeDimID)
-   if ( nc_rc /= NF90_NOERR ) then ! did not find it - try another spelling
-      nc_rc = nf90_inq_dimid(ncid,'time',dimid=TimeDimID)
-   endif
-endif
-
-end function FindTimeDimension
-
-
-!------------------------------------------------------------------
-!>  define_var_dims() takes the N-dimensional variable and appends the DART
-!>  dimensions of 'copy' and 'time'. If the variable initially had a 'time'
-!>  dimension, it is ignored because (by construction) it is a singleton
-!>  dimension.
-
-subroutine define_var_dims(ivar, ncid, memberdimid, unlimiteddimid, ndims, dimids)
-
-integer,               intent(in)  :: ivar, ncid, memberdimid, unlimiteddimid
-integer,               intent(out) :: ndims
-integer, dimension(:), intent(out) :: dimids
-
-character(len=NF90_MAX_NAME),dimension(NF90_MAX_VAR_DIMS) :: dimnames
-
-integer :: i, mydimid
-
-ndims = 0
-
-DIMLOOP : do i = 1,progvar(ivar)%numdims
-
-   if (progvar(ivar)%dimnames(i) == 'time') cycle DIMLOOP
-
-   call nc_check(nf90_inq_dimid(ncid=ncid, name=progvar(ivar)%dimnames(i), dimid=mydimid), &
-                           'define_var_dims','inq_dimid '//trim(progvar(ivar)%dimnames(i)))
-
-   ndims         = ndims + 1
-   dimids(ndims) = mydimid
-   dimnames(ndims) = progvar(ivar)%dimnames(i)
-
-enddo DIMLOOP
-
-! The last two dimensions are always 'copy' and 'time'
-ndims           = ndims + 1
-dimids(ndims)   = memberdimid
-dimnames(ndims) = 'copy'
-ndims           = ndims + 1
-dimids(ndims)   = unlimitedDimid
-dimnames(ndims) = 'time'
-
-if ((debug > 8) .and. do_output()) then
-
-   write(logfileunit,*)
-   write(logfileunit,*)'define_var_dims knowledge'
-
-   write(logfileunit,*)trim(progvar(ivar)%varname),' has original     dimnames: ', &
-                   (/( trim(progvar(ivar)%dimnames(i))//' ',i=1,progvar(ivar)%numdims) /)
-   write(logfileunit,*)trim(progvar(ivar)%varname),' repackaging into dimnames: ', &
-                       (/ (trim(dimnames(i))//' ',i=1,ndims) /)
-
-   write(logfileunit,*)'thus dimids ',dimids(1:ndims)
-   write(     *     ,*)
-   write(     *     ,*)'define_var_dims knowledge'
-   write(     *     ,*)trim(progvar(ivar)%varname),' has original     dimnames: ', &
-                   (/( trim(progvar(ivar)%dimnames(i))//' ',i=1,progvar(ivar)%numdims) /)
-   write(     *     ,*)trim(progvar(ivar)%varname),' repackaging into dimnames: ', &
-                       (/ (trim(dimnames(i))//' ',i=1,ndims) /)
-   write(     *     ,*)'thus dimids ',dimids(1:ndims)
-
-endif
-
-return
-end subroutine define_var_dims
 
 
 !------------------------------------------------------------------
