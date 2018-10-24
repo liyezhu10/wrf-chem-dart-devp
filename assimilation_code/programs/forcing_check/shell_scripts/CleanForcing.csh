@@ -63,8 +63,9 @@ EOF
 
 # set DSSBASE = /glade/p/rda/data/ds199.1/CAM_DATM.cpl
 set OURBASE = /glade/p/image/thoar/CAM_DATM/4xdaily/CAM_DATM.cpl
+set OURBASE = /glade/p/image/thoar/ds199.1/CAM_DATM.cpl
 
-@ YEAR = 2006
+@ YEAR = 1997
 while ($YEAR <= 2010)
 
    @ MEMBER = 1

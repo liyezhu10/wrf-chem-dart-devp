@@ -38,9 +38,12 @@ program clean_forcing
 !           a2x6h_Faxa_lwdn:internal_dname = "a2x6h" ;
 !           a2x6h_Faxa_lwdn:cell_methods = "time: mean" ;
 !
+! swvdf timestep  352 max variance 25982340.000 144  76 max/median    24584.617 144  76
+! member 64 is 45594.96 ... others are x.y
+!
 !-------------------------------------------------------------------------------
 
-use            types_mod, only : r8,i8
+use            types_mod, only : r8, i8, MISSING_R8
 
 use             sort_mod, only : index_sort
 
@@ -52,6 +55,7 @@ use        utilities_mod, only : initialize_utilities, &
                                  finalize_utilities, &
                                  find_namelist_in_file, &
                                  check_namelist_read, &
+                                 open_file, close_file, &
                                  nmlfileunit, &
                                  do_nml_file, &
                                  do_nml_term, &
@@ -102,31 +106,29 @@ real(r8) ::  sorted(ensemble_size)
 character(len=256) :: input_file(ensemble_size)
 
 real(r8), allocatable :: tensor(:,:,:) ! nx,ny,ensemble_size
-real(r8) :: minvalue, maxvalue, q1, q2, q3, iqr
-real(r8) :: mean, stddev, noise
-real(r8) :: newhigh, newlow, variance, new_variance
-logical  :: suspicious, newmin, newmax
+
 type(random_seq_type) :: r
 
-integer :: imember, itime, iy, ix, nT, ny, nx
+integer :: imember, nT, ny, nx
 integer :: ncstart(3)
 integer :: nccount(3)
 integer :: numdims, dimlens(NF90_MAX_VAR_DIMS)
-integer :: varid
+integer :: ivar, varid
 
 integer            :: iunit, io
 character(len=512) :: string1, string2, string3
-
-integer(i8) :: num_outliers
 
 !-------------------------------------------------------------------------------
 ! namelist
 !-------------------------------------------------------------------------------
 
-integer :: year = 2008
+integer  :: year = 2008
 real(r8) :: criterion = 100.0_r8
+real(r8) :: lat = MISSING_R8
+real(r8) :: lon = MISSING_R8
+integer  :: varnum = 1
 
-namelist /clean_forcing_nml/ year, criterion
+namelist /clean_forcing_nml/ year, criterion, lat, lon, varnum
 
 !===============================================================================
 
@@ -151,117 +153,30 @@ do imember = 1,ensemble_size
    write(*,*)'Opened '//trim(input_file(imember))
 enddo
 
-varname = variables(1)
+do ivar = 1,5
 
-call nc_get_variable_num_dimensions(ncid(1), varname, numdims)
-call nc_get_variable_size(ncid(1), varname, dimlens)
+   varname = variables(ivar)
 
-if ( .true. ) write(*,*)'dimlens are ',dimlens(1:numdims)
-nx = dimlens(1)
-ny = dimlens(2)
-nT = dimlens(3)
+   call nc_get_variable_num_dimensions(ncid(1), varname, numdims)
+   call nc_get_variable_size(ncid(1), varname, dimlens)
 
-allocate(tensor(ensemble_size,nx,ny))
+   if ( .true. ) write(*,*)'dimlens are ',dimlens(1:numdims)
+   nx = dimlens(1)
+   ny = dimlens(2)
+   nT = dimlens(3)
+   
+   allocate(tensor(ensemble_size,nx,ny))
+   
+   write(string1,'(A,''_'',i4,''.txt'')') trim(varname), year
+   iunit = open_file(string1)
 
-TIMESTEP : do itime = 1,nT
+   call purify()
 
-   call read_tensor(itime)
+   deallocate(tensor)
 
-   num_outliers = 0_i8
+enddo
 
-   LATITUDE : do iy=1,ny
-   LONGITUDE : do ix=1,nx
-
-      mean     = sum( tensor(:,ix,iy))/ensemble_size
-      variance = sum((tensor(:,ix,iy) - mean)**2)/(ensemble_size-1)
-
-      ! some gridcells are all identical values
-      if (variance < tiny(variance)) cycle LONGITUDE
-
-      suspicious = .true.
-
-      CLEAN : do while ( suspicious )
-
-         newmin = .false.
-         newmax = .false.
-
-         call index_sort(tensor(:,ix,iy), indices, ensemble_size)
-         sorted = tensor(indices,ix,iy)
-
-         ! calculate quantiles
-
-         q1  =  sorted(20)
-         q2  = (sorted(40) + sorted(41)) / 2.0_r8
-         q3  =  sorted(60)
-         iqr = q3 - q1
-
-         ! See if this cell has an outlier or not by
-         ! replacing extremes with new values and recalculate variance
-
-         sorted(80)   = q2
-         mean         = sum(sorted)/ensemble_size
-         new_variance = sum((sorted - mean)**2)/(ensemble_size-1)
-
-!        if (new_variance < tiny(new_variance)) then
-!           write(*,*)itime,ix,iy,tensor(:,ix,iy)
-!           stop
-!        endif
-
-!        if (variance/new_variance > criterion) then
-         if (variance > new_variance * criterion) then
-            write(*,*)'suspicious ',itime,ix,iy,variance,new_variance*criterion
-            suspicious = .true.
-            variance   = new_variance
-         else
-!           write(*,*)'clean ',itime,ix,iy,variance/new_variance
-            suspicious = .false.
-         endif
-
-         if (suspicious) then
-            do imember = 1,ensemble_size
-               write(*,*)        imember,  tensor(        imember ,ix,iy), &
-                         indices(imember), tensor(indices(imember),ix,iy)
-            enddo
-         else
-            exit CLEAN
-         endif
-
-         ! If we get this far, the maximum is an outlier.
-         ! replace it with a noisy estimate of the median value.
-         ! The noise distribution is estimated from the 
-         ! center of the ensemble.
-         ! The correct way is to estimate the distribution and 
-         ! replace the outlier with the expected value for that quantile.
-         ! The correct way is overkill. The really correct way may
-         ! borrow strength from the surrounding gridcells.
-         ! Another way may be to simply design and apply a filter.
-
-         num_outliers = num_outliers + 1_i8
-
-!        mean   = sum(sorted(10:70))/61.0_r8
-!        stddev = sqrt(sum(sorted(10:70) - mean)**2)/60.0_r8
-!        write(*,*)'ix,iy,stddev,iqr = ',ix,iy,stddev,iqr
-
-!        noise = random_gaussian(r, 0.0_r8, 3.0_r8*stddev)
-         noise = random_gaussian(r, 0.0_r8, iqr)
-
-         tensor(indices(80),ix,iy) = q2 + abs(noise) 
-
-         do imember = 1,ensemble_size
-            write(*,*)        imember,  tensor(        imember ,ix,iy), &
-                      indices(imember), tensor(indices(imember),ix,iy)
-         enddo
-
-      enddo CLEAN
-
-   enddo LONGITUDE
-   enddo LATITUDE
-
-   write(*,*)'timestep ',itime,' had ',num_outliers, &
-             ' values replaced when criterion is ',criterion
-   if (num_outliers > 0_i8) call write_tensor(itime)
-
-enddo TIMESTEP
+call close_file(iunit)
 
 do imember = 1,ensemble_size
    call nc_close_file(ncid(imember),routine)
@@ -318,6 +233,123 @@ MEMBER : do imember = 1,ensemble_size
 enddo MEMBER
 
 end subroutine write_tensor
+
+!-------------------------------------------------------------------------------
+!> find and replace the outliers with a noisy estimate of the median
+
+subroutine purify()
+
+! swvdf timestep  352 max variance 25982340.000 144  76 max/median    24584.617 144  76
+
+! The noise distribution is estimated from the center of the ensemble.
+! The correct way is to estimate the distribution and 
+! replace the outlier with the expected value for that quantile.
+! The correct way is overkill. The really correct way may
+! borrow strength from the surrounding gridcells.
+! Another way may be to simply design and apply a filter.
+
+integer  :: itime, iy, ix, imember
+real(r8) :: mean, variance, new_variance
+real(r8) :: q1, q2, q3, iqr, noise
+logical  :: suspicious
+integer(i8) :: num_outliers
+
+TIMESTEP : do itime = 1,nT
+
+   call read_tensor(itime)
+
+   num_outliers = 0_i8
+
+   LATITUDE : do iy=1,ny
+   LONGITUDE : do ix=1,nx
+
+!           do imember = 1,ensemble_size
+!              write(iunit,*) ix,iy,imember, tensor(imember,ix,iy)
+!           enddo
+
+      mean     = sum( tensor(:,ix,iy))/ensemble_size
+      variance = sum((tensor(:,ix,iy) - mean)**2)/(ensemble_size-1)
+
+      ! some gridcells are all identical values
+      if (variance < tiny(variance)) cycle LONGITUDE
+
+      suspicious = .true. ! presume everyone is guilty
+
+      CLEAN : do while ( suspicious )
+
+         ! calculate quantiles, sort into ascending order
+
+         call index_sort(tensor(:,ix,iy), indices, ensemble_size)
+         sorted = tensor(indices,ix,iy)
+
+         q1  =  sorted(20)
+         q2  = (sorted(40) + sorted(41)) / 2.0_r8
+         q3  =  sorted(60)
+         iqr = q3 - q1
+
+         ! See if this cell has an outlier or not by
+         ! replacing maximum with new value and recalculate variance
+
+         sorted(ensemble_size) = q2
+         mean         = sum(sorted)/ensemble_size
+         new_variance = sum((sorted - mean)**2)/(ensemble_size-1)
+
+!        if (new_variance < tiny(new_variance)) then
+!           write(*,*)itime,ix,iy,tensor(:,ix,iy)
+!           stop
+!        endif
+
+!        want to test "if (variance/new_variance > criterion) then" but
+!        new variance could be tiny
+         if (variance > new_variance * criterion) then
+            write(*,*)'suspicious ',itime,ix,iy,variance,new_variance*criterion
+            suspicious = .true.
+            variance   = new_variance
+         else
+!           write(*,*)'clean ',itime,ix,iy,variance/new_variance
+            suspicious = .false.
+         endif
+
+         if (suspicious) then ! log bad column to unique file
+            do imember = 1,ensemble_size
+               write(iunit,*)        imember,  tensor(        imember ,ix,iy), &
+                         indices(imember), tensor(indices(imember),ix,iy)
+            enddo
+         else
+            exit CLEAN
+         endif
+
+         ! If we get this far, the maximum is an outlier.
+
+         num_outliers = num_outliers + 1_i8
+
+!        mean   = sum(sorted(10:70))/61.0_r8
+!        stddev = sqrt(sum(sorted(10:70) - mean)**2)/60.0_r8
+!        write(*,*)'ix,iy,stddev,iqr = ',ix,iy,stddev,iqr
+
+!        noise = random_gaussian(r, 0.0_r8, 3.0_r8*stddev)
+         noise = random_gaussian(r, 0.0_r8, iqr)
+
+         tensor(indices(ensemble_size),ix,iy) = q2 + abs(noise) 
+
+         ! log candidate column to same unique file
+         do imember = 1,ensemble_size
+            write(iunit,*)        imember,  tensor(        imember ,ix,iy), &
+                      indices(imember), tensor(indices(imember),ix,iy)
+         enddo
+
+      enddo CLEAN
+
+   enddo LONGITUDE
+   enddo LATITUDE
+
+   write(*,*)trim(varname)//' timestep ',itime,' had ',num_outliers, &
+             ' values replaced when criterion is ',criterion
+   if (num_outliers > 0_i8) call write_tensor(itime)
+
+enddo TIMESTEP
+
+end subroutine purify
 
 
 end program clean_forcing

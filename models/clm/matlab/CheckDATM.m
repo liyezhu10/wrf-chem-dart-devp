@@ -8,8 +8,8 @@
 %
 % DART $Id$
 
-dirname = '/glade/p_old/image/thoar/CAM_DATM/4xdaily';
 dirname = '/glade/collections/rda/data/ds199.1';
+dirname = '/glade/p/cisl/dares/thoar/CAM_DATM/4xdaily';
 
 % 	float a2x6h_Faxa_swndf(time, a2x6h_ny, a2x6h_nx) ;
 
