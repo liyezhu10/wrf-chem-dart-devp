@@ -13,15 +13,14 @@
 #=========================================================================
 
 echo "`date` -- BEGIN CLM_ASSIMILATE"
-pwd
-
-set nonomatch       # suppress "rm" warnings if wildcard does not match anything
 
 # As of CESM2.0, the assimilate.csh is called by CESM - and has
 # two arguments: the CASEROOT and the DATA_ASSIMILATION_CYCLE
 
 setenv CASEROOT $1
 setenv ASSIMILATION_CYCLE $2
+
+source ${CASEROOT}/DART_params.csh || exit 1
 
 # Python uses C indexing on loops; cycle = [0,....,$DATA_ASSIMILATION_CYCLES - 1]
 # "Fix" that here, so the rest of the script isn't confusing.
@@ -39,68 +38,6 @@ setenv STOP_N         `./xmlquery STOP_N      --value`
 setenv DATA_ASSIMILATION_CYCLES `./xmlquery DATA_ASSIMILATION_CYCLES --value`
 setenv TASKS_PER_NODE `./xmlquery MAX_TASKS_PER_NODE --value`
 cd ${RUNDIR}
-
-# string to be replaced by the setup script or by hand once
-set BASEOBSDIR = BOGUSBASEOBSDIR
-
-# some systems don't like the -v option to any of the following
-switch ("`hostname`")
-   case ys*:
-      # NCAR "yellowstone"
-      set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
-      set   LINK = 'ln -fvs'
-      set REMOVE = 'rm -fr'
-      setenv MP_DEBUG_NOTIMEOUT yes
-
-      set  LAUNCHCMD = mpirun.lsf
-   breaksw
-
-   case lone*:
-      # UT lonestar
-      set   MOVE = '/bin/mv -fv'
-      set   COPY = '/bin/cp -fv --preserve=timestamps'
-      set   LINK = '/bin/ln -fvs'
-      set REMOVE = '/bin/rm -fr'
-
-      set  LAUNCHCMD = mpirun.lsf
-   breaksw
-
-   case la*:
-      # LBNL "lawrencium"
-      set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
-      set   LINK = 'ln -fvs'
-      set REMOVE = 'rm -fr'
-
-      set  LAUNCHCMD = "mpiexec -n $NTASKS"
-   breaksw
-
-   case r*:
-      # NCAR "cheyenne"
-      set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
-      set   LINK = 'ln -fvs'
-      set REMOVE = 'rm -fr'
-      setenv MP_DEBUG_NOTIMEOUT yes
-      set  LAUNCHCMD = mpiexec_mpt
-   breaksw
-
-   case example*:
-      set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
-      set   LINK = 'ln -fvs'
-      set REMOVE = 'rm -fr'
-      set LAUNCHCMD = "aprun -n $NTASKS"
-   breaksw
-
-   default:
-      echo "FATAL ERROR: The system-specific environment must be specified."   
-      echo "             Add system-specific info to a case statement in"   
-      echo "             ${CASEROOT}/assimilate.csh"   
-      exit 1
-   breaksw
-endsw
 
 #=========================================================================
 # Block 1: Determine time of model state ... from file name of first member
@@ -129,7 +66,7 @@ echo "valid time of model is $LND_YEAR $LND_MONTH $LND_DAY $LND_HOUR (hours)"
 # Get observation sequence file ... or die right away.
 # The observation file names have a time that matches the stopping time of CLM.
 #
-# The CLM observations are stowed in two sets of directories.
+# The CLM observations are stored in two sets of directories.
 # If you are stopping every 24 hours or more, the obs are in directories like YYYYMM.
 # In all other situations the observations come from directories like YYYYMM_6H.
 # The only ugly part here is if the first advance and subsequent advances are
@@ -145,10 +82,12 @@ else
    set OBSDIR = `printf %04d%02d_6H ${LND_YEAR} ${LND_MONTH}`
 endif
 
-set OBS_FILE = ${BASEOBSDIR}/${OBSDIR}/obs_seq.${LND_DATE_EXT}
+set OBS_FILE = ${baseobsdir}/${OBSDIR}/obs_seq.${LND_DATE_EXT}
+
+${REMOVE} obs_seq.out
 
 if (  -e   ${OBS_FILE} ) then
-   ${LINK} ${OBS_FILE} obs_seq.out
+   ${LINK} ${OBS_FILE} obs_seq.out || exit 2
 else
    echo "ERROR ... no observation file $OBS_FILE"
    echo "ERROR ... no observation file $OBS_FILE"
@@ -251,31 +190,30 @@ ${REMOVE} clm_inflation_cookie
 #
 #=========================================================================
 
+${REMOVE} restart_files.txt        history_files.txt        history_vector_files.txt
+${REMOVE} restart_files_output.txt history_files_output.txt history_vector_files_output.txt
+
 ls -1 ${CASE}.clm2_*.r.${LND_DATE_EXT}.nc  >! restart_files.txt
 ls -1 ${CASE}.clm2_*.h0.${LND_DATE_EXT}.nc >! history_files.txt
 ls -1 ${CASE}.clm2_*.h2.${LND_DATE_EXT}.nc >! history_vector_files.txt
 
 # must rename the output files to something
 
-if ( -e restart_files.txt ) then
-   sed -e "s#${LND_DATE_EXT}#${LND_DATE_EXT}.out#" restart_files.txt >! restart_output_files.txt
+if ( -s restart_files.txt ) then
+   sed -e "s#${LND_DATE_EXT}#${LND_DATE_EXT}.out#" restart_files.txt >! restart_files_output.txt
 endif
-if ( -e history_files.txt ) then
-   sed -e "s#${LND_DATE_EXT}#${LND_DATE_EXT}.out#" history_files.txt >! history_output_files.txt
+if ( -s history_files.txt ) then
+   sed -e "s#${LND_DATE_EXT}#${LND_DATE_EXT}.out#" history_files.txt >! history_files_output.txt
 endif
-if ( -e history_vector_files.txt ) then
-   sed -e "s#${LND_DATE_EXT}#${LND_DATE_EXT}.out#" history_vector_files.txt >! history_vector_output_files.txt
+if ( -s history_vector_files.txt ) then
+   sed -e "s#${LND_DATE_EXT}#${LND_DATE_EXT}.out#" history_vector_files.txt >! history_vector_files_output.txt
 endif
 
 #=========================================================================
 # Block 6: Actually run the assimilation.
-# Will result in a set of files : 'filter_restart.xxxx'
 #
 # DART namelist settings required:
 # &filter_nml:           async                   = 0,
-# &filter_nml:           adv_ens_command         = "no_advance_script",
-# &filter_nml:           restart_in_file_name    = 'filter_ics'
-# &filter_nml:           restart_out_file_name   = 'filter_restart'
 # &filter_nml:           obs_sequence_in_name    = 'obs_seq.out'
 # &filter_nml:           obs_sequence_out_name   = 'obs_seq.final'
 # &filter_nml:           init_time_days          = -1,
@@ -298,10 +236,13 @@ set     LND_RESTART_FILENAME = ${CASE}.clm2_0001.r.${LND_DATE_EXT}.nc
 set     LND_HISTORY_FILENAME = ${CASE}.clm2_0001.h0.${LND_DATE_EXT}.nc
 set LND_VEC_HISTORY_FILENAME = ${CASE}.clm2_0001.h2.${LND_DATE_EXT}.nc
 
-${LINK} ${LND_RESTART_FILENAME} clm_restart.nc
-${LINK} ${LND_HISTORY_FILENAME} clm_history.nc
-if (  -e   ${LND_VEC_HISTORY_FILENAME} ) then
-   ${LINK} ${LND_VEC_HISTORY_FILENAME} clm_vector_history.nc
+# remove any potentiall pre-existing linked files
+${REMOVE} clm_restart.nc clm_history.nc clm_vector_history.nc 
+
+${LINK} ${LND_RESTART_FILENAME} clm_restart.nc || exit 4
+${LINK} ${LND_HISTORY_FILENAME} clm_history.nc || exit 4
+if (  -s   ${LND_VEC_HISTORY_FILENAME} ) then
+   ${LINK} ${LND_VEC_HISTORY_FILENAME} clm_vector_history.nc || exit 4
 endif
 
 echo "`date` -- BEGIN FILTER"
@@ -311,11 +252,11 @@ echo "`date` -- END FILTER"
 # Tag the output with the valid time of the model state.
 # TODO could move each ensemble-member file to the respective member dir.
 
-foreach FILE ( input*mean*nc      input*sd*nc \
-            forecast*mean*nc   forecast*sd*nc  forecast_member_????.nc \
-            preassim*mean*nc   preassim*sd*nc  preassim_member_????.nc \
-           postassim*mean*nc  postassim*sd*nc postassim_member_????.nc \
-            analysis*mean*nc   analysis*sd*nc  analysis_member_????.nc \
+foreach FILE ( input*mean*nc      input*sd*nc     input_member*nc \
+            forecast*mean*nc   forecast*sd*nc  forecast_member*nc \
+            preassim*mean*nc   preassim*sd*nc  preassim_member*nc \
+           postassim*mean*nc  postassim*sd*nc postassim_member*nc \
+            analysis*mean*nc   analysis*sd*nc  analysis_member*nc \
               output*mean*nc     output*sd*nc )
 
    if (  -e $FILE ) then
@@ -336,17 +277,19 @@ ${MOVE} dart_log.out     clm_dart_log.${LND_DATE_EXT}.out
 # Block 7: Update the CLM restart files - 
 # required because of the special missing value flags and 
 # possible snow recompaction, etc.
-#>@todo make dart_to_clm run simultaneously ... mpi?
+#>@todo make all dart_to_clm run simultaneously 
 #=========================================================================
 
 @ instance = 0
 foreach MEMBER ( ${CASE}.clm2_*.r.${LND_DATE_EXT}.nc )
 
-   @ instance ++ 
-   set DARTFILE = `head -n $instance restart_output_files.txt | tail -n 1`
+   ${REMOVE} dart_posterior.nc clm_restart_file.nc
 
-   ${LINK} $MEMBER clm_restart_file.nc
-   ${LINK} $DARTFILE dart_posterior.nc
+   @ instance ++ 
+   set DARTFILE = `head -n $instance restart_files_output.txt | tail -n 1`
+
+   ${LINK} $DARTFILE dart_posterior.nc || exit 7
+   ${LINK} $MEMBER clm_restart_file.nc || exit 7
 
    ../bld/dart_to_clm || exit 7
 

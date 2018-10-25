@@ -67,7 +67,7 @@ ${cesmroot}/cime/scripts/create_newcase  --res  ${resolution} \
                                          --run-unsupported || exit 2
 
 # ==============================================================================
-# Preserve a copy of this script as it was run.
+# Preserve a copy of this script and the parameter file as it was run.
 # Copy the DART setup script (CESM_DART_config) to CASEROOT.
 # ==============================================================================
 
@@ -151,11 +151,11 @@ endif
 ./xmlchange RUN_TYPE=hybrid
 ./xmlchange RUN_REFCASE=${refcase}
 ./xmlchange RUN_REFDATE=${refdate}
-./xmlchange RUN_STARTDATE=${start_year}-${start_month}-${start_day}
-
-./xmlchange START_TOD=${start_tod}
 ./xmlchange RUN_REFTOD=${reftod}
 ./xmlchange GET_REFCASE=FALSE
+
+./xmlchange RUN_STARTDATE=${startdate}
+./xmlchange START_TOD=${start_tod}
 
 # pnetcdf is default
 ./xmlchange PIO_TYPENAME=pnetcdf
@@ -443,7 +443,7 @@ chmod 0755 stage_cesm_files
 ./stage_cesm_files || exit 2
 
 #===============================================================================
-# This example has SourceMods that enable CLM to output solar induced fluourescence
+# This example has SourceMods that enable CLM to output solar induced fluorescence
 # as a diagnostic variable in the history files as "FSIF".
 #
 # Copy modified CLM codes into SourceMods

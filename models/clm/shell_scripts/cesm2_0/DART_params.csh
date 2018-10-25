@@ -82,7 +82,7 @@ setenv archdir      /glade/scratch/${USER}/$cesmtag/${CASE}/archive
 # ==============================================================================
 
 setenv dartroot     /glade/work/${USER}/DART/cesm_clm
-setenv baseobsdir   /glade/p/image/Observations/land/SMAP
+setenv baseobsdir   /glade/p/cisl/dares/Observations/land/pmo
 setenv pmo_input_baseobsdir   /glade/work/afox/obs_seq_global
 setenv pmo_output_baseobsdir  /glade/work/${USER}/${CASE}/Perfect_obs
 
@@ -118,7 +118,7 @@ setenv start_year    2005
 setenv start_month   07
 setenv start_day     01
 setenv start_tod     00000
-setenv startdate     ${start_year}-${start_month}-${start_month}
+setenv startdate     ${start_year}-${start_month}-${start_day}
 
 # ==============================================================================
 # OSSE/Perfect Model experiments only.

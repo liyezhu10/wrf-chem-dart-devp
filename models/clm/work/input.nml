@@ -33,9 +33,9 @@
    input_state_file_list    = "restart_files.txt",
                               "history_files.txt",
                               "history_vector_files.txt" 
-   output_state_file_list   = "restart_files.txt",
-                              "history_files.txt",
-                              "history_vector_files.txt" 
+   output_state_file_list   = "restart_files_output.txt",
+                              "history_files_output.txt",
+                              "history_vector_files_output.txt" 
    init_time_days           = -1
    init_time_seconds        = -1
    first_obs_days           = -1
@@ -194,7 +194,7 @@
                    'leafc',       'QTY_LEAF_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
                    'LAI240_VALUE','QTY_LEAF_AREA_INDEX',            '0.0', 'NA', 'restart', 'NO_COPY_BACK',
                    'EFLX_LH_TOT', 'QTY_LATENT_HEAT_FLUX',           'NA',  'NA', 'history', 'NO_COPY_BACK',
-                   'TV',          'QTY_VEGETATION_TEMPERATURE',     'NA' , 'NA', 'vector' , 'NO_COPY_BACK',
+                   'FSIF',        'QTY_SOLAR_INDUCED_FLUORESCENCE', '0.0', 'NA', 'history', 'NO_COPY_BACK',
    /
 
 #  clm_variables = 'frootc',      'QTY_ROOT_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',

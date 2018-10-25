@@ -5,161 +5,40 @@
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
 # DART $Id$
-
-#-----------------------------------------------------------------------
-# Purpose, describe things here, etc.
-#-----------------------------------------------------------------------
-
-# ==============================================================================
-# Options defining the experiment:
 #
-# CASE          The value of "CASE" will be used many ways; directory and file
-#               names both locally and (possibly) on the HPSS, and script names;
-#               so consider its length and information content.
-# compset       Defines the vertical resolution and physics packages to be used.
-#               Must be a standard CESM compset; see the CESM documentation.
-# resolution    Defines the horizontal resolution and dynamics; see CESM docs.
-# cesmtag       The version of the CESM source code to use when building the code.
-# num_instances The number of ensemble members.
+# ------------------------------------------------------------------------------
+# Purpose: perform a multi-instance advance of CLM and then assimilate.
+#          The assumptions here are that there is an ensemble of CLM states
+#          available (as well as the CESM-required ROF states).
 #
-# For list of the pre-defined component sets: ./query_config --compsets
-# To create a variant compset, see the CESM documentation and carefully
-# incorporate any needed changes into this script.
-# ==============================================================================
-
-setenv cesmtag        ctsm
-setenv resolution     f09_f09
-setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
-setenv num_instances  40
-setenv CASE           clm5_f09_e${num_instances}
-
-# ==============================================================================
-# Directories:
-# cesmdata     Location of some supporting CESM data files.
-# cesmroot     Location of the CESM code base.  This version of the script
-#              only supports version cesm1_5_beta06c.
-# caseroot     Defines the CESM case directory - where the CESM+DART
-#              configuration files will be stored.  This should probably not
-#              be in scratch (on yellowstone, your 'work' partition is suggested).
-#              This script will delete any existing caseroot, so this script,
-#              and other useful things should be kept elsewhere.
-# rundir       Defines the location of the CESM run directory.  Will need large
-#              amounts of disk space, generally on a scratch partition.
-# exeroot      Defines the location of the CESM executable directory , where the
-#              CESM executables will be built.  Medium amount of space
-#              needed, generally on a scratch partition.
-# archdir      Defines the location of the CESM short-term archive directories.
-#              Files remain here until the long-term archiver moves them to 
-#              permanent storage.  Requires large amounts of disk space. Should
-#              not be on a scratch partition unless the long-term archiver is 
-#              invoked to move these files to permanent storage.
+# The example configured here is for daily assimilation - at 00Z.
+# Some variables for the DART state come from the CLM restart file,
+# some from the .h0. file that has 30-minute values in it, some from
+# a .h2. file that is still in the vector-based format.
 #
-# dartroot     Location of the root of _your_ DART installation
-# baseobsdir   Part of the directory name containing the observation sequence 
-#              files to be used in the assimilation. The observations are presumed
-#              to be stored in sub-directories with names built from the year and
-#              month. 'baseobsdir' will be inserted into the appropriate scripts.
-# ==============================================================================
+# An example of assimilating monthly can be found in CLM5_monthly_assim.csh
+# ------------------------------------------------------------------------------
 
-setenv project      P86850054
-setenv machine      cheyenne
-setenv cesmdata     /glade/p/cesmdata/cseg/inputdata
-setenv cesmroot     /glade/work/${USER}/CESM/$cesmtag
-setenv caseroot     /glade/work/${USER}/cases/$cesmtag/${CASE}
-setenv rundir       /glade/scratch/${USER}/$cesmtag/${CASE}/run
-setenv exeroot      /glade/scratch/${USER}/$cesmtag/${CASE}/bld
-setenv archdir      /glade/scratch/${USER}/$cesmtag/${CASE}/archive
+# All the user-specified variables and settings are read from a DART
+# parameter file. This includes the case name, ensemble size, the location
+# of the CESM code, etc. There are still some variables that are logically
+# defined in this script, as well as some specifics about the CLM namelists.
 
-setenv dartroot     /glade/work/thoar/DART/cesm_clm
-setenv baseobsdir   /glade/p/cisl/dares/Observations/land
-
-# ==============================================================================
-# configure settings:
-#
-# refcase    Name of the existing reference case that this run will start from.
-# refyear    The specific date/time-of-day in the reference case that this
-# refmon     run will start from.  (Also see 'runtime settings' below for
-# refday     start_year, start_mon, start_day and start_tod.)
-# reftod
-#
-# stagedir   The directory location of the reference case files.
-#            This will surely change based on the compset and machine.
-#
-# startdate  The date used as the starting date for the hybrid run.
-# ==============================================================================
-
-setenv refcase      clm5_f09_spinup80
-setenv refyear      2001
-setenv refmon       07
-setenv refday       01
-setenv reftod       00000
-setenv refdate      $refyear-$refmon-$refday
-setenv reftimestamp $refyear-$refmon-$refday-$reftod
-
-setenv stagedir /glade/p/cisl/dares/RDA_strawman/CESM_ensembles/CLM/CLM5BGC-Crop/ctsm_${reftimestamp}
-
-setenv startdate    2001-07-01
-
-# The forward operators for the flux tower obs REQUIRE that we predict the name of
-# of the history file. The history file names of interest are time-tagged with the
-# START of the forecast - not the restart time. The obs_def_tower_mod.f90 requires
-# the stop_option to be 'nhours', and the stop_n to be accurate.
-
-setenv stop_option  nhours
-setenv stop_n       24
-setenv resubmit     0
-
-@ clm_dtime = 1800
-@ h1nsteps = $stop_n * 3600 / $clm_dtime
-
-#>@todo stream template files & multiple years. Do we need to specify
-#> year 1 and year N (performance penalty?). Can we change years on-the-fly
-#> during a run?
-
-set stream_year_align = 1998
-set stream_year_first = 1998
-set stream_year_last  = 2010
+source DART_params.csh
 
 # ==============================================================================
 # job settings:
 #
-# queue      can be changed during a series by changing the case.run
-# timewall   can be changed during a series by changing the case.run
+# run_queue, run_time, st_archive_queue, st_archive_time may be changed at any time
 #
 # ==============================================================================
 
-setenv queue        regular
-setenv timewall     00:20:00
+setenv run_queue regular
+setenv run_time 00:30:00
+
 setenv short_term_archiver off
-
-# ==============================================================================
-# standard commands:
-#
-# If you are running on a machine where the standard commands are not in the
-# expected location, add a case for them below.
-# ==============================================================================
-
-set nonomatch       # suppress "rm" warnings if wildcard does not match anything
-
-# The FORCE options are not optional.
-# The VERBOSE options are useful for debugging though
-# some systems don't like the -v option to any of the following
-switch ("`hostname`")
-   case ys*:
-         # NCAR "yellowstone"
-         set   MOVE = '/bin/mv -v'
-         set   COPY = '/bin/cp -v --preserve=timestamps'
-         set   LINK = '/bin/ln -vsf'
-         set REMOVE = '/bin/rm -rf'
-      breaksw
-   default:
-         # NERSC "hopper", TACC "stampede" ... many more
-         set   MOVE = 'mv -v'
-         set   COPY = 'cp -v --preserve=timestamps'
-         set   LINK = 'ln -vsf'
-         set REMOVE = 'rm -rf'
-      breaksw
-endsw
+setenv st_archive_queue share
+setenv st_archive_time 06:00:00
 
 # ==============================================================================
 # Create the case - this creates the CASEROOT directory.
@@ -197,24 +76,14 @@ ${cesmroot}/cime/scripts/create_newcase  --res  ${resolution} \
                                          --multi-driver || exit 2
 
 # ==============================================================================
-# Preserve a copy of this script as it was run.
+# Preserve a copy of this script and the parameter file as it was run.
+# Copy the DART setup script (CESM_DART_config) to CASEROOT.
 # ==============================================================================
 
 set ThisFileName = $0:t
-${COPY} $ThisFileName ${caseroot}/${ThisFileName}.original
-
-set TEMPLATE = ${dartroot}/models/clm/shell_scripts/cesm2_0/CESM2_0_DART_config.template
-if ( -e ${TEMPLATE} ) then
-   sed -e "s#BOGUS_DART_ROOT_STRING#${dartroot}#" \
-       -e "s#BOGUS_DART_OBS_STRING#${baseobsdir}#" \
-       -e "s#BOGUS_CASEROOT_STRING#${caseroot}#" ${TEMPLATE} \
-           >! ${caseroot}/CESM_DART_config  || exit 3
-   chmod 755  ${caseroot}/CESM_DART_config
-else
-   echo "ERROR: the script to configure for data assimilation is not available."
-   echo "       ${TEMPLATE} MUST exist."
-   exit 4
-endif
+${COPY} $ThisFileName       ${caseroot}/${ThisFileName}.original
+${COPY} DART_params.csh     ${caseroot}
+${COPY} CESM2_0_DART_config ${caseroot}
 
 # ==============================================================================
 cd ${caseroot}
@@ -222,8 +91,8 @@ cd ${caseroot}
 
 # Save a copy for debug purposes
 foreach FILE ( *xml )
-   if ( ! -e        ${FILE}.original ) then
-      ${COPY} $FILE ${FILE}.original
+   if ( ! -e          ${FILE}.original ) then
+      ${COPY} ${FILE} ${FILE}.original
    endif
 end
 
@@ -248,11 +117,11 @@ if ( (${COMP_OCN} != socn) || (${COMP_ATM} != datm) ) then
    exit 5
 endif
 
-./xmlchange STOP_OPTION=$stop_option
-./xmlchange STOP_N=$stop_n
-./xmlchange RESUBMIT=$resubmit
-./xmlchange REST_OPTION=$stop_option
-./xmlchange REST_N=$stop_n
+./xmlchange STOP_OPTION=${stop_option}
+./xmlchange STOP_N=${stop_n}
+./xmlchange RESUBMIT=${resubmit}
+./xmlchange REST_OPTION=${stop_option}
+./xmlchange REST_N=${stop_n}
 
 ./xmlchange CALENDAR=GREGORIAN
 ./xmlchange EXEROOT=${exeroot}
@@ -270,9 +139,9 @@ endif
 
 ./xmlchange DATM_MODE=CPLHIST
 ./xmlchange DATM_CPLHIST_DOMAIN_FILE=null
-./xmlchange DATM_CPLHIST_YR_ALIGN=$stream_year_align
-./xmlchange DATM_CPLHIST_YR_START=$stream_year_first
-./xmlchange DATM_CPLHIST_YR_END=$stream_year_last
+./xmlchange DATM_CPLHIST_YR_ALIGN=${stream_year_align}
+./xmlchange DATM_CPLHIST_YR_START=${stream_year_first}
+./xmlchange DATM_CPLHIST_YR_END=${stream_year_last}
 
 # --- In a hybrid run the model is initialized as a startup, BUT uses
 # initialization datasets FROM A PREVIOUS case.  This
@@ -293,7 +162,11 @@ endif
 ./xmlchange RUN_TYPE=hybrid
 ./xmlchange RUN_REFCASE=${refcase}
 ./xmlchange RUN_REFDATE=${refdate}
+./xmlchange RUN_REFTOD=${reftod}
+./xmlchange GET_REFCASE=FALSE
+
 ./xmlchange RUN_STARTDATE=${startdate}
+./xmlchange START_TOD=${start_tod}
 
 # pnetcdf is default
 ./xmlchange PIO_TYPENAME=pnetcdf
@@ -305,18 +178,17 @@ endif
 # CIME interprets a negative task count as representing the number of nodes.
 # On Cheyenne (at least) using multiple threads is not recommended.
 
-@ nodes_per_instance = 4
-@ nthreads = 1
+@ nthreads = ${number_of_threads}
 
-@ atm_tasks = -1 * $nodes_per_instance
-@ cpl_tasks = -1 * $nodes_per_instance
-@ ocn_tasks = -1 * $nodes_per_instance
-@ wav_tasks = -1 * $nodes_per_instance
-@ glc_tasks = -1 * $nodes_per_instance
-@ ice_tasks = -1 * $nodes_per_instance
-@ rof_tasks = -1 * $nodes_per_instance
-@ lnd_tasks = -1 * $nodes_per_instance
-@ esp_tasks = -1 * $nodes_per_instance
+@ atm_tasks = -1 * ${nodes_per_instance}
+@ cpl_tasks = -1 * ${nodes_per_instance}
+@ ocn_tasks = -1 * ${nodes_per_instance}
+@ wav_tasks = -1 * ${nodes_per_instance}
+@ glc_tasks = -1 * ${nodes_per_instance}
+@ ice_tasks = -1 * ${nodes_per_instance}
+@ rof_tasks = -1 * ${nodes_per_instance}
+@ lnd_tasks = -1 * ${nodes_per_instance}
+@ esp_tasks = -1 * ${nodes_per_instance}
 
 ./xmlchange ROOTPE_ATM=0,NTHRDS_ATM=$nthreads,NTASKS_ATM=$atm_tasks
 ./xmlchange ROOTPE_CPL=0,NTHRDS_CPL=$nthreads,NTASKS_CPL=$cpl_tasks
@@ -328,32 +200,43 @@ endif
 ./xmlchange ROOTPE_LND=0,NTHRDS_LND=$nthreads,NTASKS_LND=$lnd_tasks
 ./xmlchange ROOTPE_ESP=0,NTHRDS_ESP=$nthreads,NTASKS_ESP=$esp_tasks
 
-./xmlchange --subgroup case.run        --id JOB_QUEUE          --val ${queue}
-./xmlchange --subgroup case.run        --id JOB_WALLCLOCK_TIME --val ${timewall}
-./xmlchange --subgroup case.st_archive --id JOB_WALLCLOCK_TIME --val 6:00
+./xmlchange --subgroup case.run --id JOB_QUEUE          --val ${run_queue}
+./xmlchange --subgroup case.run --id JOB_WALLCLOCK_TIME --val ${run_time}
+
+echo "setting up the case ... "
 
 ./case.setup || exit 6
 
-echo "case setup finished"
+echo "case setup finished."
 
 # ==============================================================================
-# These are archiving options that may be used.
-# You can turn the short/long term archivers on or off ({short,long}_term_archiver),
-# but these settings should be made in either event.
 
-if ($short_term_archiver == 'off') then
+if (${short_term_archiver} == 'off') then
    ./xmlchange DOUT_S=FALSE
 else
    ./xmlchange DOUT_S=TRUE
+   ./xmlchange --subgroup case.st_archive --id JOB_QUEUE         --val ${st_archive_queue}
+   ./xmlchange --subgroup case.st_archive --id JOB_WALLCLOCK_TIME --val ${st_archive_time}
 endif
 
 # DEBUG = TRUE implies turning on run and compile time debugging.
 # INFO_DBUG level of debug output, 0=minimum, 1=normal, 2=more, 3=too much.
+
 ./xmlchange DEBUG=FALSE
 ./xmlchange INFO_DBUG=0
 
+# I am not sure this has anything to do with our case, as we are using
+# our own forcing data ... required by changes to /glade in July 2018
+./xmlchange DIN_LOC_ROOT_CLMFORC=/glade/p/cgd/tss/CTSM_datm_forcing_data
+
 # ==============================================================================
 # Modify namelist templates for each instance.
+#
+# In a hybrid run with CONTINUE_RUN = FALSE (i.e. just starting up):
+# CLM builds its own 'finidat' value from the REFCASE variables.
+#
+# All of these must later on be staged with the expected filenames.
+# ==============================================================================
 
 @ inst = 1
 while ( $inst <= $num_instances )
@@ -389,10 +272,10 @@ while ( $inst <= $num_instances )
 
    # Create stream files for each ensemble member
    set SOURCEDIR = ${dartroot}/models/clm/shell_scripts/cesm2_0
-   ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.Solar_complete        user_${FILE1}
-   ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.nonSolarFlux_complete user_${FILE2}
-   ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.State1hr_complete     user_${FILE3}
-   ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.State3hr_complete     user_${FILE4}
+   ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.Solar_complete        user_${FILE1} || exit 1
+   ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.nonSolarFlux_complete user_${FILE2} || exit 1
+   ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.State1hr_complete     user_${FILE3} || exit 1
+   ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.State3hr_complete     user_${FILE4} || exit 1
 
    foreach FNAME ( user_datm.streams.txt*${inst_string} )
       echo "modifying $FNAME"
@@ -405,16 +288,24 @@ while ( $inst <= $num_instances )
    set fname = "user_nl_clm${inst_string}"
    # ===========================================================================
 
-   echo "hist_empty_htapes = .true."                                      >> ${fname}
-   echo "hist_fincl1 = 'NEP','TOTECOSYSC','TOTVEGC','TLAI'"               >> ${fname}
-   echo "hist_fincl2 = 'NEP','FSH','EFLX_LH_TOT_R'"                       >> ${fname}
-   echo "hist_fincl3 = 'TV','TLAI','PBOT','TBOT','TSA','RH2M_R','SNOWDP'" >> ${fname}
-   echo "hist_nhtfrq = -$stop_n,1,-$stop_n"                               >> ${fname}
-   echo "hist_mfilt  = 1,$h1nsteps,1"                                     >> ${fname}
-   echo "hist_avgflag_pertape = 'A','A','I'"                              >> ${fname}
-   echo "hist_dov2xy = .true.,.true.,.false."                             >> ${fname}
-   echo "hist_type1d_pertape = ' ',' ',' '"                               >> ${fname}
-   echo "dtime = $clm_dtime"                                              >> ${fname}
+   # hist_nhtfrq: Per tape series history write frequency. 
+   #              positive means in time steps 0=monthly negative means hours 
+   #              i.e. 5 means every 24 time-steps and -24 means every day 
+   #              Default: 0,-24,-24,-24,-24,-24
+   # hist_mfilt:  Per tape series maximum number of time samples.
+
+   echo "use_lch4 = .false."                                     >> ${fname}
+   echo "use_init_interp = .true."                               >> ${fname}
+   echo "init_interp_fill_missing_with_natveg = .true."          >> ${fname}
+   echo "hist_empty_htapes = .false."                            >> ${fname}
+   echo "hist_fincl1 = 'FSIF'"                                   >> ${fname}
+   echo "hist_fincl2 = 'NEP','FSH','EFLX_LH_TOT_R','FSIF','GPP'" >> ${fname}
+   echo "hist_nhtfrq = -24,-1"                                   >> ${fname}
+   echo "hist_mfilt  = 1,24"                                     >> ${fname}
+   echo "hist_avgflag_pertape = 'A','A'"                         >> ${fname}
+   echo "hist_dov2xy = .true.,.true."                            >> ${fname}
+   echo "hist_type1d_pertape = ' ',' '"                          >> ${fname}
+   echo "dtime = $clm_dtime"                                     >> ${fname}
 
    @ inst ++
 end
@@ -483,9 +374,7 @@ if ( \${CONTINUE_RUN} == TRUE ) then
 
    if (  \${DOUT_S} == TRUE ) then
 
-      # The restarts should be in the short term archive directory.  See
-      # www.cesm.ucar.edu/models/cesm1.2/cesm/doc/usersguide1_2/x1565.html#running_ccsm_restarts
-      # for more help and information.
+      # The restarts should be in the short term archive directory.
 
       set RESTARTDIR = \${DOUT_S_ROOT}/rest/\${restart_time}
 
@@ -548,8 +437,8 @@ else     # CONTINUE_RUN == FALSE
 
       echo "Staging initial files for instance \$inst of $num_instances"
 
-      ${LINK} ${stagedir}/${refcase}.clm2\${inst_string}.r.${init_time}.nc .
-      ${LINK} ${stagedir}/${refcase}.mosart\${inst_string}.r.${init_time}.nc .
+      ${LINK} ${stagedir}/${refcase}.clm2\${inst_string}.r.${init_time}.nc   . || exit 2
+      ${LINK} ${stagedir}/${refcase}.mosart\${inst_string}.r.${init_time}.nc . || exit 3
 
       @ inst ++
    end
@@ -565,6 +454,9 @@ chmod 0755 stage_cesm_files
 ./stage_cesm_files || exit 2
 
 #===============================================================================
+# This example has SourceMods that enable CLM to output solar induced fluorescence
+# as a diagnostic variable in the history files as "FSIF".
+#
 # Copy modified CLM codes into SourceMods
 # src.clm
 # |-- clm4_0
@@ -577,52 +469,53 @@ chmod 0755 stage_cesm_files
 # `-- clm5_0
 #     |-- biogeochem
 #     |   `-- CNBalanceCheckMod.F90
-#     `-- biogeophys
-#         `-- BalanceCheckMod.F90
+#     !-- biogeophys
+#     !   !-- CanopyFluxesMod.F90
+#     !   `-- PhotosynthesisMod.F90
+#     `-- cpl
+#         `-- lnd_import_export.F90
 # ==============================================================================
 
-if (    -d     ~/${cesmtag}/SourceMods ) then
+if ( ${use_sourcemods} == TRUE ) then
 
-   ${COPY} -r ~/${cesmtag}/SourceMods/src.clm ${caseroot}/SourceMods/
+   if (    -d    ~/${cesmtag}/SourceMods ) then
+      ${COPY} -r ~/${cesmtag}/SourceMods/* ${caseroot}/SourceMods/
+   
+      set clm_opts = `echo $CLM_CONFIG_OPTS | sed -e "s/-//"`
+   
+      @ iarg = 1
+      while ($iarg <= $#clm_opts)
+   
+         @ iargp1 = $iarg + 1
+         set option = $clm_opts[$iarg]
+         set  value = $clm_opts[$iargp1]
+   
+         switch ( ${option} )
 
-   set clm_opts = `echo $CLM_CONFIG_OPTS | sed -e "s/-//"`
-
-   @ iarg = 1
-   while ($iarg <= $#clm_opts)
-
-      @ iargp1 = $iarg + 1
-      set option = $clm_opts[$iarg]
-      set  value = $clm_opts[$iargp1]
-
-      switch ( ${option} )
-         case "phys":
-            if ( -e    SourceMods/src.clm/${value} ) then
-               cd      SourceMods/src.clm
-               ${LINK} ${value}/*/*F90 .
-               cd      ../..
-            else
-               echo "No SourceMods for CLM <${value}>."
-               echo "Got the version from CLM_CONFIG_OPTS ...  <${CLM_CONFIG_OPTS}>"
-            endif
-         breaksw
-      #  case "bgc":  no special action needed here at this time
-      #  breaksw
-
-         default:
-         breaksw
-      endsw
-
-      @ iarg = $iarg + 2
-   end
-
-else
-
-   echo "MESSAGE - No SourceMods for this case."
-   echo "MESSAGE - No SourceMods for this case."
-
+            case "phys":
+               if ( -e    SourceMods/src.clm/${value} ) then
+                  cd      SourceMods/src.clm
+                  ${LINK} ${value}/*/*F90 .
+                  cd      ../..
+               else
+                  echo "No SourceMods for CLM <${value}>."
+                  echo "Got the version from CLM_CONFIG_OPTS ...  <${CLM_CONFIG_OPTS}>"
+               endif
+            breaksw
+   
+            default:
+            breaksw
+         endsw
+   
+         @ iarg = $iarg + 2
+      end
+   else
+      echo "MESSAGE - No SourceMods for this case."
+      echo "MESSAGE - No SourceMods for this case."
+   endif
 endif
 
-./case.build || exit 7
+${BUILD_WRAPPER} ./case.build || exit 7
 
 # ==============================================================================
 # What to do next

@@ -84,8 +84,10 @@ endif
 
 set OBS_FILE = ${pmo_input_baseobsdir}/${OBSDIR}/obs_seq.${LND_DATE_EXT}
 
+${REMOVE} obs_seq.in
+
 if (  -e   ${OBS_FILE} ) then
-   ${LINK} ${OBS_FILE} obs_seq.in
+   ${LINK} ${OBS_FILE} obs_seq.in || exit 2
 else
    echo "ERROR ... no observation file $OBS_FILE"
    echo "ERROR ... no observation file $OBS_FILE"
@@ -152,7 +154,7 @@ ${LINK} ${LND_RESTART_FILENAME} clm_restart.nc || exit 4
 ${LINK} ${LND_HISTORY_FILENAME} clm_history.nc || exit 4
 
 if (  -e   ${OBS1_HISTORY_FILENAME}) then
-   ${LINK} ${OBS1_HISTORY_FILENAME} ${OBS2_HISTORY_FILENAME}
+   ${LINK} ${OBS1_HISTORY_FILENAME} ${OBS2_HISTORY_FILENAME} || exit 4
 endif
 if (  -e   ${LND_VEC_HISTORY_FILENAME}) then
    ${LINK} ${LND_VEC_HISTORY_FILENAME} clm_vector_history.nc || exit 4
