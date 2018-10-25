@@ -128,13 +128,13 @@ endif
 ./xmlchange RUNDIR=${rundir}
 
 # This comes from http://esmci.github.io/cime/data_models/data-atm.html
-# "Note If DATM_MODE is set to CPLHIST, it is normally assumed that the model 
-# domain will be identical to all of the stream domains. To ensure this, the 
-# xml variables ATM_DOMAIN_PATH and ATM_DOMAIN_FILE are ignored and a valid 
-# setting must be given for DATM_CPLHIST_DOMAIN_FILE. If DATM_CPLHIST_DOMAIN_FILE 
-# is set to null, then the datm component domain information is read in from 
-# the first coupler history file in the target stream and it is assumed that the 
-# first coupler stream file that is pointed to contains the domain information 
+# "Note If DATM_MODE is set to CPLHIST, it is normally assumed that the model
+# domain will be identical to all of the stream domains. To ensure this, the
+# xml variables ATM_DOMAIN_PATH and ATM_DOMAIN_FILE are ignored and a valid
+# setting must be given for DATM_CPLHIST_DOMAIN_FILE. If DATM_CPLHIST_DOMAIN_FILE
+# is set to null, then the datm component domain information is read in from
+# the first coupler history file in the target stream and it is assumed that the
+# first coupler stream file that is pointed to contains the domain information
 # for that stream. This is the default that should be used for this mode."
 
 ./xmlchange DATM_MODE=CPLHIST
@@ -225,6 +225,22 @@ endif
 ./xmlchange DEBUG=FALSE
 ./xmlchange INFO_DBUG=0
 
+# ==============================================================================
+# If the experiment only spans one year, copy a stream template for a single year
+# otherwise, use 'all' the years.
+
+if (${stream_year_first} == ${stream_year_last}) then
+   set STREAMFILE_SOLAR        = datm.streams.txt.CPLHISTForcing.Solar_single_year
+   set STREAMFILE_NONSOLARFLUX = datm.streams.txt.CPLHISTForcing.nonSolarFlux_single_year
+   set STREAMFILE_STATE1HR     = datm.streams.txt.CPLHISTForcing.State1hr_single_year
+   set STREAMFILE_STATE3HR     = datm.streams.txt.CPLHISTForcing.State3hr_single_year
+else
+   set STREAMFILE_SOLAR        = datm.streams.txt.CPLHISTForcing.Solar_complete
+   set STREAMFILE_NONSOLARFLUX = datm.streams.txt.CPLHISTForcing.nonSolarFlux_complete
+   set STREAMFILE_STATE1HR     = datm.streams.txt.CPLHISTForcing.State1hr_complete
+   set STREAMFILE_STATE3HR     = datm.streams.txt.CPLHISTForcing.State3hr_complete
+endif
+
 # I am not sure this has anything to do with our case, as we are using
 # our own forcing data ... required by changes to /glade in July 2018
 ./xmlchange DIN_LOC_ROOT_CLMFORC=/glade/p/cgd/tss/CTSM_datm_forcing_data
@@ -272,10 +288,10 @@ while ( $inst <= $num_instances )
 
    # Create stream files for each ensemble member
    set SOURCEDIR = ${dartroot}/models/clm/shell_scripts/cesm2_0
-   ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.Solar_complete        user_${FILE1} || exit 1
-   ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.nonSolarFlux_complete user_${FILE2} || exit 1
-   ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.State1hr_complete     user_${FILE3} || exit 1
-   ${COPY} ${SOURCEDIR}/datm.streams.txt.CPLHISTForcing.State3hr_complete     user_${FILE4} || exit 1
+   ${COPY} ${SOURCEDIR}/${STREAMFILE_SOLAR}        user_${FILE1} || exit 1
+   ${COPY} ${SOURCEDIR}/${STREAMFILE_NONSOLARFLUX} user_${FILE2} || exit 1
+   ${COPY} ${SOURCEDIR}/${STREAMFILE_STATE1HR}     user_${FILE3} || exit 1
+   ${COPY} ${SOURCEDIR}/${STREAMFILE_STATE3HR}     user_${FILE4} || exit 1
 
    foreach FNAME ( user_datm.streams.txt*${inst_string} )
       echo "modifying $FNAME"
@@ -288,9 +304,9 @@ while ( $inst <= $num_instances )
    set fname = "user_nl_clm${inst_string}"
    # ===========================================================================
 
-   # hist_nhtfrq: Per tape series history write frequency. 
-   #              positive means in time steps 0=monthly negative means hours 
-   #              i.e. 5 means every 24 time-steps and -24 means every day 
+   # hist_nhtfrq: Per tape series history write frequency.
+   #              positive means in time steps 0=monthly negative means hours
+   #              i.e. 5 means every 24 time-steps and -24 means every day
    #              Default: 0,-24,-24,-24,-24,-24
    # hist_mfilt:  Per tape series maximum number of time samples.
 
@@ -476,37 +492,37 @@ chmod 0755 stage_cesm_files
 #         `-- lnd_import_export.F90
 # ==============================================================================
 
-if ( ${use_sourcemods} == TRUE ) then
+if ( ${use_SourceMods} == TRUE ) then
 
    if (    -d    ~/${cesmtag}/SourceMods ) then
-      ${COPY} -r ~/${cesmtag}/SourceMods/* ${caseroot}/SourceMods/
-   
+      ${COPY} -r ~/${cesmtag}/SourceMods/* ${caseroot}/SourceMods/ || exit 3
+
       set clm_opts = `echo $CLM_CONFIG_OPTS | sed -e "s/-//"`
-   
+
       @ iarg = 1
       while ($iarg <= $#clm_opts)
-   
+
          @ iargp1 = $iarg + 1
          set option = $clm_opts[$iarg]
          set  value = $clm_opts[$iargp1]
-   
+
          switch ( ${option} )
 
             case "phys":
                if ( -e    SourceMods/src.clm/${value} ) then
                   cd      SourceMods/src.clm
-                  ${LINK} ${value}/*/*F90 .
+                  ${LINK} ${value}/*/*F90 . || exit 3
                   cd      ../..
                else
                   echo "No SourceMods for CLM <${value}>."
                   echo "Got the version from CLM_CONFIG_OPTS ...  <${CLM_CONFIG_OPTS}>"
                endif
             breaksw
-   
+
             default:
             breaksw
          endsw
-   
+
          @ iarg = $iarg + 2
       end
    else

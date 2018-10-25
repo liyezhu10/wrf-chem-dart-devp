@@ -41,9 +41,9 @@ else
    setenv CASE clm5_f09_SIF_e${num_instances}
 endif
 
-# There are sourcemods to enable CLM to compute SIF
+# There are SourceMods to enable CLM to compute SIF
 
-setenv use_sourcemods TRUE
+setenv use_SourceMods TRUE
 
 # ==============================================================================
 # Directories:
