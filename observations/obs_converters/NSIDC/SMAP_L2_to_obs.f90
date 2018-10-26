@@ -310,7 +310,7 @@ FileLoop: do ifile = 1,num_input_files
 
       err_std = max(obs_val/20.0_r8, 0.01_r8)
  
-      call create_3d_obs(rlat, rlon, depth_m/1000.0_r8, VERTISHEIGHT, obs_val, &
+      call create_3d_obs(rlat, rlon, depth_m, VERTISHEIGHT, obs_val, &
                         SOIL_MOISTURE, err_std, oday, osec, qc, obs)
 
       call add_obs_to_seq(obs_seq, obs, obs_time(icount), prev_obs, prev_time, first_obs)
