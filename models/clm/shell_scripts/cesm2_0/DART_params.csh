@@ -41,9 +41,34 @@ else
    setenv CASE clm5_f09_SIF_e${num_instances}
 endif
 
+# ==============================================================================
 # There are SourceMods to enable CLM to compute SIF
+# SourceMods may be handled in one of two ways. If you have your own GIT clone of
+# the repository, you may simply commit your changes to your GIT repo and 
+# set use_SourceMods = FALSE . If you prefer to keep your changes separate 
+# (as was required under SVN), please put your SourceMods in a directory with 
+# the following structure (which is intended to be similar to the structure 
+# in the CLM distribution):
+#
+# ${SourceModDir}/src.clm
+#                |-- clm4_0
+#                |   |-- biogeochem
+#                |   |   `-- CNBalanceCheckMod.F90
+#                |   `-- biogeophys
+#                |       |-- BalanceCheckMod.F90
+#                |       |-- SnowHydrologyMod.F90
+#                |       `-- UrbanMod.F90
+#                `-- clm5_0
+#                    |-- biogeochem
+#                    |   `-- CNBalanceCheckMod.F90
+#                    !-- biogeophys
+#                    !   !-- CanopyFluxesMod.F90
+#                    !   `-- PhotosynthesisMod.F90
+#                    `-- cpl
+#                        `-- lnd_import_export.F90
 
 setenv use_SourceMods TRUE
+setenv SourceModDir   ~/${cesmtag}/SourceMods
 
 # ==============================================================================
 # Directories:
@@ -84,7 +109,7 @@ setenv archdir      /glade/scratch/${USER}/$cesmtag/${CASE}/archive
 setenv dartroot     /glade/work/${USER}/DART/cesm_clm
 setenv baseobsdir   /glade/p/cisl/dares/Observations/land/pmo
 setenv pmo_input_baseobsdir   /glade/work/afox/obs_seq_global
-setenv pmo_output_baseobsdir  /glade/work/${USER}/${CASE}/Perfect_obs
+setenv pmo_output_baseobsdir  ${rundir}/Perfect_obs
 
 # ==============================================================================
 # configure settings:

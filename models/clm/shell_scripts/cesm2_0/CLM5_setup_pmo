@@ -38,7 +38,6 @@ setenv st_archive_time 02:00:00
 # For list of the pre-defined component sets: ./create_newcase -list
 # To create a variant compset, see the CESM documentation and carefully
 # incorporate any needed changes into this script.
-# ==============================================================================
 
 # FATAL idea to make caseroot the same dir as where this setup script is
 # since the build process removes all files in the caseroot dir before
@@ -68,7 +67,6 @@ ${cesmroot}/cime/scripts/create_newcase  --res  ${resolution} \
 # ==============================================================================
 # Preserve a copy of this script and the parameter file as it was run.
 # Copy the DART setup script (CESM_DART_config) to CASEROOT.
-# ==============================================================================
 
 set ThisFileName = $0:t
 ${COPY} $ThisFileName       ${caseroot}/${ThisFileName}.original
@@ -238,7 +236,6 @@ endif
 # CLM builds its own 'finidat' value from the REFCASE variables.
 #
 # All of these must later on be staged with the expected filenames.
-# ==============================================================================
 
 @ inst = 1
 while ( $inst <= $num_instances )
@@ -466,30 +463,11 @@ chmod 0755 stage_cesm_files
 #===============================================================================
 # This example has SourceMods that enable CLM to output solar induced fluorescence
 # as a diagnostic variable in the history files as "FSIF".
-#
-# Copy modified CLM codes into SourceMods
-# src.clm
-# |-- clm4_0
-# |   |-- biogeochem
-# |   |   `-- CNBalanceCheckMod.F90
-# |   `-- biogeophys
-# |       |-- BalanceCheckMod.F90
-# |       |-- SnowHydrologyMod.F90
-# |       `-- UrbanMod.F90
-# `-- clm5_0
-#     |-- biogeochem
-#     |   `-- CNBalanceCheckMod.F90
-#     !-- biogeophys
-#     !   !-- CanopyFluxesMod.F90
-#     !   `-- PhotosynthesisMod.F90
-#     `-- cpl
-#         `-- lnd_import_export.F90
-# ==============================================================================
 
 if ( ${use_SourceMods} == TRUE ) then
 
-   if (    -d    ~/${cesmtag}/SourceMods ) then
-      ${COPY} -r ~/${cesmtag}/SourceMods/* ${caseroot}/SourceMods/ || exit 3
+   if (    -d    ${SourceModDir} ) then
+      ${COPY} -r ${SourceModDir}/* ${caseroot}/SourceMods/ || exit 3
 
       set clm_opts = `echo $CLM_CONFIG_OPTS | sed -e "s/-//"`
 
@@ -523,8 +501,9 @@ if ( ${use_SourceMods} == TRUE ) then
          @ iarg = $iarg + 2
       end
    else
-      echo "MESSAGE - No SourceMods for this case."
-      echo "MESSAGE - No SourceMods for this case."
+      echo "ERROR - DART_params.csh use_SourceMods = ${use_SourceMods}"
+      echo "ERROR - but there are no SourceMods in ${SourceModDir}"
+      exit 3
    endif
 endif
 
