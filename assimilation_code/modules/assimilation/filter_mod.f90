@@ -306,8 +306,9 @@ namelist /filter_nml/ async,     &
 
 contains
 
-subroutine filter_read_namelist(ens_size_out)
-integer, optional, intent(out) :: ens_size_out
+subroutine filter_read_namelist(ens_size_out, obs_sequence_in_name_out)
+integer,            optional, intent(out) :: ens_size_out
+character(len=256), optional, intent(out) :: obs_sequence_in_name_out
 
 integer :: iunit, io
 
@@ -318,6 +319,10 @@ call check_namelist_read(iunit, io, "filter_nml")
 
 if (present(ens_size_out)) then
    ens_size_out = ens_size
+end if
+
+if (present(obs_sequence_in_name_out)) then
+   obs_sequence_in_name_out = obs_sequence_in_name
 end if
 end subroutine filter_read_namelist
 
