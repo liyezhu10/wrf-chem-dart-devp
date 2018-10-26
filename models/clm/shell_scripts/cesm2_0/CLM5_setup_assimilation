@@ -30,8 +30,6 @@ source DART_params.csh
 # job settings:
 #
 # run_queue, run_time, st_archive_queue, st_archive_time may be changed at any time
-#
-# ==============================================================================
 
 setenv run_queue regular
 setenv run_time 00:30:00
@@ -46,7 +44,6 @@ setenv st_archive_time 06:00:00
 # For list of the pre-defined component sets: ./create_newcase -list
 # To create a variant compset, see the CESM documentation and carefully
 # incorporate any needed changes into this script.
-# ==============================================================================
 
 # FATAL idea to make caseroot the same dir as where this setup script is
 # since the build process removes all files in the caseroot dir before
@@ -78,7 +75,6 @@ ${cesmroot}/cime/scripts/create_newcase  --res  ${resolution} \
 # ==============================================================================
 # Preserve a copy of this script and the parameter file as it was run.
 # Copy the DART setup script (CESM_DART_config) to CASEROOT.
-# ==============================================================================
 
 set ThisFileName = $0:t
 ${COPY} $ThisFileName       ${caseroot}/${ThisFileName}.original
@@ -241,10 +237,6 @@ else
    set STREAMFILE_STATE3HR     = datm.streams.txt.CPLHISTForcing.State3hr_complete
 endif
 
-# I am not sure this has anything to do with our case, as we are using
-# our own forcing data ... required by changes to /glade in July 2018
-./xmlchange DIN_LOC_ROOT_CLMFORC=/glade/p/cgd/tss/CTSM_datm_forcing_data
-
 # ==============================================================================
 # Modify namelist templates for each instance.
 #
@@ -252,7 +244,6 @@ endif
 # CLM builds its own 'finidat' value from the REFCASE variables.
 #
 # All of these must later on be staged with the expected filenames.
-# ==============================================================================
 
 @ inst = 1
 while ( $inst <= $num_instances )
@@ -472,30 +463,11 @@ chmod 0755 stage_cesm_files
 #===============================================================================
 # This example has SourceMods that enable CLM to output solar induced fluorescence
 # as a diagnostic variable in the history files as "FSIF".
-#
-# Copy modified CLM codes into SourceMods
-# src.clm
-# |-- clm4_0
-# |   |-- biogeochem
-# |   |   `-- CNBalanceCheckMod.F90
-# |   `-- biogeophys
-# |       |-- BalanceCheckMod.F90
-# |       |-- SnowHydrologyMod.F90
-# |       `-- UrbanMod.F90
-# `-- clm5_0
-#     |-- biogeochem
-#     |   `-- CNBalanceCheckMod.F90
-#     !-- biogeophys
-#     !   !-- CanopyFluxesMod.F90
-#     !   `-- PhotosynthesisMod.F90
-#     `-- cpl
-#         `-- lnd_import_export.F90
-# ==============================================================================
 
 if ( ${use_SourceMods} == TRUE ) then
 
-   if (    -d    ~/${cesmtag}/SourceMods ) then
-      ${COPY} -r ~/${cesmtag}/SourceMods/* ${caseroot}/SourceMods/ || exit 3
+   if (    -d    ${SourceModDir} ) then
+      ${COPY} -r ${SourceModDir}/* ${caseroot}/SourceMods/ || exit 3
 
       set clm_opts = `echo $CLM_CONFIG_OPTS | sed -e "s/-//"`
 
@@ -557,17 +529,17 @@ Time to check the case.
    cd  ${dartroot}/models/clm/work
    ./quickbuild.csh -mpi
 
-5) Modify the case to enable data assimilation and
+6) Modify the case to enable data assimilation and
    run DART by executing
    cd ${caseroot}
-   ./CESM_DART_config
+   ./CESM2_0_DART_config
 
-6) Make sure the DART-related parts are appropriate.
+7) Make sure the DART-related parts are appropriate.
    Check the input.nml
    Check the assimilate.csh or perfect_model.csh - as appropriate
    ./case.submit
 
-7) If that works
+8) If that works
    ./xmlchange CONTINUE_RUN=TRUE
    that sort of thing
 -------------------------------------------------------------------------
