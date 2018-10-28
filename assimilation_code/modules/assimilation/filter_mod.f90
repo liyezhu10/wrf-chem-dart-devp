@@ -306,9 +306,12 @@ namelist /filter_nml/ async,     &
 
 contains
 
-subroutine filter_read_namelist(ens_size_out, obs_sequence_in_name_out)
+subroutine filter_read_namelist(ens_size_out, obs_sequence_in_name_out,      &
+     input_state_file_list_out, output_state_file_list_out)
 integer,            optional, intent(out) :: ens_size_out
 character(len=256), optional, intent(out) :: obs_sequence_in_name_out
+character(len=256), optional, intent(out) :: input_state_file_list_out(:)
+character(len=256), optional, intent(out) :: output_state_file_list_out(:)
 
 integer :: iunit, io
 
@@ -323,6 +326,18 @@ end if
 
 if (present(obs_sequence_in_name_out)) then
    obs_sequence_in_name_out = obs_sequence_in_name
+end if
+
+if (present(input_state_file_list_out)) then
+   do io = 1, MIN(MAX_NUM_DOMS, size(input_state_file_list_out))
+      input_state_file_list_out(io) = input_state_file_list(io)
+   end do
+end if
+
+if (present(output_state_file_list_out)) then
+   do io = 1, MIN(MAX_NUM_DOMS, size(output_state_file_list_out))
+      output_state_file_list_out(io) = output_state_file_list(io)
+   end do
 end if
 end subroutine filter_read_namelist
 
