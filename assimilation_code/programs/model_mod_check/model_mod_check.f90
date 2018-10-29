@@ -238,8 +238,8 @@ if (tests_to_run(2)) then
                           restart_files = file_array_input)
 
    do imem = 1, num_ens
-      write(my_base,'(A,I2)') 'inens_',    imem
-      write(my_desc,'(A,I2)') 'input ens', imem
+      write(my_base,'(A,I4.4)') 'input_member_', imem
+      write(my_desc,'(A,I4)') 'input ensemble member ', imem
       call set_file_metadata(file_info_input,                      &
                              cnum     = imem,                      &
                              fnames   = file_array_input(imem,:),  &
@@ -250,6 +250,8 @@ if (tests_to_run(2)) then
                             cnum    = imem,     &
                             io_flag = READ_COPY)
    enddo
+
+   if (verbose) call file_info_dump(file_info_input)
 
    input_restart_files = get_stage_metadata(file_info_input)
 
@@ -270,8 +272,8 @@ if (tests_to_run(2)) then
                           restart_files = file_array_output)
 
    do imem = 1, num_ens
-      write(my_base,'(A,I2)') 'outens_',    imem
-      write(my_desc,'(A,I2)') 'output ens', imem
+      write(my_base,'(A,I4.4)') 'output_member_',    imem
+      write(my_desc,'(A,I4)') 'output ensemble member ', imem
       call set_file_metadata(file_info_output,                      &
                              cnum     = imem,                       &
                              fnames   = file_array_output(imem,:),  &
@@ -280,8 +282,11 @@ if (tests_to_run(2)) then
 
       call set_io_copy_flag(file_info_output,    &
                             cnum    = imem,      &
-                            io_flag = WRITE_COPY)
+                            io_flag = WRITE_COPY, &
+                            clamp_vars=.true.)
    enddo
+
+   if (verbose) call file_info_dump(file_info_output)
 
    output_restart_files = get_stage_metadata(file_info_output)
 

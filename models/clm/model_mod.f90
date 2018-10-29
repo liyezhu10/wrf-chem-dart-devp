@@ -25,7 +25,7 @@ module model_mod
 ! 8 crop (if using crop model)
 
 !>@todo FIXME
-! The allow_missing_in_clm   is now hardwired in the utilities/options_mod.f90 ...
+! The allow_missing_clm 
 ! since swe is the thing that is used, perhaps we can skip the allow_missing business
 ! and just repartition swe in the dart_to_clm.f90 chunk - the number of layers in
 ! each ensemble member can be different ...
@@ -104,9 +104,12 @@ use   state_structure_mod, only : add_domain, state_structure_info,   &
 
 use obs_def_utilities_mod, only : track_status
 
-use     mpi_utilities_mod, only: my_task_id
+use     mpi_utilities_mod, only : my_task_id
 
-use     default_model_mod, only : adv_1step, init_time, init_conditions, nc_write_model_vars
+use           options_mod, only : set_missing_ok_status
+
+use     default_model_mod, only : adv_1step, init_time, init_conditions, &
+                                  nc_write_model_vars
 
 use typesizes
 
@@ -207,6 +210,7 @@ integer :: domain_count = 0
 
 ! things which can/should be in the model_nml
 
+logical            :: allow_missing_clm = .true.
 integer            :: assimilation_period_days = 0
 integer            :: assimilation_period_seconds = 60
 integer            :: debug = 0   ! turn up for more and more debug messages
@@ -223,6 +227,7 @@ namelist /model_nml/            &
    clm_vector_history_filename, &
    assimilation_period_days,    &  ! for now, this is the timestep
    assimilation_period_seconds, &
+   allow_missing_clm,           &
    calendar,                    &
    debug,                       &
    clm_variables
@@ -506,6 +511,8 @@ call check_namelist_read(iunit, io, 'model_nml')
 ! Record the namelist values used for the run
 if (do_nml_file()) write(nmlfileunit, nml=model_nml)
 if (do_nml_term()) write(     *     , nml=model_nml)
+
+call set_missing_ok_status(allow_missing_clm)
 
 !---------------------------------------------------------------
 ! Set the time step ... causes clm namelists to be read.

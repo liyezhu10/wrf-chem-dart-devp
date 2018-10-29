@@ -107,7 +107,7 @@ character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
 ! Some convenient global storage items
-character(len=512)      :: msgstring
+character(len=512)      :: msgstring, string2
 type(obs_type)          :: observation
 
 integer                 :: trace_level, timestamp_level
@@ -243,12 +243,12 @@ real(r8) :: inf_lower_bound(2)             = 1.0_r8
 real(r8) :: inf_upper_bound(2)             = 1000000.0_r8
 real(r8) :: inf_sd_lower_bound(2)          = 0.0_r8
 
+!>@todo so I put 'allow_missing_in_clm in the model_nml'
 ! Some models are allowed to have MISSING_R8 values in the DART state vector.
 ! If they are encountered, it is not necessarily a FATAL error.
 ! Most of the time, if a MISSING_R8 is encountered, DART should die.
 ! CLM should have allow_missing_clm = .true.
 logical  :: allow_missing_clm = .false.
-
 
 namelist /filter_nml/ async,     &
    adv_ens_command,              &
@@ -383,7 +383,18 @@ call error_handler(E_MSG,'filter_main:', msgstring, source, revision, revdate)
 ! See if smoothing is turned on
 ds = do_smoothing()
 
-call set_missing_ok_status(allow_missing_clm)
+!>@todo deprecate 'allow_missing_clm'.
+!> Is there a better way to determine if someone is specifying 'allow_missing_clm'.
+!> If they are specifying the default value, they will never see this message.
+
+! call set_missing_ok_status(allow_missing_clm)
+if (allow_missing) then
+   write(msgstring,*) '&filter_nml "allow_missing_clm" is deprecated.'
+   write(string2,*) 'Please specify "allow_missing_clm" in the &model_nml.'
+   call error_handler(E_MSG,'filter_main:', msgstring, &
+              source, revision, revdate, text2=string2)
+endif
+
 allow_missing = get_missing_ok_status()
 
 call trace_message('Before initializing inflation')

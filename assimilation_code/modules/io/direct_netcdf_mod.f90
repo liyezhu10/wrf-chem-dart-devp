@@ -828,7 +828,10 @@ end subroutine write_augmented_state
 
 
 !-------------------------------------------------------------------------------
-!> Read in variables from start_var to end_var
+!> Read in variables from start_var to end_var.
+!> If the variable has a _FillValue or missing_value attribute, those values
+!> are read and matching data values are replaced with the DART 'missing' flag.
+!>
 !>@todo FIXME: At the moment, this code is assuming that the variables in the state start
 !> at (1,1,1) and that the whole variable is read. This is not the case for
 !> TIEGCM and CLM. 
@@ -872,8 +875,6 @@ do i = start_var, end_var
    ret = nf90_get_var(ncfile_in, var_id, var_block(istart:iend), count=dims)
    call nc_check(ret, 'read_variables: nf90_get_var',trim(get_variable_name(domain,i)) )
 
-   !>@todo replace the native missing_value or _FillValue atts with the DART missing
-
    ret = nf90_inquire_variable(ncfile_in, var_id, xtype=xtype)
    call nc_check(ret, 'read_variables: nf90_get_var',trim(get_variable_name(domain,i)) )
 
@@ -904,6 +905,8 @@ do i = start_var, end_var
           missing = real(spvalR8,r8)
        endif
    endif
+
+   ! replace the native missing_value or _FillValue atts with the DART missing
 
    where(var_block(istart:iend) == special) var_block(istart:iend) = MISSING_R8 
    where(var_block(istart:iend) == missing) var_block(istart:iend) = MISSING_R8 
@@ -1544,6 +1547,70 @@ endif ! max range set
 
 end subroutine clamp_variable
 
+!-------------------------------------------------------------------------------
+!> Replace the DART missing value with the variables natural MISSING value if
+!> the variable has a MISSING or _FillValue.
+!-------------------------------------------------------------------------------
+
+subroutine replace_missing(dom_id, var_index, variable)
+
+integer,     intent(in) :: dom_id      ! domain id
+integer,     intent(in) :: var_index   ! variable index
+real(r8), intent(inout) :: variable(:) ! variable
+
+character(len=NF90_MAX_NAME) :: varname ! for informational log messages
+
+integer        :: missingINT
+real(r4)       :: missingR4
+real(digits12) :: missingR8
+integer        :: spvalINT
+real(r4)       :: spvalR4
+real(digits12) :: spvalR8
+real(r8)       :: missing
+
+! If this (model) does not support missing values in the state vector
+! there is nothing to do.
+if ( .not. get_missing_ok_status() ) return
+
+! If this variable did not originally have a _FillValue or missing_value
+! attribute and value - there is nothing to do.
+if ( .not. get_has_missing_value(dom_id,var_index) ) return
+
+varname = get_variable_name(dom_id, var_index)
+
+write(msgstring, *) trim(varname)//' replacing MISSING_R8 with natural value'
+call error_handler(E_MSG,'replace_missing',msgstring,source,revision,revdate)
+
+select case (get_xtype(dom_id,var_index))
+   case (NF90_INT)
+     call get_missing_value(dom_id,var_index,missingINT)
+     call get_FillValue    (dom_id,var_index,spvalINT)
+     if (missingINT /= spvalINT) then
+        write(msgstring, *) trim(varname)//' unclear ', missingINT, spvalINT
+        call error_handler(E_ERR,'replace_missing',msgstring,source,revision,revdate)
+     endif
+     missing = real(missingINT,r8)
+   case (NF90_FLOAT)
+     call get_missing_value(dom_id,var_index,missingR4)
+     call get_FillValue    (dom_id,var_index,spvalR4)
+     if (missingR4 /= spvalR4) then
+        write(msgstring, *) trim(varname)//' unclear ', missingR4, spvalR4
+        call error_handler(E_ERR,'replace_missing',msgstring,source,revision,revdate)
+     endif
+     missing = real(missingR4,r8)
+   case (NF90_DOUBLE)
+     call get_missing_value(dom_id,var_index,missingR8)
+     call get_FillValue    (dom_id,var_index,spvalR8)
+     if (missingR8 /= spvalR8) then
+        write(msgstring, *) trim(varname)//' unclear ', missingR8, spvalR8
+        call error_handler(E_ERR,'replace_missing',msgstring,source,revision,revdate)
+     endif
+     missing = real(missingR8,r8)
+end select
+
+where (variable == MISSING_R8) variable = missing
+
+end subroutine replace_missing
 
 
 !-------------------------------------------------------------------------------
@@ -1551,14 +1618,14 @@ end subroutine clamp_variable
 !-------------------------------------------------------------------------------
 
 subroutine write_variables(ncid, var_block, start_var, end_var, domain, &
-                           do_file_clamping, force_copy)
+                           do_variable_clamping, force_copy)
 
 integer,  intent(in)    :: ncid
 real(r8), intent(inout) :: var_block(:)
 integer,  intent(in)    :: start_var
 integer,  intent(in)    :: end_var
 integer,  intent(in)    :: domain
-logical,  intent(in)    :: do_file_clamping
+logical,  intent(in)    :: do_variable_clamping
 logical,  intent(in)    :: force_copy
 
 integer :: istart, iend
@@ -1580,16 +1647,17 @@ do i = start_var, end_var
 
    var_size = get_variable_size(domain, i)
    iend = istart + var_size - 1
-  
+
    ! Some diagnostic variables do not need to be  updated. 
    ! This information is stored in the state structure and
    ! set by the model.
    if ( do_io_update(domain, i) .or. force_copy ) then
       ! diagnostic files do not get clamped but restart may be clamped
-      if ( do_io_clamping(domain, i) .and. do_file_clamping) then
+      if ( do_io_clamping(domain, i) .and. do_variable_clamping) then
+         call replace_missing(domain, i, var_block(istart:iend))
          call clamp_variable(domain, i, var_block(istart:iend))
       endif
-     
+  
       ! number of dimensions and length of each
       allocate(dims(get_io_num_dims(domain, i)))
 
