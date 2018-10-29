@@ -670,8 +670,16 @@ if (inf_type == AND2009) then
       new_cov_inflate)
 
 ! Bail out to save cost when lower bound is reached on lambda standard deviation
-if(lambda_sd <= sd_lower_bound_in) then
+   ! The original test to see if lambda_sd was less than the lower bound
+   ! would sometimes return false because of roundoff error and the computation
+   ! would go through the expensive part of the code when the minimum was
+   ! really reached.  (sd_lower_bound comes from a namelist and precision
+   ! errors may be because of the conversion between ascii, single precision
+   ! and double precision.)  In any case, the test was changed to return if
+   ! the value is within TINY of the limit.
+   if(abs(lambda_sd - sd_lower_bound_in) <= TINY(0.0_r8)) then
    new_cov_inflate_sd = lambda_sd
+      return
 else
    ! Compute by forcing a Gaussian fit at one positive SD
 ! First compute the new_max value for normalization purposes
@@ -718,9 +726,10 @@ else if (inf_type == GHA2017) then
                     gamma_corr, ens_size, rate, new_cov_inflate)
 
    ! Bail out to save cost when lower bound is reached on lambda standard deviation
-   if(lambda_sd <= sd_lower_bound_in) then
+   ! See comment in Anderson case for why we use abs and TINY for this comparison.
+   if(abs(lambda_sd - sd_lower_bound_in) <= TINY(0.0_r8)) then
       new_cov_inflate_sd = lambda_sd
-   
+      return 
    else
       ! Compute the shape parameter of the prior IG
       ! This comes from the assumption that the mode of the IG is the mean/mode of the input Gaussian
