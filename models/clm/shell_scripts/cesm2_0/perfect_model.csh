@@ -98,7 +98,7 @@ if ( -d ${pmo_output_baseobsdir} ) then
    # nothing to do
 else
    \mkdir -p ${pmo_output_baseobsdir}
-end
+endif
 
 #=========================================================================
 # Block 3: Populate a run-time directory with the input needed to run DART.
@@ -185,7 +185,7 @@ if ($status != 0) then
 endif
 
 #${MOVE} True_State.nc    clm_True_State.${LND_DATE_EXT}.nc
-${MOVE} obs_seq.out      ${pmo_output_baseobsdir}/obs_seq.${LND_DATE_EXT}.perfect
+${MOVE} obs_seq.out      ${pmo_output_baseobsdir}/obs_seq.${LND_DATE_EXT}
 ${MOVE} dart_log.out     dart_log.${LND_DATE_EXT}.out
 
 echo "`date` -- END   CLM PERFECT_MODEL_OBS"

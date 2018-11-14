@@ -302,16 +302,17 @@ while ( $inst <= $num_instances )
    # hist_mfilt:  Per tape series maximum number of time samples.
 
    echo "use_lch4 = .false."                                     >> ${fname}
-   echo "use_init_interp = .true."                               >> ${fname}
-   echo "init_interp_fill_missing_with_natveg = .true."          >> ${fname}
+#  echo "use_init_interp = .true."                               >> ${fname}
+#  echo "init_interp_fill_missing_with_natveg = .true."          >> ${fname}
    echo "hist_empty_htapes = .false."                            >> ${fname}
-   echo "hist_fincl1 = 'FSIF'"                                   >> ${fname}
+   echo "hist_fincl1 = 'FSIF','EFLX_LH_TOT'"                     >> ${fname}
    echo "hist_fincl2 = 'NEP','FSH','EFLX_LH_TOT_R','FSIF','GPP'" >> ${fname}
-   echo "hist_nhtfrq = -24,-1"                                   >> ${fname}
-   echo "hist_mfilt  = 1,24"                                     >> ${fname}
-   echo "hist_avgflag_pertape = 'A','A'"                         >> ${fname}
-   echo "hist_dov2xy = .true.,.true."                            >> ${fname}
-   echo "hist_type1d_pertape = ' ',' '"                          >> ${fname}
+   echo "hist_fincl3 = 'LEAFN','TLAI'"                           >> ${fname}
+   echo "hist_nhtfrq = -24,-1,-24"                               >> ${fname}
+   echo "hist_mfilt  = 1,24,1"                                   >> ${fname}
+   echo "hist_avgflag_pertape = 'A','A','I'"                     >> ${fname}
+   echo "hist_dov2xy = .true.,.true.,.false."                    >> ${fname}
+   echo "hist_type1d_pertape = ' ',' ',' '"                      >> ${fname}
    echo "dtime = $clm_dtime"                                     >> ${fname}
 
    @ inst ++

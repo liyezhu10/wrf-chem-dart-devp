@@ -65,7 +65,7 @@ setenv rundir       /glade/scratch/${USER}/$cesmtag/${CASE}/run
 setenv exeroot      /glade/scratch/${USER}/$cesmtag/${CASE}/bld
 setenv archdir      /glade/scratch/${USER}/$cesmtag/${CASE}/archive
 
-setenv dartroot     /glade/work/thoar/DART/cesm_clm
+setenv dartroot     /glade/work/${USER}/DART/cesm_clm
 
 # ==============================================================================
 # configure settings:
@@ -285,7 +285,7 @@ endif
 # CIME interprets a negative task count as representing the number of nodes.
 # On Cheyenne (at least) using multiple threads is not recommended.
 
-@ nodes_per_instance = 4
+@ nodes_per_instance = 2
 @ nthreads = 1
 
 @ atm_tasks = -1 * $nodes_per_instance
@@ -556,7 +556,7 @@ chmod 0755 stage_cesm_files
 
 #===============================================================================
 
-./case.build || exit 7
+qcmd -q share -l select=1 -A $project -- ./case.build || exit 7
 
 # ==============================================================================
 # What to do next

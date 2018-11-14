@@ -219,14 +219,14 @@ endif
 
 if (${stream_year_first} == ${stream_year_last}) then
    set STREAMFILE_SOLAR        = datm.streams.txt.CPLHISTForcing.Solar_single_year
-   set STREAMFILE_NONSOLARFLUX = datm.streams.txt.CPLHISTForcing.nonSolarFlux_single_year
    set STREAMFILE_STATE1HR     = datm.streams.txt.CPLHISTForcing.State1hr_single_year
    set STREAMFILE_STATE3HR     = datm.streams.txt.CPLHISTForcing.State3hr_single_year
+   set STREAMFILE_NONSOLARFLUX = datm.streams.txt.CPLHISTForcing.nonSolarFlux_single_year
 else
    set STREAMFILE_SOLAR        = datm.streams.txt.CPLHISTForcing.Solar_complete
-   set STREAMFILE_NONSOLARFLUX = datm.streams.txt.CPLHISTForcing.nonSolarFlux_complete
    set STREAMFILE_STATE1HR     = datm.streams.txt.CPLHISTForcing.State1hr_complete
    set STREAMFILE_STATE3HR     = datm.streams.txt.CPLHISTForcing.State3hr_complete
+   set STREAMFILE_NONSOLARFLUX = datm.streams.txt.CPLHISTForcing.nonSolarFlux_complete
 endif
 
 # ==============================================================================
@@ -242,7 +242,12 @@ while ( $inst <= $num_instances )
 
    # following the CESM strategy for 'inst_string'
    set inst_string = ''
-   set true_string = `printf _%04d $TRUTHinstance`
+
+   if ( ${SingleInstanceRefcase} == TRUE ) then
+      set true_string = ''
+   else
+      set true_string = `printf _%04d $TRUTHinstance`
+   endif
 
    # ===========================================================================
    set fname = "user_nl_datm${inst_string}"
@@ -250,9 +255,9 @@ while ( $inst <= $num_instances )
    # DATM namelist
 
    set FILE1 = datm.streams.txt.CPLHISTForcing.Solar${inst_string}
-   set FILE2 = datm.streams.txt.CPLHISTForcing.nonSolarFlux${inst_string}
-   set FILE3 = datm.streams.txt.CPLHISTForcing.State1hr${inst_string}
-   set FILE4 = datm.streams.txt.CPLHISTForcing.State3hr${inst_string}
+   set FILE2 = datm.streams.txt.CPLHISTForcing.State1hr${inst_string}
+   set FILE3 = datm.streams.txt.CPLHISTForcing.State3hr${inst_string}
+   set FILE4 = datm.streams.txt.CPLHISTForcing.nonSolarFlux${inst_string}
    set DOMAINFILE = '/glade/p/cesmdata/cseg/inputdata/share/domains/domain.lnd.fv0.9x1.25_gx1v7.151020.nc'
 
    echo "domainfile = '${DOMAINFILE}'" >> ${fname}
@@ -267,16 +272,16 @@ while ( $inst <= $num_instances )
    echo "           'nomask', " >> ${fname}
    echo "           'nomask'  " >> ${fname}
    echo "tintalgo = 'coszen', " >> ${fname}
-   echo "           'nearest'," >> ${fname}
    echo "           'linear', " >> ${fname}
-   echo "           'linear'  " >> ${fname}
+   echo "           'linear', " >> ${fname}
+   echo "           'nearest' " >> ${fname}
 
    # Create stream files for each ensemble member
    set SOURCEDIR = ${dartroot}/models/clm/shell_scripts/cesm2_0
-   ${COPY} ${SOURCEDIR}/${STREAMFILE_SOLAR}        user_${FILE1} || exit 1
-   ${COPY} ${SOURCEDIR}/${STREAMFILE_NONSOLARFLUX} user_${FILE2} || exit 1
-   ${COPY} ${SOURCEDIR}/${STREAMFILE_STATE1HR}     user_${FILE3} || exit 1
-   ${COPY} ${SOURCEDIR}/${STREAMFILE_STATE3HR}     user_${FILE4} || exit 1
+   ${COPY} ${SOURCEDIR}/${STREAMFILE_SOLAR}         user_${FILE1} || exit 1
+   ${COPY} ${SOURCEDIR}/${STREAMFILE_STATE1HR}      user_${FILE2} || exit 1
+   ${COPY} ${SOURCEDIR}/${STREAMFILE_STATE3HR}      user_${FILE3} || exit 1
+   ${COPY} ${SOURCEDIR}/${STREAMFILE_NONSOLARFLUX}  user_${FILE4} || exit 1
 
    foreach FNAME ( user_datm.streams.txt*${inst_string} )
       echo "modifying $FNAME"
@@ -434,9 +439,9 @@ else     # CONTINUE_RUN == FALSE
 
       set inst_string = ''
 
-      if ( \${SingleInstanceRefcase} == TRUE ) then
+      if ( ${SingleInstanceRefcase} == TRUE ) then
          set true_string = ''
-         echo "Staging initial files."
+         echo "Staging initial files from a single instance."
       else
          set true_string = `printf _%04d $TRUTHinstance`
          echo "Staging initial files from instance $TRUTHinstance for the truth run."

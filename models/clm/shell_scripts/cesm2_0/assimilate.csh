@@ -5,6 +5,10 @@
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
 # DART $Id$
+#
+# This script performs an assimilation by directly reading and writing to
+# the CLM restart file. There is no post-processing step 'dart_to_clm',
+# consequently, snow DA is not supported in this framework.
 
 #=========================================================================
 # This block is an attempt to localize all the machine-specific
@@ -177,56 +181,52 @@ end
 ${REMOVE} clm_inflation_cookie
 
 #=========================================================================
-# Block 5:
+# Block 5: REQUIRED DART namelist settings
 #
-# REQUIRED DART namelist settings:
-# &filter_nml:           restart_in_file_name    = 'filter_ics'
-#                        restart_out_file_name   = 'filter_restart'
-# &ensemble_manager_nml: single_restart_file_in  = '.false.'
-# &dart_to_clm_nml:      dart_to_clm_input_file  = 'dart_restart',
-# &model_nml:            clm_restart_filename        = 'clm_restart.nc'
-# &model_nml:            clm_history_filename        = 'clm_history.nc'
-# &model_nml:            clm_vector_history_filename = 'clm_vector_history.nc'
+# "restart_files.txt" is mandatory. 
+# "history_files.txt" and "history_vector_files.txt" are only needed if
+# variables from these files are specified as part of the desired DART state.
+# It is an error to specify them if they are not required.
 #
+# model_nml "clm_restart_filename" and "clm_history_filename" are mandatory
+# and are used to determine the domain metadata and *shape* of the variables.
+# "clm_vector_history_filename" is used to determine the shape of the 
+# variables required to be read from the vector history file. If there are no
+# vector-based history variables, 'clm_vector_history_filename' is not used.
+#
+# &filter_nml  
+#     async                   = 0,
+#     obs_sequence_in_name    = 'obs_seq.out'
+#     obs_sequence_out_name   = 'obs_seq.final'
+#     init_time_days          = -1,
+#     init_time_seconds       = -1,
+#     first_obs_days          = -1,
+#     first_obs_seconds       = -1,
+#     last_obs_days           = -1,
+#     last_obs_seconds        = -1,
+#     input_state_file_list   = "restart_files.txt",
+#                               "history_files.txt",
+#                               "history_vector_files.txt"
+#     output_state_file_list  = "restart_files.txt",
+#                               "history_files.txt",
+#                               "history_vector_files.txt"
+# &model_nml
+#     clm_restart_filename        = 'clm_restart.nc'
+#     clm_history_filename        = 'clm_history.nc'
+#     clm_vector_history_filename = 'clm_vector_history.nc'
+# &ensemble_manager_nml
+#     single_restart_file_in  = .false.
+#     single_restart_file_out = .false.
 #=========================================================================
 
-${REMOVE} restart_files.txt        history_files.txt        history_vector_files.txt
-${REMOVE} restart_files_output.txt history_files_output.txt history_vector_files_output.txt
+${REMOVE} restart_files.txt history_files.txt history_vector_files.txt
 
 ls -1 ${CASE}.clm2_*.r.${LND_DATE_EXT}.nc  >! restart_files.txt
 ls -1 ${CASE}.clm2_*.h0.${LND_DATE_EXT}.nc >! history_files.txt
 ls -1 ${CASE}.clm2_*.h2.${LND_DATE_EXT}.nc >! history_vector_files.txt
 
-# must rename the output files to something
-
-if ( -s restart_files.txt ) then
-   sed -e "s#${LND_DATE_EXT}#${LND_DATE_EXT}.out#" restart_files.txt >! restart_files_output.txt
-endif
-if ( -s history_files.txt ) then
-   sed -e "s#${LND_DATE_EXT}#${LND_DATE_EXT}.out#" history_files.txt >! history_files_output.txt
-endif
-if ( -s history_vector_files.txt ) then
-   sed -e "s#${LND_DATE_EXT}#${LND_DATE_EXT}.out#" history_vector_files.txt >! history_vector_files_output.txt
-endif
-
 #=========================================================================
 # Block 6: Actually run the assimilation.
-#
-# DART namelist settings required:
-# &filter_nml:           async                   = 0,
-# &filter_nml:           obs_sequence_in_name    = 'obs_seq.out'
-# &filter_nml:           obs_sequence_out_name   = 'obs_seq.final'
-# &filter_nml:           init_time_days          = -1,
-# &filter_nml:           init_time_seconds       = -1,
-# &filter_nml:           first_obs_days          = -1,
-# &filter_nml:           first_obs_seconds       = -1,
-# &filter_nml:           last_obs_days           = -1,
-# &filter_nml:           last_obs_seconds        = -1,
-# &ensemble_manager_nml: single_restart_file_in  = .false.
-# &ensemble_manager_nml: single_restart_file_out = .false.
-# &model_nml:            clm_restart_filename        = 'clm_restart.nc'
-# &model_nml:            clm_history_filename        = 'clm_history.nc'
-# &model_nml:            clm_vector_history_filename = 'clm_vector_history.nc'
 #=========================================================================
 
 # clm always needs a clm_restart.nc, clm_history.nc for geometry information, etc.
@@ -272,28 +272,6 @@ end
 
 ${MOVE} obs_seq.final    clm_obs_seq.${LND_DATE_EXT}.final
 ${MOVE} dart_log.out     clm_dart_log.${LND_DATE_EXT}.out
-
-#=========================================================================
-# Block 7: Update the CLM restart files - 
-# required because of the special missing value flags and 
-# possible snow recompaction, etc.
-#>@todo make all dart_to_clm run simultaneously 
-#=========================================================================
-
-@ instance = 0
-foreach MEMBER ( ${CASE}.clm2_*.r.${LND_DATE_EXT}.nc )
-
-   ${REMOVE} dart_posterior.nc clm_restart_file.nc
-
-   @ instance ++ 
-   set DARTFILE = `head -n $instance restart_files_output.txt | tail -n 1`
-
-   ${LINK} $DARTFILE dart_posterior.nc || exit 7
-   ${LINK} $MEMBER clm_restart_file.nc || exit 7
-
-   ../bld/dart_to_clm || exit 7
-
-end
 
 #-------------------------------------------------------------------------
 # Cleanup

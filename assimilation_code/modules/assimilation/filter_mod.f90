@@ -9,7 +9,7 @@ module filter_mod
 !------------------------------------------------------------------------------
 use types_mod,             only : r8, i8, missing_r8, metadatalength, MAX_NUM_DOMS, MAX_FILES
 
-use options_mod,           only : get_missing_ok_status, set_missing_ok_status
+use options_mod,           only : get_missing_ok_status
 
 use obs_sequence_mod,      only : read_obs_seq, obs_type, obs_sequence_type,                  &
                                   get_obs_from_key, set_copy_meta_data, get_copy_meta_data,   &
@@ -387,10 +387,10 @@ ds = do_smoothing()
 !> Is there a better way to determine if someone is specifying 'allow_missing_clm'.
 !> If they are specifying the default value, they will never see this message.
 
-! call set_missing_ok_status(allow_missing_clm)
-if (allow_missing) then
+if (allow_missing_clm) then
    write(msgstring,*) '&filter_nml "allow_missing_clm" is deprecated.'
-   write(string2,*) 'Please specify "allow_missing_clm" in the &model_nml.'
+   write(string2,*) 'Please specify desired behavior directly in the model_mod'
+   write(string2,*) 'by calling "options_mod:set_missing_ok_status()".'
    call error_handler(E_MSG,'filter_main:', msgstring, &
               source, revision, revdate, text2=string2)
 endif

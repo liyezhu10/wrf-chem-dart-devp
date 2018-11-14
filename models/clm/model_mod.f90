@@ -556,28 +556,34 @@ model_size = 0_i8
 call cluster_variables(variable_table, 'RESTART', nvars, var_names, &
                        var_qtys, var_ranges, var_update)
 if (nvars > 0) then
-   dom_restart = add_domain(clm_restart_filename, nvars, var_names,  &
-                  kind_list=var_qtys, clamp_vals=var_ranges, update_list=var_update )
-   call state_structure_info(dom_restart)
+   dom_restart = add_domain(clm_restart_filename, nvars, var_names(1:nvars),  &
+                  kind_list   = var_qtys(  1:nvars),   &
+                  clamp_vals  = var_ranges(1:nvars,:), &
+                  update_list = var_update(1:nvars) )
    model_size = model_size + get_domain_size(dom_restart)
+   if (debug > 1)  call state_structure_info(dom_restart)
 endif
 
 call cluster_variables(variable_table, 'HISTORY', nvars, var_names, &
                        var_qtys, var_ranges, var_update)
 if (nvars > 0) then
-   dom_history = add_domain(clm_history_filename, nvars, var_names, &
-                  kind_list=var_qtys, clamp_vals=var_ranges, update_list=var_update)
-   call state_structure_info(dom_history)
+   dom_history = add_domain(clm_history_filename, nvars, var_names(1:nvars), &
+                  kind_list   = var_qtys(  1:nvars),   &
+                  clamp_vals  = var_ranges(1:nvars,:), &
+                  update_list = var_update(1:nvars) )
    model_size = model_size + get_domain_size(dom_history)
+   if (debug > 1)  call state_structure_info(dom_history)
 endif
 
 call cluster_variables(variable_table, 'VECTOR', nvars, var_names, &
                        var_qtys, var_ranges, var_update)
 if (nvars > 0) then
-   dom_vector = add_domain(clm_vector_history_filename, nvars, var_names, &
-                   kind_list=var_qtys, clamp_vals=var_ranges, update_list=var_update)
-   call state_structure_info(dom_vector)
+   dom_vector = add_domain(clm_vector_history_filename, nvars, var_names(1:nvars), &
+                  kind_list   = var_qtys(  1:nvars),   &
+                  clamp_vals  = var_ranges(1:nvars,:), &
+                  update_list = var_update(1:nvars) )
    model_size = model_size + get_domain_size(dom_vector)
+   if (debug > 1)  call state_structure_info(dom_vector)
 endif
 
 if ((debug > 0) .and. do_output()) then

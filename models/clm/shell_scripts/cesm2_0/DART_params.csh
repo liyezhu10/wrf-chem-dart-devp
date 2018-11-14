@@ -30,7 +30,7 @@
 setenv cesmtag        ctsm
 setenv resolution     f09_f09_mg17
 setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
-setenv num_instances  1
+setenv num_instances  10
 
 # Since this example was tested while assimilating solar induced fluorescence,
 # we are using 'SIF' in the CASE. FYI only.
@@ -108,8 +108,8 @@ setenv archdir      /glade/scratch/${USER}/$cesmtag/${CASE}/archive
 
 setenv dartroot     /glade/work/${USER}/DART/cesm_clm
 setenv baseobsdir   /glade/p/cisl/dares/Observations/land/pmo
-setenv pmo_input_baseobsdir   /glade/work/afox/obs_seq_global
-setenv pmo_output_baseobsdir  ${rundir}/Perfect_obs
+setenv pmo_input_baseobsdir   /glade/p/cisl/dares/Observations/land/pmo/input
+setenv pmo_output_baseobsdir  /glade/p/cisl/dares/Observations/land/pmo/output
 
 # ==============================================================================
 # configure settings:
@@ -133,7 +133,7 @@ setenv reftod       00000
 setenv refdate      ${refyear}-${refmon}-${refday}
 setenv reftimestamp ${refyear}-${refmon}-${refday}-${reftod}
 
-setenv stagedir /gpfs/fs1/p/cisl/dares/RDA_strawman/CESM_ensembles/CLM/CLM5BGC-Crop/ctsm_${reftimestamp}
+setenv stagedir /glade/p/cisl/dares/RDA_strawman/CESM_ensembles/CLM/CLM5BGC-Crop/ctsm_${reftimestamp}
 
 # In a hybrid configuration, you can set the startdate to whatever you want.
 # It does not have to match the reference (although changing the month/day seems bad).

@@ -59,32 +59,6 @@ endif
 \rm -f *.o *.mod 
 
 #----------------------------------------------------------------------
-# Build any NetCDF files from .cdl files
-#----------------------------------------------------------------------
-
-@ n = 0
-
-@ has_cdl = `ls *.cdl | wc -l` >& /dev/null
-
-if ( $has_cdl > 0 ) then
-   foreach DATAFILE ( *.cdl )
-   
-      set OUTNAME = `basename $DATAFILE .cdl`.nc
-   
-      if ( ! -f $OUTNAME ) then
-         @ n = $n + 1
-         echo
-         echo "---------------------------------------------------"
-         echo "constructing $BUILDING data file $n named $OUTNAME" 
-      
-         ncgen -o $OUTNAME $DATAFILE  || exit $n
-      endif
-   
-   end
-endif
-
-
-#----------------------------------------------------------------------
 # Build all the single-threaded targets
 #----------------------------------------------------------------------
 

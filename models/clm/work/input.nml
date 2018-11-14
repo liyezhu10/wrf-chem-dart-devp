@@ -33,9 +33,9 @@
    input_state_file_list    = "restart_files.txt",
                               "history_files.txt",
                               "history_vector_files.txt" 
-   output_state_file_list   = "restart_files_output.txt",
-                              "history_files_output.txt",
-                              "history_vector_files_output.txt" 
+   output_state_file_list   = "restart_files.txt",
+                              "history_files.txt",
+                              "history_vector_files.txt" 
    init_time_days           = -1
    init_time_seconds        = -1
    first_obs_days           = -1
@@ -46,7 +46,6 @@
    num_output_obs_members   = 3
    output_interval          = 1
    num_groups               = 1
-   allow_missing_clm        = .true.
    output_forward_op_errors = .false.
    output_timestamps        = .true.
    trace_execution          = .true.
@@ -56,7 +55,7 @@
    output_members           = .true.
    output_mean              = .true.
    output_sd                = .true.
-   write_all_stages_at_end  = .true.
+   write_all_stages_at_end  = .false.
 
    inf_flavor                  = 0,                       0
    inf_initial_from_restart    = .false.,                 .false.
@@ -190,6 +189,7 @@
    debug                        = 0
    clm_variables = 'H2OSOI_LIQ',  'QTY_SOIL_LIQUID_WATER',          '0.0', 'NA', 'restart', 'UPDATE',
                    'H2OSOI_ICE',  'QTY_SOIL_ICE',                   '0.0', 'NA', 'restart', 'UPDATE',
+                   'T_SOISNO',    'QTY_SOIL_TEMPERATURE',           'NA' , 'NA', 'restart', 'UPDATE',
                    'leafn',       'QTY_LEAF_NITROGEN',              '0.0', 'NA', 'restart', 'UPDATE',
                    'leafc',       'QTY_LEAF_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
                    'LAI240_VALUE','QTY_LEAF_AREA_INDEX',            '0.0', 'NA', 'restart', 'NO_COPY_BACK',
@@ -339,8 +339,8 @@
 
 &model_mod_check_nml
    num_ens               = 1
-   input_state_files     = 'clm_restart.nc', 'clm_history.nc'
-   output_state_files    = 'mmc_output1.nc', 'mmc_output2.nc'
+   input_state_files     = 'clm_restart.nc', 'clm_history.nc', 'clm_vector_history.nc'
+   output_state_files    = 'mmc_output1.nc', 'mmc_output2.nc', 'mmc_output3.nc'
    test1thru             = 0
    run_tests             = 1,2,3,4 
    x_ind                 = 6691574

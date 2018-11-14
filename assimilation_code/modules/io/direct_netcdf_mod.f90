@@ -100,6 +100,8 @@ use io_filenames_mod,     only : get_restart_filename, inherit_copy_units, &
                                  netcdf_file_type, READ_COPY, WRITE_COPY, &
                                  noutput_state_variables
 
+!>@todo use more of the netcdf_utilities. This will require extending some of
+!>      the routines ... nc_create_file will have to accept a 'mode', for example.
 use netcdf_utilities_mod, only : nc_check
 
 use assim_model_mod,      only : get_model_size, read_model_time, write_model_time
@@ -1480,6 +1482,7 @@ real(r8), intent(inout) :: variable(:) ! variable
 real(r8) :: minclamp, maxclamp, my_minmax(2)
 character(len=NF90_MAX_NAME) :: varname ! for informational log messages
 logical  :: allow_missing ! used in CLM for state variables
+real(r8) :: mymissing
 
 ! if neither bound is set, return early
 minclamp = get_io_clamping_minval(dom_id, var_index)
@@ -1487,37 +1490,29 @@ maxclamp = get_io_clamping_maxval(dom_id, var_index)
 
 if (minclamp == missing_r8 .and. maxclamp == missing_r8) return
 
+varname = get_variable_name(dom_id, var_index)
+
 ! if we get here, either the min, max or both have a clamping value.
-  
-!>@todo this is what the code needs to be for CLM and any other
-! model that allows missing values in the state.  right now that
-! is defined in assim_tools_mod but i don't think we can use it
-! because of circular module dependencies.  it should be defined
-! maybe in filter?  and set into some low level module (like types
-! or constants or options_mod so anyone can query it).
-!
-! if we allow missing values in the state (which jeff has never
-! liked because it makes the statistics funny), then these next
-! two lines need to be:
+
 allow_missing = get_missing_ok_status()
 
 if (allow_missing) then
-   my_minmax(1) = minval(variable, mask=(variable /= missing_r8))
-   my_minmax(2) = maxval(variable, mask=(variable /= missing_r8))
+   ! this routine "clamp_variable( )" must be called after the missing_r8
+   ! has been replaced by the 'native' missing value ("replace_missing()").
+   call get_missing_value(dom_id, var_index, mymissing)
+   my_minmax(1) = minval(variable, mask=(variable /= mymissing))
+   my_minmax(2) = maxval(variable, mask=(variable /= mymissing))
 else
    ! get the min/max for this variable before we start
    my_minmax(1) = minval(variable)
    my_minmax(2) = maxval(variable)
 endif
      
-varname = get_variable_name(dom_id, var_index)
-
 ! is lower bound set?
 if ( minclamp /= missing_r8 ) then ! missing_r8 is flag for no clamping
    if ( my_minmax(1) < minclamp ) then
-      !>@todo again, if we're allowing missing in state, this has to be masked:
        if (allow_missing) then
-          where(variable /= missing_r8) variable = max(minclamp, variable)
+          where(variable /= mymissing) variable = max(minclamp, variable)
        else
           variable = max(minclamp, variable)
        endif
@@ -1531,9 +1526,8 @@ endif ! min range set
 ! is upper bound set?
 if ( maxclamp /= missing_r8 ) then ! missing_r8 is flag for no clamping
    if ( my_minmax(2) > maxclamp ) then
-      !>@todo again, if we're allowing missing in state, this has to be masked:
       if (allow_missing) then
-         where(variable /= missing_r8) variable = min(maxclamp, variable)
+         where(variable /= mymissing) variable = min(maxclamp, variable)
       else
          variable = min(maxclamp, variable)
       endif
@@ -1568,45 +1562,94 @@ real(r4)       :: spvalR4
 real(digits12) :: spvalR8
 real(r8)       :: missing
 
-! If this (model) does not support missing values in the state vector
-! there is nothing to do.
-if ( .not. get_missing_ok_status() ) return
-
-! If this variable did not originally have a _FillValue or missing_value
-! attribute and value - there is nothing to do.
-if ( .not. get_has_missing_value(dom_id,var_index) ) return
+character(len=512) :: string2, string3
 
 varname = get_variable_name(dom_id, var_index)
 
-write(msgstring, *) trim(varname)//' replacing MISSING_R8 with natural value'
-call error_handler(E_MSG,'replace_missing',msgstring,source,revision,revdate)
-
 select case (get_xtype(dom_id,var_index))
    case (NF90_INT)
+
      call get_missing_value(dom_id,var_index,missingINT)
      call get_FillValue    (dom_id,var_index,spvalINT)
-     if (missingINT /= spvalINT) then
-        write(msgstring, *) trim(varname)//' unclear ', missingINT, spvalINT
-        call error_handler(E_ERR,'replace_missing',msgstring,source,revision,revdate)
+
+     if (missingINT /= MISSING_I .and. &
+           spvalINT /= MISSING_I .and. &
+         missingINT /= spvalINT) then
+        write(msgstring, *) trim(varname)//' missing_value /= _FillValue '
+        write(string2,*) 'missing_value is ', missingINT
+        write(string3,*) '_FillValue    is ', spvalINT
+        call error_handler(E_ERR,'replace_missing',msgstring, &
+                   source, revision, revdate, text2=string2, text3=string3)
      endif
-     missing = real(missingINT,r8)
+
+     if (missingINT /= MISSING_I) then
+        write(msgstring2,*)'natural value is ',missingINT
+        missing = real(missingINT,r8)
+     elseif (spvalINT /= MISSING_I) then
+        write(msgstring2,*)'natural value is ',spvalINT
+        missing = real(spvalINT,r8)
+     else
+        call error_handler(E_ERR,'replace_missing','indeterminate integer missing value', &
+                   source, revision, revdate)
+     endif
+
    case (NF90_FLOAT)
+
      call get_missing_value(dom_id,var_index,missingR4)
      call get_FillValue    (dom_id,var_index,spvalR4)
-     if (missingR4 /= spvalR4) then
-        write(msgstring, *) trim(varname)//' unclear ', missingR4, spvalR4
-        call error_handler(E_ERR,'replace_missing',msgstring,source,revision,revdate)
+
+     if (missingR4 /= MISSING_R4 .and. &
+           spvalR4 /= MISSING_R4 .and. &
+         missingR4 /= spvalR4) then
+        write(msgstring, *) trim(varname)//' missing_value /= _FillValue '
+        write(string2,*) 'missing_value is ', missingR4
+        write(string3,*) '_FillValue    is ', spvalR4
+        call error_handler(E_ERR,'replace_missing',msgstring, &
+                   source, revision, revdate, text2=string2, text3=string3)
      endif
-     missing = real(missingR4,r8)
+
+     if (missingR4 /= MISSING_R4) then
+        write(msgstring2,*)'natural value is ',missingR4
+        missing = real(missingR4,r8)
+     elseif (spvalR4 /= MISSING_R4) then
+        write(msgstring2,*)'natural value is ',spvalR4
+        missing = real(spvalR4,r8)
+     else
+        call error_handler(E_ERR,'replace_missing','indeterminate R4  missing value', &
+                   source, revision, revdate, text2=varname)
+     endif
+
    case (NF90_DOUBLE)
+
      call get_missing_value(dom_id,var_index,missingR8)
      call get_FillValue    (dom_id,var_index,spvalR8)
-     if (missingR8 /= spvalR8) then
-        write(msgstring, *) trim(varname)//' unclear ', missingR8, spvalR8
-        call error_handler(E_ERR,'replace_missing',msgstring,source,revision,revdate)
+
+     if (missingR8 /= MISSING_R8 .and. &
+           spvalR8 /= MISSING_R8 .and. &
+         missingR8 /= spvalR8) then
+        write(msgstring, *) trim(varname)//' missing_value /= _FillValue '
+        write(string2,*) 'missing_value is ', missingR8
+        write(string3,*) '_FillValue    is ', spvalR8
+        call error_handler(E_ERR,'replace_missing',msgstring, &
+                   source, revision, revdate, text2=string2, text3=string3)
      endif
-     missing = real(missingR8,r8)
+
+     if (missingR8 /= MISSING_R8) then
+        write(msgstring2,*)'natural value is ',missingR8
+        missing = missingR8
+     elseif (spvalR8 /= MISSING_R8) then
+        write(msgstring2,*)'natural value is ',spvalR8
+        missing = spvalR8
+     else
+        call error_handler(E_ERR,'replace_missing','indeterminate missing value', &
+                   source, revision, revdate)
+     endif
+
 end select
+
+write(msgstring, *) trim(varname)//' replacing MISSING_R8 with natural value'
+call error_handler(E_MSG, 'replace_missing', msgstring, &
+           source, revision, revdate, text2=msgstring2)
 
 where (variable == MISSING_R8) variable = missing
 
@@ -1652,9 +1695,23 @@ do i = start_var, end_var
    ! This information is stored in the state structure and
    ! set by the model.
    if ( do_io_update(domain, i) .or. force_copy ) then
+
+      !>@todo reverse the order of the clamping and replace missing.
+      !> By clamping first - we can check for the DART MISSING_R8 value
+      !> which is a little simpler than checking for all the variations
+      !> of the _FillValue and missing_value based on netCDF variable type.
+
+      ! get_missing_ok_status: If this (model) supports missing values 
+      ! in the state vector they must be replaced with the natural special values.
+      ! get_has_missing_value: If this variable did not originally have 
+      ! a _FillValue or missing_value attribute and value - there is nothing to do.
+      if ( get_missing_ok_status() .and. &
+           get_has_missing_value(domain,i) ) then
+         call replace_missing(domain, i, var_block(istart:iend))
+      endif
+
       ! diagnostic files do not get clamped but restart may be clamped
       if ( do_io_clamping(domain, i) .and. do_variable_clamping) then
-         call replace_missing(domain, i, var_block(istart:iend))
          call clamp_variable(domain, i, var_block(istart:iend))
       endif
   

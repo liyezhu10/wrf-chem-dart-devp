@@ -32,7 +32,7 @@
 # ==============================================================================
 
 setenv cesmtag        clm_dev_branch
-setenv resolution     f09_g16
+setenv resolution     f09_f09_mg17
 setenv compset        2000_DATM%GSWP3v1_CLM45%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
 setenv num_instances  80
 setenv CASE           clm45_spinup_${num_instances}

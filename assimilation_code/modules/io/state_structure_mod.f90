@@ -343,7 +343,7 @@ do ivar = 1, num_vars
 enddo
 
 ! load up variable id's and sizes
-call load_state_variable_info(state%domain(dom_id))
+call load_state_variable_info(state%domain(dom_id),dom_id)
 
 ! load up the domain unique dimension info
 call load_unique_dim_info(dom_id)
@@ -485,9 +485,10 @@ end function add_domain_blank
 !> Load metadata from netcdf file info state_strucutre
 
 
-subroutine load_state_variable_info(domain)
+subroutine load_state_variable_info(domain, domain_index)
 
 type(domain_type), intent(inout) :: domain
+integer,           intent(in)    :: domain_index
 
 ! netcdf variables
 integer :: ret, ncfile
@@ -505,7 +506,7 @@ call nc_check(ret, 'load_state_variable_info, nf90_inquire')
 if ( domain%unlimDimID /= -1 ) domain%has_unlimited = .true.
 
 ! get variable ids
-call load_variable_ids(ncfile, domain)
+call load_variable_ids(ncfile, domain, domain_index)
 
 ! get all variable sizes, only readers store dimensions?
 call load_variable_sizes(ncfile, domain)
@@ -521,10 +522,11 @@ end subroutine load_state_variable_info
 !> Load netcdf variable ids
 
 
-subroutine load_variable_ids(ncfile, domain)
+subroutine load_variable_ids(ncfile, domain, domain_index)
 
 integer,           intent(in)    :: ncfile ! netdcf file id - should this be part of the domain handle?
 type(domain_type), intent(inout) :: domain
+integer,           intent(in)    :: domain_index
 
 integer :: ret  ! netcdf return value
 integer :: ivar, num_vars
@@ -536,7 +538,8 @@ do ivar = 1, num_vars
    ret = nf90_inq_varid(ncfile, domain%variable(ivar)%varname,    &
                                 domain%variable(ivar)%io_info%varid)
 
-   write(string1,*)'domain variable number ',ivar,' "'//trim(domain%variable(ivar)%varname)//'" from file "'//trim(domain%info_file)//'"'
+   write(string1,*)'domain ',domain_index,', variable #',ivar,' "', &
+       trim(domain%variable(ivar)%varname)//'" from file "'//trim(domain%info_file)//'"'
    call nc_check(ret, 'load_variable_ids, nf90_inq_var_id', string1) 
 
 enddo
@@ -718,7 +721,8 @@ deallocate(array_of_dimids, array_of_names, array_of_lengths, array_of_indices, 
 end subroutine load_unique_dim_info
 
 !-------------------------------------------------------------------------------
-!> Check to see if the template file has any of the common cf-conventions
+!> Check to see if the template file has any of the common cf-conventions and
+!> load them into the state structure
 !>
 !>  * units
 !>  * short_name
@@ -728,9 +732,7 @@ end subroutine load_unique_dim_info
 !>  * missing_value
 !>  * add_offset
 !>  * scale_factor
-!>
-!> If they exist, load them up into the state structure.
-!-------------------------------------------------------------------------------
+
 subroutine load_common_cf_conventions(domain)
 
 type(domain_type), intent(inout) :: domain
@@ -739,7 +741,7 @@ integer :: ivar
 integer :: nvars
 
 ! netcdf variables
-integer  :: ret, ncid, VarID
+integer  :: ret, ncid, VarID, io
 integer  :: var_xtype
 integer  :: cf_spvalINT
 real(r4) :: cf_spvalR4
@@ -760,60 +762,75 @@ nvars = domain%num_variables
 do ivar = 1, nvars
    var_name = domain%variable(ivar)%varname
 
-   call nc_check(nf90_inq_varid(ncid, trim(var_name), VarID), &
-            'load_common_cf_conventions', 'inq_varid '//trim(var_name))
+   io = nf90_inq_varid(ncid, trim(var_name), VarID)
+   call nc_check(io, 'load_common_cf_conventions', 'inq_varid '//trim(var_name))
 
    ! If the short_name, long_name and/or units attributes are set, get them.
    ! They are not REQUIRED by DART but are nice to keep around if they are present.
 
-   if( nf90_inquire_attribute(    ncid, VarID, 'long_name') == NF90_NOERR ) then
-      call nc_check( nf90_get_att(ncid, VarID, 'long_name' , cf_long_name), &
-                     'load_common_cf_conventions', 'get_att long_name '//trim(var_name))
+   io = nf90_inquire_attribute(    ncid, VarID, 'long_name')
+   if( io == NF90_NOERR ) then
+      io = nf90_get_att(ncid, VarID, 'long_name' , cf_long_name)
+      call nc_check(io, 'load_common_cf_conventions', 'get_att long_name '//trim(var_name))
       domain%variable(ivar)%io_info%long_name = cf_long_name
    endif
 
-   if( nf90_inquire_attribute(    ncid, VarID, 'short_name') == NF90_NOERR ) then
-      call nc_check( nf90_get_att(ncid, VarID, 'short_name' , cf_short_name), &
-                     'load_common_cf_conventions', 'get_att short_name '//trim(var_name))
+   io = nf90_inquire_attribute(    ncid, VarID, 'short_name')
+   if( io == NF90_NOERR ) then
+      io = nf90_get_att(ncid, VarID, 'short_name' , cf_short_name)
+      call nc_check(io, 'load_common_cf_conventions', 'get_att short_name '//trim(var_name))
       domain%variable(ivar)%io_info%short_name = cf_short_name
    endif
 
-   if( nf90_inquire_attribute(    ncid, VarID, 'units') == NF90_NOERR )  then
-      call nc_check( nf90_get_att(ncid, VarID, 'units' , cf_units), &
-                  'load_common_cf_conventions', 'get_att units '//trim(var_name))
+   io = nf90_inquire_attribute(    ncid, VarID, 'units')
+   if( io == NF90_NOERR )  then
+      io = nf90_get_att(ncid, VarID, 'units' , cf_units)
+      call nc_check(io, 'load_common_cf_conventions', 'get_att units '//trim(var_name))
       domain%variable(ivar)%io_info%units = cf_units
    endif
 
    ! Saving any FillValue, missing_value attributes ...
+   ! Also stuff them into the R8 slots to facilitate simpler clamp_variable
+   ! implementation.
 
    var_xtype = domain%variable(ivar)%io_info%xtype
    select case (var_xtype)
       case ( NF90_INT )
-          if (nf90_get_att(ncid, VarID, '_FillValue'    , cf_spvalINT) == NF90_NOERR) then
-             domain%variable(ivar)%io_info%spvalINT     = cf_spvalINT
+          io = nf90_get_att(ncid, VarID, '_FillValue', cf_spvalINT)
+          if (io == NF90_NOERR) then
+             domain%variable(ivar)%io_info%spvalINT  = cf_spvalINT
+             domain%variable(ivar)%io_info%spvalR8   = real(cf_spvalINT,R8)
              domain%variable(ivar)%io_info%has_missing_value = .true.
           endif
-          if (nf90_get_att(ncid, VarID, 'missing_value' , cf_spvalINT) == NF90_NOERR) then
-             domain%variable(ivar)%io_info%missingINT   = cf_spvalINT
+          io = nf90_get_att(ncid, VarID, 'missing_value', cf_spvalINT)
+          if (io == NF90_NOERR) then
+             domain%variable(ivar)%io_info%missingINT  = cf_spvalINT
+             domain%variable(ivar)%io_info%missingR8   = real(cf_spvalINT,R8)
              domain%variable(ivar)%io_info%has_missing_value = .true.
           endif
 
       case ( NF90_FLOAT )
-          if (nf90_get_att(ncid, VarID, '_FillValue'    , cf_spvalR4) == NF90_NOERR) then
-             domain%variable(ivar)%io_info%spvalR4      = cf_spvalR4
+          io = nf90_get_att(ncid, VarID, '_FillValue', cf_spvalR4)
+          if (io == NF90_NOERR) then
+             domain%variable(ivar)%io_info%spvalR4   = cf_spvalR4
+             domain%variable(ivar)%io_info%spvalR8   = real(cf_spvalR4,R8)
              domain%variable(ivar)%io_info%has_missing_value = .true.
           endif
-          if (nf90_get_att(ncid, VarID, 'missing_value' , cf_spvalR4) == NF90_NOERR) then
-             domain%variable(ivar)%io_info%missingR4    = cf_spvalR4
+          io = nf90_get_att(ncid, VarID, 'missing_value', cf_spvalR4)
+          if (io == NF90_NOERR) then
+             domain%variable(ivar)%io_info%missingR4   = cf_spvalR4
+             domain%variable(ivar)%io_info%missingR8   = real(cf_spvalR4,R8)
              domain%variable(ivar)%io_info%has_missing_value = .true.
           endif
 
       case ( NF90_DOUBLE )
-          if (nf90_get_att(ncid, VarID, '_FillValue'    , cf_spvalR8) == NF90_NOERR) then
-             domain%variable(ivar)%io_info%spvalR8      = cf_spvalR8
+          io = nf90_get_att(ncid, VarID, '_FillValue', cf_spvalR8)
+          if (io == NF90_NOERR) then
+             domain%variable(ivar)%io_info%spvalR8   = cf_spvalR8
              domain%variable(ivar)%io_info%has_missing_value = .true.
           endif
-          if (nf90_get_att(ncid, VarID, 'missing_value' , cf_spvalR8) == NF90_NOERR) then
+          io = nf90_get_att(ncid, VarID, 'missing_value', cf_spvalR8)
+          if (io == NF90_NOERR) then
              domain%variable(ivar)%io_info%missingR8    = cf_spvalR8
              domain%variable(ivar)%io_info%has_missing_value = .true.
           endif
@@ -828,14 +845,16 @@ do ivar = 1, nvars
       domain%variable(ivar)%io_info%scale_factor = cf_scale_factor
       write(string1,*) 'scale_factor not supported at the moment'
       write(string2,*) 'contact DART if you would like to get this to work'
-      call error_handler(E_ERR, 'load_common_cf_conventions',string1,source,revision,revdate,text2=string2)
+      call error_handler(E_ERR, 'load_common_cf_conventions', string1, &
+                 source, revision, revdate, text2=string2)
    endif
 
    if (nf90_get_att(ncid, VarID, 'add_offset', cf_add_offset) == NF90_NOERR) then
       domain%variable(ivar)%io_info%add_offset = cf_add_offset
       write(string1,*) 'add_offset not supported at the moment'
       write(string2,*) 'contact DART if you would like to get this to work'
-      call error_handler(E_ERR, 'load_common_cf_conventions',string1,source,revision,revdate,text2=string2)
+      call error_handler(E_ERR, 'load_common_cf_conventions', string1, &
+                 source, revision, revdate, text2=string2)
    endif
 
 enddo
@@ -1580,7 +1599,6 @@ subroutine state_structure_info(dom_id)
 integer, intent(in) :: dom_id ! domain identifier
 
 integer :: ivar, jdim
-integer :: num_vars
 integer :: num_dims
 integer :: array_ids(NF90_MAX_VAR_DIMS)
 integer :: array_lengths(NF90_MAX_VAR_DIMS)
@@ -1617,9 +1635,7 @@ write(*,*)
 
 ! report on each variable in this domain
 
-num_vars = get_num_variables(dom_id)
-
-do ivar = 1, num_vars
+do ivar = 1, get_num_variables(dom_id)
    write(*,*)         'VARNAME     : ', trim(get_variable_name(dom_id,ivar))
    write(*,*)         'var_size    : ', get_variable_size(dom_id,ivar)
    write(*,*)         'index_start : ', get_index_start(dom_id,ivar)
@@ -1652,7 +1668,6 @@ do ivar = 1, num_vars
        dim_name = get_dim_name(dom_id, ivar, jdim)
        write(*,200) jdim, array_ids(jdim), array_lengths(jdim), trim(dim_name)
    enddo
-
 
    if ( state%domain(dom_id)%info_file /= 'NULL' ) then
       write(*,*) 'CF-Conventions that exist in : ', trim(state%domain(dom_id)%info_file)

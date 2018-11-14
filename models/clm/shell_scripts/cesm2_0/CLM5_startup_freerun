@@ -10,7 +10,7 @@
 # Purpose, describe things here, etc.
 #-----------------------------------------------------------------------
 #
-# CESM2_0_setup_spinup   Simply spins up an ensemble in 1 month chunks.
+# CLM5_startup_freerun   Simply spins up an ensemble in 1 month chunks.
 #                        Writes out restart files once per month. 
 #                        All ensembles start from the same (default) input file.
 #
@@ -27,9 +27,9 @@
 # num_instances The number of ensemble members.
 # ==============================================================================
 
-setenv resolution     f09_f09
-setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
 setenv cesmtag        ctsm
+setenv resolution     f09_f09_mg17
+setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
 setenv num_instances  80
 setenv CASE           clm5_f09_freerun_${num_instances}
 
