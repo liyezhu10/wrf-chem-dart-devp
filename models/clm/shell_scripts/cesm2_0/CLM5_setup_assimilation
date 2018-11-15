@@ -41,10 +41,6 @@ setenv st_archive_time 06:00:00
 # ==============================================================================
 # Create the case - this creates the CASEROOT directory.
 #
-# For list of the pre-defined component sets: ./create_newcase -list
-# To create a variant compset, see the CESM documentation and carefully
-# incorporate any needed changes into this script.
-
 # FATAL idea to make caseroot the same dir as where this setup script is
 # since the build process removes all files in the caseroot dir before
 # populating it.  try to prevent shooting yourself in the foot.
@@ -108,7 +104,7 @@ setenv CASEROOT              `./xmlquery CASEROOT              --value`
 
 if ( (${COMP_OCN} != socn) || (${COMP_ATM} != datm) ) then
    echo " "
-   echo "ERROR: This setup script is not appropriate for active ocean or atmospheric compsets."
+   echo "ERROR: This script is not appropriate for active ocean or atmospheric compsets."
    echo " "
    exit 5
 endif
@@ -206,12 +202,13 @@ echo "setting up the case ... "
 echo "case setup finished."
 
 # ==============================================================================
+# These are archiving options that may be used.
 
 if (${short_term_archiver} == 'off') then
    ./xmlchange DOUT_S=FALSE
 else
    ./xmlchange DOUT_S=TRUE
-   ./xmlchange --subgroup case.st_archive --id JOB_QUEUE         --val ${st_archive_queue}
+   ./xmlchange --subgroup case.st_archive --id JOB_QUEUE          --val ${st_archive_queue}
    ./xmlchange --subgroup case.st_archive --id JOB_WALLCLOCK_TIME --val ${st_archive_time}
 endif
 
@@ -227,14 +224,14 @@ endif
 
 if (${stream_year_first} == ${stream_year_last}) then
    set STREAMFILE_SOLAR        = datm.streams.txt.CPLHISTForcing.Solar_single_year
-   set STREAMFILE_NONSOLARFLUX = datm.streams.txt.CPLHISTForcing.nonSolarFlux_single_year
    set STREAMFILE_STATE1HR     = datm.streams.txt.CPLHISTForcing.State1hr_single_year
    set STREAMFILE_STATE3HR     = datm.streams.txt.CPLHISTForcing.State3hr_single_year
+   set STREAMFILE_NONSOLARFLUX = datm.streams.txt.CPLHISTForcing.nonSolarFlux_single_year
 else
    set STREAMFILE_SOLAR        = datm.streams.txt.CPLHISTForcing.Solar_complete
-   set STREAMFILE_NONSOLARFLUX = datm.streams.txt.CPLHISTForcing.nonSolarFlux_complete
    set STREAMFILE_STATE1HR     = datm.streams.txt.CPLHISTForcing.State1hr_complete
    set STREAMFILE_STATE3HR     = datm.streams.txt.CPLHISTForcing.State3hr_complete
+   set STREAMFILE_NONSOLARFLUX = datm.streams.txt.CPLHISTForcing.nonSolarFlux_complete
 endif
 
 # ==============================================================================
@@ -256,9 +253,9 @@ while ( $inst <= $num_instances )
    # DATM namelist
 
    set FILE1 = datm.streams.txt.CPLHISTForcing.Solar${inst_string}
-   set FILE2 = datm.streams.txt.CPLHISTForcing.nonSolarFlux${inst_string}
-   set FILE3 = datm.streams.txt.CPLHISTForcing.State1hr${inst_string}
-   set FILE4 = datm.streams.txt.CPLHISTForcing.State3hr${inst_string}
+   set FILE2 = datm.streams.txt.CPLHISTForcing.State1hr${inst_string}
+   set FILE3 = datm.streams.txt.CPLHISTForcing.State3hr${inst_string}
+   set FILE4 = datm.streams.txt.CPLHISTForcing.nonSolarFlux${inst_string}
    set DOMAINFILE = '/glade/p/cesmdata/cseg/inputdata/share/domains/domain.lnd.fv0.9x1.25_gx1v7.151020.nc'
 
    echo "domainfile = '${DOMAINFILE}'" >> ${fname}
@@ -273,16 +270,16 @@ while ( $inst <= $num_instances )
    echo "           'nomask', " >> ${fname}
    echo "           'nomask'  " >> ${fname}
    echo "tintalgo = 'coszen', " >> ${fname}
-   echo "           'nearest'," >> ${fname}
    echo "           'linear', " >> ${fname}
-   echo "           'linear'  " >> ${fname}
+   echo "           'linear', " >> ${fname}
+   echo "           'nearest' " >> ${fname}
 
    # Create stream files for each ensemble member
    set SOURCEDIR = ${dartroot}/models/clm/shell_scripts/cesm2_0
-   ${COPY} ${SOURCEDIR}/${STREAMFILE_SOLAR}        user_${FILE1} || exit 1
-   ${COPY} ${SOURCEDIR}/${STREAMFILE_NONSOLARFLUX} user_${FILE2} || exit 1
-   ${COPY} ${SOURCEDIR}/${STREAMFILE_STATE1HR}     user_${FILE3} || exit 1
-   ${COPY} ${SOURCEDIR}/${STREAMFILE_STATE3HR}     user_${FILE4} || exit 1
+   ${COPY} ${SOURCEDIR}/${STREAMFILE_SOLAR}         user_${FILE1} || exit 1
+   ${COPY} ${SOURCEDIR}/${STREAMFILE_STATE1HR}      user_${FILE2} || exit 1
+   ${COPY} ${SOURCEDIR}/${STREAMFILE_STATE3HR}      user_${FILE3} || exit 1
+   ${COPY} ${SOURCEDIR}/${STREAMFILE_NONSOLARFLUX}  user_${FILE4} || exit 1
 
    foreach FNAME ( user_datm.streams.txt*${inst_string} )
       echo "modifying $FNAME"
@@ -463,7 +460,7 @@ chmod 0755 stage_cesm_files
 
 #===============================================================================
 # This example has SourceMods that enable CLM to output solar induced fluorescence
-# as a diagnostic variable in the history files as "FSIF".
+# as an additional diagnostic variable ("FSIF") in the history file.
 
 if ( ${use_SourceMods} == TRUE ) then
 
@@ -499,8 +496,9 @@ if ( ${use_SourceMods} == TRUE ) then
          @ iarg = $iarg + 2
       end
    else
-      echo "MESSAGE - No SourceMods for this case."
-      echo "MESSAGE - No SourceMods for this case."
+      echo "ERROR - DART_params.csh use_SourceMods = ${use_SourceMods}"
+      echo "ERROR - but there are no SourceMods in ${SourceModDir}"
+      exit 3
    endif
 endif
 
@@ -523,8 +521,8 @@ Time to check the case.
 
 3) check things
 
-4) run a single day, verify that it works without assimilation
-   ./case.submit
+4) run a single job (and send mail), verify that it works without assimilation
+   ./case.submit -M all
 
 5) IF NEEDED, compile all the DART executables by
    cd  ${dartroot}/models/clm/work
@@ -538,10 +536,11 @@ Time to check the case.
 7) Make sure the DART-related parts are appropriate.
    Check the input.nml
    Check the assimilate.csh or perfect_model.csh - as appropriate
-   ./case.submit
+   ./case.submit -M all
 
 8) If that works
    ./xmlchange CONTINUE_RUN=TRUE
+   ./xmlchange RESUBMIT=11
    that sort of thing
 -------------------------------------------------------------------------
 

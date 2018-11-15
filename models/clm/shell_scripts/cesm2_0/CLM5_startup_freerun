@@ -11,16 +11,16 @@
 #          Writes out restart files once per month.
 #          All ensembles start from the same (default) input file.
 #
-# Put another way: This script takes the spun-up CLM state supplied with 
+# Put another way: This script takes the spun-up CLM state supplied with
 # the compset and forecasts an ensemble of these. Each ensemble member uses
 # a unique data atmosphere stream file. After some time, the ensemble of
 # CLM states have enough diversity to be a useful initial ensemble for
-# an assimilation experiment. 
+# an assimilation experiment.
 # ------------------------------------------------------------------------------
 
 # Many user-specified variables and settings are read from a DART
 # parameter file "DART_params.csh". This should be configured first.
-# There are still some variables that are logically defined in this script, 
+# There are still some variables that are logically defined in this script,
 # as well as some specifics about the CLM namelists.
 
 source DART_params.csh
@@ -30,10 +30,12 @@ source DART_params.csh
 #
 # run_queue, run_time, st_archive_queue, st_archive_time may be changed at any time
 #
-# TJH: Advancing 80 instances for 1 month using 2 nodes per instance averaged
+# TJH: for a CLM50%BGC-CROP at f09_f09_mg17 resolution,
+#      Advancing 80 instances for 1 month using 2 nodes per instance averaged
 #      about 2000 core hours on cheyenne using 36 tasks and 1 thread per node.
 #      About 625 seconds of wall-clock per month. 2000*60*60/(80*4*36) = 625
 #      Consequently, a year takes a litte more than 2 hours of run_time.
+#      12 months of an 80-member ensemble is about 2.6 Tb of data.
 
 # A 'startup' run_type uses the spun-up CLM state supplied with the compset.
 # stop_option=nmonths,stop_n=12 ... stop after 1 year
@@ -53,7 +55,7 @@ setenv run_queue regular
 setenv run_time 03:00:00
 
 # the short-term archiver is turned off (initially?) to let you explore the
-# run directory 
+# run directory
 
 setenv short_term_archiver off
 setenv st_archive_queue share
@@ -62,10 +64,6 @@ setenv st_archive_time 06:00:00
 # ==============================================================================
 # Create the case - this creates the CASEROOT directory.
 #
-# For list of the pre-defined component sets: ./create_newcase -list
-# To create a variant compset, see the CESM documentation and carefully
-# incorporate any needed changes into this script.
-
 # FATAL idea to make caseroot the same dir as where this setup script is
 # since the build process removes all files in the caseroot dir before
 # populating it.  try to prevent shooting yourself in the foot.
@@ -172,8 +170,7 @@ endif
 # CIME interprets a negative task count as representing the number of nodes.
 # On Cheyenne (at least) using multiple threads is not recommended.
 
-@ nodes_per_instance = 2
-@ nthreads = 1
+@ nthreads = ${number_of_threads}
 
 @ atm_tasks = -1 * ${nodes_per_instance}
 @ cpl_tasks = -1 * ${nodes_per_instance}
@@ -206,8 +203,6 @@ echo "case setup finished."
 
 # ==============================================================================
 # These are archiving options that may be used.
-# You can turn the short/long term archivers on or off ({short,long}_term_archiver),
-# but these settings should be made in either event.
 
 if (${short_term_archiver} == 'off') then
    ./xmlchange DOUT_S=FALSE
@@ -229,14 +224,14 @@ endif
 
 if (${stream_year_first} == ${stream_year_last}) then
    set STREAMFILE_SOLAR        = datm.streams.txt.CPLHISTForcing.Solar_single_year
-   set STREAMFILE_NONSOLARFLUX = datm.streams.txt.CPLHISTForcing.nonSolarFlux_single_year
    set STREAMFILE_STATE1HR     = datm.streams.txt.CPLHISTForcing.State1hr_single_year
    set STREAMFILE_STATE3HR     = datm.streams.txt.CPLHISTForcing.State3hr_single_year
+   set STREAMFILE_NONSOLARFLUX = datm.streams.txt.CPLHISTForcing.nonSolarFlux_single_year
 else
    set STREAMFILE_SOLAR        = datm.streams.txt.CPLHISTForcing.Solar_complete
-   set STREAMFILE_NONSOLARFLUX = datm.streams.txt.CPLHISTForcing.nonSolarFlux_complete
    set STREAMFILE_STATE1HR     = datm.streams.txt.CPLHISTForcing.State1hr_complete
    set STREAMFILE_STATE3HR     = datm.streams.txt.CPLHISTForcing.State3hr_complete
+   set STREAMFILE_NONSOLARFLUX = datm.streams.txt.CPLHISTForcing.nonSolarFlux_complete
 endif
 
 # ==============================================================================
@@ -253,9 +248,9 @@ while ( $inst <= $num_instances )
    # DATM namelist
 
    set FILE1 = datm.streams.txt.CPLHISTForcing.Solar${inst_string}
-   set FILE2 = datm.streams.txt.CPLHISTForcing.nonSolarFlux${inst_string}
-   set FILE3 = datm.streams.txt.CPLHISTForcing.State1hr${inst_string}
-   set FILE4 = datm.streams.txt.CPLHISTForcing.State3hr${inst_string}
+   set FILE2 = datm.streams.txt.CPLHISTForcing.State1hr${inst_string}
+   set FILE3 = datm.streams.txt.CPLHISTForcing.State3hr${inst_string}
+   set FILE4 = datm.streams.txt.CPLHISTForcing.nonSolarFlux${inst_string}
    set DOMAINFILE = '/glade/p/cesmdata/cseg/inputdata/share/domains/domain.lnd.fv0.9x1.25_gx1v7.151020.nc'
 
    echo "domainfile = '${DOMAINFILE}'" >> ${fname}
@@ -270,16 +265,16 @@ while ( $inst <= $num_instances )
    echo "           'nomask', " >> ${fname}
    echo "           'nomask'  " >> ${fname}
    echo "tintalgo = 'coszen', " >> ${fname}
-   echo "           'nearest'," >> ${fname}
    echo "           'linear', " >> ${fname}
-   echo "           'linear'  " >> ${fname}
+   echo "           'linear', " >> ${fname}
+   echo "           'nearest' " >> ${fname}
 
    # Create stream files for each ensemble member
    set SOURCEDIR = ${dartroot}/models/clm/shell_scripts/cesm2_0
-   ${COPY} ${SOURCEDIR}/${STREAMFILE_SOLAR}        user_${FILE1} || exit 1
-   ${COPY} ${SOURCEDIR}/${STREAMFILE_NONSOLARFLUX} user_${FILE2} || exit 1
-   ${COPY} ${SOURCEDIR}/${STREAMFILE_STATE1HR}     user_${FILE3} || exit 1
-   ${COPY} ${SOURCEDIR}/${STREAMFILE_STATE3HR}     user_${FILE4} || exit 1
+   ${COPY} ${SOURCEDIR}/${STREAMFILE_SOLAR}         user_${FILE1} || exit 1
+   ${COPY} ${SOURCEDIR}/${STREAMFILE_STATE1HR}      user_${FILE2} || exit 1
+   ${COPY} ${SOURCEDIR}/${STREAMFILE_STATE3HR}      user_${FILE3} || exit 1
+   ${COPY} ${SOURCEDIR}/${STREAMFILE_NONSOLARFLUX}  user_${FILE4} || exit 1
 
    foreach FNAME ( user_datm.streams.txt*${inst_string} )
       echo "modifying $FNAME"
@@ -312,6 +307,8 @@ while ( $inst <= $num_instances )
 
    @ inst ++
 end
+
+./preview_namelists || exit 3
 
 #===============================================================================
 # This example has SourceMods that enable CLM to output solar induced fluorescence
@@ -351,8 +348,9 @@ if ( ${use_SourceMods} == TRUE ) then
          @ iarg = $iarg + 2
       end
    else
-      echo "MESSAGE - No SourceMods for this case."
-      echo "MESSAGE - No SourceMods for this case."
+      echo "ERROR - DART_params.csh use_SourceMods = ${use_SourceMods}"
+      echo "ERROR - but there are no SourceMods in ${SourceModDir}"
+      exit 3
    endif
 endif
 

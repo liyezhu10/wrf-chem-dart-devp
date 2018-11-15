@@ -12,7 +12,10 @@
 #          perfect_model_obs to harvest synthetic observations from the single
 #          instance, which is now the true state of the system.
 
-# The DART_params.csh contains many (if not all) of the run-time settings
+# Many user-specified variables and settings are read from a DART
+# parameter file "DART_params.csh". This should be configured first.
+# There are still some variables that are logically defined in this script,
+# as well as some specifics about the CLM namelists.
 
 source DART_params.csh
 
@@ -21,7 +24,7 @@ source DART_params.csh
 #
 # run_queue, run_time, st_archive_queue, st_archive_time may be changed at any time
 #
-# TJH: Advancing 1 instance for 24 hours with 4 nodes
+# TJH: Advancing 1 instance for 24 hours with 2 nodes
 #      took less than XX minutes on cheyenne.
 # ==============================================================================
 
@@ -35,10 +38,6 @@ setenv st_archive_time 02:00:00
 # ==============================================================================
 # Create the case - this creates the CASEROOT directory.
 #
-# For list of the pre-defined component sets: ./create_newcase -list
-# To create a variant compset, see the CESM documentation and carefully
-# incorporate any needed changes into this script.
-
 # FATAL idea to make caseroot the same dir as where this setup script is
 # since the build process removes all files in the caseroot dir before
 # populating it.  try to prevent shooting yourself in the foot.
@@ -100,7 +99,7 @@ setenv CASEROOT              `./xmlquery CASEROOT              --value`
 
 if ( (${COMP_OCN} != socn) || (${COMP_ATM} != datm) ) then
    echo " "
-   echo "ERROR: This setup script is not appropriate for active ocean or atmospheric compsets."
+   echo "ERROR: This script is not appropriate for active ocean or atmospheric compsets."
    echo " "
    exit 5
 endif
@@ -161,8 +160,6 @@ endif
 # Set the nodes_per_instance below to match your case.
 # By computing task counts like we do below, we guarantee each instance uses
 # a whole number of nodes which is the recommended configuration.
-# This is a decent layout for a single instance, but should be explored.
-# Presently, all components run 'serially' - one after another.
 # CIME interprets a negative task count as representing the number of nodes.
 # On Cheyenne (at least) using multiple threads is not recommended.
 
@@ -198,12 +195,13 @@ echo "setting up the case ... "
 echo "case setup finished."
 
 # ==============================================================================
+# These are archiving options that may be used.
 
 if (${short_term_archiver} == 'off') then
    ./xmlchange DOUT_S=FALSE
 else
    ./xmlchange DOUT_S=TRUE
-   ./xmlchange --subgroup case.st_archive --id JOB_QUEUE         --val ${st_archive_queue}
+   ./xmlchange --subgroup case.st_archive --id JOB_QUEUE          --val ${st_archive_queue}
    ./xmlchange --subgroup case.st_archive --id JOB_WALLCLOCK_TIME --val ${st_archive_time}
 endif
 
@@ -467,7 +465,7 @@ chmod 0755 stage_cesm_files
 
 #===============================================================================
 # This example has SourceMods that enable CLM to output solar induced fluorescence
-# as a diagnostic variable in the history files as "FSIF".
+# as an additional diagnostic variable ("FSIF") in the history file.
 
 if ( ${use_SourceMods} == TRUE ) then
 
@@ -531,8 +529,8 @@ Time to check the case.
 
 3) check things
 
-4) run a single day, verify that it works without DART
-   ./case.submit
+4) run a single job (and send mail), verify that it works without DART
+   ./case.submit -M all
 
 5) If that works, start again, this time using DART
    ./xmlchange CONTINUE_RUN=FALSE
@@ -551,7 +549,7 @@ Time to check the case.
    ./xmlchange CONTINUE_RUN=TRUE
    ./xmlchange RESUBMIT=<number_of_cycles_to_run>
    and
-   ./case.submit
+   ./case.submit -M all
 
 -------------------------------------------------------------------------
 
