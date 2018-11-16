@@ -30,12 +30,10 @@ source DART_params.csh
 #
 # run_queue, run_time, st_archive_queue, st_archive_time may be changed at any time
 #
-# TJH: for a CLM50%BGC-CROP at f09_f09_mg17 resolution,
-#      Advancing 80 instances for 1 month using 2 nodes per instance averaged
-#      about 2000 core hours on cheyenne using 36 tasks and 1 thread per node.
-#      About 625 seconds of wall-clock per month. 2000*60*60/(80*4*36) = 625
-#      Consequently, a year takes a litte more than 2 hours of run_time.
-#      12 months of an 80-member ensemble is about 2.6 Tb of data.
+# FYI: for a CLM50%BGC-CROP at f09_f09_mg17 resolution,
+#      Advancing 80 instances for 1 year using 2 nodes per instance averaged
+#      about 2.5 hours of wall-clock and generates about 2.6Tb of data.
+#      About 15,000 core hours on cheyenne.
 
 # A 'startup' run_type uses the spun-up CLM state supplied with the compset.
 # stop_option=nmonths,stop_n=12 ... stop after 1 year

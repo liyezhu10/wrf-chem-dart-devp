@@ -24,8 +24,8 @@ source DART_params.csh
 #
 # run_queue, run_time, st_archive_queue, st_archive_time may be changed at any time
 #
-# TJH: Advancing 1 instance for 24 hours with 2 nodes
-#      took less than XX minutes on cheyenne.
+# FYI: Advancing 1 instance for 24 hours with 2 nodes and running perfect_model_obs
+#      took less than 6 minutes on cheyenne.
 # ==============================================================================
 
 setenv run_queue premium
