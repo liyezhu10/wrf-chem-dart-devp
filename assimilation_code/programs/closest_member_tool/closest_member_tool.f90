@@ -4,6 +4,17 @@
 !
 ! $Id$
 
+!> @mainpage
+!> @{
+!> @brief  this program selects the member closest to the ensemble mean.
+!>
+!>
+!>  this program has options to compute distance in several different ways
+!>  and returns the ensemble member which has the smallest distance from
+!>  the ensemble mean.
+!> @}
+!>
+!>
 !>@todo FIXME changed so it compiles, but this IS NOT WORKING CODE YET
 !> it needs to read in an ensemble (perhaps become an mpi program)
 !> and do all ensemble members at the same time - also handle the
@@ -459,6 +470,8 @@ end function compute_diff
 
 
 end program closest_member_tool
+
+
 
 ! <next few lines under version control, do not edit>
 ! $URL$
