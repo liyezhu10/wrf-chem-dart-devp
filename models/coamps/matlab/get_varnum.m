@@ -5,18 +5,14 @@ function varnum=get_varnum(restart_info_file,varname,level)
 % the restart.vars file used for the ensemble run, generates the
 % variable number in the long state vector.
 
-%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% <next few lines under version control, do not edit>
-% $URL$
-% $Id$
-% $Revision$
-% $Date$
+% DART $Id$
 
   % format string for the restart.vars file
-  % u2 01 NOPERTS 1.0 M KIND_U_WIND UPDATE FALSE NOPOSDEF
+  % u2 01 NOPERTS 1.0 M QTY_U_WIND UPDATE FALSE NOPOSDEF
   %fmt_str='%s %d %s %f %c %s %s %s %s';
   fmt_str = '%s %d %*[^\n]';  
   [name,sigma_level] = textread(restart_info_file,fmt_str, ...
@@ -42,3 +38,8 @@ function varnum=get_varnum(restart_info_file,varname,level)
   
   % Grab the index
   varnum = Name_indices(r,c);
+
+% <next few lines under version control, do not edit>
+% $URL$
+% $Revision$
+% $Date$

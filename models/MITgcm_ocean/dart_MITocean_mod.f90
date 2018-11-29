@@ -1,19 +1,15 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 module dart_MITocean_mod
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 use types_mod,        only : r8, rad2deg, PI
 use obs_def_mod,      only : obs_def_type, get_obs_def_time, read_obs_def, &
                              write_obs_def, destroy_obs_def, interactive_obs_def, &
-                             copy_obs_def, set_obs_def_time, set_obs_def_kind, &
+                             copy_obs_def, set_obs_def_time, set_obs_def_type_of_obs, &
                              set_obs_def_error_variance, set_obs_def_location, &
                              set_obs_def_key
 use time_manager_mod, only : time_type, get_date, set_time, GREGORIAN, &
@@ -28,7 +24,7 @@ use obs_sequence_mod, only : init_obs_sequence, init_obs, insert_obs_in_seq, &
                              set_obs_values, set_qc, obs_sequence_type, obs_type, &
                              copy_obs, set_copy_meta_data, set_qc_meta_data, set_obs_def, &
                              get_first_obs, get_last_obs, get_obs_def
-use     obs_kind_mod, only : get_obs_kind_index
+use     obs_kind_mod, only : get_index_for_type_of_obs
 use obs_def_ocean_mod, only : set_hf_radial_vel
 
 implicit none
@@ -37,10 +33,10 @@ private
 public :: real_obs_sequence
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 logical, save :: module_initialized = .false.
 
@@ -185,7 +181,7 @@ obsloop:  do
 
 
    ! assign each observation the correct observation type
-   obstype = get_obs_kind_index(obs_kind_name)
+   obstype = get_index_for_type_of_obs(obs_kind_name)
    if(obstype < 1) then
       print*, 'unknown observation type [',trim(obs_kind_name),'] ... skipping ...'
       cycle obsloop
@@ -326,7 +322,7 @@ loc0 = set_location(lon, lat, vloc, which_vert )
 call set_obs_def_location(obs_def, loc0)
 
 ! set obs kind
-call set_obs_def_kind(obs_def, obs_kind)
+call set_obs_def_type_of_obs(obs_def, obs_kind)
 
 call set_obs_def_time(obs_def, set_time(seconds, days) )
 call set_obs_def_error_variance(obs_def, var2)
@@ -343,3 +339,9 @@ end subroutine initialize_module
 
 
 end module dart_MITocean_mod
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

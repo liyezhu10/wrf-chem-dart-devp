@@ -1,10 +1,10 @@
 #!/bin/ksh 
 #
-# DART software - Copyright 2004 - 2011 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# $Id$
+# DART $Id$
 #
 # Purpose: run real.exe and generate perturbed IC/BC's using WRFVAR
 # and prepares the run directory by linking all of the needed files
@@ -47,7 +47,7 @@
 # ensemble members for running this script on bluefire.
 # ########
 # CAUTION - this script will remove the OUTPUT and ASSIM_DIR
-# dierctories during execution. Change to different paths to
+# directories during execution. Change to different paths to
 # avoid wiping out old directories.
 # ########
 #-----------------------------------------------------------------------
@@ -134,23 +134,23 @@ export      BE_file=$VAR_DIR/var/run/be.dat.cv3
 # parameter definitions - especially the moist variables related to the microphysics
 # of your choice.  Note that any states that you want to update with filter, or
 # monitor, needs to be on this list. Note the lists below are in double quotes.
-  export  my_state_variables="'U','KIND_U_WIND_COMPONENT','TYPE_U','UPDATE','999',
-                              'V','KIND_V_WIND_COMPONENT','TYPE_V','UPDATE','999',
-                              'W','KIND_VERTICAL_VELOCITY','TYPE_W','UPDATE','999',
-                              'PH','KIND_GEOPOTENTIAL_HEIGHT','TYPE_GZ','UPDATE','999',
-                              'T','KIND_POTENTIAL_TEMPERATURE','TYPE_T','UPDATE','999',
-                              'MU','KIND_PRESSURE','TYPE_MU','UPDATE','999',
-                              'QVAPOR','KIND_VAPOR_MIXING_RATIO','TYPE_QV','UPDATE','999',
-                              'QCLOUD','KIND_CLOUD_LIQUID_WATER','TYPE_QC','UPDATE','999',
-                              'QRAIN','KIND_RAINWATER_MIXING_RATIO','TYPE_QR','UPDATE','999',
-                              'QICE','KIND_CLOUD_ICE','TYPE_QI','UPDATE','999',
-                              'QSNOW','KIND_SNOW_MIXING_RATIO','TYPE_QS','UPDATE','999',
-                              'U10','KIND_U_WIND_COMPONENT','TYPE_U10','UPDATE','999',
-                              'V10','KIND_V_WIND_COMPONENT','TYPE_V10','UPDATE','999',
-                              'T2','KIND_TEMPERATURE','TYPE_T2','UPDATE','999',
-                              'TH2','KIND_POTENTIAL_TEMPERATURE','TYPE_TH2','UPDATE','999',
-                              'Q2','KIND_SPECIFIC_HUMIDITY','TYPE_Q2','UPDATE','999',
-                              'PSFC','KIND_PRESSURE','TYPE_PS','UPDATE','999',"
+  export  my_state_variables="'U','QTY_U_WIND_COMPONENT','TYPE_U','UPDATE','999',
+                              'V','QTY_V_WIND_COMPONENT','TYPE_V','UPDATE','999',
+                              'W','QTY_VERTICAL_VELOCITY','TYPE_W','UPDATE','999',
+                              'PH','QTY_GEOPOTENTIAL_HEIGHT','TYPE_GZ','UPDATE','999',
+                              'T','QTY_POTENTIAL_TEMPERATURE','TYPE_T','UPDATE','999',
+                              'MU','QTY_PRESSURE','TYPE_MU','UPDATE','999',
+                              'QVAPOR','QTY_VAPOR_MIXING_RATIO','TYPE_QV','UPDATE','999',
+                              'QCLOUD','QTY_CLOUD_LIQUID_WATER','TYPE_QC','UPDATE','999',
+                              'QRAIN','QTY_RAINWATER_MIXING_RATIO','TYPE_QR','UPDATE','999',
+                              'QICE','QTY_CLOUD_ICE','TYPE_QI','UPDATE','999',
+                              'QSNOW','QTY_SNOW_MIXING_RATIO','TYPE_QS','UPDATE','999',
+                              'U10','QTY_U_WIND_COMPONENT','TYPE_U10','UPDATE','999',
+                              'V10','QTY_V_WIND_COMPONENT','TYPE_V10','UPDATE','999',
+                              'T2','QTY_TEMPERATURE','TYPE_T2','UPDATE','999',
+                              'TH2','QTY_POTENTIAL_TEMPERATURE','TYPE_TH2','UPDATE','999',
+                              'Q2','QTY_SPECIFIC_HUMIDITY','TYPE_Q2','UPDATE','999',
+                              'PSFC','QTY_PRESSURE','TYPE_PS','UPDATE','999',"
 # List of state variables that should be 'positive definite' - where negative values that
 # emerge from filter are reset to the value indicated below (zero). Microphysical variables
 # are logically added here.
@@ -338,8 +338,7 @@ cat > input.nml.tmp << EOF
    bin_width                  =     0, 0, 0, 6, 0, 0 ,
    time_to_skip               =     0, 0, 0, 0, 0, 0 ,
    max_num_bins               = 1000,
-   rat_cri                    = 5000.0,
-   input_qc_threshold         = 4.0,
+   trusted_obs                = 'null',
    Nregions                   = 1,
    lonlim1                    =  235.0,
    lonlim2                    =  295.0,
@@ -347,7 +346,9 @@ cat > input.nml.tmp << EOF
    latlim2                    =   55.0,
    reg_names                  = 'North America',
    print_mismatched_locs      = .false.,
-   print_obs_locations        = .false.,
+   create_rank_histogram      = .true.,
+   outliers_in_histogram      = .true.,
+   use_zero_error_obs         = .false.,
    verbose                    = .false.  /
 
  &restart_file_utility_nml

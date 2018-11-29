@@ -2,23 +2,19 @@
 % ----------
 % plot_l05.m
 
-%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% <next few lines under version control, do not edit>
-% $URL$
-% $Id$
-% $Revision$
-% $Date$
+% DART $Id$
 
 clear all;
 close all;
 
 % Open up the various NetCDF files
-truth = netcdf('True_State.nc');
-prior = netcdf('Prior_Diag.nc');
-postr = netcdf('Posterior_Diag.nc');
+truth = netcdf('true_state.nc');
+prior = netcdf('preassim.nc');
+postr = netcdf('analysis.nc');
 
 % Pull out the time variable
 state_time = prior{'time'}(:);
@@ -127,3 +123,8 @@ title (['Difference between Prior and Posterior Estimates: ' ...
         '31 August 1999 : \tau = ' sprintf('%dhrs',avail_times ...
                                            + 5)]);
 saveas(difffig,'difference','png');
+
+% <next few lines under version control, do not edit>
+% $URL$
+% $Revision$
+% $Date$

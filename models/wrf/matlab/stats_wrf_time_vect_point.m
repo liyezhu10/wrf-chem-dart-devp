@@ -1,14 +1,10 @@
 %% stats_wrf_time_vect_point
 
-%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% <next few lines under version control, do not edit>
-% $URL$
-% $Id$
-% $Revision$
-% $Date$
+% DART $Id$
 
 trfname = 'True_State.nc';
 prfname = 'Prior_Diag.nc';
@@ -34,7 +30,7 @@ tlat  = nc_varget(prfname,  'XLAT_d01'); sn        = size(  tlat, 1);
 level = nc_varget(prfname, 'level_d01'); bt        = size( level, 1);
 times = nc_varget(prfname,      'time'); num_times = size( times, 1);
 
-ens_size       = get_ens_size(prfname);
+[ens_size,~] = nc_dim_info(prfname,'member');
 
 state_vec_truth = nc_varget(trfname, 'state');
 state_vec_prior = nc_varget(prfname, 'state');
@@ -206,3 +202,7 @@ xlabel('hours')
 % Loop for another try
 %map_wrf;
 
+% <next few lines under version control, do not edit>
+% $URL$
+% $Revision$
+% $Date$

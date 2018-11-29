@@ -8,16 +8,17 @@ function temp = compute_temperature( pres, theta, Cp, Rd, p0 )
 % Output:
 %	temp     = temperature, at mass pts
 
-%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% <next few lines under version control, do not edit>
-% $URL$
-% $Id$
-% $Revision$
-% $Date$
+% DART $Id$
 
 kappa = Rd / Cp ;
 
 temp = theta .* (pres ./ p0).^kappa ;
+
+% <next few lines under version control, do not edit>
+% $URL$
+% $Revision$
+% $Date$

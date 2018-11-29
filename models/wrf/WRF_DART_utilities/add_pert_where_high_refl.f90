@@ -1,14 +1,10 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 PROGRAM add_pert_where_high_refl
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 ! Add 3D random but smooth perturbations to WRF fields in/near where the observations
 ! indicate high reflectivity values.  The technique is somewhat like that of
@@ -28,23 +24,25 @@ PROGRAM add_pert_where_high_refl
 ! (9) td_sd         -- std. dev. of dewpoint noise (K), before smoothing
 ! (10) qv_sd        -- std. dev. of water vapor mixing ratio noise, before smoothing
 !                         (input value is in g/kg, value after conversion is in kg/kg)
+! (11) ens_num      -- ensemble number for consistently seeding the random number generator
+! (12) gdays        -- gregorian day number of wrf analysis time
+! (13) gsecs        -- gregorian seconds of day of wrf analysis time
 !
 ! output:
 
 use        types_mod, only : r8, gravity, t_kelvin, ps0, gas_constant, gas_constant_v
 use    utilities_mod, only : error_handler, E_ERR
-use    random_nr_mod, only : random_seq_type, init_ran1
-use   random_seq_mod, only : random_gaussian
+use   random_seq_mod, only : random_gaussian, random_seq_type, init_random_seq
 use    netcdf
 use    f2kcli
 
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   =  "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 ! command-line parameters
 character(len=129) :: refl_ob_file
@@ -57,6 +55,9 @@ real(r8)           :: w_sd
 real(r8)           :: t_sd
 real(r8)           :: td_sd
 real(r8)           :: qv_sd
+integer            :: ens_num
+integer            :: gdays
+integer            :: gsecs
 
 ! local variables
 integer               :: n_obs                  ! number of gridded reflectivity observations
@@ -112,7 +113,7 @@ type (random_seq_type) :: rs
 
  ! Get command-line parameters, using the F2KCLI interface.  See f2kcli.f90 for details.
 
-if( COMMAND_ARGUMENT_COUNT() .ne. 10 ) then
+if( COMMAND_ARGUMENT_COUNT() .ne. 13 ) then
   print*, 'INCORRECT # OF ARGUMENTS ON COMMAND LINE:  ', COMMAND_ARGUMENT_COUNT()
   call exit(1)
 else
@@ -191,6 +192,30 @@ else
     call exit(1)
   else
     read(string,*) qv_sd
+  endif
+
+  call GET_COMMAND_ARGUMENT(11,string,length,status)
+  if( status .ne. 0 ) then
+    print*,  'ens_num NOT RETRIEVED FROM COMMAND LINE:  ', status
+    call exit(1)
+  else
+    read(string,*) ens_num
+  endif
+
+  call GET_COMMAND_ARGUMENT(12,string,length,status)
+  if( status .ne. 0 ) then
+    print*,  'gdays NOT RETRIEVED FROM COMMAND LINE:  ', status
+    call exit(1)
+  else
+    read(string,*) gdays
+  endif
+
+  call GET_COMMAND_ARGUMENT(13,string,length,status)
+  if( status .ne. 0 ) then
+    print*,  'gsecs NOT RETRIEVED FROM COMMAND LINE:  ', status
+    call exit(1)
+  else
+    read(string,*) gsecs
   endif
 
 endif
@@ -286,11 +311,15 @@ do k=1, bt+1
 enddo
 
 
-! Initialize random number generator with a seed based on the milliseconds
-! portion of the current time.
+! Initialize random number generator based on the analysis time and
+! the ensemble number so repeated runs have reproducible values.
+call init_random_seq(rs, (gdays + gsecs)*1000 + ens_num)
 
-call date_and_time(crdate,crtime,crzone,values)
-call init_ran1(rs, -int(values(8)))
+! Original code was setting the seed based on the milliseconds of
+! the system clock, so all seeds were random but not reproducible.
+!call date_and_time(crdate,crtime,crzone,values)
+!call init_random_seq(rs, -int(values(8)))
+
 
 
 ! Add perturbations.
@@ -681,3 +710,9 @@ contains
 
 
 END PROGRAM add_pert_where_high_refl
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

@@ -1,21 +1,19 @@
 function RunAllTests(dummy)
-%% RunAllTests.m
+%% RunAllTests.m simple_advection
 
-%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% <next few lines under version control, do not edit>
-% $URL$
-% $Id$
-% $Revision$
-% $Date$
+% DART $Id$
 
 if (nargin() > 0)
    interactive = 1;
 else
    interactive = 0;
 end
+
+%%
 
 figure(1)
 if (interactive)
@@ -36,7 +34,7 @@ end
  fprintf('Starting %s\n','PlotBins');
  clear pinfo; close all;
 
- pinfo = CheckModelCompatibility('True_State.nc','Prior_Diag.nc');
+ pinfo = CheckModelCompatibility('true_state.nc','preassim.nc');
 [pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(pinfo.diagn_file);
  pinfo.var            = 'concentration';
  pinfo.var_inds       = [1 5 10];
@@ -68,7 +66,7 @@ end
  fprintf('Starting %s\n','PlotCorrel');
  clear pinfo; clf
 
- pinfo = CheckModel('Prior_Diag.nc');
+ pinfo = CheckModel('preassim.nc');
  pinfo.base_var           = 'concentration';
  pinfo.base_var_index     = 3;
  pinfo.base_time          = 250;
@@ -88,7 +86,7 @@ end
  fprintf('Starting %s\n','PlotPhaseSpace');
  clear pinfo; clf
 
- pinfo.fname    = 'Posterior_Diag.nc';
+ pinfo.fname    = 'analysis.nc';
  pinfo.model    = 'simple_advection';
  pinfo.var1name = 'concentration';
  pinfo.var2name = 'source';
@@ -96,7 +94,7 @@ end
  pinfo.var1ind  = 4;
  pinfo.var2ind  = 2;
  pinfo.var3ind  = 8;
- pinfo.ens_mem  = 'ensemble mean';
+ pinfo.ens_mem  = 'ensemble member 10';
  pinfo.ltype    = 'k-';
 
  PlotPhaseSpace(pinfo)
@@ -119,17 +117,17 @@ end
  fprintf('Starting %s\n','PlotSawtooth');
  clear pinfo; close all
 
- pinfo    = CheckModelCompatibility('Prior_Diag.nc','Posterior_Diag.nc');
+ pinfo    = CheckModelCompatibility('preassim.nc','analysis.nc');
  pinfo.prior_time     = pinfo.truth_time;
  pinfo.prior_file     = pinfo.truth_file;
  pinfo.posterior_time = pinfo.diagn_time;
  pinfo.posterior_file = pinfo.diagn_file;
- pinfo.truth_file     = 'True_State.nc';
+ pinfo.truth_file     = 'true_state.nc';
  pinfo = rmfield(pinfo,{'diagn_file','truth_time','diagn_time'});
  [pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(pinfo.prior_file);
  pinfo.var            = 'wind';
  pinfo.var_inds       = [2 8];
- pinfo.copyindices    = [7 12 17];
+ pinfo.copyindices    = [5 10 15];
 
  PlotSawtooth(pinfo)
  fprintf('Finished %s ... pausing, hit any key\n','PlotSawtooth'); pause
@@ -151,7 +149,7 @@ end
  fprintf('Starting %s\n','PlotTotalErr');
  clear pinfo; clf
 
- pinfo    = CheckModelCompatibility('True_State.nc','Prior_Diag.nc');
+ pinfo    = CheckModelCompatibility('true_state.nc','preassim.nc');
 
  PlotTotalErr(pinfo)
  fprintf('Finished %s ... pausing, hit any key\n','PlotTotalErr'); pause
@@ -168,7 +166,7 @@ end
  fprintf('Starting %s\n','PlotVarVarCorrel');
  clear pinfo; clf
 
- pinfo  = CheckModel('Prior_Diag.nc');
+ pinfo  = CheckModel('preassim.nc');
  pinfo.base_var        = 'concentration';
  pinfo.state_var       = 'source';
  pinfo.base_var_index  = 4;
@@ -191,3 +189,7 @@ end
  PlotJeffCorrel(pinfo)
  fprintf('Finished %s\n','PlotJeffCorrel')
 
+% <next few lines under version control, do not edit>
+% $URL$
+% $Revision$
+% $Date$

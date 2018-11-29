@@ -1,14 +1,10 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 program ensemble_init
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 ! This program is out of date compared to the other utilities in this directory.
 ! I believe it could call the standard model_mod initialization routine and
@@ -48,8 +44,6 @@ use  wrf_data_module, only : wrf_data, wrf_bdy_data, &
                              wrf_io, wrfbdy_io, &
                              set_wrf_date
 use      location_mod, only : location_type, get_location, set_location, & 
-                              vert_is_surface, vert_is_level, vert_is_pressure, vert_is_height, &
-                              VERTISUNDEF, VERTISSURFACE, VERTISLEVEL, VERTISPRESSURE, &
                               VERTISHEIGHT
 use    utilities_mod, only : get_unit, file_exist, open_file, &
                              close_file, error_handler, E_ERR, E_MSG, initialize_utilities, &
@@ -61,10 +55,10 @@ use netcdf
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 ! miscellaneous
 integer, parameter :: max_state_variables = 100
@@ -577,3 +571,9 @@ subroutine wrfbdy_add( wrfbdy_a, a, wrfbdy_b, b  )
 end subroutine wrfbdy_add
 
 end program ensemble_init
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

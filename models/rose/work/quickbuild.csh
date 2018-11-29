@@ -1,22 +1,19 @@
 #!/bin/csh
 #
-# DART software - Copyright 2004 - 2011 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# $Id$
-#
-# Script to manage the compilation of all components for this model;
-# executes a known "perfect model" experiment using an existing
-# observation sequence file (obs_seq.in) and initial conditions appropriate 
-# for both 'perfect_model_obs' (perfect_ics) and 'filter' (filter_ics).
-# There are enough initial conditions for ?? ensemble members in filter.
-# The 'input.nml' file controls all facets of this execution.
+# DART $Id$
 
 #----------------------------------------------------------------------
+# compile all programs in the current directory with a mkmf_xxx file.
+#
+# usage: [ -mpi | -nompi ]
+#----------------------------------------------------------------------
 # 'preprocess' is a program that culls the appropriate sections of the
-# observation module for the observations types in 'input.nml'; the 
-# resulting source file is used by all the remaining programs, 
+# observation module for the observations types in 'input.nml'; the
+# resulting source file is used by all the remaining programs,
 # so this MUST be run first.
 #----------------------------------------------------------------------
 
@@ -39,19 +36,16 @@ make || exit $n
 ./preprocess || exit 99
 
 #----------------------------------------------------------------------
-# Build rose first ... the modules are used by everyone and have a
-# gazillion input files that I don't want to specify 
-# in EVERY path_names_xxxx file.
+# Build rose first ... if possible.
 #----------------------------------------------------------------------
 
-@ n = $n + 1
-echo
 echo
 echo "---------------------------------------------------------------"
-echo "${MODEL} build number ${n} is rose"
+echo "The rose source is not distributed with DART."
+echo
 
-csh mkmf_rose
-make || exit $n
+# csh mkmf_rose
+# make || exit $n
 
 #----------------------------------------------------------------------
 # Build all the single-threaded targets

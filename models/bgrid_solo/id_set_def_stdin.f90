@@ -1,28 +1,25 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
  
 program id_set_def_stdin
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
-
-use     types_mod, only : r8
+use     types_mod, only : r8, i8
 use  location_mod, only : location_type
 use utilities_mod, only : get_unit
+use  obs_kind_mod, only : QTY_SURFACE_PRESSURE
 use     model_mod, only : static_init_model, get_model_size, &
-                          TYPE_PS, get_state_meta_data
+                          get_state_meta_data
 
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 integer :: i, model_size, var_type, iunit
 type(location_type) :: location
@@ -53,10 +50,10 @@ do i = 1, model_size
    ! Time is 0 days 0 seconds for create obs sequence
    write(iunit, *) 0, 0
 
-   call get_state_meta_data(i, location, var_type)
+   call get_state_meta_data(int(i,i8), location, var_type)
 
    ! Output the appropriate observational error variance
-   if(var_type == TYPE_PS) then
+   if(var_type == QTY_SURFACE_PRESSURE) then
    write(iunit, *)  10000.0_r8
    else
       write(iunit, *) 1.0_r8
@@ -68,3 +65,9 @@ end do
 write(iunit, *) 'set_def.out'
 
 end program id_set_def_stdin
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

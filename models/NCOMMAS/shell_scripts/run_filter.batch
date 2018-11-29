@@ -1,10 +1,10 @@
 #!/bin/csh
 #
-# DART software - Copyright 2004 - 2011 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# $Id$
+# DART $Id$
 #
 # Script to assimilate observations using DART and the ncommas ocean model.
 # This presumes two directories exists that contain all the required bits
@@ -250,7 +250,7 @@ endif
 # DART namelist settings appropriate/required:
 # &filter_nml:           restart_in_file_name    = 'filter_ics'
 # &ensemble_manager_nml: single_restart_file_in  = '.false.'
-# &ncommas_to_dart_nml:      ncommas_to_dart_output_file = 'dart.ud',
+# &ncommas_to_dart_nml:      ncommas_to_dart_output_file = 'dart_ics',
 #
 # &restart_file_tool_nml: <see list that follows>
 #  input_file_name              = "filter_restart",
@@ -293,7 +293,7 @@ cat ncommas_in.part1 ncommas_in.part2 >! ncommas_in
 set member = 1
 while ($member <= $ensemble_size)
 
-   # grap the ncommas pointer file and dereference it 
+   # grab the ncommas pointer file and dereference it 
    # Copy the ncommas restart file ... we will be updating it.
    # then link the ncommas restart file to the name for 'ncommas_to_dart'
    ${COPY} ${ncommasDIR}/rpointer.ocn.$member.restart .
@@ -306,7 +306,7 @@ while ($member <= $ensemble_size)
 
    ./ncommas_to_dart || exit 1
 
-   ${MOVE} dart.ud filter_restart
+   ${MOVE} dart_ics filter_restart
 
    ./restart_file_tool || exit 1
 
@@ -500,8 +500,8 @@ ${MOVE} STD*                       ${experiment}/ncommas
 ${MOVE} filter_restart*            ${experiment}/DART
 ${MOVE} assim_model_state_ud[1-9]* ${experiment}/DART
 ${MOVE} assim_model_state_ic[1-9]* ${experiment}/DART
-${MOVE} Posterior_Diag.nc          ${experiment}/DART
-${MOVE} Prior_Diag.nc              ${experiment}/DART
+${MOVE} analysis.nc                ${experiment}/DART
+${MOVE} preassim.nc                ${experiment}/DART
 ${MOVE} obs_seq.final              ${experiment}/DART
 ${MOVE} dart_log.out               ${experiment}/DART
 

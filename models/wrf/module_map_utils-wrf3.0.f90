@@ -1,3 +1,6 @@
+! This code is not protected by the DART copyright agreement.
+! DART $Id$
+
 MODULE map_utils
 
 ! Module that defines constants, data structures, and
@@ -682,6 +685,7 @@ MODULE map_utils
   
       ! Executable code
       reflon = proj%stdlon + 90.
+      proj%cone = 1.0_r8
   
       ! Compute numerator term of map scale factor
       scale_top = 1. + proj%hemi * SIN(proj%truelat1 * rad_per_deg)
@@ -2150,3 +2154,9 @@ MODULE map_utils
    END SUBROUTINE llij_gauss 
   
 END MODULE map_utils
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

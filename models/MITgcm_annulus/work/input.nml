@@ -13,7 +13,7 @@
    restart_out_file_name = "perfect_restart",
    obs_seq_in_file_name  = "obs_seq.in",
    obs_seq_out_file_name = "obs_seq.out",
-   adv_ens_command       = "./advance_model.csh",
+   adv_ens_command       = "../shell_scripts/advance_model.csh",
    output_timestamps     = .false.,
    trace_execution       = .false.,
    output_forward_op_errors = .false.,
@@ -23,7 +23,7 @@
 
 &filter_nml
    async                    = 0,
-   adv_ens_command          = "./advance_model.csh",
+   adv_ens_command          = "../shell_scripts/advance_model.csh",
    ens_size                 = 20,
    start_from_restart       = .false.,
    output_restart           = .true.,
@@ -58,11 +58,12 @@
    inf_out_file_name           = 'prior_inflate_restart', 'post_inflate_restart',
    inf_diag_file_name          = 'prior_inflate_diag',    'post_inflate_diag',
    inf_initial                 = 1.0,                     1.0,
-   inf_sd_initial              = 0.0,                     0.0,
-   inf_damping                 = 1.0,                     1.0,
    inf_lower_bound             = 1.0,                     1.0,
    inf_upper_bound             = 1000000.0,               1000000.0,
-   inf_sd_lower_bound          = 0.0,                     0.0
+   inf_damping                 = 1.0,                     1.0,
+   inf_sd_initial              = 0.0,                     0.0,
+   inf_sd_lower_bound          = 0.0,                     0.0,
+   inf_sd_max_change           = 1.05,                    1.05,
 /
 
 &smoother_nml
@@ -80,7 +81,7 @@
 &assim_tools_nml
    filter_kind                     = 1,
    cutoff                          = 0.15,
-   sort_obs_inc                    = .true.,
+   sort_obs_inc                    = .false.,
    spread_restoration              = .false.,
    sampling_error_correction       = .false.,
    adaptive_localization_threshold = -1,
@@ -99,11 +100,6 @@
                                 'RADIOSONDE_U_WIND_COMPONENT',
                                 'RADIOSONDE_V_WIND_COMPONENT'
    evaluate_these_obs_types   = 'RADIOSONDE_SURFACE_PRESSURE'  /
-
-&assim_model_nml
-   write_binary_restart_files = .true.,
-   netCDF_large_file_support  = .false.
-  /
 
 &model_nml
    model_size = 539400,
@@ -139,11 +135,11 @@
    reg_diagnostics_file = "reg_diagnostics"  /
 
 &preprocess_nml
-    input_obs_def_mod_file = '../../../obs_def/DEFAULT_obs_def_mod.F90', 
-   output_obs_def_mod_file = '../../../obs_def/obs_def_mod.f90', 
-   input_obs_kind_mod_file = '../../../obs_kind/DEFAULT_obs_kind_mod.F90', 
-  output_obs_kind_mod_file = '../../../obs_kind/obs_kind_mod.f90', 
-               input_files = '../../../obs_def/obs_def_reanalysis_bufr_mod.f90'  /
+    input_obs_def_mod_file = '../../../observations/forward_operators/DEFAULT_obs_def_mod.F90', 
+   output_obs_def_mod_file = '../../../observations/forward_operators/obs_def_mod.f90', 
+   input_obs_kind_mod_file = '../../../assimilation_code/modules/observations/DEFAULT_obs_kind_mod.F90', 
+  output_obs_kind_mod_file = '../../../assimilation_code/modules/observations/obs_kind_mod.f90', 
+               input_files = '../../../observations/forward_operators/obs_def_reanalysis_bufr_mod.f90'  /
 
 &restart_file_utility_nml
    input_file_name              = "filter_restart",
@@ -179,8 +175,7 @@
    bin_width        =     0, 0, 0, 6, 0, 0 ,
    time_to_skip     =     0, 0, 0, 0, 0, 0 ,
    max_num_bins     = 1000,
-   rat_cri            = 3.0,
-   input_qc_threshold = 3.0,
+   trusted_obs      = 'null',
    Nregions   = 4,
    lonlim1    =   0.0,   0.0,   0.0, 235.0,
    lonlim2    = 360.0, 360.0, 360.0, 295.0,
@@ -188,6 +183,9 @@
    latlim2    =  80.0, -20.0,  20.0,  55.0,
    reg_names  = 'Northern Hemisphere', 'Southern Hemisphere', 'Tropics', 'North America',
    print_mismatched_locs = .false.,
-   print_obs_locations = .false.,
-   verbose = .false.  /
+   create_rank_histogram = .true.,
+   outliers_in_histogram = .true.,
+   use_zero_error_obs    = .false.,
+   verbose               = .false.
+   /
 

@@ -1,21 +1,19 @@
 function RunAllTests(dummy)
-%% RunAllTests.m
+%% RunAllTests.m wrf
 
-%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% <next few lines under version control, do not edit>
-% $URL$
-% $Id$
-% $Revision$
-% $Date$
+% DART $Id$
 
 if (nargin() > 0)
    interactive = 1;
 else
    interactive = 0;
 end
+
+%%
 
 figure(1)
 if (interactive)
@@ -36,14 +34,14 @@ end
  fprintf('Starting %s\n','PlotBins');
  clear pinfo; close all;
 
- truth_file = 'True_State.nc';
- diagn_file = 'Prior_Diag.nc';
+ truth_file = 'true_state.nc';
+ diagn_file = 'preassim.nc';
  vars1 = CheckModel(diagn_file);
  vars1 = rmfield(vars1,{'time','time_series_length','fname'});
  vars2 = CheckModelCompatibility(truth_file,diagn_file);
  pinfo = CombineStructs(vars1,vars2);
- pinfo.lonmat     = nc_varget(pinfo.truth_file, 'XLONG_d01');
- pinfo.latmat     = nc_varget(pinfo.truth_file, 'XLAT_d01');
+ pinfo.lonmat     = ncread(pinfo.truth_file, 'XLONG_d01');
+ pinfo.latmat     = ncread(pinfo.truth_file, 'XLAT_d01');
  [nlats, nlons]   = size(pinfo.lonmat);
  pinfo.var        = 'T_d01';
  pinfo.levelindex = 1;
@@ -82,11 +80,11 @@ end
  fprintf('Starting %s\n','PlotCorrel');
  clear pinfo; clf
 
- pinfo                    = CheckModel('Prior_Diag.nc');
- pinfo.time               = nc_varget(pinfo.fname,'time');
+ pinfo                    = CheckModel('preassim.nc');
+ pinfo.time               = ncread(pinfo.fname,'time');
  pinfo.time_series_length = length(pinfo.time);
- pinfo.lonmat             = nc_varget(pinfo.fname, 'XLONG_d01');
- pinfo.latmat             = nc_varget(pinfo.fname, 'XLAT_d01');
+ pinfo.lonmat             = ncread(pinfo.fname, 'XLONG_d01');
+ pinfo.latmat             = ncread(pinfo.fname, 'XLAT_d01');
  [nlats, nlons]           = size(pinfo.lonmat);
  pinfo.base_var           = 'T_d01';
  pinfo.comp_var           = 'T_d01';
@@ -117,13 +115,13 @@ end
  fprintf('Starting %s\n','PlotPhaseSpace');
  clear pinfo; clf
 
- pinfo              = CheckModel('Prior_Diag.nc');
+ pinfo              = CheckModel('preassim.nc');
 [pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(pinfo.fname);
  pinfo.var1name     = 'T_d01';
  pinfo.var2name     = 'PH_d01';
  pinfo.var3name     = 'W_d01';
- pinfo.lonmat       = nc_varget(pinfo.fname, 'XLONG_d01');
- pinfo.latmat       = nc_varget(pinfo.fname, 'XLAT_d01');
+ pinfo.lonmat       = ncread(pinfo.fname, 'XLONG_d01');
+ pinfo.latmat       = ncread(pinfo.fname, 'XLAT_d01');
  [nlats, nlons]     = size(pinfo.lonmat);
  pinfo.var1_lvlind  = 1;
  pinfo.var2_lvlind  = 1;
@@ -166,9 +164,9 @@ end
  fprintf('Starting %s\n','PlotSawtooth');
  clear pinfo; close all
 
- truth_file     = 'True_State.nc';
- prior_file     = 'Prior_Diag.nc';
- posterior_file = 'Posterior_Diag.nc';
+ truth_file     = 'true_state.nc';
+ prior_file     = 'preassim.nc';
+ posterior_file = 'analysis.nc';
  pinfo = CheckModelCompatibility(prior_file,posterior_file);
  pinfo.prior_time     = pinfo.truth_time;
  pinfo.posterior_time = pinfo.diagn_time;
@@ -178,8 +176,8 @@ end
  pinfo = rmfield(pinfo,{'diagn_file','truth_time','diagn_time'});
 [pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(prior_file);
  pinfo.var_names      = 'U_d01';
- pinfo.latmat         = nc_varget(pinfo.prior_file, 'XLAT_U_d01');
- pinfo.lonmat         = nc_varget(pinfo.prior_file, 'XLONG_U_d01');
+ pinfo.latmat         = ncread(pinfo.prior_file, 'XLAT_U_d01');
+ pinfo.lonmat         = ncread(pinfo.prior_file, 'XLONG_U_d01');
 [nlats, nlons]        = size(pinfo.lonmat);
  pinfo.levelindex     = 1;
  pinfo.latindex       = round(nlats/2);
@@ -210,8 +208,8 @@ end
  fprintf('Starting %s\n','PlotTotalErr');
  clear pinfo; clf
 
- truth_file = 'True_State.nc';
- diagn_file = 'Prior_Diag.nc';
+ truth_file = 'true_state.nc';
+ diagn_file = 'preassim.nc';
  vars1 = CheckModel(diagn_file);
  rmfield(vars1,{'time','time_series_length','fname'});
  vars2 = CheckModelCompatibility(truth_file,diagn_file);
@@ -233,15 +231,15 @@ end
  fprintf('Starting %s\n','PlotVarVarCorrel');
  clear pinfo; clf
 
- diagn_file = 'Prior_Diag.nc';
+ diagn_file = 'preassim.nc';
  pinfo = CheckModel(diagn_file);
 [pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(pinfo.fname);
  pinfo.base_var     = 'T_d01';
  pinfo.comp_var     = 'PH_d01';
  pinfo.base_tmeind  = 3;
  pinfo.base_time    = pinfo.time(pinfo.base_tmeind);
- pinfo.lonmat       = nc_varget(pinfo.fname, 'XLONG_d01');
- pinfo.latmat       = nc_varget(pinfo.fname, 'XLAT_d01');
+ pinfo.lonmat       = ncread(pinfo.fname, 'XLONG_d01');
+ pinfo.latmat       = ncread(pinfo.fname, 'XLAT_d01');
  [nlats, nlons]     = size(pinfo.lonmat);
  pinfo.base_lvlind  = 1;
  pinfo.base_lvl     = 1;
@@ -273,3 +271,7 @@ end
  PlotJeffCorrel(pinfo)
  fprintf('Finished %s\n','PlotJeffCorrel')
 
+% <next few lines under version control, do not edit>
+% $URL$
+% $Revision$
+% $Date$

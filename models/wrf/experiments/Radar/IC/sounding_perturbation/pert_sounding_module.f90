@@ -1,14 +1,10 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 module pert_sounding_mod
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 ! This program adds perturbations to a sounding
 ! based on an initial sounding that's input from
@@ -17,6 +13,7 @@ module pert_sounding_mod
 !
 ! Written by Altug Aksoy for WRF/DART 11/09/2006
 ! Based on code by David Dowell
+!>@todo FIXME remove the numerical recipes routines
 
 implicit none
 
@@ -428,3 +425,8 @@ return
 
 end function ran2
 
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

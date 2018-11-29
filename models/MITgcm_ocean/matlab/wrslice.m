@@ -69,3 +69,8 @@ if count ~= nnn
  return
 end
 st=fclose(fid);
+
+% <next few lines under version control, do not edit>
+% $URL$
+% $Revision$
+% $Date$

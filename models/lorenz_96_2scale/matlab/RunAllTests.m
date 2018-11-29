@@ -1,21 +1,19 @@
 function RunAllTests(dummy)
-%% RunAllTests.m
+%% RunAllTests.m lorenz_96_2scale
 
-%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% <next few lines under version control, do not edit>
-% $URL$
-% $Id$
-% $Revision$
-% $Date$
+% DART $Id$
 
 if (nargin() > 0)
    interactive = 1;
 else
    interactive = 0;
 end
+
+%%
 
 figure(1)
 if (interactive)
@@ -36,7 +34,7 @@ end
  fprintf('Starting %s\n','PlotBins');
  clear pinfo; close all;
 
- pinfo = CheckModelCompatibility('True_State.nc','Prior_Diag.nc');
+ pinfo = CheckModelCompatibility('true_state.nc','preassim.nc');
 [pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(pinfo.diagn_file);
  pinfo.var            = 'Y';
  pinfo.var_inds       = [100 200 300];
@@ -68,7 +66,7 @@ end
  fprintf('Starting %s\n','PlotCorrel');
  clear pinfo; clf
 
- pinfo                    = CheckModel('Prior_Diag.nc');
+ pinfo                    = CheckModel('preassim.nc');
  pinfo.base_var           = 'X';
  pinfo.base_var_index     = 10;
  pinfo.base_time          = 125;
@@ -88,7 +86,7 @@ end
  fprintf('Starting %s\n','PlotPhaseSpace');
  clear pinfo; clf
 
- pinfo.fname    = 'Prior_Diag.nc';
+ pinfo.fname    = 'preassim.nc';
  pinfo.model    = 'Lorenz_96_2scale';
  pinfo.var1name = 'X';
  pinfo.var2name = 'Y';
@@ -119,17 +117,17 @@ end
  fprintf('Starting %s\n','PlotSawtooth');
  clear pinfo; close all
 
- pinfo    = CheckModelCompatibility('Prior_Diag.nc','Posterior_Diag.nc');
+ pinfo    = CheckModelCompatibility('preassim.nc','analysis.nc');
  pinfo.prior_time     = pinfo.truth_time;
  pinfo.prior_file     = pinfo.truth_file;
  pinfo.posterior_time = pinfo.diagn_time;
  pinfo.posterior_file = pinfo.diagn_file;
- pinfo.truth_file     = 'True_State.nc';
+ pinfo.truth_file     = 'true_state.nc';
  pinfo = rmfield(pinfo,{'diagn_file','truth_time','diagn_time'});
  [pinfo.num_ens_members, pinfo.ensemble_indices] = get_ensemble_indices(pinfo.prior_file);
  pinfo.var            = 'X';
  pinfo.var_inds       = [1 12 24];
- pinfo.copyindices    = [7 12 17];
+ pinfo.copyindices    = [5 10 15];
 
  PlotSawtooth(pinfo)
  fprintf('Finished %s ... pausing, hit any key\n','PlotSawtooth'); pause
@@ -151,7 +149,7 @@ end
  fprintf('Starting %s\n','PlotTotalErr');
  clear pinfo; clf
 
- pinfo    = CheckModelCompatibility('True_State.nc','Prior_Diag.nc');
+ pinfo    = CheckModelCompatibility('true_state.nc','preassim.nc');
  pinfo.def_state_vars     = [1 12 24];
 
  PlotTotalErr(pinfo)
@@ -169,7 +167,7 @@ end
  fprintf('Starting %s\n','PlotVarVarCorrel');
  clear pinfo; clf
 
- pinfo  = CheckModel('Prior_Diag.nc');
+ pinfo  = CheckModel('preassim.nc');
  pinfo.base_var        = 'X';
  pinfo.state_var       = 'Y';
  pinfo.base_var_index  = 18;
@@ -192,3 +190,7 @@ end
  PlotJeffCorrel(pinfo)
  fprintf('Finished %s\n','PlotJeffCorrel')
 
+% <next few lines under version control, do not edit>
+% $URL$
+% $Revision$
+% $Date$

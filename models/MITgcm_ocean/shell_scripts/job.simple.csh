@@ -1,11 +1,11 @@
 #!/bin/csh
 #
-# DART software - Copyright 2004 - 2011 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# $Id$
-#
+# DART $Id$
+
 # job.simple.csh ... Top level script to run a single assimilation experiment.
 #
 # Unlike the more complex job.csh, this script only processes a single 
@@ -36,9 +36,11 @@ set experiment = DARTMIT
 alias submit 'bsub < \!*'
 
 set myname = $0     # this is the name of this script
+set nonomatch       # suppress "rm" warnings if wildcard does not match anything
 
+# The FORCE options are not optional.
+# The VERBOSE options are useful for debugging though
 # some systems don't like the -v option to any of the following 
-
 set OSTYPE = `uname -s` 
 switch ( ${OSTYPE} )
    case IRIX64:
@@ -152,8 +154,8 @@ ${MOVE} STD*                  ${experiment}/MIT
 ${MOVE} filter_restart*            ${experiment}/DART
 ${MOVE} assim_model_state_ud[1-9]* ${experiment}/DART
 ${MOVE} assim_model_state_ic[1-9]* ${experiment}/DART
-${MOVE} Posterior_Diag.nc          ${experiment}/DART
-${MOVE} Prior_Diag.nc              ${experiment}/DART
+${MOVE} analysis.nc                ${experiment}/DART
+${MOVE} preassim.nc                ${experiment}/DART
 ${MOVE} obs_seq.final              ${experiment}/DART
 ${MOVE} dart_log.out               ${experiment}/DART
 

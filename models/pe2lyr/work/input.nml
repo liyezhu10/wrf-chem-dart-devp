@@ -42,7 +42,7 @@
    output_interval          = 1,
    num_groups               = 1,
    input_qc_threshold       =  3.0,
-   outlier_threshold        = -1.0,
+   outlier_threshold        =  4.0,
    output_forward_op_errors = .true.,
    output_timestamps        = .false.,
    output_inflation         = .true.,
@@ -54,15 +54,13 @@
    inf_sd_initial_from_restart = .false.,                 .false.,
    inf_output_restart          = .true.,                  .true.,
    inf_deterministic           = .true.,                  .true.,
-   inf_in_file_name            = 'prior_inflate_ics',     'post_inflate_ics',
-   inf_out_file_name           = 'prior_inflate_restart', 'post_inflate_restart',
-   inf_diag_file_name          = 'prior_inflate_diag',    'post_inflate_diag',
    inf_initial                 = 1.0,                     1.0,
-   inf_sd_initial              = 0.0,                     0.0,
-   inf_damping                 = 1.0,                     1.0,
    inf_lower_bound             = 1.0,                     1.0,
    inf_upper_bound             = 1000000.0,               1000000.0,
-   inf_sd_lower_bound          = 0.0,                     0.0
+   inf_damping                 = 1.0,                     1.0,
+   inf_sd_initial              = 0.0,                     0.0,
+   inf_sd_lower_bound          = 0.0,                     0.0,
+   inf_sd_max_change           = 1.05,                    1.05,
 /
 
 &smoother_nml
@@ -79,8 +77,8 @@
 
 &assim_tools_nml
    filter_kind                     = 1,
-   cutoff                          = 100000.0,
-   sort_obs_inc                    = .true.,
+   cutoff                          = 0.02,
+   sort_obs_inc                    = .false.,
    spread_restoration              = .false.,
    sampling_error_correction       = .false.,
    adaptive_localization_threshold = -1,
@@ -106,11 +104,6 @@
 
    evaluate_these_obs_types   = 'GEOPOTENTIAL_HEIGHT'  /
 
-&assim_model_nml
-   write_binary_restart_files = .true.,
-   netCDF_large_file_support  = .false.
-  /
-
 &location_nml
    horiz_dist_only             = .true.,
    vert_normalization_pressure = 100000.0, 
@@ -119,14 +112,15 @@
    approximate_distance        = .false.,
    nlon                        = 71,
    nlat                        = 36,
+   print_box_level             = 0,
    output_box_info             = .false.  /
 
 &preprocess_nml
-    input_obs_kind_mod_file = '../../../obs_kind/DEFAULT_obs_kind_mod.F90',
-   output_obs_kind_mod_file = '../../../obs_kind/obs_kind_mod.f90',
-     input_obs_def_mod_file = '../../../obs_def/DEFAULT_obs_def_mod.F90',
-    output_obs_def_mod_file = '../../../obs_def/obs_def_mod.f90',
-                input_files = '../../../obs_def/obs_def_pe2lyr_mod.f90' /
+    input_obs_kind_mod_file = '../../../assimilation_code/modules/observations/DEFAULT_obs_kind_mod.F90',
+   output_obs_kind_mod_file = '../../../assimilation_code/modules/observations/obs_kind_mod.f90',
+     input_obs_def_mod_file = '../../../observations/forward_operators/DEFAULT_obs_def_mod.F90',
+    output_obs_def_mod_file = '../../../observations/forward_operators/obs_def_mod.f90',
+                input_files = '../../../observations/forward_operators/obs_def_pe2lyr_mod.f90' /
 
 &utilities_nml
    TERMLEVEL = 1,
@@ -136,8 +130,7 @@
    write_nml   = 'file'  /
 
 &obs_sequence_tool_nml
-   num_input_files   = 2,
-   filename_seq      = 'obs_seq.one', 'obs_seq.two',
+   filename_seq      = 'obs_seq.out',
    filename_out      = 'obs_seq.processed',
    first_obs_days    = -1,
    first_obs_seconds = -1,
@@ -176,24 +169,10 @@
 #
 
 
-&restart_file_tool_nml
-   input_file_name              = "filter_restart",
-   output_file_name             = "filter_updated_restart",
-   ens_size                     = 1,
-   single_restart_file_in       = .true.,
-   single_restart_file_out      = .true.,
-   write_binary_restart_files   = .true.,
-   overwrite_data_time          = .false.,
-   new_data_days                = -1,
-   new_data_secs                = -1,
-   input_is_model_advance_file  = .false.,
-   output_is_model_advance_file = .false.,
-   overwrite_advance_time       = .false.,
-   new_advance_days             = -1,
-   new_advance_secs             = -1,
-   gregorian_cal                = .false.
-/
-
+# again - this model doesn't use a calendar.  it starts at
+# day 0, seconds 0.  that's equiv to year 1601 in gregorian,
+# so use that for now.  but it should allow a no_calendar option.
+#
 # The times in the namelist for the obs_diag program are vectors
 # that follow the following sequence:
 # year   month   day   hour   minute   second
@@ -202,25 +181,72 @@
 #
 # Acceptable latitudes range from  [-90,  90]
 # Acceptable longitudes range from [  0, Inf]
+# 
+# currently this fails anyway because the observations are called
+# U_WIND_COMPONENT and V_WIND_COMPONENT and in trying to match up
+# corresponding wind observations into a single vector, the obs_diag
+# program expects a platform name at the start of the obs type and
+# fails without one.
 
 &obs_diag_nml
    obs_sequence_name = 'obs_seq.final',
    obs_sequence_list = '',
-   first_bin_center =  2003, 1, 1, 0, 0, 0 ,
-   last_bin_center  =  2003, 1, 7, 0, 0, 0 ,
-   bin_separation   =     0, 0, 0, 6, 0, 0 ,
-   bin_width        =     0, 0, 0, 6, 0, 0 ,
-   time_to_skip     =     0, 0, 1, 0, 0, 0 ,
+   first_bin_center =  1601, 1, 1, 0, 0, 0 ,
+   last_bin_center  =  9999, 1, 1, 0, 0, 0 ,
+   bin_separation   =     0, 0, 0, 0, 0, 0 ,
+   bin_width        =     0, 0, 1, 0, 0, 0 ,
+   time_to_skip     =     0, 0, 0, 0, 0, 0 ,
    max_num_bins     = 1000,
-   rat_cri            = 3.0,
-   input_qc_threshold = 3.0,
-   Nregions   = 4,
-   lonlim1    =   0.0,   0.0,   0.0, 235.0,
-   lonlim2    = 360.0, 360.0, 360.0, 295.0,
-   latlim1    =  20.0, -80.0, -20.0,  25.0,
-   latlim2    =  80.0, -20.0,  20.0,  55.0,
-   reg_names  = 'Northern Hemisphere', 'Southern Hemisphere', 'Tropics', 'North America',
+   trusted_obs      = 'null',
+   Nregions   = 3,
+   lonlim1    =   0.0,   0.0,   0.0,
+   lonlim2    = 360.0, 360.0, 360.0,
+   latlim1    =  20.0, -80.0, -20.0,
+   latlim2    =  80.0, -20.0,  20.0,
+   reg_names  = 'Northern Hemisphere', 'Southern Hemisphere', 'Tropics',
    print_mismatched_locs = .false.,
-   print_obs_locations   = .false.,
-   verbose               = .false.  /
+   create_rank_histogram = .true.,
+   outliers_in_histogram = .true.,
+   use_zero_error_obs    = .false.,
+   verbose               = .true.
+   /
+
+# this is what the namelist should probably look like, because
+# this model doesn't really have a calendar.  it just increments
+# days and seconds.  but the schedule module currently only
+# understands models with calendars, so lie to it about using
+# a gregorian calendar.  it works just fine - day 0 is year 1601.
+#&schedule_nml
+#   calendar        = 'no_calendar',
+#   first_bin_start =     0,  0,
+#   first_bin_end   =  9999,  0,
+#   last_bin_end    =  9999,  0,
+#   bin_interval_days    = 1000000,
+#   bin_interval_seconds = 0,
+#   max_num_bins         = 1000,
+#   print_table          = .true.
+#   /
+
+&schedule_nml
+   calendar        = 'Gregorian',
+   first_bin_start =  1601,  1,  1,  0,  0,  0,
+   first_bin_end   =  2999,  1,  1,  0,  0,  0,
+   last_bin_end    =  2999,  1,  1,  0,  0,  0,
+   bin_interval_days    = 1000000,
+   bin_interval_seconds = 0,
+   max_num_bins         = 1000,
+   print_table          = .true.
+   /
+
+
+&obs_seq_to_netcdf_nml
+   obs_sequence_name = 'obs_seq.final',
+   obs_sequence_list = '',
+   append_to_netcdf  = .false.,
+   lonlim1    =    0.0,
+   lonlim2    =  360.0,
+   latlim1    =  -90.0,
+   latlim2    =   90.0,
+   verbose    = .false.
+   /
 

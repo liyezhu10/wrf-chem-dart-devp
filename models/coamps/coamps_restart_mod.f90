@@ -1,14 +1,9 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
-! http://www.image.ucar.edu/DAReS/DART/DART_download
+! This code may (or may not) be part of the COAMPS distribution,
+! So it is not protected by the DART copyright agreement.
+!
+! DART $Id$
 
 module coamps_restart_mod
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 !------------------------------
 ! MODULE:       coamps_restart_mod
@@ -211,10 +206,10 @@ module coamps_restart_mod
   type(coamps_restart), target :: restart_info
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source = "$URL$", &
-   revision = "$Revision$", &
-   revdate = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
   !------------------------------
   ! END MODULE VARIABLES
@@ -654,7 +649,7 @@ contains
        call level_type_to_flag(lvl_type, lvl_flag)
        call update_field_to_flag(write_fld, write_flag)
        call pos_def_to_flag(pos_def, pos_flag)
-       var_type_num = get_raw_obs_kind_index(var_type)
+       var_type_num = get_index_for_quantity(var_type)
 
        if (var_type_num .lt. 0) then
           call error_handler(E_ERR, 'read_restart_var_file',            &
@@ -960,7 +955,7 @@ contains
 
     character(len=32) :: kind_name
 
-    kind_name = get_raw_obs_kind_name(var%var_type)
+    kind_name = get_name_for_quantity(var%var_type)
 
     if (do_output()) then
        write (*, '(A9 T15A5)')   "VAR NAME:",var%var_name
@@ -983,3 +978,8 @@ contains
   !------------------------------
 end module coamps_restart_mod
 
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

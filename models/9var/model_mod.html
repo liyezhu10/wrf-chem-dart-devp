@@ -3,27 +3,41 @@
 <HTML>
 <HEAD>
 <TITLE>module model_mod (9-variable)</TITLE>
-<link rel="stylesheet" type="text/css" href="../../doc/html/doc.css">
+<link rel="stylesheet" type="text/css" href="../../documentation/html/doc.css">
+<link href="../../documentation/images/dart.ico" rel="shortcut icon" />
 </HEAD>
 <BODY>
 <A NAME="TOP"></A>
 
-<center>
-<A HREF="#Interface">INTERFACES</A> /
+<H1>MODULE model_mod (9-variable)</H1>
+
+<table border=0 summary="" cellpadding=5>
+<tr>
+    <td valign=middle>
+    <img src="../../documentation/images/Dartboard7.png" alt="DART project logo" height=70 />
+    </td>
+    <td>
+       <P>Jump to <a href="../../documentation/index.html">DART Documentation Main Index</a><br />
+          <small><small>version information for this file: <br />
+          <!-- version tag follows, do not edit -->
+          $Id$</small></small>
+       </P></td>
+</tr>
+</table>
+
 <A HREF="#Namelist">NAMELIST</A> /
+<A HREF="#Interface">INTERFACES</A> /
 <A HREF="#FilesUsed">FILES</A> /
 <A HREF="#References">REFERENCES</A> /
 <A HREF="#Errors">ERRORS</A> /
 <A HREF="#FuturePlans">PLANS</A> /
 <A HREF="#PrivateComponents">PRIVATE COMPONENTS</A> /
 <A HREF="#Legalese">TERMS OF USE</A>
-</center>
 
-<H1>MODULE model_mod (9-variable)</H1>
-<!-- version tag follows, do not edit --><P>$Id$</P>
+<H2>Overview</H2>
 
 <P>
-DART interface module for the 9-variable model. The 17 public interfaces
+DART interface module for the 9-variable model. The 16 public interfaces
 are standardized for all DART compliant models. These interfaces allow
 DART to advance the model, get the model state and metadata describing 
 this state, find state variables that are close to a given location, 
@@ -37,7 +51,7 @@ that is something like gravity waves.
 <!--==================================================================-->
 
 <A NAME="OtherModulesUsed"></A>
-<HR>
+<div class="top">[<a href="#">top</a>]</div><hr />
 <H2>OTHER MODULES USED</H2>
 <PRE>
 types_mod
@@ -55,7 +69,7 @@ utilities_mod
 <!--==================================================================-->
 
 <A NAME="Interface"></A>
-<HR>
+<div class="top">[<a href="#">top</a>]</div><hr />
 <H2>PUBLIC INTERFACES</H2>
 
 <TABLE>
@@ -525,7 +539,7 @@ real(r8),             intent(in)    :: <em class=code>maxdist</em>
 
 <P>
 Pass-through to the 1-D locations module. See
-<A HREF="../../location/oned/location_mod.html#get_close_maxdist_init">
+<A HREF="../../assimilation_code/location/oned/location_mod.html#get_close_maxdist_init">
 get_close_maxdist_init()</A> for the documentation of this subroutine.
 </P>
 
@@ -550,7 +564,7 @@ type(location_type),  intent(in)    :: <em class=code>obs(num)</em>
 
 <P>
 Pass-through to the 1-D locations module. See
-<A HREF="../../location/oned/location_mod.html#get_close_obs_init">
+<A HREF="../../assimilation_code/location/oned/location_mod.html#get_close_obs_init">
 get_close_obs_init()</A> for the documentation of this subroutine.
 </P>
 
@@ -582,7 +596,7 @@ real(r8), optional,   intent(out) :: <em class=optionalcode>dist(:)</em>
 
 <P>
 Pass-through to the 1-D locations module. See
-<A HREF="../../location/oned/location_mod.html#get_close_obs">
+<A HREF="../../assimilation_code/location/oned/location_mod.html#get_close_obs">
 get_close_obs()</A> for the documentation of this subroutine.
 </P>
 
@@ -620,58 +634,75 @@ A NULL INTERFACE in this model.
 <!--===================== DESCRIPTION OF A NAMELIST =====================-->
 
 <A NAME="Namelist"></A>
-<HR>
+<div class="top">[<a href="#">top</a>]</div><hr />
 <H2>NAMELIST</H2>
-<P>We adhere to the F90 standard of starting a namelist with an ampersand
-'&amp;' and terminating with a slash '/' for all our namelist input.
-The declarations have a different syntax, naturally.
+<P>
+This namelist is read from the file <em class=file>input.nml</em>.
+Namelists start with an ampersand
+'&amp;' and terminate with a slash '/'.
+Character strings that contain a '/' must be
+enclosed in quotes to prevent them from 
+prematurely terminating the namelist.
 </P>
+
 <div class=namelist>
 <pre>
-<em class=call>namelist / model_nml / </em> &amp;
-    g, delta_t, time_step_days, time_step_seconds
+&amp;model_nml
+   g                 = 8.0,
+   deltat            = 0.0833333333333333,
+   time_step_days    = 0,
+   time_step_seconds = 3600  
+/
 </pre>
 </div>
 
-<div class=indent1>
-<!-- Description -->
+<br />
+<br />
 
-<P>
-This namelist is read in a file called <em class=file>input.nml</em>
-</P>
+<div>
+<TABLE border=0 cellpadding=10 width=100% summary='namelist description'>
+<THEAD align=left>
+<TR><TH> Item </TH>
+    <TH> Type </TH>
+    <TH> Description </TH> </TR>
+</THEAD>
 
-<TABLE border=0 cellpadding=3 width=100%>
-<TR><TH align=left>Contents    </TH>
-    <TH align=left>Type        </TH>
-    <TH align=left>Description </TH></TR>
-<TR><!--contents--><TD valign=top>g           </TD>
-    <!--  type  --><TD valign=top>real(r8)        </TD>
-    <!--descript--><TD>Model parameter, see comp_dt in code for equations.
-                       Default: 8.</TD></TR>
-<TR><!--contents--><TD valign=top>delta_t              </TD>
-    <!--  type  --><TD valign=top>real(r8)             </TD>
-    <!--descript--><TD>Non-dimensional timestep, default 1/12. 
-                       This is mapped to the dimensional timestep specified by
-                       time_step_days and time_step_seconds.</TD></TR>
-<TR><!--contents--><TD valign=top>time_step_days       </TD>
-    <!--  type  --><TD valign=top>real(r8)             </TD>
-    <!--descript--><TD>Number of days for dimensional timestep,
-                       mapped to delta_t. Default: 0.</TD></TR>
-<TR><!--contents--><TD valign=top>time_step_seconds    </TD>
-    <!--  type  --><TD valign=top>real(r8)             </TD>
-    <!--descript--><TD>Number of seconds for dimensional timestep,
-                       mapped to delta_t.  Default: 3600</TD></TR>
+<TBODY valign=top>
+
+<TR><TD>g </TD>
+    <TD>real(r8) </TD>
+    <TD>Model parameter, see comp_dt in code for equations.
+</TD></TR>
+
+<TR><TD>delta_t </TD>
+    <TD>real(r8) </TD>
+    <TD>Non-dimensional timestep.  This is mapped to the dimensional timestep
+specified by time_step_days and time_step_seconds.
+</TD></TR>
+
+<TR><TD>time_step_days </TD>
+    <TD>real(r8) </TD>
+    <TD>Number of days for dimensional timestep, mapped to delta_t.
+</TD></TR>
+
+<TR><TD>time_step_seconds </TD>
+    <TD>real(r8) </TD>
+    <TD>Number of seconds for dimensional timestep, mapped to delta_t.
+</TD></TR>
+
+</TBODY> 
 </TABLE>
-
 </div>
-<br>
+
+<br />
+<br />
 
 <!--==================================================================-->
 <!-- Describe the Files Used by this module.                          -->
 <!--==================================================================-->
 
 <A NAME="FilesUsed"></A>
-<HR>
+<div class="top">[<a href="#">top</a>]</div><hr />
 <H2>FILES</H2>
 
 <TABLE border=0 >
@@ -679,9 +710,9 @@ This namelist is read in a file called <em class=file>input.nml</em>
     <TH align=left>purpose</TH></TR>
 <TR><TD>input.nml</TD>
     <TD>to read the model_mod namelist</TD></TR>
-<TR><TD>Prior_Diag.nc</TD>
+<TR><TD>preassim.nc</TD>
     <TD>the time-history of the model state before assimilation</TD></TR>
-<TR><TD>Posterior_Diag.nc&nbsp;</TD>
+<TR><TD>analysis.nc&nbsp;</TD>
     <TD>the time-history of the model state after assimilation</TD></TR>
 <TR><TD>dart_log.out [default name]</TD>
     <TD>the run-time diagnostic output</TD></TR>
@@ -695,7 +726,7 @@ This namelist is read in a file called <em class=file>input.nml</em>
 <!--==================================================================-->
 
 <A NAME="References"></A>
-<HR>
+<div class="top">[<a href="#">top</a>]</div><hr />
 <H2>REFERENCES</H2>
 <ul>
 <li> none </li>
@@ -706,7 +737,7 @@ This namelist is read in a file called <em class=file>input.nml</em>
 <!--==================================================================-->
 
 <A NAME="Errors"></A>
-<HR>
+<div class="top">[<a href="#">top</a>]</div><hr />
 <H2>ERROR CODES and CONDITIONS</H2>
 
 <div class=errors>
@@ -732,7 +763,7 @@ none at this time
 <!--==================================================================-->
 
 <A NAME="FuturePlans"></A>
-<HR>
+<div class="top">[<a href="#">top</a>]</div><hr />
 <H2>FUTURE PLANS</H2>
 <P>
 none at this time
@@ -743,7 +774,7 @@ none at this time
 <!--==================================================================-->
 
 <A NAME="PrivateComponents"></A>
-<HR>
+<div class="top">[<a href="#">top</a>]</div><hr />
 <H2>PRIVATE COMPONENTS</H2>
 <P>
 N/A
@@ -754,13 +785,12 @@ N/A
 <!--==================================================================-->
 
 <A NAME="Legalese"></A>
-<HR>
+<div class="top">[<a href="#">top</a>]</div><hr />
 <H2>Terms of Use</H2>
 
 <P>
-DART software - Copyright 2004 - 2011 UCAR.<br>
-This open source software is provided by UCAR, "as is",<br>
-without charge, subject to all terms of use at<br>
+DART software - Copyright UCAR. This open source software is provided
+by UCAR, "as is", without charge, subject to all terms of use at
 <a href="http://www.image.ucar.edu/DAReS/DART/DART_download">
 http://www.image.ucar.edu/DAReS/DART/DART_download</a>
 </P>

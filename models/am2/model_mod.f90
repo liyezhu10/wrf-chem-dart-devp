@@ -1,20 +1,15 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 module model_mod
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 !----------------------------------------------------------------------
 ! purpose: interface between AM2 and DART
 !              Translate to/from state_vector and restart file(s)
 !              Initialize model
-!              Write out model fields to Prior and Posterior_Diag.nc,
 !              Generate expected obs from model state (model_interpolate)
 !              Find state variables (or obs) that are close to a given base observation.
 !                  (get_close_obs)
@@ -26,16 +21,16 @@ module model_mod
   use time_manager_mod,  only : time_type, set_time, print_time, set_calendar_type, GREGORIAN
   use utilities_mod,     only : open_file, close_file, find_namelist_in_file, check_namelist_read, &
                                 register_module, error_handler, file_exist, E_ERR, E_WARN, E_MSG,  &
-                                nmlfileunit, do_output, nc_check, do_nml_file, do_nml_term
+                                nmlfileunit, do_output, nc_check, do_nml_file, do_nml_term, logfileunit
   use mpi_utilities_mod, only : my_task_id, task_count
   use location_mod,      only : location_type,      get_close_maxdist_init,      &
                                 get_close_obs_init, get_close_obs, set_location, &
                                 get_location, vert_is_level, vert_is_pressure, vert_is_height
-  use obs_kind_mod,      only : KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT,  &
-                                KIND_SURFACE_PRESSURE, KIND_TEMPERATURE,       &
-                                KIND_SPECIFIC_HUMIDITY, KIND_PRESSURE,         &
-                                KIND_CLOUD_LIQUID_WATER, KIND_CLOUD_ICE,       &
-                                get_obs_kind_index, get_obs_kind_var_type
+  use obs_kind_mod,      only : QTY_U_WIND_COMPONENT, QTY_V_WIND_COMPONENT,  &
+                                QTY_SURFACE_PRESSURE, QTY_TEMPERATURE,       &
+                                QTY_SPECIFIC_HUMIDITY, QTY_PRESSURE,         &
+                                QTY_CLOUD_LIQUID_WATER, QTY_CLOUD_ICE,       &
+                                get_index_for_type_of_obs, get_quantity_for_type_of_obs
                                 ! We'll need to add a kind_cloud_fraction to correspond to AM2 prog var
   use location_mod,      only:  VERTISSURFACE, VERTISLEVEL
 
@@ -71,6 +66,13 @@ module model_mod
             end_model_instance,     &
             read_model_init,        &
             write_model_init
+
+! version controlled file description for error handling, do not edit
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
+
   !==============================================================================================
   !
   ! Global declarations
@@ -90,8 +92,8 @@ module model_mod
 
   !----------------------------------------------------------------------
   ! Namelist variables with default values follow
-
   !----------------------------------------------------------------------
+
   integer, parameter :: maxnum_tracers = 10
   character(len = nf90_max_name), dimension(maxnum_tracers) :: &
     tracer_names = '', tracer_files = '', tracer_obs_kind_names = "", tracer_config_files = ''
@@ -121,12 +123,16 @@ module model_mod
     model_config_file, model_restart_file,                                  &
     highest_obs_pressure_mb, highest_state_pressure_mb, max_obs_lat_degree, &
     Time_step_seconds, Time_step_days
+
   !----------------------------------------------------------------------
   !
   ! Useful global storage
   !
 
+  character(len=256) :: string1
+  logical, save :: module_initialized = .false.
   type(time_type) :: Time_step_atmos
+
   !
   ! Model top pressure is used for converting pressure thickness delp to surface pressure
   !   It should ideally be availible in phalf but the restart files I have don't have
@@ -147,9 +153,9 @@ module model_mod
   character(len = 2), dimension(num_2d_prog_vars), parameter :: &
          names_2d_prog_vars = (/ "PS" /)
   integer, dimension(num_3d_prog_vars),            parameter :: &
-         kinds_3d_prog_vars = (/ KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT, KIND_TEMPERATURE /)
+         kinds_3d_prog_vars = (/ QTY_U_WIND_COMPONENT, QTY_V_WIND_COMPONENT, QTY_TEMPERATURE /)
   integer, dimension(num_2d_prog_vars),            parameter ::  &
-         kinds_2d_prog_vars = (/ KIND_SURFACE_PRESSURE /)
+         kinds_2d_prog_vars = (/ QTY_SURFACE_PRESSURE /)
 
   !
   ! Information related to dimensions (coordinates)
@@ -169,17 +175,11 @@ module model_mod
   !
   real, dimension(:, :), allocatable :: surface_geopotential
   real, dimension(:),    allocatable :: ak, bk, akmid, bkmid
-  !-----------------------------------------------------------------------
-  ! version controlled file description for error handling, do not edit
-  character(len=128) :: version = "$Revision$"
-  character(len=128) :: tag = "$Id$"
-  character(len=128), parameter :: &
-     source   = "$URL$", &
-     revision = "$Revision$", &
-     revdate  = "$Date$"
+
   !-----------------------------------------------------------------------
 
 contains
+
   ! ----------------------------------------------------------------------------
   !
   !  Public procedures
@@ -197,6 +197,12 @@ contains
     integer :: ncfileid, ncvarid, i, index
     logical :: do_out
     ! --------------------------------------------------------------------------
+
+    if ( module_initialized ) return ! only need to do this once.
+
+    ! Since this routine calls other routines that could call this routine
+    ! we'll say we've been initialized pretty dang early.
+    module_initialized = .true.
 
     call register_module(source, revision, revdate)
 
@@ -284,9 +290,9 @@ contains
       call error_handler(E_ERR, 'static_model_init', &
            "Different number of model tracer names, tracer kinds provided", source, revision, revdate)
     do i = 1, num_tracers
-      index = get_obs_kind_index(tracer_obs_kind_names(i))
+      index = get_index_for_type_of_obs(tracer_obs_kind_names(i))
       if(index > 0) then
-        tracer_obs_kinds(i) = get_obs_kind_var_type(index)
+        tracer_obs_kinds(i) = get_quantity_for_type_of_obs(index)
       else
         call error_handler(E_ERR, 'static_model_init', &
            "Tracer type " // trim(tracer_obs_kind_names(i)) // " unknown" , source, revision, revdate)
@@ -304,7 +310,11 @@ contains
   ! ----------------------------------------------------------------------------
 
   integer function get_model_size()
+
+     if ( .not. module_initialized ) call static_init_model
+
      get_model_size = model_size
+
   end function get_model_size
 
   ! ----------------------------------------------------------------------------
@@ -323,15 +333,17 @@ contains
                 which_vert
     real(r8) :: local_lat, local_lon, vert_loc
 
+    if ( .not. module_initialized ) call static_init_model
 
-    start = 1; field_number = 0; local_index = 0
+    start        = 1
+    field_number = 0
+    local_index  = 0
 
-    !
     ! Figure out which field the index points to and the index within that field
     !   Walk through each field, compute its start and end point, and see if index_in
     !   lies between them.
     !   Assign the observation type while we're at it.
-    !
+
     do i = 1, num_2d_prog_vars
       finish = start + (num_lons * num_lats) - 1
       if(index_in >= start .and. index_in <= finish) then
@@ -396,8 +408,8 @@ contains
     !
     ! Convert indexes to lat, lon, level values
     !
-    local_lat = lat(lat_index); if(local_type == KIND_U_WIND_COMPONENT) local_lat = latu(lat_index)
-    local_lon = lon(lon_index); if(local_type == KIND_V_WIND_COMPONENT) local_lon = lonv(lon_index)
+    local_lat = lat(lat_index); if(local_type == QTY_U_WIND_COMPONENT) local_lat = latu(lat_index)
+    local_lon = lon(lon_index); if(local_type == QTY_V_WIND_COMPONENT) local_lon = lonv(lon_index)
 
     location = set_location(local_lon, local_lat, real(level_index, r8),  which_vert)
     if(present(var_type)) var_type = local_type
@@ -426,6 +438,8 @@ contains
     integer, dimension(8) :: values      ! needed by F90 DATE_AND_TIME intrinsic
     character(len=NF90_MAX_NAME) :: str1
     !-------------------------------------------------------------------------------
+
+    if ( .not. module_initialized ) call static_init_model
 
     ierr = -1     ! assume it's not going to work
 
@@ -628,6 +642,9 @@ contains
     real,    dimension(num_levels, num_lons, num_lats) :: tempField
     logical, dimension(num_levels, num_lons, num_lats) :: allTrue
     ! --------------------
+
+     if ( .not. module_initialized ) call static_init_model
+
     allTrue(:, :, :) = .true.
     ierr = -1 ! Assume the worst
     if ( output_state_vector ) then
@@ -699,37 +716,53 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
     ! is not going to be used (the model will only be advanced as
     ! a separate model-specific executable), this can be a
     ! NULL INTERFACE.
-    !
 
+     if ( .not. module_initialized ) call static_init_model
+
+     if (do_output()) then
+        call print_time(time,'NULL interface adv_1step (no advance) DART time is')
+        call print_time(time,'NULL interface adv_1step (no advance) DART time is',logfileunit)
+     endif
+
+     write(string1,*)'DART should not be trying to advance AM2'
+     call error_handler(E_ERR,'adv_1step',string1,source,revision,revdate)
+
+     x(:) = MISSING_R8   ! just to satisfy compiler
 
   end subroutine adv_1step
 
   ! ----------------------------------------------------------------------------
 
   subroutine init_time(time)
-    type(time_type), intent(out) :: time
-    !
-    ! Companion interface to init_conditions. Returns a time that is somehow
-    ! appropriate for starting up a long integration of the model.
-    ! At present, this is only used if the namelist parameter
-    ! start_from_restart is set to .false. in the program perfect_model_obs.
-    !
+     type(time_type), intent(out) :: time
 
-    ! for now, just set to 0
-    time = set_time(0, 0)
+     ! Companion interface to init_conditions. Returns a time that is somehow
+     ! appropriate for starting up a long integration of the model.
+     ! At present, this is only used if the namelist parameter
+     ! start_from_restart is set to .false. in the program perfect_model_obs.
+
+     if ( .not. module_initialized ) call static_init_model
+
+     ! for now, just set to 0
+     time = set_time(0, 0)
 
   end subroutine init_time
 
   ! ----------------------------------------------------------------------------
 
   subroutine init_conditions(x)
-    real(r8), intent(out) :: x(:)
-    !
+     real(r8), intent(out) :: x(:)
+
     ! Returns a model state vector, x, that is some sort of appropriate
     ! initial condition for starting up a long integration of the model.
     ! At present, this is only used if the namelist parameter
     ! start_from_restart is set to .false. in the program perfect_model_obs.
-    !
+    if ( .not. module_initialized ) call static_init_model
+
+    write(string1,*)'DART cannot initialize AM2'
+    call error_handler(E_ERR,'init_conditions',string1,source,revision,revdate)
+
+     x(:) = MISSING_R8   ! just to satisfy compiler
 
   end subroutine init_conditions
 
@@ -771,10 +804,9 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
     real(kind = r8), dimension(:), &
                       allocatable    :: theseLons, theseLats
 
-    !
     ! Notes after talking to Jeff A
     !   We interpolate the KINDS we have: U, V, T, tracers, and PS; we also allow for surface height
-    !   **adding in KIND_PRESSURE**
+    !   **adding in QTY_PRESSURE**
     !   Vertical coordinates can be expressed as level, pressure (most usual), and height
     !   We'll interpolate linearly in lat, lon, and vertical coordinate since the
     !   errors this introduces are small and can be lumped in to "representativeness"
@@ -783,19 +815,21 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
     !   easiest way to get around that is to interpolate in the vertical at each of the four
     !   corners first, then interpolate in the horizontal
 
+     if ( .not. module_initialized ) call static_init_model
+
     ! -------------------------------------------------------------
     !
     ! Which variable are we looking for?
     !   State vector is ordered ps (2D), u, v, t, tracers
     !
     variableStart = -1
-    if(itype == KIND_SURFACE_PRESSURE .or. itype == KIND_PRESSURE) then
+    if(itype == QTY_SURFACE_PRESSURE .or. itype == QTY_PRESSURE) then
       variableStart = 1
-    else if (itype == KIND_U_WIND_COMPONENT) then
+    else if (itype == QTY_U_WIND_COMPONENT) then
       variableStart = 1 + (num_lons * num_lats)
-    else if (itype == KIND_V_WIND_COMPONENT) then
+    else if (itype == QTY_V_WIND_COMPONENT) then
       variableStart = 1 + (num_lons * num_lats) + 1 * (num_lons * num_lats * num_levels)
-    else if (itype == KIND_TEMPERATURE) then
+    else if (itype == QTY_TEMPERATURE) then
       variableStart = 1 + (num_lons * num_lats) + 2 * (num_lons * num_lats * num_levels)
     else
       do i = 1, num_tracers
@@ -818,12 +852,12 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
       !
       ! U and V are on staggered grids
       !
-      if(itype == KIND_V_WIND_COMPONENT) then
+      if(itype == QTY_V_WIND_COMPONENT) then
         theseLons(:) = lonv(:)
       else
         theseLons(:) = lon(:)
       end if
-      if(itype == KIND_U_WIND_COMPONENT) then
+      if(itype == QTY_U_WIND_COMPONENT) then
         theseLats(:) = (/ latu(:), real(MISSING_R8) /)
       else
         theseLats(:) = lat(:)
@@ -892,7 +926,7 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
         ! Find the four values that bracket the observation location in the horizontal
         !   Storage order is level, lon, lat
         !
-        if(itype == KIND_SURFACE_PRESSURE) then
+        if(itype == QTY_SURFACE_PRESSURE) then
           cornerValues(:, :) = psurf(:, :)   
         else
           !
@@ -908,7 +942,7 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
           ! We know how to interpolate vertically in level, pressure, and height - are we missing any possibilities?
           !
           if(vert_is_level(location)) then
-            if(itype == KIND_PRESSURE) then
+            if(itype == QTY_PRESSURE) then
                forall(i = 1:2, j = 1:2)
                   cornerValues(i, j) = interpolate1D(desiredLocation = lon_lat_height(3),                 &
                                                    values = akmid(:) + bkmid(:) * psurf(i,j),             &
@@ -953,7 +987,7 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
             !
             variableStart = -1
             do i = 1, num_tracers
-              if(tracer_obs_kinds(i) == KIND_SPECIFIC_HUMIDITY) &
+              if(tracer_obs_kinds(i) == QTY_SPECIFIC_HUMIDITY) &
                 variableStart = 1 + (num_lons) * num_lats + (i - 1 + 3) * (num_lons * num_lats * num_levels)
             end do
             if(variableStart > 0) then
@@ -994,7 +1028,7 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
                                                        values = cornerLogPressureProfiles(i, j,num_levels+1:1:-1),  & 
                                                        locations =  cornerHeights(i, j,num_levels+1:1:-1))
             end forall
-            if(itype == KIND_PRESSURE) then
+            if(itype == QTY_PRESSURE) then
                forall(i = 1:2, j = 1:2)
                   cornerValues(i,j) = exp(cornerLogPressures(i,j))
                end forall
@@ -1011,7 +1045,7 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
                                                  ! Compute pressure at layer midpoints in this column on the fly
                                                  locations = akmid(:) + bkmid(:) * psurf(i, j) )
                end forall
-            end if !KIND_PRESSURE loop
+            end if !QTY_PRESSURE loop
             !
           else
             !
@@ -1052,16 +1086,16 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
   ! ----------------------------------------------------------------------------
 
   function get_model_time_step()
-    type(time_type) :: get_model_time_step
-    !
-    ! Returns the the time step of the model; the smallest increment
-    ! in time that the model is capable of advancing the state in a given
-    ! implementation. This interface is required for all applications.
-    !
+     type(time_type) :: get_model_time_step
 
+     ! Returns the the time step of the model; the smallest increment
+     ! in time that the model is capable of advancing the state in a given
+     ! implementation. This interface is required for all applications.
 
-    ! Time_step_atmos is global static storage
-    get_model_time_step =  Time_step_atmos
+     if ( .not. module_initialized ) call static_init_model
+
+     ! Time_step_atmos is global static storage
+     get_model_time_step =  Time_step_atmos
 
   end function get_model_time_step
 
@@ -1072,6 +1106,8 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
     !
     ! Does any shutdown and clean-up needed for model. Can be a NULL
     ! INTERFACE if the model has no need to clean up storage, etc.
+
+     if ( .not. module_initialized ) call static_init_model
 
     ! good style ... perhaps you could deallocate stuff (from static_init_model?).
     ! deallocate(state_loc)
@@ -1096,15 +1132,18 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
     ! should be returned as .true. if the model wants to do its own
     ! perturbing of states.
 
+     if ( .not. module_initialized ) call static_init_model
 
-    interf_provided = .false.
+     interf_provided = .false.
 
   end subroutine pert_model_state
 
   ! ----------------------------------------------------------------------------
 
   subroutine ens_mean_for_model(ens_mean)
-    real(r8), intent(in) :: ens_mean(:)
+     real(r8), intent(in) :: ens_mean(:)
+
+     if ( .not. module_initialized ) call static_init_model
 
   end subroutine ens_mean_for_model
 
@@ -1116,10 +1155,11 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
 
   subroutine init_model_instance(var)
     type(model_type), intent(out) :: var
-    !
+
     ! Initializes an instance of a model state variable
     !   In our case this means storage allocation
-    !
+
+    if ( .not. module_initialized ) call static_init_model
 
     call end_model_instance(var)
     allocate(var%u   (num_lons, num_lats, num_levels), &
@@ -1136,10 +1176,11 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
 
    subroutine end_model_instance(var)
      type(model_type), intent(inout) :: var
-     !
+
      ! Ends an instance of a model state variable
      !   i.e. frees allocated storage
-     !
+
+     if ( .not. module_initialized ) call static_init_model
 
      if(associated(var%ps  )) deallocate(var%ps)
      if(associated(var%u   )) deallocate(var%u)
@@ -1160,6 +1201,8 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
     integer :: ncfileid, delpvarid, uvarid, vvarid, tvarid
     integer :: ncfileid_t, varID
     integer :: i
+
+    if ( .not. module_initialized ) call static_init_model
 
     ! Do restart file first
     call nc_check(nf90_open(path = trim(rst_file_name), mode = nf90_nowrite, ncid = ncfileid), &
@@ -1204,6 +1247,8 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
    integer :: i, j, k, t
 
    real, dimension(:, :, :), allocatable :: tempVar
+
+   if ( .not. module_initialized ) call static_init_model
 
    allocate(tempVar(num_lons, num_lats, num_levels))
 
@@ -1284,6 +1329,8 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
     real, dimension(:,:,:,:), allocatable :: tracers
     integer :: i, j, k, t
 
+    if ( .not. module_initialized ) call static_init_model
+
     if(size(state_vector) /= model_size)       &
       call error_handler(E_ERR, 'prog_var_to_vector', "State vector is incorrect size for model_type", &
                          source, revision, revdate)
@@ -1349,6 +1396,8 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
     integer :: i, j, k, t
 
     ! -----------------------------------------------
+
+    if ( .not. module_initialized ) call static_init_model
 
     if(size(state_vector) /= model_size)       &
       call error_handler(E_ERR, 'prog_var_to_vector', "State vector is incorrect size for model_type", &
@@ -1436,9 +1485,12 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
     integer, intent(in) :: ncFileId
     !
     ! Called by static_model_init; fills in global variables related to the coordinates
-    !
+    ! DimStrings must be in this order 
     integer :: i, temp_size
     integer, dimension(num_dims) :: dim_ids
+    character(len=5), dimension(6) :: DimStrings = &
+       (/ 'lat  ', 'latu ', 'lon  ', 'lonv ', 'pfull', 'phalf' /)
+    logical :: inOrder = .true.
 
     do i = 1, num_dims
       call nc_check(nf90_inq_dimid(ncfileid, trim(dim_names(i)), dim_ids(i)), &
@@ -1450,14 +1502,18 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
     end do
 
     do i = 1, size(dim_names)
-      if(all(trim(dim_names(i)) /= (/ 'lat', 'latu', 'lon', 'lonv', 'pfull', 'phalf' /)) ) &
+       if ( trim(dim_names(i)) /= trim(DimStrings(i)) ) inOrder = .false.
+    end do
+
+    if ( .not. inOrder ) then
          call error_handler(E_ERR, 'read_dimension_info', &
             "Mapping between dim names and variables is messed up", source, revision, revdate)
-    end do
-    if(dim_lens(1) /= dim_lens(2) .or. dim_lens(3) /= dim_lens(4) .or. dim_lens(5) /= dim_lens(6) - 1) &
+    endif
+
+    if(dim_lens(1) /= dim_lens(2) .or. dim_lens(3) /= dim_lens(4) .or. &
+       dim_lens(5) /= dim_lens(6) - 1) &
        call error_handler(E_ERR, 'read_dimension_info', &
            "Dimension sizes aren't what we expect", source, revision, revdate)
-
 
     num_lats = dim_lens(1)
     allocate(lat(num_lats), latu(num_lats))
@@ -1649,3 +1705,9 @@ timeindex /)), "nc_write_model_vars", "Writing PS")
   !------------------------------------------------------------------------------------------
 
 end module model_mod
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

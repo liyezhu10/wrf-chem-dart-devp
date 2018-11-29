@@ -1,17 +1,33 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
+!> @mainpage Remote Memory Access version of DART code.
+!>
+!> Forward operator, vertical conversion
+!>
+!> WRF
+!>
+!> For distributed phb array see distributed_phb_model_mod.f90
+!> \todo To do list
+!> @author dart@ucar.edu
+!>
+!> \subpage test
+!> 
+!> \page test
+
+!> WRF model mod
 module model_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 ! Assimilation interface for WRF model
-
+!> \defgroup wrf model_mod
+!> Model mod
+!> 
+!> Model mod for WRF
+!> @{
 !-----------------------------------------------------------------------
 !
 !     interface for WRF
@@ -20,59 +36,80 @@ module model_mod
 !---------------- m o d u l e   i n f o r m a t i o n ------------------
 !-----------------------------------------------------------------------
 
-use         types_mod, only : r8, deg2rad, missing_r8, ps0, earth_radius, &
-                              gas_constant, gas_constant_v, gravity, pi,  &
-                              digits12
+use         types_mod,   only : r8, i8, deg2rad, missing_r8, ps0, earth_radius, &
+                                gas_constant, gas_constant_v, gravity, pi,      &
+                                digits12
 
-use  time_manager_mod, only : time_type, set_time, set_calendar_type, GREGORIAN
+use  time_manager_mod,   only : time_type, set_time, set_calendar_type, GREGORIAN,&
+                                set_date, get_date
 
-use      location_mod, only : location_type, get_location, set_location, &
-                              horiz_dist_only, &
-                              LocationDims, LocationName, LocationLName, &
-                              query_location, vert_is_undef, vert_is_surface, &
-                              vert_is_level, vert_is_pressure, vert_is_height, &
-                              vert_is_scale_height, VERTISUNDEF, VERTISSURFACE, &
-                              VERTISLEVEL, VERTISPRESSURE, VERTISHEIGHT, &
-                              VERTISSCALEHEIGHT, &
-                              get_close_type, get_dist, get_close_maxdist_init, &
-                              get_close_obs_init, loc_get_close_obs => get_close_obs
+use      location_mod,   only : location_type, get_location, set_location, &
+                                query_location, VERTISUNDEF, VERTISSURFACE, &
+                                VERTISLEVEL, VERTISPRESSURE, VERTISHEIGHT, &
+                                VERTISSCALEHEIGHT, vertical_localization_on, &
+                                set_vertical_localization_coord, &
+                                get_close_type, get_dist, is_vertical, &
+                                loc_get_close => get_close_obs
 
-use     utilities_mod, only : file_exist, open_file, close_file, &
-                              register_module, error_handler, E_ERR, E_WARN, &
-                              E_MSG, nmlfileunit, do_output, nc_check, &
-                              find_namelist_in_file, check_namelist_read, &
-                              find_textfile_dims, file_to_text, &
-                              do_nml_file, do_nml_term
+use     utilities_mod,  only  : file_exist, open_file, close_file, &
+                                register_module, error_handler, E_ERR, E_WARN, &
+                                E_MSG, nmlfileunit, logfileunit, do_output, &
+                                find_namelist_in_file, check_namelist_read, &
+                                find_textfile_dims, file_to_text, &
+                                do_nml_file, do_nml_term, scalar
 
-use  mpi_utilities_mod, only : my_task_id
+use netcdf_utilities_mod, only : nc_add_global_attribute, nc_synchronize_file, &
+                                 nc_add_global_creation_time, nc_check, &
+                                 nc_begin_define_mode, nc_end_define_mode
 
-use     random_seq_mod, only : random_seq_type, init_random_seq, random_gaussian
+use  mpi_utilities_mod,  only : my_task_id, task_count, all_reduce_min_max
 
-use      obs_kind_mod, only : KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT, &
-                              KIND_SURFACE_PRESSURE, KIND_TEMPERATURE, &
-                              KIND_SPECIFIC_HUMIDITY, KIND_SURFACE_ELEVATION, &
-                              KIND_PRESSURE, KIND_VERTICAL_VELOCITY, &
-                              KIND_RAINWATER_MIXING_RATIO, KIND_DENSITY, &
-                              KIND_GRAUPEL_MIXING_RATIO, KIND_SNOW_MIXING_RATIO, &
-                              KIND_CLOUD_LIQUID_WATER, KIND_CLOUD_ICE, &
-                              KIND_CONDENSATIONAL_HEATING, KIND_VAPOR_MIXING_RATIO, &
-                              KIND_ICE_NUMBER_CONCENTRATION, KIND_GEOPOTENTIAL_HEIGHT, &
-                              KIND_POTENTIAL_TEMPERATURE, KIND_SOIL_MOISTURE, &
-                              KIND_DROPLET_NUMBER_CONCENTR, KIND_SNOW_NUMBER_CONCENTR, &
-                              KIND_RAIN_NUMBER_CONCENTR, KIND_GRAUPEL_NUMBER_CONCENTR, &
-                              KIND_VORTEX_LAT, KIND_VORTEX_LON, &
-                              KIND_RADAR_REFLECTIVITY, KIND_POWER_WEIGHTED_FALL_SPEED,&
-                              KIND_VORTEX_PMIN, KIND_VORTEX_WMAX, &
-                              KIND_SKIN_TEMPERATURE, KIND_LANDMASK, &
-                              get_raw_obs_kind_index, get_num_raw_obs_kinds, &
-                              get_raw_obs_kind_name
+use     random_seq_mod,  only : random_seq_type, init_random_seq, random_gaussian
+
+use      obs_kind_mod,   only : QTY_U_WIND_COMPONENT, QTY_V_WIND_COMPONENT, &
+                                QTY_SURFACE_PRESSURE, QTY_TEMPERATURE, &
+                                QTY_SPECIFIC_HUMIDITY, QTY_SURFACE_ELEVATION, &
+                                QTY_PRESSURE, QTY_VERTICAL_VELOCITY, &
+                                QTY_DENSITY, QTY_FLASH_RATE_2D, &
+                                QTY_RAINWATER_MIXING_RATIO, QTY_HAIL_MIXING_RATIO, &
+                                QTY_GRAUPEL_MIXING_RATIO, QTY_SNOW_MIXING_RATIO, &
+                                QTY_CLOUD_LIQUID_WATER, QTY_CLOUD_ICE, &
+                                QTY_CONDENSATIONAL_HEATING, QTY_VAPOR_MIXING_RATIO, &
+                                QTY_ICE_NUMBER_CONCENTRATION, QTY_GEOPOTENTIAL_HEIGHT, &
+                                QTY_POTENTIAL_TEMPERATURE, QTY_SOIL_MOISTURE, &
+                                QTY_DROPLET_NUMBER_CONCENTR, QTY_SNOW_NUMBER_CONCENTR, &
+                                QTY_RAIN_NUMBER_CONCENTR, QTY_GRAUPEL_NUMBER_CONCENTR, &
+                                QTY_HAIL_NUMBER_CONCENTR, QTY_HAIL_VOLUME, &
+                                QTY_GRAUPEL_VOLUME, QTY_DIFFERENTIAL_REFLECTIVITY, &
+                                QTY_RADAR_REFLECTIVITY, QTY_POWER_WEIGHTED_FALL_SPEED, &
+                                QTY_SPECIFIC_DIFFERENTIAL_PHASE, &
+                                QTY_VORTEX_LAT, QTY_VORTEX_LON, &
+                                QTY_VORTEX_PMIN, QTY_VORTEX_WMAX, &
+                                QTY_SKIN_TEMPERATURE, QTY_LANDMASK, &
+                                get_index_for_quantity, get_num_quantities, &
+                                get_name_for_quantity
+
+use ensemble_manager_mod,  only : ensemble_type, get_my_num_vars, get_my_vars
+
+use sort_mod,              only : sort
+
+use distributed_state_mod, only : get_state
+
+use default_model_mod,   only : adv_1step, nc_write_model_vars, &
+                                init_conditions => fail_init_conditions, &
+                                init_time => fail_init_time
+
+use state_structure_mod, only : add_domain, get_model_variable_indices, &
+                                state_structure_info, &
+                                get_index_start, get_index_end, &
+                                get_dart_vector_index
 
 ! FIXME:
-! the kinds KIND_CLOUD_LIQUID_WATER should be KIND_CLOUDWATER_MIXING_RATIO, 
-! and kind KIND_CLOUD_ICE should be KIND_ICE_MIXING_RATIO, but for backwards
+! the kinds QTY_CLOUD_LIQUID_WATER should be QTY_CLOUDWATER_MIXING_RATIO, 
+! and kind QTY_CLOUD_ICE should be QTY_ICE_MIXING_RATIO, but for backwards
 ! compatibility with other models, they remain as is for now.  at the next
 ! major dart release, the names will be made consistent.
-! ditto KIND_ICE_NUMBER_CONCENTRATION, which should be KIND_ICE_NUMBER_CONCENTR
+! ditto QTY_ICE_NUMBER_CONCENTRATION, which should be QTY_ICE_NUMBER_CONCENTR
 ! to be consistent with the other concentration names.
 
 !nc -- module_map_utils split the declarations of PROJ_* into a separate module called
@@ -91,66 +128,73 @@ private
 
 
 !-----
-! DART requires 16 specific public interfaces from model_mod.f90 -- Note
-!   that the last four are simply "stubs" since WRF currently requires use
-!   of system called shell scripts to advance the model.
+! DART requires 18 specific public interfaces from model_mod.f90 
 
-public ::  get_model_size,                    &
-           get_state_meta_data,               &
-           model_interpolate,                 &
-           get_model_time_step,               &
-           static_init_model,                 &
-           pert_model_state,                  &
-           nc_write_model_atts,               &
-           nc_write_model_vars,               &
-           get_close_obs,                     &
-           ens_mean_for_model,                &
-           get_close_maxdist_init,            &
-           get_close_obs_init
+! routines with code in this module
+public ::  get_model_size,                &
+           get_state_meta_data,           &
+           shortest_time_between_assimilations, &
+           static_init_model,             &
+           model_interpolate,             &
+           nc_write_model_atts,           &
+           get_close_obs,                 &
+           get_close_state,               &
+           convert_vertical_obs,          &
+           convert_vertical_state,        &
+           pert_model_copies,             &
+           read_model_time,               &
+           write_model_time,              &
+           end_model
 
-!  public stubs 
-public ::  adv_1step,       &
-           end_model,       &
-           init_time,       &
-           init_conditions
+
+! required routines where the code is in another module
+public ::  adv_1step,          &
+           init_time,          &
+           init_conditions,    &
+           nc_write_model_vars
 
 !-----
 ! Here is the appropriate place for other users to make additional routines
 !   contained within model_mod available for public use:
-public ::  get_number_domains,       &
-           get_wrf_static_data,      &
-           model_pressure,           &
-           model_height,             &
-           pres_to_zk,               &
-           height_to_zk,             &
-           get_domain_info,          &
-           get_wrf_state_variables,  &
-           fill_default_state_table, &
-           read_wrf_dimensions,      &
+public ::  get_number_domains,          &
+           get_wrf_static_data,         &
+           model_pressure_distrib,      &
+           model_height_distrib,        &
+           pres_to_zk,                  &
+           height_to_zk,                &
+           get_domain_info,             &
+           get_wrf_state_variables,     &
+           fill_default_state_table,    &
+           read_wrf_dimensions,         &
            get_number_of_wrf_variables, &
            get_variable_bounds,         &
            set_variable_bound_defaults, &
            get_variable_size_from_file, &
-           trans_3Dto1D, trans_1Dto3D, &
-           trans_2Dto1D, trans_1Dto2D, &
-           get_wrf_date, set_wrf_date, &
+           get_wrf_date, set_wrf_date,  &
+           vert_convert,                &
            height_diff_check
 
 ! public parameters
-public :: max_state_variables, &
+public :: max_state_variables,     &
           num_state_table_columns, &
           num_bounds_table_columns
 
 ! types
 public :: wrf_dom, wrf_static_data_for_dart
 
+! Interfaces for array and single value versions of subroutines/functions
+! This is because the forward operator works on the whole ensemble, and the
+! vertical conversion only uses the mean copy.
+
+
+! HK ? interp_4pressure interface needed?
 
 !-----------------------------------------------------------------------
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 ! miscellaneous
 integer, parameter :: max_state_variables = 100
@@ -182,12 +226,18 @@ integer :: center_spline_grid_scale = 10
 integer :: vert_localization_coord = VERTISHEIGHT
 ! Allow observations above the surface but below the lowest sigma level.
 logical :: allow_obs_below_vol = .false.
+! Do the interpolation of pressure values only after taking the log (.true.)
+! vs doing a linear interpolation directly in pressure units (.false.)
+logical :: log_vert_interp  = .true.
+logical :: log_horz_interpM = .false.
+logical :: log_horz_interpQ = .false.
 !nc -- we are adding these to the model.nml until they appear in the NetCDF files
 logical :: polar = .false.         ! wrap over the poles
 logical :: periodic_x = .false.    ! wrap in longitude or x
 logical :: periodic_y = .false.    ! used for single column model, wrap in y
 !JPH -- single column model flag 
 logical :: scm        = .false.    ! using the single column model
+logical :: allow_perturbed_ics = .false.  ! should spin the model up for a while after
 
 ! obsolete items; ignored by this code. 
 ! non-backwards-compatible change. should be removed, 
@@ -202,7 +252,7 @@ character(len = 72) :: adv_mod_command = ''
 ! are IGNORED no matter what their settings in the namelist are.
 ! they are obsolete, but removing them here will cause a fatal error
 ! until users remove them from their input.nml files as well.
-namelist /model_nml/ output_state_vector, num_moist_vars, &
+namelist /model_nml/ num_moist_vars, &
                      num_domains, calendar_type, surf_obs, soil_data, h_diab, &
                      default_state_variables, wrf_state_variables, &
                      wrf_state_bounds, sfc_elev_max_diff, &
@@ -210,9 +260,7 @@ namelist /model_nml/ output_state_vector, num_moist_vars, &
                      allow_obs_below_vol, vert_localization_coord, &
                      center_search_half_length, center_spline_grid_scale, &
                      circulation_pres_level, circulation_radius, polar, &
-                     periodic_x, periodic_y, scm
-
-real(r8), allocatable :: ens_mean(:)
+                     periodic_x, periodic_y, scm, allow_perturbed_ics
 
 ! if you need to check backwards compatibility, set this to .true.
 ! otherwise, leave it as false to use the more correct geometric height
@@ -222,6 +270,7 @@ character(len = 20) :: wrf_nml_file = 'namelist.input'
 logical :: have_wrf_nml_file = .false.
 integer :: num_obs_kinds = 0
 logical, allocatable :: in_state_vector(:)
+integer, allocatable  :: domain_id(:) ! Global storage to interface with state_structure_mod.
 
 !-----------------------------------------------------------------------
 
@@ -276,18 +325,22 @@ TYPE wrf_static_data_for_dart
    ! JPH local variables to hold type indices
    integer :: type_u, type_v, type_w, type_t, type_qv, type_qr, type_hdiab, &
               type_qndrp, type_qnsnow, type_qnrain, type_qngraupel, type_qnice, &
-              type_qc, type_qg, type_qi, type_qs, type_gz, type_refl, type_fall_spd
+              type_qc, type_qg, type_qi, type_qs, type_gz, type_refl, type_fall_spd, &
+              type_dref, type_spdp, type_qh, type_qnhail, type_qhvol, type_qgvol
+
    integer :: type_u10, type_v10, type_t2, type_th2, type_q2, &
-              type_ps, type_mu, type_tsk, type_tslb, type_sh2o, type_smois
+              type_ps, type_mu, type_tsk, type_tslb, type_sh2o, &
+              type_smois, type_2dflash
 
    integer :: number_of_wrf_variables
-   integer, dimension(:,:), pointer :: var_index
-   integer, dimension(:,:), pointer :: var_size
-   integer, dimension(:),   pointer :: var_type
-   integer, dimension(:),   pointer :: var_index_list
-   integer, dimension(:),   pointer :: dart_kind
-   integer, dimension(:,:), pointer :: land
-   real(r8), dimension(:), pointer  :: lower_bound,upper_bound
+   integer(i8), dimension(:,:), pointer :: var_index
+   integer,     dimension(:,:), pointer :: var_size
+   integer,     dimension(:),   pointer :: var_type
+   integer,     dimension(:),   pointer :: var_index_list
+   logical,     dimension(:),   pointer :: var_update_list
+   integer,     dimension(:),   pointer :: dart_kind
+   integer,     dimension(:,:), pointer :: land
+   real(r8),    dimension(:),   pointer :: lower_bound,upper_bound
    character(len=10), dimension(:),pointer :: clamp_or_fail
    character(len=129),dimension(:),pointer :: description, units, stagger, coordinates
 
@@ -307,7 +360,7 @@ real(r8) :: stdlon,truelat1,truelat2 !,latinc,loninc
 
 ! have a single, module global error string (rather than 
 ! replicate it in each subroutine and use up more stack space)
-character(len=129) :: errstring
+character(len=129) :: errstring, msgstring2, msgstring3
 
 contains
 
@@ -325,7 +378,10 @@ logical, parameter    :: debug = .false.
 integer               :: ind, i, j, k, id, dart_index
 integer               :: my_index
 integer               :: var_element_list(max_state_variables)
-
+logical               :: var_update_list(max_state_variables)
+real(r8)              :: var_bounds_table(max_state_variables,2)
+! holds the variable names for a domain when calling add_domain
+character(len=129)    :: netcdf_variable_names(max_state_variables)
 
 !----------------------------------------------------------------------
 
@@ -343,27 +399,24 @@ if (do_nml_term()) write(     *     , nml=model_nml)
 
 ! Temporary warning until this namelist item is removed.
 if (adv_mod_command /= '') then
-   call error_handler(E_MSG, 'static_init_model:', "WARNING")
+   msgstring2 = "Set the model advance command in the &dart_to_wrf_nml namelist"
    call error_handler(E_MSG, 'static_init_model:', &
-                      "WARNING: adv_mod_command ignored in &model_mod namelist")
-   call error_handler(E_MSG, 'static_init_model:', &
-                      "WARNING: Set the model advance command in &dart_to_wrf_nml")
-   call error_handler(E_MSG, 'static_init_model:', "WARNING")
+         "WARNING: adv_mod_command ignored in &model_mod namelist", &
+          text2=msgstring2)
 endif
 
 allocate(wrf%dom(num_domains))
+allocate(domain_id(num_domains))
 
 ! get default state variable table if asked
 if ( default_state_variables ) then
   wrf_state_variables = 'NULL'
   call fill_default_state_table(wrf_state_variables)
+  msgstring2 = 'Set "default_state_variables" to .false. in the namelist'
+  msgstring3 = 'to use the "wrf_state_variables" list instead.'
   call error_handler(E_MSG, 'static_init_model:', &
-      'Using predefined wrf variable list for dart state vector.')
-  call error_handler(E_MSG, 'static_init_model:', &
-      'Set "default_state_variables" to .false. in the namelist')
-  call error_handler(E_MSG, 'static_init_model:', &
-      'to use the "wrf_state_variables" list instead.')
-
+                  'Using predefined wrf variable list for dart state vector.', &
+                   text2=msgstring2, text3=msgstring3)
 endif
 
 if ( debug ) then
@@ -378,18 +431,10 @@ endif
 ! helpful error message if not).
 !---------------------------
 
-num_obs_kinds = get_num_raw_obs_kinds()
+num_obs_kinds = get_num_quantities()
 allocate(in_state_vector(num_obs_kinds))
 call fill_dart_kinds_table(wrf_state_variables, in_state_vector)
 
-
-if ( debug ) then
-   if ( output_state_vector ) then
-      write(*,*)'netcdf file in state vector format'
-   else
-      write(*,*)'netcdf file in prognostic vector format'
-   endif
-endif
 
 ! set calendar type
 call set_calendar_type(calendar_type)
@@ -406,11 +451,11 @@ elseif (vert_localization_coord == VERTISHEIGHT) then
 elseif (vert_localization_coord == VERTISSCALEHEIGHT) then
    wrf%dom(:)%localization_coord = VERTISSCALEHEIGHT
 else
-   write(errstring,*)'vert_localization_coord must be one of ', &
+   write(msgstring2,*)'vert_localization_coord must be one of ', &
                      VERTISLEVEL, VERTISPRESSURE, VERTISHEIGHT, VERTISSCALEHEIGHT
-   call error_handler(E_MSG,'static_init_model', errstring, source, revision,revdate)
    write(errstring,*)'vert_localization_coord is ', vert_localization_coord
-   call error_handler(E_ERR,'static_init_model', errstring, source, revision,revdate)
+   call error_handler(E_ERR,'static_init_model', errstring, source, revision,revdate, &
+                      text2=msgstring2)
 endif
 
 ! the agreement amongst the dart/wrf users was that there was no need to
@@ -426,9 +471,12 @@ WRFDomains : do id=1,num_domains
 
    ! only print this once, no matter how many parallel tasks are running
    if (do_output()) then
-      write(*,*) '******************'
-      write(*,*) '**  DOMAIN # ',idom,'  **'
-      write(*,*) '******************'
+      write(     *     ,*) '******************'
+      write(     *     ,*) '**  DOMAIN # ',idom,'  **'
+      write(     *     ,*) '******************'
+      write(logfileunit,*) '******************'
+      write(logfileunit,*) '**  DOMAIN # ',idom,'  **'
+      write(logfileunit,*) '******************'
    endif
 
    if(file_exist('wrfinput_d0'//idom)) then
@@ -482,7 +530,7 @@ WRFDomains : do id=1,num_domains
 !-------------------------------------------------------
 
 ! get the number of wrf variables wanted in this domain's state
-   wrf%dom(id)%number_of_wrf_variables = get_number_of_wrf_variables(id,wrf_state_variables,var_element_list)
+   wrf%dom(id)%number_of_wrf_variables = get_number_of_wrf_variables(id,wrf_state_variables,var_element_list, var_update_list)
 
 ! allocate and store the table locations of the variables valid on this domain
    allocate(wrf%dom(id)%var_index_list(wrf%dom(id)%number_of_wrf_variables))
@@ -490,6 +538,10 @@ WRFDomains : do id=1,num_domains
 
 ! allocation for wrf variable types 
    allocate(wrf%dom(id)%var_type(wrf%dom(id)%number_of_wrf_variables))
+
+! allocation for update/nocopyback/noupdate
+   allocate(wrf%dom(id)%var_update_list(wrf%dom(id)%number_of_wrf_variables))
+   wrf%dom(id)%var_update_list = var_update_list(1:wrf%dom(id)%number_of_wrf_variables)
 
 ! allocation for dart kinds
    allocate(wrf%dom(id)%dart_kind(wrf%dom(id)%number_of_wrf_variables))
@@ -521,7 +573,7 @@ WRFDomains : do id=1,num_domains
       my_index =  wrf%dom(id)%var_index_list(ind)
 
       wrf%dom(id)%var_type(ind) = ind ! types are just the order for this domain
-      wrf%dom(id)%dart_kind(ind) = get_raw_obs_kind_index(trim(wrf_state_variables(2,my_index)))
+      wrf%dom(id)%dart_kind(ind) = get_index_for_quantity(trim(wrf_state_variables(2,my_index)))
 
       if ( debug ) then
          print*,'dart kind identified: ',trim(wrf_state_variables(2,my_index)),' ',wrf%dom(id)%dart_kind(ind)
@@ -564,13 +616,18 @@ WRFDomains : do id=1,num_domains
       call error_handler(E_MSG, 'static_init_model: ', errstring)
    enddo
 
+   if (do_output()) then
+      write(     *     ,*)
+      write(logfileunit,*)
+   endif
+
 ! close data file, we have all we need
 
    call nc_check(nf90_close(ncid),'static_init_model','close wrfinput_d0'//idom)
 
 ! indices into 1D array - hopefully this becomes obsolete
 ! JPH changed last dimension here from num_model_var_types
-   allocate(wrf%dom(id)%dart_ind(wrf%dom(id)%wes,wrf%dom(id)%sns,wrf%dom(id)%bts,wrf%dom(id)%number_of_wrf_variables))
+   !HK allocate(wrf%dom(id)%dart_ind(wrf%dom(id)%wes,wrf%dom(id)%sns,wrf%dom(id)%bts,wrf%dom(id)%number_of_wrf_variables))
 
 ! start and stop of each variable in vector
    allocate(wrf%dom(id)%var_index(2,wrf%dom(id)%number_of_wrf_variables))
@@ -584,7 +641,7 @@ WRFDomains : do id=1,num_domains
 ! then just loop thru the table
 !---------------------------
 
-   wrf%dom(id)%dart_ind = 0
+   !HK wrf%dom(id)%dart_ind = 0
 
 ! NOTE: this could be put into the loop above if wrf%dom(id)%dart_ind is
 ! eventually not needed
@@ -606,8 +663,8 @@ WRFDomains : do id=1,num_domains
       do k=1,wrf%dom(id)%var_size(3,ind)
          do j=1,wrf%dom(id)%var_size(2,ind)
             do i=1,wrf%dom(id)%var_size(1,ind)
-               wrf%dom(id)%dart_ind(i,j,k,ind) &
-                                              = dart_index
+               ! HK wrf%dom(id)%dart_ind(i,j,k,ind) &
+               !                               = dart_index
                dart_index = dart_index + 1
             enddo
          enddo
@@ -642,13 +699,17 @@ WRFDomains : do id=1,num_domains
    wrf%dom(id)%type_qr     = get_type_ind_from_type_string(id,'QRAIN')
    wrf%dom(id)%type_qc     = get_type_ind_from_type_string(id,'QCLOUD')
    wrf%dom(id)%type_qg     = get_type_ind_from_type_string(id,'QGRAUP')
+   wrf%dom(id)%type_qh     = get_type_ind_from_type_string(id,'QHAIL')
    wrf%dom(id)%type_qi     = get_type_ind_from_type_string(id,'QICE')
    wrf%dom(id)%type_qs     = get_type_ind_from_type_string(id,'QSNOW')
+   wrf%dom(id)%type_qgvol  = get_type_ind_from_type_string(id,'QVGRAUPEL')
+   wrf%dom(id)%type_qhvol  = get_type_ind_from_type_string(id,'QVHAIL')
    wrf%dom(id)%type_qnice  = get_type_ind_from_type_string(id,'QNICE')
    wrf%dom(id)%type_qndrp  = get_type_ind_from_type_string(id,'QNDRP')
    wrf%dom(id)%type_qnsnow = get_type_ind_from_type_string(id,'QNSNOW')
    wrf%dom(id)%type_qnrain = get_type_ind_from_type_string(id,'QNRAIN')
    wrf%dom(id)%type_qngraupel = get_type_ind_from_type_string(id,'QNGRAUPEL')
+   wrf%dom(id)%type_qnhail = get_type_ind_from_type_string(id,'QNHAIL')
    wrf%dom(id)%type_u10    = get_type_ind_from_type_string(id,'U10')
    wrf%dom(id)%type_v10    = get_type_ind_from_type_string(id,'V10')
    wrf%dom(id)%type_t2     = get_type_ind_from_type_string(id,'T2')
@@ -657,28 +718,77 @@ WRFDomains : do id=1,num_domains
    wrf%dom(id)%type_ps     = get_type_ind_from_type_string(id,'PSFC')
    wrf%dom(id)%type_mu     = get_type_ind_from_type_string(id,'MU')
    wrf%dom(id)%type_tsk    = get_type_ind_from_type_string(id,'TSK')
+   wrf%dom(id)%type_2dflash = get_type_ind_from_type_string(id,'FLASH_RATE_2D')
    wrf%dom(id)%type_tslb   = get_type_ind_from_type_string(id,'TSLB')
    wrf%dom(id)%type_smois  = get_type_ind_from_type_string(id,'SMOIS')
    wrf%dom(id)%type_sh2o   = get_type_ind_from_type_string(id,'SH2O')
    wrf%dom(id)%type_refl   = get_type_ind_from_type_string(id,'REFL_10CM')
+   wrf%dom(id)%type_dref   = get_type_ind_from_type_string(id,'DIFF_REFL_10CM')
+   wrf%dom(id)%type_spdp   = get_type_ind_from_type_string(id,'SPEC_DIFF_10CM')
    wrf%dom(id)%type_fall_spd = get_type_ind_from_type_string(id,'FALL_SPD_Z_WEIGHTED')
+   !wrf%dom(id)%type_fall_spd = get_type_ind_from_type_string(id,'VT_DBZ_WT')
    wrf%dom(id)%type_hdiab  = get_type_ind_from_type_string(id,'H_DIABATIC')
+
+   ! variable bound table for setting upper and lower bounds of variables 
+   var_bounds_table(1:wrf%dom(id)%number_of_wrf_variables,1) = wrf%dom(id)%lower_bound
+   var_bounds_table(1:wrf%dom(id)%number_of_wrf_variables,2) = wrf%dom(id)%upper_bound
+
+   ! List of netcdf variable names in the domain
+   do i = 1, wrf%dom(id)%number_of_wrf_variables
+      my_index =  wrf%dom(id)%var_index_list(i) ! index in wrf_state_variables
+      netcdf_variable_names(i) = wrf_state_variables(1, my_index)
+   enddo
+
+
+   ! add domain - not doing anything with domain_id yet so just overwriting it
+   domain_id(id) = add_domain( 'wrfinput_d0'//idom, &
+                           wrf%dom(id)%number_of_wrf_variables, &
+                           var_names   = netcdf_variable_names(1:wrf%dom(id)%number_of_wrf_variables), &
+                           kind_list   = wrf%dom(id)%dart_kind, &
+                           clamp_vals  = var_bounds_table(1:wrf%dom(id)%number_of_wrf_variables,:), &
+                           update_list = var_update_list(1:wrf%dom(id)%number_of_wrf_variables) )
+
+   if (debug) call state_structure_info(domain_id(id))
 
 enddo WRFDomains 
 
 wrf%model_size = dart_index - 1
-allocate (ens_mean(wrf%model_size))
 write(errstring,*) ' wrf model size is ',wrf%model_size
 call error_handler(E_MSG, 'static_init_model', errstring)
 
+! tell the location module how we want to localize in the vertical
+call set_vertical_localization_coord(vert_localization_coord)
+
 end subroutine static_init_model
 
+!#######################################################################
+!> Convert from the state structure id to the wrf domain number.
+!> These are the same if there is only WRF involved in the assimilation
+!> The state structure id may be different if WRF is coupled with another
+!> model.
+function get_wrf_domain(state_id)
+
+integer, intent(in) :: state_id
+integer :: get_wrf_domain
+
+integer :: i
+
+do i = 1, num_domains
+   if (domain_id(i) == state_id) then
+      get_wrf_domain = i
+      return
+   endif
+enddo
+
+call error_handler(E_ERR, 'get_wrf_domain', 'not a valid domain')
+
+end function get_wrf_domain
 
 !#######################################################################
 
 function get_model_size()
 
-integer :: get_model_size
+integer(i8) :: get_model_size
 
 get_model_size = wrf%model_size
 
@@ -719,18 +829,9 @@ end subroutine get_wrf_state_variables
 
 !#######################################################################
 
-function get_model_time_step()
-!------------------------------------------------------------------------
-! function get_model_time_step()
-!
-! Returns the time step of the model. In the long run should be replaced
-! by a more general routine that returns details of a general time-stepping
-! capability.
-!
-! toward that end ... we are now reading a namelist variable for the
-! width of the assimilation time window.
+function shortest_time_between_assimilations()
 
-type(time_type) :: get_model_time_step
+type(time_type) :: shortest_time_between_assimilations
 integer :: model_dt, assim_dt
 
 ! We need to coordinate the desired assimilation window to be a 
@@ -741,9 +842,9 @@ model_dt = nint(wrf%dom(1)%dt)
 ! The integer arithmetic does its magic.
 assim_dt = (assimilation_period_seconds / model_dt) * model_dt
 
-get_model_time_step = set_time(assim_dt)
+shortest_time_between_assimilations = set_time(assim_dt)
 
-end function get_model_time_step
+end function shortest_time_between_assimilations
 
 
 !#######################################################################
@@ -759,118 +860,48 @@ subroutine get_state_meta_data(index_in, location, var_type_out, id_out)
 ! this version has an optional last argument that is never called by
 ! any of the dart code, which can return the wrf domain number.
 
-integer,             intent(in)  :: index_in
+integer(i8),         intent(in)  :: index_in
 type(location_type), intent(out) :: location
 integer, optional,   intent(out) :: var_type_out, id_out
 
-integer  :: var_type, dart_type
-integer  :: index, ip, jp, kp
-integer  :: nz, ny, nx
-logical  :: var_found
-real(r8) :: lon, lat, lev
+integer     :: var_type, dart_type
+integer(i8) :: index
+integer     :: ip, jp, kp
+integer     :: nz, ny, nx
+logical     :: var_found
+real(r8)    :: lon, lat, lev
 character(len=129) :: string1
 
-integer :: i, id
+integer :: i, id, var_id, state_id
 logical, parameter :: debug = .false.
 
-if(debug) then
-   write(errstring,*)' index_in = ',index_in
-   call error_handler(E_MSG,'get_state_meta_data',errstring,' ',' ',' ')
-endif
+! from the dart index get the local variables indices
+call get_model_variable_indices(index_in, ip, jp, kp, var_id=var_id, dom_id=state_id)
 
-! identity obs come in with a negative value - absolute
-! index into the state vector.  obs_def_mod code calls this
-! with -1 * identity_index so it's always positive, but the 
-! code here in vert_convert() passes in the raw obs_kind 
-! so it could, indeed, be negative.
-index = abs(index_in)
-
-! dump out a list of all domains and variable types
-if(debug) then
-   do id=1,num_domains
-      do i=1, wrf%dom(id)%number_of_wrf_variables
-         write(errstring,*)' domain, var, var_type(i) = ',id,i,wrf%dom(id)%var_type(i)
-         call error_handler(E_MSG,'get_state_meta_data',errstring)
-      enddo
-   enddo
-endif
-
-! loop through the wrf vars (U, V, PS, etc) in state vector, starting
-! at domain 1.  see if the start/end index range in the 1d state vector
-! includes the requested index.  if you get to the end of the list of vars 
-! and you haven't found it yet, bump up the domain number and start 
-! search over from the start of the wrf var list.
-! if you get to the end of the domains and you haven't found the
-! valid range, the index must be larger than the state vector
-! which is a fatal error.
-
-var_found = .false.
-i = 0
-id = 1
-do while (.not. var_found)
-   i = i + 1
-   if(i .gt. wrf%dom(id)%number_of_wrf_variables) then
-      i = 1
-      if (id < num_domains) then
-         id = id + 1
-      else
-         write(string1,*)' size of state vector = ',wrf%model_size
-         write(errstring,*)' dart_index ',index_in, ' is out of range'
-         call error_handler(E_ERR,'get_state_meta_data', errstring, &
-              source, revision, revdate, text2=string1)
-      endif
-   endif
-   if( (index .ge. wrf%dom(id)%var_index(1,i) ) .and.  &
-       (index .le. wrf%dom(id)%var_index(2,i) )       )  then
-      var_found = .true.
-      var_type  = wrf%dom(id)%var_type(i)
-      dart_type = wrf%dom(id)%dart_kind(i)
-      index = index - wrf%dom(id)%var_index(1,i) + 1
-   endif
-end do
-
-!  now find i,j,k location.
-!  index has been normalized such that it is relative to
-!  array starting at (1,1,1)
-
-nx = wrf%dom(id)%var_size(1,i)
-ny = wrf%dom(id)%var_size(2,i)
-nz = wrf%dom(id)%var_size(3,i)
-
-kp = 1 + (index-1)/(nx*ny)
-jp = 1 + (index - (kp-1)*nx*ny - 1)/nx
-ip = index - (kp-1)*nx*ny - (jp-1)*nx
+! convert from state_structure domain number to wrf.
+id = get_wrf_domain(state_id)
 
 ! at this point, (ip,jp,kp) refer to indices in the variable's own grid
 
 if(debug) write(*,*) ' ip, jp, kp for index ',ip,jp,kp,index
 if(debug) write(*,*) ' Var type: ',var_type
 
+var_type  = wrf%dom(id)%var_type(var_id)
+dart_type = wrf%dom(id)%dart_kind(var_id)
+
 ! first obtain lat/lon from (ip,jp)
 call get_wrf_horizontal_location( ip, jp, var_type, id, lon, lat )
 
-! now convert to desired vertical coordinate (defined in the namelist)
-if (wrf%dom(id)%localization_coord == VERTISLEVEL) then
-   ! here we need level index of mass grid
-   if( (var_type == wrf%dom(id)%type_w ) .or. (var_type == wrf%dom(id)%type_gz) ) then
-      lev = real(kp) - 0.5_r8
-   else
-      lev = real(kp)
-   endif
-elseif (wrf%dom(id)%localization_coord == VERTISPRESSURE) then
-   ! directly convert to pressure
-   lev = model_pressure(ip,jp,kp,id,var_type,ens_mean)
-elseif (wrf%dom(id)%localization_coord == VERTISHEIGHT) then
-   lev = model_height(ip,jp,kp,id,var_type,ens_mean)
-elseif (wrf%dom(id)%localization_coord == VERTISSCALEHEIGHT) then
-   lev = -log(model_pressure(ip,jp,kp,id,var_type,ens_mean) / &
-              model_surface_pressure(ip,jp,id,var_type,ens_mean))
+! return staggered levels for vertical types?  check this later.
+if( (var_type == wrf%dom(id)%type_w ) .or. (var_type == wrf%dom(id)%type_gz) ) then
+  lev = real(kp) - 0.5_r8
+else
+  lev = real(kp)
 endif
 
 if(debug) write(*,*) 'lon, lat, lev: ',lon, lat, lev
 
-! convert to DART location type
-location = set_location(lon, lat, lev, wrf%dom(id)%localization_coord)
+location = set_location(lon, lat, lev, VERTISLEVEL)
 
 ! return DART variable kind if requested
 if(present(var_type_out)) var_type_out = dart_type
@@ -880,20 +911,23 @@ if(present(id_out)) id_out = id
 
 end subroutine get_state_meta_data
 
-
-!#######################################################################
-
-subroutine model_interpolate(x, location, obs_kind, obs_val, istatus)
-
+!--------------------------------------------------------------------
+!> Distributed version of model interpolate
+!> obs_kind is called as location type in assim model model
+!> Storing the mean copy level location as the observation location
+!> to save recomputation of v_p in vert_convert in get_close_obs
+!
+! Should this code be simplified so there is not so much repetition?
 ! This is the main forward operator subroutine for WRF.
 ! Given an ob (its DART location and kind), the corresponding model
 ! value is computed at nearest i,j,k. Thus, first i,j,k is obtained
 ! from ob lon,lat,z and then the state value that corresponds to
 ! the ob kind is interpolated.
-
+!
 ! No location conversions are carried out in this subroutine. See
 ! get_close_obs, where ob vertical location information is converted
 ! to the requested vertical coordinate type.
+subroutine model_interpolate(state_handle, ens_size, location, obs_kind, expected_obs, istatus)
 
 ! x:       Full DART state vector relevant to what's being updated
 !          in the filter (mean or individual members).
@@ -911,72 +945,100 @@ subroutine model_interpolate(x, location, obs_kind, obs_val, istatus)
 ! modified 18 November 2008 to allow unknown kinds to return without stopping
 ! modified  5 February 2010 to add circulation calc for vortex obs
 
+! Helen Kershaw - Aim: to not require the whole state vector
+
 ! arguments
-real(r8),            intent(in) :: x(:)
-type(location_type), intent(in) :: location
-integer,             intent(in) :: obs_kind
-real(r8),           intent(out) :: obs_val
-integer,            intent(out) :: istatus
+type(ensemble_type),   intent(in)  :: state_handle
+integer,               intent(in)  :: ens_size
+type(location_type),   intent(in)  :: location 
+integer,               intent(in)  :: obs_kind
+real(r8),              intent(out) :: expected_obs(ens_size)
+integer,               intent(out) :: istatus(ens_size)
 
 ! local
 logical, parameter  :: debug = .false.
 logical, parameter  :: restrict_polar = .false.
 logical, parameter  :: use_old_vortex = .true.   ! set to .false. to use circ code
 real(r8), parameter :: drad = pi / 18.0_r8
-real(r8)            :: xloc, yloc, zloc, xloc_u, yloc_v, xyz_loc(3)
-integer             :: i, i_u, j, j_v, k, k2
-real(r8)            :: dx,dy,dz,dxm,dym,dzm,dx_u,dxm_u,dy_v,dym_v
-real(r8)            :: a1,utrue,vtrue,ugrid,vgrid
+real(r8)            :: xloc, yloc, xloc_u, yloc_v, xyz_loc(3)
+integer             :: i, i_u, j, j_v, k2
+real(r8)            :: dx,dy,dxm,dym,dx_u,dxm_u,dy_v,dym_v
 integer             :: id
 logical             :: surf_var
-
+real(r8) :: a1(ens_size) 
+real(r8) :: zloc(ens_size)
+integer  :: k(ens_size)
+real(r8) :: dz(ens_size), dzm(ens_size)
+real(r8) :: utrue(ens_size), vtrue(ens_size)
 
 ! from getCorners
 integer, dimension(2) :: ll, lr, ul, ur, ll_v, lr_v, ul_v, ur_v
-integer            :: rc, ill, ilr, iul, iur, i1, i2
+integer            :: rc, i1, i2
+integer(i8)        :: ill, ilr, iul, iur
 
-real(r8), dimension(2) :: fld
-real(r8), allocatable, dimension(:) :: v_h, v_p
+real(r8) :: fld(2,ens_size)
+real(r8), allocatable, dimension(:,:) :: v_h, v_p
 
 ! local vars, used in finding sea-level pressure and vortex center
-real(r8), allocatable, dimension(:)   :: t1d, p1d, qv1d, z1d
-real(r8), allocatable, dimension(:,:) :: vfld, pp, pd, uwnd, vwnd, vort
-real(r8), allocatable, dimension(:)   :: x1d, y1d, xx1d, yy1d
+real(r8), allocatable, dimension(:, :)    :: t1d, p1d, qv1d, z1d
+real(r8), allocatable, dimension(:, :)    :: z1d_1, z1d_2
+real(r8), allocatable, dimension(:,:)  :: pp, pd
+real(r8), allocatable, dimension(:,:,:)  :: vfld
+real(r8), allocatable, dimension(:,:,:)  :: uwnd, vwnd, vort
+real(r8), allocatable, dimension(:)    :: x1d, y1d, xx1d, yy1d
 integer  :: center_search_half_size, center_track_xmin, center_track_ymin, &
             center_track_xmax, center_track_ymax, circ_half_size, &
             circ_xmin, circ_xmax, circ_ymin, circ_ymax, xlen, ylen, &
             xxlen, yylen, ii1, ii2, cxlen, cylen, imax, jmax
-real(r8) :: clat, clon, cxloc, cyloc, vcrit, magwnd, maxwspd, circ, &
+real(r8) :: clat, clon, cxloc, cyloc, vcrit, &
             circ_half_length, asum, distgrid, dgi1, dgi2
 
+real(r8) :: magwnd(ens_size), maxwspd(ens_size), circ(ens_size)
+
 ! local vars, used in calculating density, pressure, height
-real(r8)            :: rho1 , rho2 , rho3, rho4
-real(r8)            :: pres1, pres2, pres3, pres4, pres
-logical             :: is_lev0
+real(r8) :: rho1(ens_size) , rho2(ens_size) , rho3(ens_size), rho4(ens_size)
+real(r8) :: pres1(ens_size), pres2(ens_size), pres3(ens_size), pres4(ens_size), pres(ens_size)
+logical  :: is_lev0(ens_size) 
 
 ! local var for terrain elevation check for surface stations 
-real(r8)            :: mod_sfc_elevation 
+real(r8)            :: mod_sfc_elevation
+
+
+real(r8) :: x_ill(ens_size), x_iul(ens_size), x_ilr(ens_size), x_iur(ens_size), ugrid(ens_size), vgrid(ens_size)
+real(r8) :: x_ugrid_1(ens_size), x_ugrid_2(ens_size), x_ugrid_3(ens_size), x_ugrid_4(ens_size)
+real(r8) :: x_vgrid_1(ens_size), x_vgrid_2(ens_size), x_vgrid_3(ens_size), x_vgrid_4(ens_size)
+integer  :: e, count, uk !< index varibles for loop
+real(r8) :: failedcopies(ens_size)
+integer, allocatable  :: uniquek(:)
+integer  :: ksort(ens_size)
+
+integer(i8) :: ugrid_1, ugrid_2, ugrid_3, ugrid_4, vgrid_1, vgrid_2, vgrid_3, vgrid_4
+integer(i8) :: z1d_ind1, z1d_ind2, t1d_ind, qv1d_ind
+
+id = 1
+
+! call static_data_sizes(domain=id)
 
 ! Initialize stuff
-istatus = 0
-fld(:) = missing_r8
-obs_val = missing_r8
-
+istatus(:) = 0
+fld(:,:) = missing_r8
+expected_obs(:) = missing_r8  !< array of obs_vals
+failedcopies(:) = 1
 
 ! If identity observation (obs_kind < 0), then no need to interpolate
 if ( obs_kind < 0 ) then
 
    ! identity observation -> -(obs_kind)=DART state vector index
    ! obtain state value directly from index
-   obs_val = x(-1*obs_kind)
- 
+   expected_obs(:) = get_state(int(-1*obs_kind, i8), state_handle)
+
 ! Otherwise, we need to do interpolation
 else
 
    ! Is this a valid kind to interpolate?  Set up in the static_init_model code,
    ! based on entries in wrf_state_vector namelist item.
    if (.not. in_state_vector(obs_kind)) then
-      write(errstring, *) 'cannot interpolate ' // trim(get_raw_obs_kind_name(obs_kind)) &
+      write(errstring, *) 'cannot interpolate ' // trim(get_name_for_quantity(obs_kind)) &
                            // ' with the current WRF arrays in state vector'
       call error_handler(E_ERR, 'model_interpolate', errstring, &
                                  source, revision, revdate)
@@ -1053,12 +1115,13 @@ else
    ! 0.b Vertical stuff
 
    if ( debug ) then
-      write(*,*) 'vert_is_pressure ',vert_is_pressure(location)
-      write(*,*) 'vert_is_height ',vert_is_height(location)
+      write(*,*) 'is_vertical(PRESSURE) ',is_vertical(location,"PRESSURE")
+      write(*,*) 'is_vertical(HEIGHT) ',is_vertical(location,"HEIGHT")
    endif
 
-   ! Allocate both a vertical height and vertical pressure coordinate -- 0:bt
-   allocate(v_h(0:wrf%dom(id)%bt), v_p(0:wrf%dom(id)%bt))
+   ! HK
+   ! Allocate both a vertical height and vertical pressure coordinate -- 0:bt x ens_size
+   allocate(v_h(0:wrf%dom(id)%bt, ens_size), v_p(0:wrf%dom(id)%bt, ens_size))
 
    ! Set surf_var to .false. and then change in vert_is_surface section if necessary
    surf_var = .false.
@@ -1066,17 +1129,25 @@ else
    ! Determine corresponding model level for obs location
    ! This depends on the obs vertical coordinate
    !   From this we get a meaningful z-direction real-valued index number
-   if(vert_is_level(location)) then
+   if(is_vertical(location,"LEVEL")) then
       ! Ob is by model level
       zloc = xyz_loc(3)
 
-   elseif(vert_is_pressure(location)) then
+   elseif(is_vertical(location,"PRESSURE")) then
       ! Ob is by pressure: get corresponding mass level zloc from
       ! computed column pressure profile
-      call get_model_pressure_profile(i,j,dx,dy,dxm,dym,wrf%dom(id)%bt,x,id,v_p)
+      call get_model_pressure_profile_distrib(i,j,dx,dy,dxm,dym,wrf%dom(id)%bt,id,v_p,state_handle, ens_size)
+
+      !print*, 'v_p distrib ', v_p
+
+! testing get_model_pressure_profile_distrib
+!      istatus = 0
+!      expected_obs = -9
+!      return
+
       ! get pressure vertical co-ordinate
-      call pres_to_zk(xyz_loc(3), v_p, wrf%dom(id)%bt,zloc,is_lev0)
-      if(debug .and. obs_kind /= KIND_SURFACE_PRESSURE) &
+      call pres_to_zk_distrib(xyz_loc(3), v_p, wrf%dom(id)%bt, ens_size, zloc,is_lev0)
+      if(debug .and. obs_kind /= QTY_SURFACE_PRESSURE) &
                 print*,' obs is by pressure and zloc,lev0 =',zloc, is_lev0
       if(debug) print*,'model pressure profile'
       if(debug) print*,v_p
@@ -1085,42 +1156,53 @@ else
       ! the default is to reject it.  But if the namelist value is true, then
       ! accept the observation and later on extrapolate the values from levels
       ! 1 and 2 downward.
-      if (is_lev0) then
-         ! the pres_to_zk() routine has returned a valid zloc in case we
-         ! want to use it.  the default is to reject the observation and so
-         ! we overwrite it with missing -- but, if the namelist value is set
-         ! to true, leave zloc alone.
-         if (.not. allow_obs_below_vol) zloc = missing_r8
-         if (debug .and. .not. allow_obs_below_vol) print*, 'setting zloc missing'
 
-         ! else need to set a qc here?
-      endif
-         
-   elseif(vert_is_height(location)) then
+      !HK ensemble loop, however do you reject the obs for all ensembles later anyway?
+
+      do e = 1, ens_size
+
+         if (is_lev0(e)) then
+            ! the pres_to_zk() routine has returned a valid zloc in case we
+            ! want to use it.  the default is to reject the observation and so
+            ! we overwrite it with missing -- but, if the namelist value is set
+            ! to true, leave zloc alone.
+            if (.not. allow_obs_below_vol) zloc(e) = missing_r8
+               if (debug .and. .not. allow_obs_below_vol) print*, 'setting zloc missing'
+
+            ! else need to set a qc here?
+         endif
+
+      enddo
+
+   elseif(is_vertical(location,"HEIGHT")) then
+
       ! Ob is by height: get corresponding mass level zloc from
       ! computed column height profile
-      call get_model_height_profile(i,j,dx,dy,dxm,dym,wrf%dom(id)%bt,x,id,v_h)
+      call get_model_height_profile_distrib(i,j,dx,dy,dxm,dym,wrf%dom(id)%bt,id,v_h, state_handle, ens_size)
       ! get height vertical co-ordinate
-      call height_to_zk(xyz_loc(3), v_h, wrf%dom(id)%bt,zloc,is_lev0)
-      if(debug) print*,' obs is by height and zloc,lev0 =',zloc, is_lev0
-      if(debug) print*,'model height profile'
-      if(debug) print*,v_h
+      do e = 1, ens_size ! HK should there be a height_to_zk_distrib?
+         call height_to_zk(xyz_loc(3), v_h(:, e), wrf%dom(id)%bt,zloc(e),is_lev0(e))
+         if(debug) print*,' obs is by height and zloc,lev0 =',zloc(e), is_lev0(e)
+         if(debug) print*,'model height profile'
+         if(debug) print*,v_h
 
-      ! If location is above model surface but below the lowest sigma level,
-      ! the default is to reject it.  But if the namelist value is true, then
-      ! accept the observation and later on extrapolate the values from levels
-      ! 1 and 2 downward.
-      if (is_lev0) then
-         ! the height_to_zk() routine has returned a valid zloc in case we
-         ! want to use it.  the default is to reject the observation and so
-         ! we overwrite it with missing.  but if the namelist value is set
-         ! to true, leave zloc alone.
-         if (.not. allow_obs_below_vol) zloc = missing_r8
-         if (debug .and. .not. allow_obs_below_vol) print*, 'setting zloc missing'
-         ! else need to set a qc here?
-      endif
-   
-   elseif(vert_is_surface(location)) then
+         ! If location is above model surface but below the lowest sigma level,
+         ! the default is to reject it.  But if the namelist value is true, then
+         ! accept the observation and later on extrapolate the values from levels
+         ! 1 and 2 downward.
+         if (is_lev0(e)) then
+            ! the height_to_zk() routine has returned a valid zloc in case we
+            ! want to use it.  the default is to reject the observation and so
+            ! we overwrite it with missing.  but if the namelist value is set
+            ! to true, leave zloc alone.
+            if (.not. allow_obs_below_vol) zloc(e) = missing_r8
+            if (debug .and. .not. allow_obs_below_vol) print*, 'setting zloc missing member ', e
+            ! else need to set a qc here?
+         endif
+
+      enddo
+
+   elseif(is_vertical(location,"SURFACE")) then
       zloc = 1.0_r8
       surf_var = .true.
       if(debug) print*,' obs is at the surface = ', xyz_loc(3)
@@ -1161,7 +1243,7 @@ else
          if ( .not. height_diff_check(sfc_elev_max_diff,xyz_loc(3),mod_sfc_elevation) ) zloc = missing_r8
       endif
 
-   elseif(vert_is_undef(location)) then
+   elseif(is_vertical(location,"UNDEFINED")) then
       ! the zloc value should not be used since there is no actual vertical
       ! location for this observation, but give zloc a valid value to avoid
       ! the error checks below for missing_r8
@@ -1178,15 +1260,48 @@ else
 
 
    ! Deal with missing vertical coordinates -- return with istatus .ne. 0
-   if(zloc == missing_r8) then
-      obs_val = missing_r8
-      istatus = 2
-      deallocate(v_h, v_p)
-      return
-   endif
+   ! HK This is annoying.  Back to earlier question of QC if one ensemble fails do we
+   ! discard all the obervations?
+   ! For now, to replicate the original code behaviour keep track of the failed copies
+
+   ! ********* bail out early code **********
+   !if(any(zloc == missing_r8)) then
+   !   print*, 'One of the ensembles has failed the vertical co ordinate rank', my_task_id()
+   !   expected_obs = missing_r8 !HK this is redundant? expected_obs is initialized to missing_r8
+   !   istatus = 2
+   !   deallocate(v_h, v_p)
+   !   return
+   !endif
+   ! ********* endof bail out early code ********
+
+   do e = 1, ens_size
+      if(zloc(e) == missing_r8) then
+          failedcopies(e) = missing_r8
+          istatus(e) = 2
+      endif
+   enddo
 
    ! Set a working integer k value -- if (int(zloc) < 1), then k = 1
-   k = max(1,int(zloc))
+   k = max(1,int(zloc)) !HK k is now ensemble size
+
+
+   ! Find the unique k values
+   ksort = sort(k)
+
+   count = 1
+   do e = 2, ens_size
+       if ( ksort(e) /= ksort(e-1) ) count = count + 1
+   enddo
+
+   allocate(uniquek(count))
+ 
+   uk = 1
+   do e = 1, ens_size
+      if ( all(uniquek /= k(e)) ) then
+         uniquek(uk) = k(e)
+         uk = uk + 1
+      endif
+   enddo
 
    ! The big horizontal interp loop below computes the data values in the level
    ! below and above the actual location, and then does a separate vertical
@@ -1194,7 +1309,7 @@ else
    ! stored in fld(1:2).  Set them to missing here, and if the code below cannot
    ! compute a value, it can just drop out and not have to explicitly set it to
    ! missing anymore.
-   fld(:) = missing_r8
+   fld(:,:) = missing_r8 !HK
 
    !----------------------------------
    ! 1. Horizontal Interpolation 
@@ -1216,7 +1331,8 @@ else
    ! 1.f Specific Humidity (SH, SH2)
    ! 1.g Vapor Mixing Ratio (QV, Q2)
    ! 1.h Rainwater Mixing Ratio (QR)
-   ! 1.i Graupel Mixing Ratio (QG)
+   ! 1.i.1 Graupel Mixing Ratio (QG)
+   ! 1.i.2 Hail Mixing Ratio (QH)
    ! 1.j Snow Mixing Ratio (QS)
    ! 1.k Ice Mixing Ratio (QI)
    ! 1.l Cloud Mixing Ratio (QC)
@@ -1224,12 +1340,15 @@ else
    ! 1.n Ice Number Concentration (QNICE)
    ! 1.o Snow Number Concentration (QNSNOW)
    ! 1.p Rain Number Concentration (QNRAIN)
-   ! 1.q Graupel Number Concentration (QNGRAUPEL)
+   ! 1.q.1 Graupel Number Concentration (QNGRAUPEL) 
+   ! 1.q.2 Hail Number Concentration (QNHAIL)
    ! 1.r Previous time step condensational heating (H_DIABATIC)
    ! 1.s Reflectivity weighted precip fall speed (FALL_SPD_Z_WEIGHTED)
    ! 1.t Pressure (P)
    ! 1.u Vortex Center Stuff from Yongsheng
-   ! 1.v Radar Reflectivity (REFL_10CM)
+   ! 1.v.1 Radar Reflectivity (REFL_10CM)
+   ! 1.v.2 Differential Reflectivity (DIFF_REFL_10CM)
+   ! 1.v.3 Specific Differential Phase (SPEC_DIFF_10CM)
    ! 1.w Geopotential Height (GZ)
    ! 1.x Surface Elevation (HGT)
    ! 1.y Surface Skin Temperature (TSK)
@@ -1247,14 +1366,54 @@ else
    !     at the following forward operator code.  Hence, we can remove the call to 
    !     vert_is_surface.
 
+   if (obs_kind == QTY_RAINWATER_MIXING_RATIO .or. & 
+       obs_kind == QTY_GRAUPEL_MIXING_RATIO .or. &
+       obs_kind == QTY_HAIL_MIXING_RATIO .or. &
+       obs_kind == QTY_SNOW_MIXING_RATIO .or. &
+       obs_kind == QTY_CLOUD_ICE .or. &
+       obs_kind == QTY_CLOUD_LIQUID_WATER .or. &
+       obs_kind == QTY_DROPLET_NUMBER_CONCENTR .or. &
+       obs_kind == QTY_ICE_NUMBER_CONCENTRATION .or. &
+       obs_kind == QTY_SNOW_NUMBER_CONCENTR .or. &
+       obs_kind == QTY_RAIN_NUMBER_CONCENTR .or. &
+       obs_kind == QTY_GRAUPEL_NUMBER_CONCENTR .or. &
+       obs_kind == QTY_HAIL_NUMBER_CONCENTR .or. &
+       obs_kind == QTY_CONDENSATIONAL_HEATING .or. &
+       obs_kind == QTY_POWER_WEIGHTED_FALL_SPEED .or. &
+       obs_kind == QTY_RADAR_REFLECTIVITY .or. &
+       obs_kind == QTY_DIFFERENTIAL_REFLECTIVITY .or. &
+       obs_kind == QTY_SPECIFIC_DIFFERENTIAL_PHASE ) then
+
+       call simple_interp_distrib(fld, wrf, id, i, j, k, obs_kind, dxm, dx, dy, dym, uniquek, ens_size, state_handle)
+       if (all(fld == missing_r8)) goto 200
+      
+
+      ! don't accept negative fld
+      if (obs_kind == QTY_RAINWATER_MIXING_RATIO .or. &
+          obs_kind == QTY_GRAUPEL_MIXING_RATIO .or. &
+          obs_kind == QTY_HAIL_MIXING_RATIO .or. &
+          obs_kind == QTY_SNOW_MIXING_RATIO .or. &
+          obs_kind == QTY_CLOUD_ICE .or. &
+          obs_kind == QTY_CLOUD_LIQUID_WATER .or. &
+          obs_kind == QTY_DROPLET_NUMBER_CONCENTR .or. &
+          obs_kind == QTY_ICE_NUMBER_CONCENTRATION .or. &
+          obs_kind == QTY_SNOW_NUMBER_CONCENTR .or. &
+          obs_kind == QTY_RAIN_NUMBER_CONCENTR .or. &
+          obs_kind == QTY_GRAUPEL_NUMBER_CONCENTR .or. &
+          obs_kind == QTY_HAIL_NUMBER_CONCENTR ) then
+
+          fld = max(0.0_r8, fld) ! Don't accept negative
+
+      endif
+
    !-----------------------------------------------------
    ! 1.a Horizontal Winds (U, V, U10, V10)
 
    ! We need one case structure for both U & V because they comprise a vector which could need
    !   transformation depending on the map projection (hence, the call to gridwind_to_truewind)
-   if( obs_kind == KIND_U_WIND_COMPONENT .or. obs_kind == KIND_V_WIND_COMPONENT) then   ! U, V
+   elseif( obs_kind == QTY_U_WIND_COMPONENT .or. obs_kind == QTY_V_WIND_COMPONENT) then   ! U, V
 
-      ! This is for 3D wind fields -- surface winds later
+     ! This is for 3D wind fields -- surface winds later
       if(.not. surf_var) then
 
          if ( ( wrf%dom(id)%type_u >= 0 ) .and. ( wrf%dom(id)%type_v >= 0 ) ) then
@@ -1276,67 +1435,85 @@ else
             ! Get South West gridpoint indices for xloc_u and yloc_v
             call toGrid(xloc_u,i_u,dx_u,dxm_u)
             call toGrid(yloc_v,j_v,dy_v,dym_v)
+
+            do uk = 1, count ! for the different ks
+
+               ! Check to make sure retrieved integer gridpoints are in valid range
+               if ( boundsCheck( i_u, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_u) .and. &
+                    boundsCheck( i,   wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_v) .and. &
+                    boundsCheck( j,   wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_u) .and. &
+                    boundsCheck( j_v, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_v) .and. &
+                    boundsCheck( uniquek(uk),   .false.,                id, dim=3, type=wrf%dom(id)%type_u) ) then
    
-            ! Check to make sure retrieved integer gridpoints are in valid range
-            if ( boundsCheck( i_u, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_u) .and. &
-                 boundsCheck( i,   wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_v) .and. &
-                 boundsCheck( j,   wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_u) .and. &
-                 boundsCheck( j_v, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_v) .and. &
-                 boundsCheck( k,   .false.,                id, dim=3, type=wrf%dom(id)%type_u) ) then
-   
-               ! Need to get grid cell corners surrounding observation location -- with
-               !   periodicity, this could be non-consecutive (i.e., NOT necessarily i and i+1);
-               !   Furthermore, it could be different for the U-grid and V-grid.  Remember, for 
-               !   now, we are disallowing observations to be located poleward of the 1st and 
-               !   last mass points.
+                  ! Need to get grid cell corners surrounding observation location -- with
+                  !   periodicity, this could be non-consecutive (i.e., NOT necessarily i and i+1);
+                  !   Furthermore, it could be different for the U-grid and V-grid.  Remember, for
+                  !   now, we are disallowing observations to be located poleward of the 1st and
+                  !   last mass points.
                
-               call getCorners(i_u, j, id, wrf%dom(id)%type_u, ll, ul, lr, ur, rc )
-               if ( rc .ne. 0 ) &
-                    print*, 'model_mod.f90 :: model_interpolate :: getCorners U rc = ', rc
+                  call getCorners(i_u, j, id, wrf%dom(id)%type_u, ll, ul, lr, ur, rc )
+                  if ( rc .ne. 0 ) &
+                       print*, 'model_mod.f90 :: model_interpolate :: getCorners U rc = ', rc
                
-               call getCorners(i, j_v, id, wrf%dom(id)%type_v, ll_v, ul_v, lr_v, ur_v, rc ) 
-               if ( rc .ne. 0 ) &
-                    print*, 'model_mod.f90 :: model_interpolate :: getCorners V rc = ', rc
-               
-               ! Now we want to get the corresponding DART state vector indices, and then
-               !   interpolate horizontally on TWO different vertical levels (so that we can
-               !   do the vertical interpolation properly later)
-               do k2 = 1, 2
-   
-                  ! Interpolation for the U field
-                  ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+k2-1, wrf%dom(id)%type_u)
-                  iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+k2-1, wrf%dom(id)%type_u)
-                  ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+k2-1, wrf%dom(id)%type_u)
-                  iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+k2-1, wrf%dom(id)%type_u)
-   
-                  ugrid = dym*( dxm_u*x(ill) + dx_u*x(ilr) ) + dy*( dxm_u*x(iul) + dx_u*x(iur) )
-   
-                  ! Interpolation for the V field
-                  ill = wrf%dom(id)%dart_ind(ll_v(1), ll_v(2), k+k2-1, wrf%dom(id)%type_v)
-                  iul = wrf%dom(id)%dart_ind(ul_v(1), ul_v(2), k+k2-1, wrf%dom(id)%type_v)
-                  ilr = wrf%dom(id)%dart_ind(lr_v(1), lr_v(2), k+k2-1, wrf%dom(id)%type_v)
-                  iur = wrf%dom(id)%dart_ind(ur_v(1), ur_v(2), k+k2-1, wrf%dom(id)%type_v)
+                  call getCorners(i, j_v, id, wrf%dom(id)%type_v, ll_v, ul_v, lr_v, ur_v, rc )
+                  if ( rc .ne. 0 ) &
+                       print*, 'model_mod.f90 :: model_interpolate :: getCorners V rc = ', rc
+
+                  ! Now we want to get the corresponding DART state vector indices, and then
+                  !   interpolate horizontally on TWO different vertical levels (so that we can
+                  !   do the vertical interpolation properly later)
+                  do k2 = 1, 2
+
+                     ! Interpolation for the U field
+                     ill = get_dart_vector_index(ll(1), ll(2), uniquek(uk)+k2-1, domain_id(id), wrf%dom(id)%type_u)
+                     iul = get_dart_vector_index(ul(1), ul(2), uniquek(uk)+k2-1, domain_id(id), wrf%dom(id)%type_u)
+                     ilr = get_dart_vector_index(lr(1), lr(2), uniquek(uk)+k2-1, domain_id(id), wrf%dom(id)%type_u)
+                     iur = get_dart_vector_index(ur(1), ur(2), uniquek(uk)+k2-1, domain_id(id), wrf%dom(id)%type_u)
+
+                     x_ill = get_state(ill, state_handle)
+                     x_iul = get_state(iul, state_handle)
+                     x_ilr = get_state(ilr, state_handle)
+                     x_iur = get_state(iur, state_handle)
+
+                     ugrid = dym*( dxm_u*x_ill + dx_u*x_ilr ) + dy*( dxm_u*x_iul + dx_u*x_iur )
+
+                     ! Interpolation for the V field
+                     ill = get_dart_vector_index(ll_v(1), ll_v(2), uniquek(uk)+k2-1, domain_id(id), wrf%dom(id)%type_v)
+                     iul = get_dart_vector_index(ul_v(1), ul_v(2), uniquek(uk)+k2-1, domain_id(id), wrf%dom(id)%type_v)
+                     ilr = get_dart_vector_index(lr_v(1), lr_v(2), uniquek(uk)+k2-1, domain_id(id), wrf%dom(id)%type_v)
+                     iur = get_dart_vector_index(ur_v(1), ur_v(2), uniquek(uk)+k2-1, domain_id(id), wrf%dom(id)%type_v)
+
+                     x_ill = get_state(ill, state_handle)
+                     x_iul = get_state(iul, state_handle)
+                     x_ilr = get_state(ilr, state_handle)
+                     x_iur = get_state(iur, state_handle)
+
+                     vgrid = dym_v*( dxm*x_ill + dx*x_ilr ) + dy_v*( dxm*x_iul + dx*x_iur )
+
+                        do e = 1, ens_size
+
+                           if ( k(e) == uniquek(uk) ) then ! interpolate only if is the correct k
+                              ! Certain map projections have wind on grid different than true wind (on map)
+                              !   subroutine gridwind_to_truewind is in module_map_utils.f90
+                              call gridwind_to_truewind(xyz_loc(1), wrf%dom(id)%proj, ugrid(e), vgrid(e), &
+                                utrue(e), vtrue(e))
                   
-                  vgrid = dym_v*( dxm*x(ill) + dx*x(ilr) ) + dy_v*( dxm*x(iul) + dx*x(iur) )
-   
-                  ! Certain map projections have wind on grid different than true wind (on map)
-                  !   subroutine gridwind_to_truewind is in module_map_utils.f90
-                  call gridwind_to_truewind(xyz_loc(1), wrf%dom(id)%proj, ugrid, vgrid, &
-                       utrue, vtrue)
-                  
-                  ! Figure out which field was the actual desired observation and store that
-                  !   field as one of the two elements of "fld" (the other element is the other
-                  !   k-level)
-                  if( obs_kind == KIND_U_WIND_COMPONENT) then                  
-                     fld(k2) = utrue                  
-                  else   ! must want v                  
-                     fld(k2) = vtrue                  
-                  endif
-                  
-               end do
-   
-            endif
-         endif
+                              ! Figure out which field was the actual desired observation and store that
+                              !   field as one of the two elements of "fld" (the other element is the other
+                              !   k-level)
+                              if( obs_kind == QTY_U_WIND_COMPONENT) then
+                                 fld(k2, e) = utrue(e)
+                              else   ! must want v
+                                 fld(k2, e) = vtrue(e)
+                              endif
+                           endif
+                        enddo
+                    enddo
+                   endif
+
+               enddo
+
+          endif
 
 
       ! This is for surface wind fields -- NOTE: surface winds are on Mass grid 
@@ -1359,162 +1536,201 @@ else
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners U10, V10 rc = ', rc
    
                ! Interpolation for the U10 field
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_u10)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_u10)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_u10)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_u10)
-               ugrid = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) ) 
+               ill = get_dart_vector_index(ll(1), ll(2), 1, domain_id(id), wrf%dom(id)%type_u10)
+               iul = get_dart_vector_index(ul(1), ul(2), 1, domain_id(id), wrf%dom(id)%type_u10)
+               ilr = get_dart_vector_index(lr(1), lr(2), 1, domain_id(id), wrf%dom(id)%type_u10)
+               iur = get_dart_vector_index(ur(1), ur(2), 1, domain_id(id), wrf%dom(id)%type_u10)
+
+               x_ill = get_state(ill, state_handle)
+               x_iul = get_state(iul, state_handle)
+               x_ilr = get_state(ilr, state_handle)
+               x_iur = get_state(iur, state_handle)
+
+               ugrid = dym*( dxm*x_ill + dx*x_ilr ) + dy*( dxm*x_iul + dx*x_iur )
    
                ! Interpolation for the V10 field
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_v10)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_v10)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_v10)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_v10)
-               vgrid = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-               call gridwind_to_truewind(xyz_loc(1), wrf%dom(id)%proj, ugrid, vgrid, &
-                    utrue, vtrue)
-   
-               ! U10 (U at 10 meters)
-               if( obs_kind == KIND_U_WIND_COMPONENT) then
-                  fld(1) = utrue
-               ! V10 (V at 10 meters)
-               else
-                  fld(1) = vtrue
-               endif
-   
+               ill = get_dart_vector_index(ll(1), ll(2), 1, domain_id(id), wrf%dom(id)%type_v10)
+               iul = get_dart_vector_index(ul(1), ul(2), 1, domain_id(id), wrf%dom(id)%type_v10)
+               ilr = get_dart_vector_index(lr(1), lr(2), 1, domain_id(id), wrf%dom(id)%type_v10)
+               iur = get_dart_vector_index(ur(1), ur(2), 1, domain_id(id), wrf%dom(id)%type_v10)
+
+               x_ill = get_state(ill, state_handle)
+               x_iul = get_state(iul, state_handle)
+               x_iur = get_state(iur, state_handle)
+               x_ilr = get_state(ilr, state_handle)
+
+               vgrid = dym*( dxm*x_ill + dx*x_ilr ) + dy*( dxm*x_iul + dx*x_iur )
+
+               do e = 1, ens_size
+                  call gridwind_to_truewind(xyz_loc(1), wrf%dom(id)%proj, ugrid(e), vgrid(e), &
+                       utrue(e), vtrue(e))
+
+                  ! U10 (U at 10 meters)
+                  if( obs_kind == QTY_U_WIND_COMPONENT) then
+                     fld(1, e) = utrue(e)
+                  ! V10 (V at 10 meters)
+                  else
+                     fld(1, e) = vtrue(e)
+                  endif
+
+               enddo
+
+
             endif
          endif
       endif
 
-
    !-----------------------------------------------------
    ! 1.b Sensible Temperature (T, T2)
 
-   elseif ( obs_kind == KIND_TEMPERATURE ) then
-
+   elseif ( obs_kind == QTY_TEMPERATURE ) then
       ! This is for 3D temperature field -- surface temps later
+      !print*, 'k ', k
+
       if(.not. surf_var) then
 
          if ( wrf%dom(id)%type_t >= 0 ) then
 
-            ! Check to make sure retrieved integer gridpoints are in valid range
-            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+            do uk = 1, count ! for the different ks
+
+               ! Check to make sure retrieved integer gridpoints are in valid range
+               if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
+                    boundsCheck( uniquek(uk), .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
    
-               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-               if ( rc .ne. 0 ) &
-                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
+                  call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+                  if ( rc .ne. 0 ) &
+                       print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
                
-               ! Interpolation for T field at level k
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_t)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_t)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_t)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_t)
-   
-               ! In terms of perturbation potential temperature
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-               pres1 = model_pressure_t(ll(1), ll(2), k, id, x)
-               pres2 = model_pressure_t(lr(1), lr(2), k, id, x)
-               pres3 = model_pressure_t(ul(1), ul(2), k, id, x)
-               pres4 = model_pressure_t(ur(1), ur(2), k, id, x)
-               
-               ! Pressure at location
-               pres = dym*( dxm*pres1 + dx*pres2 ) + dy*( dxm*pres3 + dx*pres4 )
-   
-               ! Full sensible temperature field
-               fld(1) = (ts0 + a1)*(pres/ps0)**kappa
-   
-               ! Interpolation for T field at level k+1
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_t)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_t)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_t)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_t)
-   
-               ! In terms of perturbation potential temperature
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-               pres1 = model_pressure_t(ll(1), ll(2), k+1, id, x)
-               pres2 = model_pressure_t(lr(1), lr(2), k+1, id, x)
-               pres3 = model_pressure_t(ul(1), ul(2), k+1, id, x)
-               pres4 = model_pressure_t(ur(1), ur(2), k+1, id, x)
-               
-               ! Pressure at location
-               pres = dym*( dxm*pres1 + dx*pres2 ) + dy*( dxm*pres3 + dx*pres4 )
-   
-               ! Full sensible temperature field
-               fld(2) = (ts0 + a1)*(pres/ps0)**kappa
-   
-            endif
+                  ! Interpolation for T field at level k
+                  ill = get_dart_vector_index(ll(1), ll(2), uniquek(uk), domain_id(id), wrf%dom(id)%type_t)
+                  iul = get_dart_vector_index(ul(1), ul(2), uniquek(uk), domain_id(id), wrf%dom(id)%type_t)
+                  ilr = get_dart_vector_index(lr(1), lr(2), uniquek(uk), domain_id(id), wrf%dom(id)%type_t)
+                  iur = get_dart_vector_index(ur(1), ur(2), uniquek(uk), domain_id(id), wrf%dom(id)%type_t)
+
+                  x_iul = get_state(iul, state_handle)
+                  x_ill = get_state(ill, state_handle)
+                  x_ilr = get_state(ilr, state_handle)
+                  x_iur = get_state(iur, state_handle)
+
+                  ! In terms of perturbation potential temperature
+                  a1 = dym*( dxm*x_ill + dx*x_ilr ) + dy*( dxm*x_iul + dx*x_iur )
+
+                  pres1 = model_pressure_t_distrib(ll(1), ll(2), uniquek(uk), id, state_handle, ens_size)
+                  pres2 = model_pressure_t_distrib(lr(1), lr(2), uniquek(uk), id, state_handle, ens_size)
+                  pres3 = model_pressure_t_distrib(ul(1), ul(2), uniquek(uk), id, state_handle, ens_size)
+                  pres4 = model_pressure_t_distrib(ur(1), ur(2), uniquek(uk), id, state_handle, ens_size)
+
+                  ! Pressure at location
+                  pres = dym*( dxm*pres1 + dx*pres2 ) + dy*( dxm*pres3 + dx*pres4 )
+
+                  do e = 1, ens_size
+                     if ( k(e) == uniquek(uk) ) then
+                        ! Full sensible temperature field
+                        fld(1, e) = (ts0 + a1(e))*(pres(e)/ps0)**kappa
+                     endif
+                  enddo
+
+                  ! Interpolation for T field at level k+1
+                  ill = get_dart_vector_index(ll(1), ll(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_t)
+                  iul = get_dart_vector_index(ul(1), ul(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_t)
+                  ilr = get_dart_vector_index(lr(1), lr(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_t)
+                  iur = get_dart_vector_index(ur(1), ur(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_t)
+
+                  x_ill = get_state(ill, state_handle)
+                  x_iul = get_state(iul, state_handle)
+                  x_iur = get_state(iur, state_handle)
+                  x_ilr = get_state(ilr, state_handle)
+
+                  ! In terms of perturbation potential temperature
+                  a1 = dym*( dxm*x_ill + dx*x_ilr ) + dy*( dxm*x_iul + dx*x_iur )
+
+                  pres1 = model_pressure_t_distrib(ll(1), ll(2), uniquek(uk)+1, id, state_handle, ens_size)
+                  pres2 = model_pressure_t_distrib(lr(1), lr(2), uniquek(uk)+1, id, state_handle, ens_size)
+                  pres3 = model_pressure_t_distrib(ul(1), ul(2), uniquek(uk)+1, id, state_handle, ens_size)
+                  pres4 = model_pressure_t_distrib(ur(1), ur(2), uniquek(uk)+1, id, state_handle, ens_size)
+
+                  ! Pressure at location
+                  pres = dym*( dxm*pres1 + dx*pres2 ) + dy*( dxm*pres3 + dx*pres4 )
+
+                  do e = 1, ens_size
+                     if ( k(e) == uniquek(uk) ) then
+                     ! Full sensible temperature field
+                     fld(2, e) = (ts0 + a1(e))*(pres(e)/ps0)**kappa
+                     endif
+                  enddo
+                  
+
+               endif
+            enddo
          endif
 
       ! This is for surface temperature (T2)
       else
          
-         if ( wrf%dom(id)%type_t2 >= 0 ) then
-
-            ! Check to make sure retrieved integer gridpoints are in valid range
-            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
-                   .or. wrf%dom(id)%scm ) then
-   
-               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-               if ( rc .ne. 0 ) &
-                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
-   
-               ! Interpolation for the T2 field
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_t2)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_t2)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_t2)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_t2)
-               
-               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-            endif
+         if ( wrf%dom(id)%type_t2 >= 0 ) then ! HK is there a better way to do this?
+            call surface_interp_distrib(fld, wrf, id, i, j, obs_kind, wrf%dom(id)%type_t2, dxm, dx, dy, dym, ens_size, state_handle)
+            if (all(fld == missing_r8)) goto 200
          endif
       endif
-
 
    !-----------------------------------------------------
    ! 1.c Potential Temperature (Theta, TH2)
 
    ! Note:  T is perturbation potential temperature (potential temperature - ts0)
    !   TH2 is potential temperature at 2 m
-   elseif ( obs_kind == KIND_POTENTIAL_TEMPERATURE ) then
-
+   elseif ( obs_kind == QTY_POTENTIAL_TEMPERATURE ) then
       ! This is for 3D potential temperature field -- surface pot temps later
       if(.not. surf_var) then
 
          if ( wrf%dom(id)%type_t >= 0 ) then
- 
+
+            do uk = 1, count
+
             ! Check to make sure retrieved integer gridpoints are in valid range
             if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
                  boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+                 boundsCheck( uniquek(uk), .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
          
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners Theta rc = ', rc
                
                ! Interpolation for Theta field at level k
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_t)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_t)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_t)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_t)
-   
-               fld(1) = ts0 + dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               ill = get_dart_vector_index(ll(1), ll(2), uniquek(uk),  domain_id(id),wrf%dom(id)%type_t)
+               iul = get_dart_vector_index(ul(1), ul(2), uniquek(uk),  domain_id(id),wrf%dom(id)%type_t)
+               ilr = get_dart_vector_index(lr(1), lr(2), uniquek(uk),  domain_id(id),wrf%dom(id)%type_t)
+               iur = get_dart_vector_index(ur(1), ur(2), uniquek(uk),  domain_id(id),wrf%dom(id)%type_t)
+
+               x_ill = get_state(ill, state_handle)
+               x_iul = get_state(iul, state_handle)
+               x_ilr = get_state(ilr, state_handle)
+               x_iur = get_state(iur, state_handle)
+
+               do e = 1, ens_size
+                  if ( k(e) == uniquek(uk) ) then
+                     fld(1, e) = ts0 + dym*( dxm*x_ill(e) + dx*x_ilr(e)) + dy*( dxm*x_iul(e) + dx*x_iur(e) )
+                  endif
+               enddo
    
                ! Interpolation for Theta field at level k+1
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_t)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_t)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_t)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_t)
-   
-               fld(2) = ts0 + dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-            endif
+               ill = get_dart_vector_index(ll(1), ll(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_t)
+               iul = get_dart_vector_index(ul(1), ul(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_t)
+               ilr = get_dart_vector_index(lr(1), lr(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_t)
+               iur = get_dart_vector_index(ur(1), ur(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_t)
+
+               x_ill = get_state(ill, state_handle)
+               x_ill = get_state(ill, state_handle)
+               x_ilr = get_state(ilr, state_handle)
+               x_iur = get_state(iur, state_handle)
+
+               do e = 1, ens_size
+                  if ( k(e) == uniquek(uk) ) then
+                    fld(2, e) = ts0 + dym*( dxm*x_ill(e) + dx*x_ilr(e) ) + dy*( dxm*x_iul(e) + dx*x_iur(e) )
+                 endif
+               enddo
+             endif
+           enddo
          endif
 
       ! This is for surface potential temperature (TH2)
@@ -1522,39 +1738,22 @@ else
          
          if ( wrf%dom(id)%type_th2 >= 0 ) then
 
-            ! Check to make sure retrieved integer gridpoints are in valid range
-            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
-                   .or. wrf%dom(id)%scm ) then
-   
-               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-               if ( rc .ne. 0 ) &
-                    print*, 'model_mod.f90 :: model_interpolate :: getCorners TH2 rc = ', rc
-   
-               ! Interpolation for the TH2 field
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_th2)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_th2)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_th2)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_th2)
-               
-               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+            call surface_interp_distrib(fld, wrf, id, i, j, obs_kind, wrf%dom(id)%type_th2, dxm, dx, dy, dym, ens_size, state_handle)
+            if (all(fld == missing_r8)) goto 200
    
             endif
-         endif
       endif
-
 
    !-----------------------------------------------------
    ! 1.d Density (Rho)
+   elseif (obs_kind == QTY_DENSITY) then
 
-   ! Rho calculated at mass points, and so is like "TYPE_T" -- KIND_DENSITY apparently only
-   !   refers to full 3D density field (i.e., no surface fields!)
-   elseif ( obs_kind == KIND_DENSITY ) then
-      
+      do uk = 1, count ! for the different ks
+
       ! Check to make sure retrieved integer gridpoints are in valid range
       if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
            boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-           boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+           boundsCheck( uniquek(uk), .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
          
          call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
          if ( rc .ne. 0 ) &
@@ -1568,69 +1767,70 @@ else
          !   the corner indices
 
          ! Interpolation for the Rho field at level k
-         rho1 = model_rho_t(ll(1), ll(2), k, id, x)
-         rho2 = model_rho_t(lr(1), lr(2), k, id, x)
-         rho3 = model_rho_t(ul(1), ul(2), k, id, x)
-         rho4 = model_rho_t(ur(1), ur(2), k, id, x)
+         rho1 = model_rho_t_distrib(ll(1), ll(2), uniquek(uk), id, state_handle, ens_size)
+         rho2 = model_rho_t_distrib(lr(1), lr(2), uniquek(uk), id, state_handle, ens_size)
+         rho3 = model_rho_t_distrib(ul(1), ul(2), uniquek(uk), id, state_handle, ens_size)
+         rho4 = model_rho_t_distrib(ur(1), ur(2), uniquek(uk), id, state_handle, ens_size)
 
-         fld(1) = dym*( dxm*rho1 + dx*rho2 ) + dy*( dxm*rho3 + dx*rho4 )
+         do e = 1, ens_size
+            if (k(e) == uniquek(uk) ) then
+               fld(1, e) = dym*( dxm*rho1(e) + dx*rho2(e) ) + dy*( dxm*rho3(e) + dx*rho4(e) )
+            endif
+         enddo
 
          ! Interpolation for the Rho field at level k+1
-         rho1 = model_rho_t(ll(1), ll(2), k+1, id, x)
-         rho2 = model_rho_t(lr(1), lr(2), k+1, id, x)
-         rho3 = model_rho_t(ul(1), ul(2), k+1, id, x)
-         rho4 = model_rho_t(ur(1), ur(2), k+1, id, x)
+         rho1 = model_rho_t_distrib(ll(1), ll(2), uniquek(uk)+1, id, state_handle, ens_size)
+         rho2 = model_rho_t_distrib(lr(1), lr(2), uniquek(uk)+1, id, state_handle, ens_size)
+         rho3 = model_rho_t_distrib(ul(1), ul(2), uniquek(uk)+1, id, state_handle, ens_size)
+         rho4 = model_rho_t_distrib(ur(1), ur(2), uniquek(uk)+1, id, state_handle, ens_size)
 
-         fld(2) = dym*( dxm*rho1 + dx*rho2 ) + dy*( dxm*rho3 + dx*rho4 )
+         do e = 1, ens_size
+            if (k(e) == uniquek(uk) ) then
+               fld(2, e) = dym*( dxm*rho1(e) + dx*rho2(e) ) + dy*( dxm*rho3(e) + dx*rho4(e) )
+            endif
+         enddo
 
       endif
 
+      enddo
 
    !-----------------------------------------------------
    ! 1.e Vertical Wind (W)
 
-   elseif ( obs_kind == KIND_VERTICAL_VELOCITY ) then
+   elseif ( obs_kind == QTY_VERTICAL_VELOCITY ) then
 
-      if ( wrf%dom(id)%type_w >= 0 ) then
+      ! Adjust zloc for staggered ZNW grid (or W-grid, as compared to ZNU or M-grid)
+      zloc = zloc + 0.5_r8
+      k = max(1,int(zloc))  !> @todo what should you do with this?
 
-         ! Adjust zloc for staggered ZNW grid (or W-grid, as compared to ZNU or M-grid)
-         zloc = zloc + 0.5_r8
-         k = max(1,int(zloc))
-         
-         ! Check to make sure retrieved integer gridpoints are in valid range
-         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_w ) .and. &
-              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_w ) .and. &
-              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_w ) ) then
+      deallocate(uniquek)
+
+      ! Re-find the unique k values
+      ksort = sort(k)
    
-            call getCorners(i, j, id, wrf%dom(id)%type_w, ll, ul, lr, ur, rc )
-            if ( rc .ne. 0 ) &
-                 print*, 'model_mod.f90 :: model_interpolate :: getCorners W rc = ', rc
-            
-            ! Interpolation for W field at level k
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_w)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_w)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_w)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_w)
-            
-            fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-            
-            ! Interpolation for W field at level k+1
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_w)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_w)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_w)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_w)
-            
-            fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-         
+      count = 1
+      do e = 2, ens_size
+          if ( ksort(e) /= ksort(e-1) ) count = count + 1
+      enddo
+   
+      allocate(uniquek(count))
+    
+      uk = 1
+      do e = 1, ens_size
+         if ( all(uniquek /= k(e)) ) then
+            uniquek(uk) = k(e)
+            uk = uk + 1
          endif
-      endif
+      enddo
 
+      call simple_interp_distrib(fld, wrf, id, i, j, k, obs_kind, dxm, dx, dy, dym, uniquek, ens_size, state_handle )
+      if (all(fld == missing_r8)) goto 200
 
-   !-----------------------------------------------------
+    !-----------------------------------------------------
    ! 1.f Specific Humidity (SH, SH2)
-
+   ! Look at me
    ! Convert water vapor mixing ratio to specific humidity:
-   else if( obs_kind == KIND_SPECIFIC_HUMIDITY ) then
+   else if( obs_kind == QTY_SPECIFIC_HUMIDITY ) then
 
       ! This is for 3D specific humidity -- surface spec humidity later
       if(.not. surf_var) then
@@ -1638,34 +1838,55 @@ else
          ! First confirm that vapor mixing ratio is in the DART state vector
          if ( wrf%dom(id)%type_qv >= 0 ) then
 
-            ! Check to make sure retrieved integer gridpoints are in valid range
-            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
-      
-               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-               if ( rc .ne. 0 ) &
-                    print*, 'model_mod.f90 :: model_interpolate :: getCorners SH rc = ', rc
-               
-               ! Interpolation for SH field at level k
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_qv)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_qv)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_qv)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_qv)
-               
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               fld(1) = a1 /(1.0_r8 + a1)
-               
-               ! Interpolation for SH field at level k+1
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_qv)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_qv)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_qv)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_qv)
-               
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               fld(2) = a1 /(1.0_r8 + a1)
+            UNIQUEK_LOOP: do uk = 1, count ! for the different ks
 
-            endif
+               ! Check to make sure retrieved integer gridpoints are in valid range
+               if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
+                    boundsCheck( uniquek(uk), .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+
+                  call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc ) ! HK why is this type_t
+                  if ( rc .ne. 0 ) &
+                       print*, 'model_mod.f90 :: model_interpolate :: getCorners SH rc = ', rc
+
+                  ! Interpolation for SH field at level k
+                  ill = get_dart_vector_index(ll(1), ll(2), uniquek(uk), domain_id(id), wrf%dom(id)%type_qv)
+                  iul = get_dart_vector_index(ul(1), ul(2), uniquek(uk), domain_id(id), wrf%dom(id)%type_qv)
+                  ilr = get_dart_vector_index(lr(1), lr(2), uniquek(uk), domain_id(id), wrf%dom(id)%type_qv)
+                  iur = get_dart_vector_index(ur(1), ur(2), uniquek(uk), domain_id(id), wrf%dom(id)%type_qv)
+
+                  x_ill = get_state(ill, state_handle)
+                  x_iul = get_state(iul, state_handle)
+                  x_ilr = get_state(ilr, state_handle)
+                  x_iur = get_state(iur, state_handle)
+
+                  do e = 1, ens_size
+                     if ( k(e) == uniquek(uk) ) then ! interpolate only if it is the correct k
+                        a1 = dym*( dxm*x_ill + dx*x_ilr ) + dy*( dxm*x_iul + dx*x_iur ) ! think this can go outside the k loop
+                        fld(1,e) = a1(e) /(1.0_r8 + a1(e))
+                     endif
+                  enddo
+
+                  ! Interpolation for SH field at level k+1
+                  ill = get_dart_vector_index(ll(1), ll(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_qv)
+                  iul = get_dart_vector_index(ul(1), ul(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_qv)
+                  ilr = get_dart_vector_index(lr(1), lr(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_qv)
+                  iur = get_dart_vector_index(ur(1), ur(2), uniquek(uk)+1, domain_id(id), wrf%dom(id)%type_qv)
+
+                  x_ill = get_state(ill, state_handle)
+                  x_ilr = get_state(ilr, state_handle)
+                  x_iul = get_state(iul, state_handle)
+                  x_iur = get_state(iur, state_handle)
+
+                  do e = 1, ens_size
+                     if ( k(e) == uniquek(uk) ) then ! interpolate only if it is the correct
+                        a1 = dym*( dxm*x_ill + dx*x_ilr ) + dy*( dxm*x_iul + dx*x_iur )
+                        fld(2,e) = a1(e) /(1.0_r8 + a1(e))
+                     endif
+                  enddo
+              endif
+            enddo UNIQUEK_LOOP
+
          endif
 
       ! This is for surface specific humidity (calculated from Q2)
@@ -1673,7 +1894,6 @@ else
          
          ! confirm that field is in the DART state vector
          if ( wrf%dom(id)%type_q2 >= 0 ) then
-
             ! Check to make sure retrieved integer gridpoints are in valid range
             if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
@@ -1684,13 +1904,18 @@ else
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners SH2 rc = ', rc
 
                ! Interpolation for the SH2 field
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_q2)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_q2)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_q2)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_q2)
-               
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               fld(1) = a1 /(1.0_r8 + a1)
+               ill = get_dart_vector_index(ll(1), ll(2), 1, domain_id(id), wrf%dom(id)%type_q2)
+               iul = get_dart_vector_index(ul(1), ul(2), 1, domain_id(id), wrf%dom(id)%type_q2)
+               ilr = get_dart_vector_index(lr(1), lr(2), 1, domain_id(id), wrf%dom(id)%type_q2)
+               iur = get_dart_vector_index(ur(1), ur(2), 1, domain_id(id), wrf%dom(id)%type_q2)
+
+               x_ill = get_state(ill, state_handle)
+               x_iul = get_state(iul, state_handle)
+               x_iur = get_state(iur, state_handle)
+               x_ilr = get_state(ilr, state_handle)
+
+               a1 = dym*( dxm*x_ill + dx*x_ilr ) + dy*( dxm*x_iul + dx*x_iur )
+               fld(1,:) = a1 /(1.0_r8 + a1)
 
             endif
          endif
@@ -1698,545 +1923,37 @@ else
 
 
    !-----------------------------------------------------
-   ! 1.g Vapor Mixing Ratio (QV, Q2)
-   else if( obs_kind == KIND_VAPOR_MIXING_RATIO ) then
+   ! 1.g Vapor Mixing Ratio (QV, Q2)  
+   else if( obs_kind == QTY_VAPOR_MIXING_RATIO ) then
 
       ! This is for 3D vapor mixing ratio -- surface QV later
       if(.not. surf_var) then
-
-         ! First confirm that vapor mixing ratio is in the DART state vector
-         if ( wrf%dom(id)%type_qv >= 0 ) then
-      
-            ! Check to make sure retrieved integer gridpoints are in valid range
-            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
-      
-               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-               if ( rc .ne. 0 ) &
-                    print*, 'model_mod.f90 :: model_interpolate :: getCorners QV rc = ', rc
-               
-               ! Interpolation for QV field at level k
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_qv)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_qv)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_qv)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_qv)
-               
-               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-               ! Interpolation for QV field at level k+1
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_qv)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_qv)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_qv)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_qv)
-               
-               fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-            endif
-         endif
-
-      ! This is for surface QV (Q2)
-      else
-
+         call simple_interp_distrib(fld, wrf, id, i, j, k, obs_kind, dxm, dx, dy, dym, uniquek, ens_size, state_handle )
+         if (all(fld == missing_r8)) goto 200
+      else ! This is for surface QV (Q2)
          ! Confirm that right field is in the DART state vector
          if ( wrf%dom(id)%type_q2 >= 0 ) then
-         
-            ! Check to make sure retrieved integer gridpoints are in valid range
-            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
-                   .or. wrf%dom(id)%scm ) then
-               
-               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-               if ( rc .ne. 0 ) &
-                    print*, 'model_mod.f90 :: model_interpolate :: getCorners QV2 rc = ', rc
-
-               ! Interpolation for the SH2 field
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_q2)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_q2)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_q2)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_q2)
-               
-               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-            endif
+            !HK I am not sure what the type should be
+            call surface_interp_distrib(fld, wrf, id, i, j, obs_kind, wrf%dom(id)%type_q2, dxm, dx, dy, dym, ens_size, state_handle)
+            if (all(fld == missing_r8)) goto 200
          endif
       endif
 
-
-   !-----------------------------------------------------
-   ! 1.h Rainwater Mixing Ratio (QR)
-   else if( obs_kind == KIND_RAINWATER_MIXING_RATIO ) then
-
-      ! Confirm that QR is in the DART state vector
-      if ( wrf%dom(id)%type_qr >= 0 ) then
-
-         ! Check to make sure retrieved integer gridpoints are in valid range
-         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
-      
-            call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-            if ( rc .ne. 0 ) &
-                 print*, 'model_mod.f90 :: model_interpolate :: getCorners QR rc = ', rc
-               
-            ! Interpolation for QR field at level k
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_qr)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_qr)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_qr)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_qr)
-            
-            fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-            ! Interpolation for QR field at level k+1
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_qr)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_qr)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_qr)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_qr)
-               
-            fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-            
-            ! Don't accept negative rain amounts (?)
-            fld = max(0.0_r8, fld)
-
-         endif
-      endif
-   
-
-   !-----------------------------------------------------
-   ! 1.i Graupel Mixing Ratio (QG)
-   else if( obs_kind == KIND_GRAUPEL_MIXING_RATIO ) then
-
-      ! Confirm that QG is in the DART state vector
-      if ( wrf%dom(id)%type_qg >= 0 ) then
-
-         ! Check to make sure retrieved integer gridpoints are in valid range
-         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
-            
-            call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-            if ( rc .ne. 0 ) &
-                 print*, 'model_mod.f90 :: model_interpolate :: getCorners QG rc = ', rc
-               
-            ! Interpolation for QG field at level k
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_qg)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_qg)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_qg)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_qg)
-            
-            fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-            ! Interpolation for QG field at level k+1
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_qg)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_qg)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_qg)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_qg)
-               
-            fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-            ! Don't accept negative rain amounts (?)
-            fld = max(0.0_r8, fld)
-            
-         endif
-      endif
-   
-
-   !-----------------------------------------------------
-   ! 1.j Snow Mixing Ratio (QS)
-   else if( obs_kind == KIND_SNOW_MIXING_RATIO ) then
-
-      ! Confirm that QS is in the DART state vector
-      if ( wrf%dom(id)%type_qs >= 0 ) then
-
-         ! Check to make sure retrieved integer gridpoints are in valid range
-         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
-         
-            call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-            if ( rc .ne. 0 ) &
-                 print*, 'model_mod.f90 :: model_interpolate :: getCorners QS rc = ', rc
-               
-            ! Interpolation for QS field at level k
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_qs)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_qs)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_qs)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_qs)
-            
-            fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-            ! Interpolation for QS field at level k+1
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_qs)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_qs)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_qs)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_qs)
-               
-            fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-            ! Don't accept negative rain amounts (?)
-            fld = max(0.0_r8, fld)
-            
-         endif
-      endif
-   
-
-   !-----------------------------------------------------
-   ! 1.k Ice Mixing Ratio (QI)
-   else if( obs_kind == KIND_CLOUD_ICE) then  ! really KIND_ICE_MIXING_RATIO
-
-      ! Confirm that QI is in the DART state vector
-      if ( wrf%dom(id)%type_qi >= 0 ) then
-
-         ! Check to make sure retrieved integer gridpoints are in valid range
-         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
-         
-            call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-            if ( rc .ne. 0 ) &
-                 print*, 'model_mod.f90 :: model_interpolate :: getCorners QI rc = ', rc
-               
-            ! Interpolation for QI field at level k
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_qi)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_qi)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_qi)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_qi)
-            
-            fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-            ! Interpolation for QI field at level k+1
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_qi)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_qi)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_qi)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_qi)
-               
-            fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-            ! Don't accept negative ice amounts (?)
-            fld = max(0.0_r8, fld)
-            
-         endif
-      endif
-   
-   !-----------------------------------------------------
-   ! 1.l Cloud Mixing Ratio (QC)
-
-   ! Cloud water mixing ratio added for forward radiative transfer model calculations.
-  
-   else if( obs_kind == KIND_CLOUD_LIQUID_WATER ) then ! really KIND_CLOUDWATER_MIXING_RATIO
-
-      ! make sure vector includes the needed field
-      if ( wrf%dom(id)%type_qc >= 0 ) then
-
-         ! Check to make sure retrieved integer gridpoints are in valid range
-         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
-         
-            call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-            if ( rc .ne. 0 ) &
-                 print*, 'model_mod.f90 :: model_interpolate :: getCorners QC rc = ', rc
-               
-            ! Interpolation for QC field at level k
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_qc)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_qc)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_qc)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_qc)
-            
-            fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-            ! Interpolation for QC field at level k+1
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_qc)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_qc)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_qc)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_qc)
-               
-            fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-            ! Don't accept negative cloud amounts (?)
-            fld = max(0.0_r8, fld)
-            
-         endif
-      endif
-   
-
-   !-----------------------------------------------------
-   ! 1.m Droplet Number Concentration (QNDRP)
-   else if( obs_kind == KIND_DROPLET_NUMBER_CONCENTR ) then
-
-      ! Confirm that QNDRP is in the DART state vector
-      if ( wrf%dom(id)%type_qndrp >= 0 ) then
-
-         ! Check to make sure retrieved integer gridpoints are in valid range
-         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
-         
-            call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-            if ( rc .ne. 0 ) &
-                 print*, 'model_mod.f90 :: model_interpolate :: getCorners QNDRP rc = ', rc
-               
-            ! Interpolation for QNDRP field at level k
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_qndrp)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_qndrp)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_qndrp)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_qndrp)
-            
-            fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-            ! Interpolation for QNDRP field at level k+1
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_qndrp)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_qndrp)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_qndrp)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_qndrp)
-               
-            fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-            ! Don't accept negative droplet concentrations (?)
-            fld = max(0.0_r8, fld)
-            
-         endif
-      endif
-   
-
-   !-----------------------------------------------------
-   ! 1.n Ice Number Concentration (QNICE)
-   else if( obs_kind == KIND_ICE_NUMBER_CONCENTRATION ) then
-
-      ! Confirm that QNICE is in the DART state vector
-      if ( wrf%dom(id)%type_qnice >= 0 ) then
-
-         ! Check to make sure retrieved integer gridpoints are in valid range
-         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
-         
-            call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-            if ( rc .ne. 0 ) &
-                 print*, 'model_mod.f90 :: model_interpolate :: getCorners QNICE rc = ', rc
-               
-            ! Interpolation for QNICE field at level k
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_qnice)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_qnice)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_qnice)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_qnice)
-            
-            fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-            ! Interpolation for QNICE field at level k+1
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_qnice)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_qnice)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_qnice)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_qnice)
-               
-            fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-            ! Don't accept negative ice concentrations (?)
-            fld = max(0.0_r8, fld)
-            
-         endif
-      endif
-   
-
-   !-----------------------------------------------------
-   ! 1.o Snow Number Concentration (QNSNOW)
-   else if( obs_kind == KIND_SNOW_NUMBER_CONCENTR ) then
-
-      ! Confirm that QNSNOW is in the DART state vector
-      if ( wrf%dom(id)%type_qnsnow >= 0 ) then
-
-         ! Check to make sure retrieved integer gridpoints are in valid range
-         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
-         
-            call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-            if ( rc .ne. 0 ) &
-                 print*, 'model_mod.f90 :: model_interpolate :: getCorners QNSNOW rc = ', rc
-               
-            ! Interpolation for QNSNOW field at level k
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_qnsnow)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_qnsnow)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_qnsnow)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_qnsnow)
-            
-            fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-            ! Interpolation for QNSNOW field at level k+1
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_qnsnow)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_qnsnow)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_qnsnow)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_qnsnow)
-               
-            fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-            ! Don't accept negative snow concentrations (?)
-            fld = max(0.0_r8, fld)
-            
-         endif
-      endif
-   
-
-   !----------------------------------------------------
-   ! 1.p Rain Number Concentration (QNRAIN)
-   else if( obs_kind == KIND_RAIN_NUMBER_CONCENTR ) then
-
-      ! Confirm that QNRAIN is in the DART state vector
-      if ( wrf%dom(id)%type_qnrain >= 0 ) then
-
-         ! Check to make sure retrieved integer gridpoints are in valid range
-         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
-         
-            call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-            if ( rc .ne. 0 ) &
-                 print*, 'model_mod.f90 :: model_interpolate :: getCorners QNRAIN rc = ', rc
-               
-            ! Interpolation for QNRAIN field at level k
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_qnrain)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_qnrain)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_qnrain)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_qnrain)
-            
-            fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-            ! Interpolation for QNRAIN field at level k+1
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_qnrain)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_qnrain)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_qnrain)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_qnrain)
-               
-            fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-            ! Don't accept negative rain concentrations (?)
-            fld = max(0.0_r8, fld)
-            
-         endif
-      endif
-   
-
-   !-----------------------------------------------------
-   ! 1.q Graupel Number Concentration (QNGRAUPEL)
-   else if( obs_kind == KIND_GRAUPEL_NUMBER_CONCENTR ) then
-
-      ! Confirm that QNGRAUPEL is in the DART state vector
-      if ( wrf%dom(id)%type_qngraupel >= 0 ) then
-
-         ! Check to make sure retrieved integer gridpoints are in valid range
-         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
-         
-            call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-            if ( rc .ne. 0 ) &
-                 print*, 'model_mod.f90 :: model_interpolate :: getCorners QNGRAUPEL rc = ', rc
-               
-            ! Interpolation for QNGRAUPEL field at level k
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_qngraupel)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_qngraupel)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_qngraupel)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_qngraupel)
-            
-            fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-            ! Interpolation for QNGRAUPEL field at level k+1
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_qngraupel)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_qngraupel)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_qngraupel)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_qngraupel)
-               
-            fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-            ! Don't accept negative graupel concentrations (?)
-            fld = max(0.0_r8, fld)
-            
-         endif
-      endif
-   
-
-   !-----------------------------------------------------
-   ! 1.r Previous time step condensational heating (H_DIABATIC)
-   else if( obs_kind == KIND_CONDENSATIONAL_HEATING ) then
-
-      ! Confirm that H_DIABATIC is in the DART state vector
-      if ( wrf%dom(id)%type_hdiab >= 0 ) then
-
-         ! Check to make sure retrieved integer gridpoints are in valid range
-         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
-         
-            call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-            if ( rc .ne. 0 ) &
-                 print*, 'model_mod.f90 :: model_interpolate :: getCorners H_DIABATIC rc = ', rc
-               
-            ! Interpolation for H_DIABATIC field at level k
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_hdiab)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_hdiab)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_hdiab)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_hdiab)
-            
-            fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-            ! Interpolation for H_DIABATIC field at level k+1
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_hdiab)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_hdiab)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_hdiab)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_hdiab)
-               
-            fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-         endif
-      endif
-   
-
-   !-----------------------------------------------------
-   ! 1.s Reflectivity weighted precip fall speed (FALL_SPD_Z_WEIGHTED)
-   else if( obs_kind == KIND_POWER_WEIGHTED_FALL_SPEED ) then
-
-      ! Confirm that FALL_SPD_Z_WEIGHTED is in the DART state vector
-      if ( wrf%dom(id)%type_fall_spd >= 0 ) then
-
-         ! Check to make sure retrieved integer gridpoints are in valid range
-         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
-         
-            call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-            if ( rc .ne. 0 ) &
-                 print*, 'model_mod.f90 :: model_interpolate :: getCorners FALL_SPD_Z_WEIGHTED rc = ', rc
-               
-            ! Interpolation for FALL_SPD_Z_WEIGHTED field at level k
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_fall_spd)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_fall_spd)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_fall_spd)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_fall_spd)
-            
-            fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-            ! Interpolation for FALL_SPD_Z_WEIGHTED field at level k+1
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_fall_spd)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_fall_spd)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_fall_spd)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_fall_spd)
-               
-            fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-         endif
-      endif
+      ! Don't accept negative water vapor amounts (?)
+     fld = max(0.0_r8, fld)
 
    !-----------------------------------------------------
    ! 1.t Pressure (P)
-   else if( obs_kind == KIND_PRESSURE .or. obs_kind == KIND_SURFACE_PRESSURE ) then
-
-      ! This is for the 3D pressure field -- surface pressure later
+   else if( obs_kind == QTY_PRESSURE .or. obs_kind == QTY_SURFACE_PRESSURE ) then
+            ! This is for the 3D pressure field -- surface pressure later
       if(.not. surf_var) then
+
+         do uk = 1, count
 
          ! Check to make sure retrieved integer gridpoints are in valid range
          if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
               boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+              boundsCheck( uniquek(uk), .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
    
             call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
             if ( rc .ne. 0 ) &
@@ -2245,24 +1962,34 @@ else
             ! Hmmm, it does not appear that P is part of the DART state vector, so there
             !   is not a reference to wrf%dom(id)%dart_ind -- we'll have to go right from
             !   the corner indices
-   
+
             ! Interpolation for the P field at level k
-            pres1 = model_pressure_t(ll(1), ll(2), k, id, x)
-            pres2 = model_pressure_t(lr(1), lr(2), k, id, x)
-            pres3 = model_pressure_t(ul(1), ul(2), k, id, x)
-            pres4 = model_pressure_t(ur(1), ur(2), k, id, x)
-   
-            fld(1) = dym*( dxm*pres1 + dx*pres2 ) + dy*( dxm*pres3 + dx*pres4 )
+            pres1 = model_pressure_t_distrib(ll(1), ll(2), uniquek(uk), id, state_handle, ens_size)
+            pres2 = model_pressure_t_distrib(lr(1), lr(2), uniquek(uk), id, state_handle, ens_size)
+            pres3 = model_pressure_t_distrib(ul(1), ul(2), uniquek(uk), id, state_handle, ens_size)
+            pres4 = model_pressure_t_distrib(ur(1), ur(2), uniquek(uk), id, state_handle, ens_size)
+
+            do e = 1, ens_size
+               if ( k(e) == uniquek(uk) ) then ! interpolate only if it is the correct k
+                  fld(1, e) = dym*( dxm*pres1(e) + dx*pres2(e) ) + dy*( dxm*pres3(e) + dx*pres4(e) )
+               endif
+            enddo
+
    
             ! Interpolation for the P field at level k+1
-            pres1 = model_pressure_t(ll(1), ll(2), k+1, id, x)
-            pres2 = model_pressure_t(lr(1), lr(2), k+1, id, x)
-            pres3 = model_pressure_t(ul(1), ul(2), k+1, id, x)
-            pres4 = model_pressure_t(ur(1), ur(2), k+1, id, x)
-   
-            fld(2) = dym*( dxm*pres1 + dx*pres2 ) + dy*( dxm*pres3 + dx*pres4 )
+            pres1 = model_pressure_t_distrib(ll(1), ll(2), uniquek(uk)+1, id, state_handle, ens_size)
+            pres2 = model_pressure_t_distrib(lr(1), lr(2), uniquek(uk)+1, id, state_handle, ens_size)
+            pres3 = model_pressure_t_distrib(ul(1), ul(2), uniquek(uk)+1, id, state_handle, ens_size)
+            pres4 = model_pressure_t_distrib(ur(1), ur(2), uniquek(uk)+1, id, state_handle, ens_size)
+
+            do e = 1, ens_size
+               if ( k(e) == uniquek(uk) ) then ! interpolate only if it is the correct k
+                  fld(2, e) = dym*( dxm*pres1(e) + dx*pres2(e) ) + dy*( dxm*pres3(e) + dx*pres4(e) )
+               endif
+            enddo
    
          endif
+         enddo
 
       !  This is for surface pressure (PSFC)
       else
@@ -2279,45 +2006,45 @@ else
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners PS rc = ', rc
       
                ! Interpolation for the PS field
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_ps)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_ps)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_ps)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_ps)
+               ill = get_dart_vector_index(ll(1), ll(2), 1, domain_id(id), wrf%dom(id)%type_ps)
+               iul = get_dart_vector_index(ul(1), ul(2), 1, domain_id(id), wrf%dom(id)%type_ps)
+               ilr = get_dart_vector_index(lr(1), lr(2), 1, domain_id(id), wrf%dom(id)%type_ps)
+               iur = get_dart_vector_index(ur(1), ur(2), 1, domain_id(id), wrf%dom(id)%type_ps)
+
+               x_ill = get_state(ill, state_handle)
+               x_iul = get_state(iul, state_handle)
+               x_ilr = get_state(ilr, state_handle)
+               x_iur = get_state(iur, state_handle)
+
+               do e = 1, ens_size
+                  ! I'm not quite sure where this comes from, but I will trust them on it....
+                  if ( x_ill(e) /= 0.0_r8 .and. x_ilr(e) /= 0.0_r8 .and. x_iul(e) /= 0.0_r8 .and. &
+                       x_iur(e) /= 0.0_r8 ) then
       
-               ! I'm not quite sure where this comes from, but I will trust them on it....
-               if ( x(ill) /= 0.0_r8 .and. x(ilr) /= 0.0_r8 .and. x(iul) /= 0.0_r8 .and. &
-                    x(iur) /= 0.0_r8 ) then
+                  fld(1, e) = dym*( dxm*x_ill(e) + dx*x_ilr(e) ) + dy*( dxm*x_iul(e) + dx*x_iur(e) )
       
-                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-      
-               ! JPH special treatment for scm configuration, where PS is not defined
-               ! on the boundaries and the weights are already 1,0
-               elseif ( wrf%dom(id)%scm ) then
-      
-                  fld(1) = x(ill)
-      
-               endif
-   
+                  ! JPH special treatment for scm configuration, where PS is not defined
+                  ! on the boundaries and the weights are already 1,0
+                  elseif ( wrf%dom(id)%scm ) then !HK is this redunant? What happens if you fail both conditions.
+                     fld(1, e) = x_ill(e)
+                  endif
+               enddo
             endif
          endif
       endif
 
+
    !-----------------------------------------------------
    ! 1.u Vortex Center Stuff from Yongsheng
+   else if ( obs_kind == QTY_VORTEX_LAT  .or. obs_kind == QTY_VORTEX_LON .or. &
+             obs_kind == QTY_VORTEX_PMIN .or. obs_kind == QTY_VORTEX_WMAX ) then
 
-   ! This computation eventually belongs in an obs_def forward operator,
-   ! but it also requires searching parts of the computational grid and
-   ! it was inefficient enough outside the interpolate() routine to break
-   ! the rules for now.  but if/when we add a 'get multiple values in one go'
-   ! interface, then this vortex code should move out.
-
-   else if ( obs_kind == KIND_VORTEX_LAT  .or. obs_kind == KIND_VORTEX_LON .or. &
-             obs_kind == KIND_VORTEX_PMIN .or. obs_kind == KIND_VORTEX_WMAX ) then
+      do uk = 1, count ! for the different ks
 
       ! Check to make sure retrieved integer gridpoints are in valid range
       if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
            boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-           boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+           boundsCheck( uniquek(uk), .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
 
          !!   define a search box bounded by center_track_***
          center_search_half_size = nint(center_search_half_length/wrf%dom(id)%dx)
@@ -2346,8 +2073,8 @@ else
 
          endif 
 
-         if ( obs_kind == KIND_VORTEX_LAT .or. obs_kind == KIND_VORTEX_LON .or. &
-              obs_kind == KIND_VORTEX_PMIN ) then
+         if ( obs_kind == QTY_VORTEX_LAT .or. obs_kind == QTY_VORTEX_LON .or. &
+              obs_kind == QTY_VORTEX_PMIN ) then
 
             !!   define spline interpolation box dimensions
             xlen = center_track_xmax - center_track_xmin + 1
@@ -2357,7 +2084,7 @@ else
 
             allocate(x1d(xlen), y1d(ylen))  ;  allocate(xx1d(xxlen), yy1d(yylen))
             allocate(pd(xlen,ylen))         ;  allocate(pp(xxlen,yylen))
-            allocate(vfld(xlen,ylen))
+            allocate(vfld(xlen,ylen, ens_size))
 
             do i1 = 1,xlen
                x1d(i1) = (i1-1)+center_track_xmin
@@ -2374,7 +2101,7 @@ else
 
          endif
 
-         if ( (obs_kind == KIND_VORTEX_LAT .or. obs_kind == KIND_VORTEX_LON) .and. (.not. use_old_vortex) ) then
+         if ( (obs_kind == QTY_VORTEX_LAT .or. obs_kind == QTY_VORTEX_LON) .and. (.not. use_old_vortex) ) then
 
             !  determine window that one would need wind components, thus circulation
             circ_half_size   = nint(circulation_radius/wrf%dom(id)%dx)
@@ -2398,9 +2125,9 @@ else
 
             cxlen = circ_xmax-circ_xmin+1
             cylen = circ_ymax-circ_ymin+1
-            allocate(uwnd(cxlen+2,cylen+2))
-            allocate(vwnd(cxlen+2,cylen+2))
-            allocate(z1d(0:wrf%dom(id)%bt))
+            allocate(uwnd(cxlen+2,cylen+2, ens_size))
+            allocate(vwnd(cxlen+2,cylen+2, ens_size))
+            allocate(z1d(0:wrf%dom(id)%bt, ens_size))
 
             do i1 = circ_xmin-1, circ_xmax+1
 
@@ -2438,38 +2165,87 @@ else
 
                   !  calculate the wind components at the desired pressure level
                   do k2 = 1, wrf%dom(id)%var_size(3,wrf%dom(id)%type_t)
-                     z1d(k2) = model_pressure_t(i1,i2,k2,id,x)
+                     !z1d(k2) = model_pressure_t(i1,i2,k2,id,x)
+                     z1d(k2, :) = model_pressure_t_distrib(i1,i2,k2,id, state_handle, ens_size)
                   enddo
-                  z1d(0) = z1d(1)
-                  call pres_to_zk(circulation_pres_level, z1d, wrf%dom(id)%bt, zloc, is_lev0)
-                  k2 = floor(zloc)  ;  dxm = mod(zloc,1.0_r8)  ;  dx = 1.0_r8 - dxm
+                  z1d(0, :) = z1d(1, :)
+                  !call pres_to_zk(circulation_pres_level, z1d, wrf%dom(id)%bt, zloc, is_lev0)
+                  call pres_to_zk_distrib(circulation_pres_level, z1d, wrf%dom(id)%bt, ens_size, zloc, is_lev0)
 
-                  if ( zloc >= 1.0_r8 ) then  !  vertically interpolate
+                  do e = 1, ens_size
 
-                     ugrid = (dx  * (x(wrf%dom(id)%dart_ind(ii1,  ii2,  k2,  wrf%dom(id)%type_u))  + &
-                                     x(wrf%dom(id)%dart_ind(ii1+1,ii2,  k2,  wrf%dom(id)%type_u))) + &
-                              dxm * (x(wrf%dom(id)%dart_ind(ii1,  ii2,  k2+1,wrf%dom(id)%type_u))  + &
-                                     x(wrf%dom(id)%dart_ind(ii1+1,ii2,  k2+1,wrf%dom(id)%type_u)))) * 0.5_r8
-                     vgrid = (dx  * (x(wrf%dom(id)%dart_ind(ii1,  ii2,  k2,  wrf%dom(id)%type_v))  + &
-                                     x(wrf%dom(id)%dart_ind(ii1,  ii2+1,k2,  wrf%dom(id)%type_v))) + &
-                              dxm * (x(wrf%dom(id)%dart_ind(ii1,  ii2,  k2+1,wrf%dom(id)%type_v))  + &
-                                     x(wrf%dom(id)%dart_ind(ii1,  ii2+1,k2+1,wrf%dom(id)%type_v)))) * 0.5_r8
+                     k2 = floor(zloc(e))  ;  dxm = mod(zloc(e),1.0_r8)  ;  dx = 1.0_r8 - dxm
 
-                  else  !  pressure level below ground.  Take model level 1 winds
+                     if ( zloc(e) >= 1.0_r8 ) then  !  vertically interpolate
 
-                     ugrid = (x(wrf%dom(id)%dart_ind(ii1,  ii2,  1,wrf%dom(id)%type_u)) + &
-                              x(wrf%dom(id)%dart_ind(ii1+1,ii2,  1,wrf%dom(id)%type_u))) * 0.5_r8
-                     vgrid = (x(wrf%dom(id)%dart_ind(ii1,  ii2,  1,wrf%dom(id)%type_v)) + &
-                              x(wrf%dom(id)%dart_ind(ii1,  ii2+1,1,wrf%dom(id)%type_v))) * 0.5_r8
+!                     ugrid = (dx  * (x(wrf%dom(id)%dart_ind(ii1,  ii2,  k2,  wrf%dom(id)%type_u))  + &
+!                                     x(wrf%dom(id)%dart_ind(ii1+1,ii2,  k2,  wrf%dom(id)%type_u))) + &
+!                              dxm * (x(wrf%dom(id)%dart_ind(ii1,  ii2,  k2+1,wrf%dom(id)%type_u))  + &
+!                                     x(wrf%dom(id)%dart_ind(ii1+1,ii2,  k2+1,wrf%dom(id)%type_u)))) * 0.5_r8
 
-                  endif
-                  uwnd(i1-circ_xmin+2,i2-circ_ymin+2) = ugrid
-                  vwnd(i1-circ_xmin+2,i2-circ_ymin+2) = vgrid
+                        ugrid_1 = get_dart_vector_index(ii1,  ii2,  k2,   domain_id(id), wrf%dom(id)%type_u)
+                        ugrid_2 = get_dart_vector_index(ii1+1,ii2,  k2,   domain_id(id), wrf%dom(id)%type_u)
+                        ugrid_3 = get_dart_vector_index(ii1,  ii2,  k2,   domain_id(id), wrf%dom(id)%type_u)
+                        ugrid_4 = get_dart_vector_index(ii1,  ii2,  k2+1, domain_id(id), wrf%dom(id)%type_u )
+
+                        x_ugrid_1 = get_state(ugrid_1, state_handle)
+                        x_ugrid_2 = get_state(ugrid_2, state_handle)
+                        x_ugrid_3 = get_state(ugrid_3, state_handle)
+                        x_ugrid_4 = get_state(ugrid_4, state_handle)
+
+                        ugrid = (dx  * (x_ugrid_1  + x_ugrid_2) + dxm * (x_ugrid_3 + x_ugrid_4)) * 0.5_r8
+
+                        vgrid_1 = get_dart_vector_index(ii1,  ii2,  k2,   domain_id(id),wrf%dom(id)%type_v)
+                        vgrid_2 = get_dart_vector_index(ii1,  ii2+1,k2,   domain_id(id),wrf%dom(id)%type_v)
+                        vgrid_3 = get_dart_vector_index(ii1,  ii2,  k2+1, domain_id(id),wrf%dom(id)%type_v)
+                        vgrid_4 = get_dart_vector_index(ii1,  ii2+1,k2+1, domain_id(id),wrf%dom(id)%type_v)
+
+                        x_vgrid_1 = get_state(vgrid_1, state_handle)
+                        x_vgrid_2 = get_state(vgrid_2, state_handle)
+                        x_vgrid_3 = get_state(vgrid_3, state_handle)
+                        x_vgrid_4 = get_state(vgrid_4, state_handle)
+
+!                     vgrid = (dx  * (x(wrf%dom(id)%dart_ind(ii1,  ii2,  k2,  wrf%dom(id)%type_v))  + &
+!                                     x(wrf%dom(id)%dart_ind(ii1,  ii2+1,k2,  wrf%dom(id)%type_v))) + &
+!                              dxm * (x(wrf%dom(id)%dart_ind(ii1,  ii2,  k2+1,wrf%dom(id)%type_v))  + &
+!                                     x(wrf%dom(id)%dart_ind(ii1,  ii2+1,k2+1,wrf%dom(id)%type_v)))) * 0.5_r8
+
+                        vgrid = (dx  * (vgrid_1 + vgrid_2) + dxm * (vgrid_3 + vgrid_4)) * 0.5_r8
+
+                     else  !  pressure level below ground.  Take model level 1 winds
+
+!                     ugrid = (x(wrf%dom(id)%dart_ind(ii1,  ii2,  1,wrf%dom(id)%type_u)) + &
+!                              x(wrf%dom(id)%dart_ind(ii1+1,ii2,  1,wrf%dom(id)%type_u))) * 0.5_r8
+
+                        ugrid_1 = get_dart_vector_index(ii1,  ii2,  1, domain_id(id),wrf%dom(id)%type_u)
+                        ugrid_2 = get_dart_vector_index(ii1+1,ii2,  1, domain_id(id),wrf%dom(id)%type_u)
+
+                        x_ugrid_1 = get_state(ugrid_1, state_handle)
+                        x_ugrid_2 = get_state(ugrid_2, state_handle)
+ 
+                        ugrid = (x_ugrid_1 + x_ugrid_2) * 0.5_r8
+
+!                     vgrid = (x(wrf%dom(id)%dart_ind(ii1,  ii2,  1,wrf%dom(id)%type_v)) + &
+!                              x(wrf%dom(id)%dart_ind(ii1,  ii2+1,1,wrf%dom(id)%type_v))) * 0.5_r8
+
+                        vgrid_1 = get_dart_vector_index(ii1,  ii2,  1, domain_id(id),wrf%dom(id)%type_v)
+                        vgrid_2 = get_dart_vector_index(ii1,  ii2+1,1, domain_id(id),wrf%dom(id)%type_v)
+
+                        x_vgrid_1 = get_state(vgrid_1, state_handle)
+                        x_vgrid_2 = get_state(vgrid_2, state_handle)
+
+                        vgrid = (x_vgrid_1 + x_vgrid_2) * 0.5_r8
+
+                     endif
+                     uwnd(i1-circ_xmin+2,i2-circ_ymin+2, :) = ugrid
+                     vwnd(i1-circ_xmin+2,i2-circ_ymin+2, :) = vgrid
+
+                  enddo
 
                enddo
             enddo
 
-            allocate(vort(cxlen,cylen))
+            allocate(vort(cxlen,cylen, ens_size))
             do i1 = circ_xmin, circ_xmax
 
                dgi1 = 2.0_r8
@@ -2496,10 +2272,10 @@ else
                   ii2  = i2-circ_ymin+1
 
                   !  compute the vorticity for each point needed to compute circulation
-                  vort(ii1,ii2) = (vwnd(ii1+2,ii2+1) - vwnd(ii1+1,ii2+1)) / (wrf%dom(id)%dx * dgi2) + &
-                                  (vwnd(ii1+1,ii2+1) - vwnd(ii1  ,ii2+1)) / (wrf%dom(id)%dx * dgi2) - &
-                                  (uwnd(ii1+1,ii2+2) - uwnd(ii1+1,ii2+1)) / (wrf%dom(id)%dx * dgi1) - &
-                                  (uwnd(ii1+1,ii2+1) - uwnd(ii1+1,ii2  )) / (wrf%dom(id)%dx * dgi1)
+                  vort(ii1,ii2, :) = (vwnd(ii1+2,ii2+1, :) - vwnd(ii1+1,ii2+1, :)) / (wrf%dom(id)%dx * dgi2) + &
+                                  (vwnd(ii1+1,ii2+1, :) - vwnd(ii1  ,ii2+1, :)) / (wrf%dom(id)%dx * dgi2) - &
+                                  (uwnd(ii1+1,ii2+2, :) - uwnd(ii1+1,ii2+1, :)) / (wrf%dom(id)%dx * dgi1) - &
+                                  (uwnd(ii1+1,ii2+1, :) - uwnd(ii1+1,ii2, :  )) / (wrf%dom(id)%dx * dgi1)
 
                enddo
             enddo
@@ -2517,27 +2293,31 @@ else
                   if ( distgrid <= circulation_radius ) then
 
                      asum = asum + 1.0_r8
-                     circ = circ + vort(ii1-circ_xmin+1,ii2-circ_ymin+1)
+                     circ = circ + vort(ii1-circ_xmin+1,ii2-circ_ymin+1, :)
 
                   endif
 
                enddo
                enddo
 
-               vfld(i1-center_track_xmin+1,i2-center_track_ymin+1) = circ / asum
+               vfld(i1-center_track_xmin+1,i2-center_track_ymin+1, :) = circ / asum
 
             enddo
             enddo
 
             !  find maximum in circulation through spline interpolation
-            call splie2(x1d,y1d,vfld,xlen,ylen,pd)
+            do e = 1, ens_size
+               call splie2(x1d,y1d,vfld(:,:,e),xlen,ylen,pd)
+            enddo
 
             vcrit = -1.0e20_r8
             cxloc = -1
             cyloc = -1
             do ii1 = 1, xxlen
             do ii2 = 1, yylen
-               call splin2(x1d,y1d,vfld,pd,xlen,ylen,xx1d(ii1),yy1d(ii2),pp(ii1,ii2))
+               do e = 1, ens_size
+                  call splin2(x1d,y1d,vfld(:,:,e),pd,xlen,ylen,xx1d(ii1),yy1d(ii2),pp(ii1,ii2))
+               enddo
                if (vcrit < pp(ii1,ii2)) then
                   vcrit = pp(ii1,ii2)
                   cxloc = xx1d(ii1)
@@ -2550,16 +2330,30 @@ else
             if ( cxloc-xx1d(1) < 1.0_r8 .or. xx1d(xxlen)-cxloc < 1.0_r8 .or. &
                  cyloc-yy1d(1) < 1.0_r8 .or. yy1d(yylen)-cyloc < 1.0_r8 ) then
 
-               fld(:) = missing_r8
+               do e = 1, ens_size
+                  if ( k(e) == uniquek(uk) ) then ! interpolate only if is the correct k
+                     fld(:, e) = missing_r8
+                  endif
+               enddo
 
             else
 
             call ij_to_latlon(wrf%dom(id)%proj, cxloc, cyloc, clat, clon)
 
-            if ( obs_kind == KIND_VORTEX_LAT ) then
-               fld(1) = clat
+            if ( obs_kind == QTY_VORTEX_LAT ) then
+               do e = 1, ens_size
+                  if ( k(e) == uniquek(uk) ) then ! interpolate only if is the correct k
+                     fld(1, e) = clat
+                  endif
+               enddo
+
             else
-               fld(1) = clon
+               do e = 1, ens_size
+                  if ( k(e) == uniquek(uk) ) then ! interpolate only if is the correct k
+                     fld(1, e) = clon
+                  endif
+               enddo
+
             endif
 
             endif
@@ -2567,13 +2361,16 @@ else
             deallocate(uwnd, vwnd, vort, z1d)
             deallocate(vfld, pd, pp, x1d, y1d, xx1d, yy1d)
 
-         else if ( obs_kind == KIND_VORTEX_PMIN .or. (use_old_vortex .and. & 
-                  (obs_kind == KIND_VORTEX_LAT .or. obs_kind == KIND_VORTEX_LON)) ) then
+         else if ( obs_kind == QTY_VORTEX_PMIN .or. (use_old_vortex .and. & 
+                  (obs_kind == QTY_VORTEX_LAT .or. obs_kind == QTY_VORTEX_LON)) ) then
 
-            allocate(p1d(wrf%dom(id)%bt),  t1d(wrf%dom(id)%bt))
-            allocate(qv1d(wrf%dom(id)%bt), z1d(wrf%dom(id)%bt))
+            allocate(p1d(wrf%dom(id)%bt, ens_size),  t1d(wrf%dom(id)%bt, ens_size))
+            allocate(qv1d(wrf%dom(id)%bt, ens_size), z1d(wrf%dom(id)%bt, ens_size))
+            allocate(z1d_1(wrf%dom(id)%bt, ens_size), z1d_2(wrf%dom(id)%bt, ens_size))
 
             !  compute SLP for each grid point within the search area
+            print*, center_track_xmin, center_track_xmax
+            print*, center_track_ymin, center_track_ymax
             do i1 = center_track_xmin, center_track_xmax
 
                ii1 = i1
@@ -2598,59 +2395,96 @@ else
 
                   do k2 = 1,wrf%dom(id)%var_size(3,wrf%dom(id)%type_t)
 
-                     p1d(k2) = model_pressure_t(ii1,ii2,k2,id,x)
-                     t1d(k2) = x(wrf%dom(id)%dart_ind(ii1,ii2,k2,wrf%dom(id)%type_t)) + ts0
-                     qv1d(k2)= x(wrf%dom(id)%dart_ind(ii1,ii2,k2,wrf%dom(id)%type_qv))
-                     z1d(k2) = (x(wrf%dom(id)%dart_ind(ii1,ii2,k2,  wrf%dom(id)%type_gz))+ &
-                                x(wrf%dom(id)%dart_ind(ii1,ii2,k2+1,wrf%dom(id)%type_gz))+ &
-                                wrf%dom(id)%phb(ii1,ii2,k2)+wrf%dom(id)%phb(ii1,ii2,k2+1))*0.5_r8/gravity
+!                     p1d(k2) = model_pressure_t(ii1,ii2,k2,id,x)
+                      p1d(k2, :) = model_pressure_t_distrib(ii1,ii2,k2, id, state_handle, ens_size)
+                      !print*, 'p1d(k2, 1)', p1d(k2, 1)
+
+!                     t1d(k2) = x(wrf%dom(id)%dart_ind(ii1,ii2,k2,wrf%dom(id)%type_t)) + ts0
+                     t1d_ind = get_dart_vector_index(ii1,ii2,k2, domain_id(id),wrf%dom(id)%type_t)
+                     t1d(k2, :) = get_state( t1d_ind, state_handle)
+                     t1d(k2, :) = t1d(k2, :) + ts0
+                     !print*, 't1d(k2, 1)', t1d(k2, 1)
+
+!                     qv1d(k2)= x(wrf%dom(id)%dart_ind(ii1,ii2,k2,wrf%dom(id)%type_qv))
+                     qv1d_ind = get_dart_vector_index(ii1,ii2,k2, domain_id(id),wrf%dom(id)%type_qv)
+                     qv1d(k2, :) = get_state(qv1d_ind, state_handle)
+                     !print*, 'qv1d(k2, 1)', qv1d(k2, 1)
+
+!                     z1d(k2) = (x(wrf%dom(id)%dart_ind(ii1,ii2,k2,  wrf%dom(id)%type_gz))+ &
+!                                x(wrf%dom(id)%dart_ind(ii1,ii2,k2+1,wrf%dom(id)%type_gz))+ &
+!                                wrf%dom(id)%phb(ii1,ii2,k2)+wrf%dom(id)%phb(ii1,ii2,k2+1))*0.5_r8/gravity
+                     z1d_ind1 = get_dart_vector_index(ii1,ii2,k2,   domain_id(id),wrf%dom(id)%type_gz)
+                     z1d_ind2 = get_dart_vector_index(ii1,ii2,k2+1, domain_id(id),wrf%dom(id)%type_gz)
+
+                     z1d_1(k2, :) = get_state(z1d_ind1, state_handle)
+                     z1d_2(k2, :) = get_state(z1d_ind2, state_handle)
+
+                     z1d(k2, :) = ( z1d_1(k2, :)+ z1d_2(k2, :) + &
+                                    wrf%dom(id)%phb(ii1,ii2,k2)+wrf%dom(id)%phb(ii1,ii2,k2+1))*0.5_r8/gravity
+
+                     !print*, 'z1d(k2, 1)', z1d(k2, 1)
+
 
                   enddo
-                  call compute_seaprs(wrf%dom(id)%bt, z1d, t1d, p1d, qv1d, &
-                                      vfld(i1-center_track_xmin+1,i2-center_track_ymin+1), debug)
+                  do e = 1, ens_size
+                     call compute_seaprs(wrf%dom(id)%bt, z1d(:,e), t1d(:,e), p1d(:,e), qv1d(:,e), &
+                                      vfld(i1-center_track_xmin+1,i2-center_track_ymin+1, e), debug)
+                  enddo
                enddo
 
             enddo
 
-            !  find minimum in MSLP through spline interpolation
-            call splie2(x1d,y1d,vfld,xlen,ylen,pd)
+            !print*, 'vfld(1, 1)', vfld(1, 1, 1)
+            do e = 1, ens_size
 
-            vcrit = 1.0e20_r8
-            do ii1=1,xxlen
-            do ii2=1,yylen
-               call splin2(x1d,y1d,vfld,pd,xlen,ylen,xx1d(ii1),yy1d(ii2),pp(ii1,ii2))
-               if ( vcrit > pp(ii1,ii2)) then
-                 vcrit = pp(ii1,ii2)
-                 cxloc = xx1d(ii1)
-                 cyloc = yy1d(ii2)
+               if ( k(e) == uniquek(uk) ) then
+
+                  !  find minimum in MSLP through spline interpolation
+                  call splie2(x1d,y1d,vfld(:,:,e),xlen,ylen,pd)
+
+                     vcrit = 1.0e20_r8
+                     do ii1=1,xxlen
+                     do ii2=1,yylen
+                        call splin2(x1d,y1d,vfld(:,:,e),pd,xlen,ylen,xx1d(ii1),yy1d(ii2),pp(ii1,ii2))
+                        if ( vcrit > pp(ii1,ii2)) then
+                           vcrit = pp(ii1,ii2)
+                           cxloc = xx1d(ii1)
+                           cyloc = yy1d(ii2)
+                        endif
+                     enddo
+                     enddo
+
+                     !  forward operator fails if maximum is at edge of search area
+                     if ( cxloc-xx1d(1) < 1.0_r8 .or. xx1d(xxlen)-cxloc < 1.0_r8 .or. &
+                        cyloc-yy1d(1) < 1.0_r8 .or. yy1d(yylen)-cyloc < 1.0_r8 ) then
+
+                        fld(:, e) = missing_r8
+
+                     else
+
+                        call ij_to_latlon(wrf%dom(id)%proj, cxloc, cyloc, clat, clon)
+
+                        if ( obs_kind == QTY_VORTEX_PMIN ) then
+                           fld(1, e) = vcrit
+                        else if ( obs_kind == QTY_VORTEX_LAT ) then
+                           fld(1, e) = clat
+                        else
+                           fld(1, e) = clon
+                        endif
+
+                     endif
+
                endif
+
             enddo
-            enddo
 
-            !  forward operator fails if maximum is at edge of search area
-            if ( cxloc-xx1d(1) < 1.0_r8 .or. xx1d(xxlen)-cxloc < 1.0_r8 .or. &
-                 cyloc-yy1d(1) < 1.0_r8 .or. yy1d(yylen)-cyloc < 1.0_r8 ) then
 
-               fld(:) = missing_r8
-
-            else
-
-              call ij_to_latlon(wrf%dom(id)%proj, cxloc, cyloc, clat, clon)
-
-              if ( obs_kind == KIND_VORTEX_PMIN ) then
-                fld(1) = vcrit
-              else if ( obs_kind == KIND_VORTEX_LAT ) then
-                fld(1) = clat
-              else
-                fld(1) = clon
-              endif
-
-            endif
-
+            print*, 'fld', fld
             deallocate(p1d, t1d, qv1d, z1d)
             deallocate(vfld, pd, pp, x1d, y1d, xx1d, yy1d)
+            if (all(fld == missing_r8)) goto 200
 
-         else if ( obs_kind == KIND_VORTEX_WMAX ) then   !  Maximum wind speed
+         else if ( obs_kind == QTY_VORTEX_WMAX ) then   !  Maximum wind speed
 
             maxwspd = 0.0_r8
             do i1 = center_track_xmin, center_track_xmax
@@ -2676,21 +2510,53 @@ else
                   endif
 
                   if ( ( wrf%dom(id)%type_u10 >= 0 ) .and. ( wrf%dom(id)%type_v10 >= 0 ) ) then
-                     ugrid = x(wrf%dom(id)%dart_ind(ii1,ii2,1,wrf%dom(id)%type_u10))
-                     vgrid = x(wrf%dom(id)%dart_ind(ii1,ii2,1,wrf%dom(id)%type_v10))
+                     !ugrid = x(wrf%dom(id)%dart_ind(ii1,ii2,1,wrf%dom(id)%type_u10))
+                     !vgrid = x(wrf%dom(id)%dart_ind(ii1,ii2,1,wrf%dom(id)%type_v10))
+
+                     ugrid_1 = get_dart_vector_index(ii1,ii2,1, domain_id(id),wrf%dom(id)%type_u10)
+                     ugrid = get_state(ugrid_1, state_handle)
+ 
+                     vgrid_1 = get_dart_vector_index(ii1,ii2,1, domain_id(id),wrf%dom(id)%type_v10)
+                     vgrid = get_state(vgrid_1, state_handle)
+
                   else
-                     ugrid = 0.5_r8*(x(wrf%dom(id)%dart_ind(ii1,  ii2,1,wrf%dom(id)%type_u)) + &
-                                     x(wrf%dom(id)%dart_ind(ii1+1,ii2,1,wrf%dom(id)%type_u)))
-                     vgrid = 0.5_r8*(x(wrf%dom(id)%dart_ind(ii1,ii2,  1,wrf%dom(id)%type_v)) + &
-                                     x(wrf%dom(id)%dart_ind(ii1,ii2+1,1,wrf%dom(id)%type_v)))
+
+! Same code as above
+!                     ugrid = 0.5_r8*(x(wrf%dom(id)%dart_ind(ii1,  ii2,1,wrf%dom(id)%type_u)) + &
+!                                     x(wrf%dom(id)%dart_ind(ii1+1,ii2,1,wrf%dom(id)%type_u)))
+!                     vgrid = 0.5_r8*(x(wrf%dom(id)%dart_ind(ii1,ii2,  1,wrf%dom(id)%type_v)) + &
+!                                     x(wrf%dom(id)%dart_ind(ii1,ii2+1,1,wrf%dom(id)%type_v)))
+                     ugrid_1 = get_dart_vector_index(ii1,  ii2,  1, domain_id(id),wrf%dom(id)%type_u)
+                     ugrid_2 = get_dart_vector_index(ii1+1,ii2,  1, domain_id(id),wrf%dom(id)%type_u)
+
+                     x_ugrid_1 = get_state(ugrid_1, state_handle)
+                     x_ugrid_2 = get_state(ugrid_2, state_handle)
+ 
+                     ugrid = (x_ugrid_1 + x_ugrid_2) * 0.5_r8
+
+                     vgrid_1 = get_dart_vector_index(ii1,  ii2,  1, domain_id(id),wrf%dom(id)%type_v)
+                     vgrid_2 = get_dart_vector_index(ii1,  ii2+1,1, domain_id(id),wrf%dom(id)%type_v)
+
+                     x_vgrid_1 = get_state(vgrid_1, state_handle)
+                     x_vgrid_2 = get_state(vgrid_2, state_handle)
+
+                     vgrid = (x_vgrid_1 + x_vgrid_2) * 0.5_r8
+
                   endif
 
                   magwnd  = sqrt(ugrid * ugrid + vgrid * vgrid)
-                  if ( magwnd > maxwspd ) then
-                     imax    = i1
-                     jmax    = i2
-                     maxwspd = magwnd
-                  endif
+
+                  do e = 1, ens_size
+                     if ( k(e) == uniquek(uk) ) then ! interpolate only if is the correct k
+                        if ( magwnd(e) > maxwspd(e) ) then
+                           imax    = i1
+                           jmax    = i2
+                           maxwspd(e) = magwnd(e)
+                        endif
+                     endif
+                  enddo
+
+
 
                enddo
             enddo
@@ -2698,54 +2564,30 @@ else
             !  forward operator fails if maximum is at edge of search area
             if ( imax == center_track_xmin .or. jmax == center_track_ymin .or. &
                  imax == center_track_xmax .or. jmax == center_track_ymax ) then
-               fld(:) = missing_r8
+               do e = 1, ens_size
+                  if ( k(e) == uniquek(uk) ) then ! interpolate only if is the correct k
+                     fld(:, e) = missing_r8
+                  endif
+               enddo
             else
-               fld(1) = maxwspd
+               do e = 1, ens_size
+                  if ( k(e) == uniquek(uk) ) then ! interpolate only if is the correct k
+                     fld(1, e) = maxwspd(e)
+                  endif
+               enddo
             endif
 
          endif  !  if test on obs_kind
 
-     endif   ! bounds check failed.
+      endif   ! bounds check failed.
+
+      enddo 
 
 !*****************************************************************************
-! END OF VERBATIM BIT
+! END OF VERBATIM BIT - what does this mean?
 !*****************************************************************************
 
-   !-----------------------------------------------------
-   ! 1.v Radar Reflectivity (REFL_10CM)
-   else if( obs_kind == KIND_RADAR_REFLECTIVITY ) then
 
-      ! Confirm that REFL is in the DART state vector
-      if ( wrf%dom(id)%type_refl >= 0 ) then
-         
-         ! Check to make sure retrieved integer gridpoints are in valid range
-         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
-   
-            call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-            if ( rc .ne. 0 ) &
-                 print*, 'model_mod.f90 :: model_interpolate :: getCorners REFL rc = ', rc
-               
-            ! Interpolation for REFL field at level k
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_refl)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_refl)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_refl)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_refl)
-            
-            fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-            ! Interpolation for REFL field at level k+1
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_refl)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_refl)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_refl)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_refl)
-               
-            fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-         endif
-      endif
-   
    !-----------------------------------------------------
    ! 1.w Geopotential Height (GZ)
 
@@ -2754,58 +2596,87 @@ else
    !   variable; the same is true for W as well.  If one wants to observe the surface value
    !   of either of these variables, then one can simply operate on the full 3D field 
    !   (toGrid below should return dz ~ 0 and dzm ~ 1) 
-   else if( obs_kind == KIND_GEOPOTENTIAL_HEIGHT ) then
+   else if( obs_kind == QTY_GEOPOTENTIAL_HEIGHT ) then
+      !if( my_task_id() == 0 ) print*, '*** geopotential height forward operator not tested'
 
       ! make sure vector includes the needed field
       if ( wrf%dom(id)%type_gz >= 0 ) then
 
          ! Adjust zloc for staggered ZNW grid (or W-grid, as compared to ZNU or M-grid)
          zloc = zloc + 0.5_r8
-         k = max(1,int(zloc))
+         k = max(1,int(zloc))  ! Only 1 value of k across the ensemble?
+
+         deallocate(uniquek)
+         ! Re-find the unique k values
+         ksort = sort(k)
+      
+         count = 1
+         do e = 2, ens_size
+             if ( ksort(e) /= ksort(e-1) ) count = count + 1
+         enddo
+      
+         allocate(uniquek(count))
+       
+         uk = 1
+         do e = 1, ens_size
+            if ( all(uniquek /= k(e)) ) then
+               uniquek(uk) = k(e)
+               uk = uk + 1
+            endif
+         enddo
 
          ! Check to make sure retrieved integer gridpoints are in valid range
          if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_gz ) .and. &
               boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_gz ) .and. &
-              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_gz ) ) then
+              boundsCheck( k(1), .false.,                id, dim=3, type=wrf%dom(id)%type_gz ) ) then
             
             call getCorners(i, j, id, wrf%dom(id)%type_gz, ll, ul, lr, ur, rc )
             if ( rc .ne. 0 ) &
                  print*, 'model_mod.f90 :: model_interpolate :: getCorners GZ rc = ', rc
             
             ! Interpolation for GZ field at level k
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_gz)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_gz)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_gz)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_gz)
-            
-            fld(1) = ( dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) ) + &
+            ill = get_dart_vector_index(ll(1), ll(2), k(1), domain_id(id), wrf%dom(id)%type_gz)
+            iul = get_dart_vector_index(ul(1), ul(2), k(1), domain_id(id), wrf%dom(id)%type_gz)
+            ilr = get_dart_vector_index(lr(1), lr(2), k(1), domain_id(id), wrf%dom(id)%type_gz)
+            iur = get_dart_vector_index(ur(1), ur(2), k(1), domain_id(id), wrf%dom(id)%type_gz)
+
+            x_ill = get_state(ill, state_handle)
+            x_iul = get_state(iul, state_handle)
+            x_iur = get_state(iur, state_handle)
+            x_ilr = get_state(ilr, state_handle)
+
+            fld(1,:) = ( dym*( dxm*x_ill + dx*x_ilr ) + dy*( dxm*x_iul + dx*x_iur ) + &
                        dym*( dxm*wrf%dom(id)%phb(ll(1), ll(2), k)   + &
                              dx *wrf%dom(id)%phb(lr(1), lr(2), k) ) + &
                        dy *( dxm*wrf%dom(id)%phb(ul(1), ul(2), k)   + &
                              dx *wrf%dom(id)%phb(ur(1), ur(2), k) ) )  / gravity
             
             ! Interpolation for GZ field at level k+1
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_gz)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_gz)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_gz)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_gz)
-            
-            fld(2) = ( dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) ) + &
-                       dym*( dxm*wrf%dom(id)%phb(ll(1), ll(2), k+1)   + &
-                             dx *wrf%dom(id)%phb(lr(1), lr(2), k+1) ) + &
-                       dy *( dxm*wrf%dom(id)%phb(ul(1), ul(2), k+1)   + &
-                             dx *wrf%dom(id)%phb(ur(1), ur(2), k+1) ) )  / gravity
+            ill = get_dart_vector_index(ll(1), ll(2), k(1)+1, domain_id(id), wrf%dom(id)%type_gz)
+            iul = get_dart_vector_index(ul(1), ul(2), k(1)+1, domain_id(id), wrf%dom(id)%type_gz)
+            ilr = get_dart_vector_index(lr(1), lr(2), k(1)+1, domain_id(id), wrf%dom(id)%type_gz)
+            iur = get_dart_vector_index(ur(1), ur(2), k(1)+1, domain_id(id), wrf%dom(id)%type_gz)
+
+            x_ill = get_state(ill, state_handle)
+            x_iul = get_state(iul, state_handle)
+            x_iur = get_state(iur, state_handle)
+            x_ilr = get_state(ilr, state_handle)
+
+            fld(2, :) = ( dym*( dxm*x_ill + dx*x_ilr ) + dy*( dxm*x_iul + dx*x_iur ) + &
+                       dym*( dxm*wrf%dom(id)%phb(ll(1), ll(2), k(1)+1)   + &
+                             dx *wrf%dom(id)%phb(lr(1), lr(2), k(1)+1) ) + &
+                       dy *( dxm*wrf%dom(id)%phb(ul(1), ul(2), k(1)+1)   + &
+                             dx *wrf%dom(id)%phb(ur(1), ur(2), k(1)+1) ) )  / gravity
    
          endif
       endif
 
-
-   !-----------------------------------------------------
+     !-----------------------------------------------------
    ! 1.x Surface Elevation (HGT)
 
    ! Surface Elevation has been added by Ryan Torn to accommodate altimeter observations.
    !   HGT is not in the dart_ind vector, so get it from wrf%dom(id)%hgt.
-   else if( obs_kind == KIND_SURFACE_ELEVATION ) then
+   else if( obs_kind == QTY_SURFACE_ELEVATION ) then
 
       if ( debug ) print*,'Getting surface elevation'
 
@@ -2819,7 +2690,7 @@ else
          
          ! Interpolation for the HGT field -- HGT is NOT part of state vector x, but rather
          !   in the associated domain meta data
-         fld(1) = dym*( dxm*wrf%dom(id)%hgt(ll(1), ll(2)) + &
+         fld(1, :) = dym*( dxm*wrf%dom(id)%hgt(ll(1), ll(2)) + &
                          dx*wrf%dom(id)%hgt(lr(1), lr(2)) ) + &
                    dy*( dxm*wrf%dom(id)%hgt(ul(1), ul(2)) + &
                          dx*wrf%dom(id)%hgt(ur(1), ur(2)) )
@@ -2829,39 +2700,21 @@ else
 
    !-----------------------------------------------------
    ! 1.y Surface Skin Temperature (TSK)
-   
-   else if( obs_kind == KIND_SKIN_TEMPERATURE ) then
 
-      ! make sure vector includes the needed field
-      if ( wrf%dom(id)%type_tsk >= 0 ) then
-
-         ! Check to make sure retrieved integer gridpoints are in valid range
-         if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-                boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
-                .or. wrf%dom(id)%scm ) then
-   
-            call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-            if ( rc .ne. 0 ) &
-                 print*, 'model_mod.f90 :: model_interpolate :: getCorners TSK rc = ', rc
-
-            ! Interpolation for the TSK field
-            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_tsk)
-            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_tsk)
-            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_tsk)
-            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_tsk)
-
-            fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-
-         endif
-      endif
-
+   else if( obs_kind == QTY_SKIN_TEMPERATURE ) then
+     ! make sure vector includes the needed field
+     if ( wrf%dom(id)%type_tsk >= 0 ) then
+        call surface_interp_distrib(fld, wrf, id, i, j, obs_kind, wrf%dom(id)%type_tsk, dxm, dx, dy, dym, ens_size, state_handle)
+        if (all(fld == missing_r8)) goto 200
+     endif
 
    !-----------------------------------------------------
    ! 1.z Land Mask (XLAND)
 
    ! Land Mask has been added to accommodate satellite observations.
    !   XLAND is not in the dart_ind vector, so get it from wrf%dom(id)%land
-   else if( obs_kind == KIND_LANDMASK ) then
+   else if( obs_kind == QTY_LANDMASK ) then
+      if( my_task_id() == 0 ) print*, '*** Land mask forward operator not tested'
 
       if ( debug ) print*,'Getting land mask'
 
@@ -2875,23 +2728,23 @@ else
          
          ! Interpolation for the XLAND field -- XLAND is NOT part of state vector x, but rather
          !   in the associated domain meta data
-         fld(1) = dym*( dxm*real(wrf%dom(id)%land(ll(1), ll(2))) + &
+         fld(1, :) = dym*( dxm*real(wrf%dom(id)%land(ll(1), ll(2))) + &
                          dx*real(wrf%dom(id)%land(lr(1), lr(2))) ) + &
                    dy*( dxm*real(wrf%dom(id)%land(ul(1), ul(2))) + &
                          dx*real(wrf%dom(id)%land(ur(1), ur(2))) )
 
       endif
 
-
    !-----------------------------------------------------
    ! If obs_kind is not negative (for identity obs), or if it is not one of the above 15
    !   explicitly checked-for kinds, then set error istatus and missing_r8.
    else
 
-      obs_val = missing_r8
+      expected_obs = missing_r8
       istatus = 3
       if (debug) print*, 'unrecognized obs KIND, value = ', obs_kind
       deallocate(v_h, v_p)
+      if (allocated(uniquek)) deallocate(uniquek)
       return
 
    endif
@@ -2910,80 +2763,191 @@ else
    !   (k and k+1).
 
    ! Check to make sure that we did something sensible in the Horizontal Interpolation 
-   !   section above.  All valid obs_kinds will have changed fld(1).
-   if ( fld(1) == missing_r8 ) then
+   !   section above.  All valid obs_kinds will have changed fld(1,e).
 
-      obs_val = missing_r8
+   !HK I am unsure as to whether this should be done on the array expected_obs or one ensemble
+   ! member (e) at a time.
+   do e = 1, ens_size
 
-   ! We purposefully changed fld(1), so continue onward
-   else
+      if ( fld(1,e) == missing_r8 ) then
 
-      ! If a surface variable, or a variable with no particular vertical location
-      ! (basically the entire column) then no need to do any vertical interpolation
-      if ( surf_var .or. vert_is_undef(location) ) then 
+         expected_obs(e) = missing_r8
+   
+      else ! We purposefully changed fld(1,e), so continue onward
 
-         obs_val = fld(1)
+         ! If a surface variable, or a variable with no particular vertical location
+         ! (basically the entire column) then no need to do any vertical interpolation
+         if ( surf_var .or. is_vertical(location,"UNDEFINED") ) then
 
-      ! If an interior variable, then we DO need to do vertical interpolation
-      else
+            !obs_val = fld(1)
+             expected_obs(e) = fld(1,e) !HK
 
-         ! First make sure fld(2) is no longer a missing value
-         if ( fld(2) == missing_r8 ) then
-
-            obs_val = missing_r8
-
-         ! Do vertical interpolation -- at this point zloc is >= 1 unless
-         ! the namelist value allow_obs_below_vol is true, in which case
-         ! it is >= 0, and < 1 is a request to extrapolate.  
+         ! If an interior variable, then we DO need to do vertical interpolation
          else
 
-            ! Get fractional distances between grid points
-            call toGrid(zloc, k, dz, dzm)
-            if (debug) print*, 'zloc, k, dz, dzm = ', zloc, k, dz, dzm
-            if (debug) print*, 'fld(1), fld(2) = ', fld(1), fld(2)
+            ! First make sure fld(2,:) is no longer a missing value
+            if ( fld(2,e) == missing_r8 ) then !HK should be any?
 
-            ! If you get here and zloc < 1.0, then k will be 0, and
-            ! we should extrapolate.  fld(1) and fld(2) where computed
-            ! at levels 1 and 2.
+               expected_obs(e) = missing_r8
 
-            if (k >= 1) then
-               ! Linearly interpolate between grid points
-               obs_val = dzm*fld(1) + dz*fld(2)
-               if (debug) print*, 'interpolated obs_val = ', obs_val
+            ! Do vertical interpolation -- at this point zloc is >= 1 unless
+            ! the namelist value allow_obs_below_vol is true, in which case
+            ! it is >= 0, and < 1 is a request to extrapolate.
             else
-               ! Extrapolate below first level.
-               obs_val = fld(1) - (fld(2)-fld(1))*dzm
-               if (debug) print*, 'extrapolated obs_val = ', obs_val
+
+               ! Get fractional distances between grid points
+               call toGrid(zloc(e), k(e), dz(e), dzm(e))
+               if (debug) print*, 'zloc(e), k(e), dz(e), dzm(e) = ', zloc(e), k(e), dz(e), dzm(e)
+               if (debug) print*, 'fld(1,e), fld(2,e) = ', fld(1,e), fld(2,e)
+
+               ! If you get here and zloc < 1.0, then k will be 0, and
+               ! we should extrapolate.  fld(1,:) and fld(2,:) where computed
+               ! at levels 1 and 2.
+
+               if (k(e) >= 1) then
+                  ! Linearly interpolate between grid points
+                  expected_obs(e) = dzm(e)*fld(1,e) + dz(e)*fld(2,e)
+                  if (debug) print*, 'interpolated obs_val = ', expected_obs(e)
+               else
+                  ! Extrapolate below first level.
+                  expected_obs(e) = fld(1,e) - (fld(2,e)-fld(1,e))*dzm(e)
+                  if (debug) print*, 'extrapolated obs_val = ', expected_obs(e)
+               endif
+
             endif
-            
          endif
       endif
-   endif
+
+      ! Fill in failed copies
+      if ( failedcopies(e) == missing_r8 ) expected_obs(e) = missing_r8
+
+   enddo
 
 endif  ! end of "if ( obs_kind < 0 )"
 
+200  continue
+
+if (all(fld == missing_r8)) then
+   expected_obs(:) = missing_r8
+   istatus(:) = 99
+endif 
 
 ! Now that we are done, check to see if a missing value somehow 
 ! made it through without already having set an error return code.
-if ( obs_val == missing_r8 .and. istatus == 0 ) then
-   istatus = 99
-endif
+do e = 1, ens_size
+   if ( expected_obs(e) == missing_r8 .and. istatus(e) == 0 ) then
+      istatus(e) = 99
+   endif
+enddo
 
 ! Pring the observed value if in debug mode
 if(debug) then
-  print*,'model_interpolate() return value for obs_kind ',obs_kind, ' = ',obs_val
+  print*,'model_interpolate() return value for obs_kind ',obs_kind, ' = ',expected_obs
 endif
 
 ! Deallocate variables before exiting
 deallocate(v_h, v_p)
+deallocate(uniquek)
 
 end subroutine model_interpolate
 
+!#######################################################################
+subroutine convert_vertical_obs(state_handle, num, locs, loc_qtys, loc_types, &
+                                which_vert, status)
+
+type(ensemble_type), intent(in)    :: state_handle
+integer,             intent(in)    :: num
+type(location_type), intent(inout) :: locs(:)
+integer,             intent(in)    :: loc_qtys(:)
+integer,             intent(in)    :: loc_types(:)
+integer,             intent(in)    :: which_vert
+integer,             intent(out)   :: status(:)
+
+integer :: i
+
+do i=1, num
+   call vert_convert(state_handle, locs(i), loc_qtys(i), status(i))
+enddo
+
+end subroutine convert_vertical_obs
+
 
 !#######################################################################
+subroutine convert_vertical_state(state_handle, num, locs, loc_qtys, loc_indx, &
+                                  which_vert, istatus)
+
+type(ensemble_type), intent(in)    :: state_handle
+integer,             intent(in)    :: num
+type(location_type), intent(inout) :: locs(:)
+integer,             intent(in)    :: loc_qtys(:)
+integer(i8),         intent(in)    :: loc_indx(:)
+integer,             intent(in)    :: which_vert
+integer,             intent(out)   :: istatus
+
+integer :: i, istat
+integer     :: var_type, dart_type
+integer(i8) :: index
+integer     :: ip, jp, kp
+integer     :: nz, ny, nx
+logical     :: var_found
+real(r8)    :: lon, lat, lev
+character(len=129) :: string1
+
+integer :: id, var_id, state_id
+logical, parameter :: debug = .false.
 
 
-subroutine vert_convert(x, location, obs_kind, istatus)
+istatus = 0
+
+do i=1, num
+
+   ! from the dart index get the local variables indices
+   call get_model_variable_indices(loc_indx(i), ip, jp, kp, var_id=var_id, dom_id=state_id)
+   
+   ! convert from state_structure domain number to wrf.
+   id = get_wrf_domain(state_id)
+   
+   ! at this point, (ip,jp,kp) refer to indices in the variable's own grid
+   
+   if(debug) write(*,*) ' ip, jp, kp for index ',ip,jp,kp,index
+   if(debug) write(*,*) ' Var type: ',var_type
+   
+   var_type  = wrf%dom(id)%var_type(var_id)
+   dart_type = wrf%dom(id)%dart_kind(var_id)
+   
+   ! first obtain lat/lon from (ip,jp)
+   call get_wrf_horizontal_location( ip, jp, var_type, id, lon, lat )
+   
+   ! now convert to desired vertical coordinate (defined in the namelist)
+   if (wrf%dom(id)%localization_coord == VERTISLEVEL) then
+      ! here we need level index of mass grid
+      if( (var_type == wrf%dom(id)%type_w ) .or. (var_type == wrf%dom(id)%type_gz) ) then
+         lev = real(kp) - 0.5_r8
+      else
+         lev = real(kp)
+      endif
+   elseif (wrf%dom(id)%localization_coord == VERTISPRESSURE) then
+      ! directly convert to pressure
+      lev = model_pressure_distrib(ip, jp, kp, id, var_type, state_handle)
+   elseif (wrf%dom(id)%localization_coord == VERTISHEIGHT) then
+      lev = model_height_distrib(ip, jp, kp, id, var_type, state_handle)
+   elseif (wrf%dom(id)%localization_coord == VERTISSCALEHEIGHT) then
+      lev = -log(model_pressure_distrib(ip, jp, kp, id, var_type, state_handle) / &
+                 model_surface_pressure_distrib(ip, jp, id, var_type, state_handle))
+   endif
+   
+   locs(i) = set_location(lon, lat, lev, wrf%dom(id)%localization_coord)
+   
+enddo
+
+end subroutine convert_vertical_state
+
+
+!#######################################################################
+!> This is used in the filter_assim. The vertical conversion is done using the 
+!> mean state.
+!> I think at the moment you are over communicating
+subroutine vert_convert(state_handle, location, obs_kind, istatus)
 
 ! This subroutine converts a given ob/state vertical coordinate to
 ! the vertical localization coordinate type requested through the 
@@ -3007,34 +2971,41 @@ subroutine vert_convert(x, location, obs_kind, istatus)
 !            functionality to operate on any DART state vector that
 !            is supplied to it.
 
-real(r8),            intent(in)    :: x(:)
-type(location_type), intent(inout) :: location
-integer,             intent(in)    :: obs_kind
-integer,             intent(out)   :: istatus
+type(ensemble_type),    intent(in)    :: state_handle
+type(location_type),    intent(inout) :: location
+integer,                intent(in)    :: obs_kind
+integer,                intent(out)   :: istatus
 
 ! changed zloc to zin and zout, since the point of this routine
 ! is to convert zloc from one value to another.  ztype{in,out}
 ! are the vertical types as defined by the 3d sphere locations mod.
-real(r8)            :: xloc, yloc, zin, xyz_loc(3), zout, zk
-integer             :: id, i, j, k, rc, ztypein, ztypeout
-real(r8)            :: dx,dy,dz,dxm,dym,dzm
+real(r8)            :: xloc, yloc, zin, xyz_loc(3), zout
+integer             :: id, i, j, rc, ztypein, ztypeout
+real(r8)            :: dx,dy,dxm,dym, dz, dzm
 integer, dimension(2) :: ll, lr, ul, ur
 
-real(r8), allocatable, dimension(:) :: v_h, v_p
+real(r8), allocatable, dimension(:) :: v_h
+real(r8), allocatable, dimension(:) :: v_p !< only need the mean value
 
 ! local vars, used in calculating pressure and height
 real(r8)            :: pres1, pres2, pres3, pres4
 real(r8)            :: presa, presb, psurf
 real(r8)            :: hgt1, hgt2, hgt3, hgt4, hgta, hgtb
-logical             :: lev0
+
+!HK
+real(r8) :: zk
+integer  :: k
+logical  :: lev0
 
 ! assume failure.
 istatus = 1
 
 ! first off, check if ob is identity ob.  if so get_state_meta_data() will 
 ! return location information already in the requested vertical type.
+!> @todo This in not true anymore if you don't convert all the state variables 
+! to the localization coordinate in get_state_meta_data
 if (obs_kind < 0) then
-   call get_state_meta_data(obs_kind,location)
+   call get_state_meta_data(int(obs_kind,i8),location)
    istatus = 0
    return
 endif
@@ -3053,6 +3024,8 @@ endif
 ! extracting the location lat/lon/vert values.
 xyz_loc = get_location(location)
 
+!if(my_task_id() == 0) write(10, *) xyz_loc
+
 ! the routines below will use zin as the incoming vertical value
 ! and zout as the new outgoing one.  start out assuming failure
 ! (zout = missing) and wait to be pleasantly surprised when it works.
@@ -3063,6 +3036,7 @@ zout = missing_r8
 ! with the requested type as out.
 if (zin == missing_r8) then
    location = set_location(xyz_loc(1),xyz_loc(2),missing_r8,ztypeout)
+   !print*, 'missing rank', my_task_id()
    return
 endif
 
@@ -3079,6 +3053,8 @@ endif
 ! but using requested vertical coord.  istatus already set above.
 if (id==0) then
    location = set_location(xyz_loc(1),xyz_loc(2),missing_r8,ztypeout)
+   !print*, 'can not find domain rank', my_task_id()
+
    return
 endif
 
@@ -3092,6 +3068,8 @@ call toGrid(yloc,j,dy,dym)
 if ( .not. boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .or. &
      .not. boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) then
    location = set_location(xyz_loc(1),xyz_loc(2),missing_r8,ztypeout)
+   !print*, 'out of bounds rank', my_task_id()
+
    return
 endif
 
@@ -3118,7 +3096,7 @@ select case (ztypein)
 
 ! -------------------------------------------------------
 ! incoming vertical coordinate is 'model level number'
-! -------------------------------------------------------
+! ---------------------------------------------------- ---
 case (VERTISLEVEL)
 
    ! convert into:
@@ -3137,21 +3115,21 @@ case (VERTISLEVEL)
       if(.not. boundsCheck(k, .false., id, dim=3, type=wrf%dom(id)%type_t)) goto 100
 
       ! compute pressure at all neighboring mass points and interpolate
-      presa = model_pressure_t(ll(1), ll(2), k  ,id,x)
-      presb = model_pressure_t(ll(1), ll(2), k+1,id,x)
+      presa = scalar(model_pressure_t_distrib(ll(1), ll(2), k  ,id, state_handle,1))
+      presb = scalar(model_pressure_t_distrib(ll(1), ll(2), k+1,id, state_handle,1))
       pres1 = dzm*presa + dz*presb
-      presa = model_pressure_t(lr(1), lr(2), k  ,id,x)
-      presb = model_pressure_t(lr(1), lr(2), k+1,id,x)
+      presa = scalar(model_pressure_t_distrib(lr(1), lr(2), k  ,id, state_handle,1))
+      presb = scalar(model_pressure_t_distrib(lr(1), lr(2), k+1,id, state_handle,1))
       pres2 = dzm*presa + dz*presb
-      presa = model_pressure_t(ul(1), ul(2), k  ,id,x)
-      presb = model_pressure_t(ul(1), ul(2), k+1,id,x)
+      presa = scalar(model_pressure_t_distrib(ul(1), ul(2), k  ,id, state_handle,1))
+      presb = scalar(model_pressure_t_distrib(ul(1), ul(2), k+1,id, state_handle,1))
       pres3 = dzm*presa + dz*presb
-      presa = model_pressure_t(ur(1), ur(2), k  ,id,x)
-      presb = model_pressure_t(ur(1), ur(2), k+1,id,x)
+      presa = scalar(model_pressure_t_distrib(ur(1), ur(2), k  ,id, state_handle,1))
+      presb = scalar(model_pressure_t_distrib(ur(1), ur(2), k+1,id, state_handle,1))
       pres4 = dzm*presa + dz*presb
       zout = dym*( dxm*pres1 + dx*pres2 ) + dy*( dxm*pres3 + dx*pres4 )
 
-   
+
    ! -------------------------------------------------------
    ! incoming vertical coordinate is 'model level number'
    ! outgoing vertical coordinate should be 'height' in meters
@@ -3161,25 +3139,31 @@ case (VERTISLEVEL)
       ! get neighboring mass level indices & compute weights to zin
       ! need to add half a grid to get to staggered vertical coordinate
       call toGrid(zin+0.5_r8,k,dz,dzm)
+      !print*, 'k', k, 'zin ', zin
 
       ! Check that integer height index is in valid range.  if not, bail to end
-      if(.not. boundsCheck(k, .false., id, dim=3, type=wrf%dom(id)%type_gz)) goto 100
+      if(.not. boundsCheck(k, .false., id, dim=3, type=wrf%dom(id)%type_gz)) then
+         ! print*, 'bounds check fail'
+          goto 100
+      endif
 
+      ! HK if this is a piece of state, I believe you don't need to the four corners,
+      ! the location is the lower left corner.
       ! compute height at all neighboring mass points and interpolate
-      hgta = model_height_w(ll(1), ll(2), k  ,id,x)
-      hgtb = model_height_w(ll(1), ll(2), k+1,id,x)
+      ! You have already converted the state in get_state_meta_data
+      hgta = model_height_w_distrib(ll(1), ll(2), k  ,id,state_handle)
+      hgtb = model_height_w_distrib(ll(1), ll(2), k+1,id,state_handle)
       hgt1 = dzm*hgta + dz*hgtb
-      hgta = model_height_w(lr(1), lr(2), k  ,id,x)
-      hgtb = model_height_w(lr(1), lr(2), k+1,id,x)
+      hgta = model_height_w_distrib(lr(1), lr(2), k  ,id,state_handle)
+      hgtb = model_height_w_distrib(lr(1), lr(2), k+1,id,state_handle)
       hgt2 = dzm*hgta + dz*hgtb
-      hgta = model_height_w(ul(1), ul(2), k  ,id,x)
-      hgtb = model_height_w(ul(1), ul(2), k+1,id,x)
+      hgta = model_height_w_distrib(ul(1), ul(2), k  ,id,state_handle)
+      hgtb = model_height_w_distrib(ul(1), ul(2), k+1,id,state_handle)
       hgt3 = dzm*hgta + dz*hgtb
-      hgta = model_height_w(ur(1), ur(2), k  ,id,x)
-      hgtb = model_height_w(ur(1), ur(2), k+1,id,x)
+      hgta = model_height_w_distrib(ur(1), ur(2), k  ,id,state_handle)
+      hgtb = model_height_w_distrib(ur(1), ur(2), k+1,id,state_handle)
       hgt4 = dzm*hgta + dz*hgtb
       zout = dym*( dxm*hgt1 + dx*hgt2 ) + dy*( dxm*hgt3 + dx*hgt4 )
-
 
    ! -------------------------------------------------------
    ! incoming vertical coordinate is 'model level number'
@@ -3194,25 +3178,25 @@ case (VERTISLEVEL)
       if(.not. boundsCheck(k, .false., id, dim=3, type=wrf%dom(id)%type_t)) goto 100
 
       ! pressure at height
-      presa = model_pressure_t(ll(1), ll(2), k  ,id,x)
-      presb = model_pressure_t(ll(1), ll(2), k+1,id,x)
+      presa = scalar(model_pressure_t_distrib(ll(1), ll(2), k  ,id,state_handle,1))
+      presb = scalar(model_pressure_t_distrib(ll(1), ll(2), k+1,id,state_handle,1))
       pres1 = dzm*presa + dz*presb
-      presa = model_pressure_t(lr(1), lr(2), k  ,id,x)
-      presb = model_pressure_t(lr(1), lr(2), k+1,id,x)
+      presa = scalar(model_pressure_t_distrib(lr(1), lr(2), k  ,id,state_handle,1))
+      presb = scalar(model_pressure_t_distrib(lr(1), lr(2), k+1,id,state_handle,1))
       pres2 = dzm*presa + dz*presb
-      presa = model_pressure_t(ul(1), ul(2), k  ,id,x)
-      presb = model_pressure_t(ul(1), ul(2), k+1,id,x)
+      presa = scalar(model_pressure_t_distrib(ul(1), ul(2), k  ,id,state_handle,1))
+      presb = scalar(model_pressure_t_distrib(ul(1), ul(2), k+1,id,state_handle,1))
       pres3 = dzm*presa + dz*presb
-      presa = model_pressure_t(ur(1), ur(2), k  ,id,x)
-      presb = model_pressure_t(ur(1), ur(2), k+1,id,x)
+      presa = scalar(model_pressure_t_distrib(ur(1), ur(2), k  ,id,state_handle,1))
+      presb = scalar(model_pressure_t_distrib(ur(1), ur(2), k+1,id,state_handle,1))
       pres4 = dzm*presa + dz*presb
       zout = dym*( dxm*pres1 + dx*pres2 ) + dy*( dxm*pres3 + dx*pres4 )
 
       ! surface pressure
-      pres1 = model_pressure_s(ll(1), ll(2), id, x)
-      pres2 = model_pressure_s(lr(1), lr(2), id, x)
-      pres3 = model_pressure_s(ul(1), ul(2), id, x) 
-      pres4 = model_pressure_s(ur(1), ur(2), id, x)
+      pres1 = model_pressure_s_distrib(ll(1), ll(2), id, state_handle)
+      pres2 = model_pressure_s_distrib(lr(1), lr(2), id, state_handle)
+      pres3 = model_pressure_s_distrib(ul(1), ul(2), id, state_handle) 
+      pres4 = model_pressure_s_distrib(ur(1), ur(2), id, state_handle)
       zout = -log(zout / (dym*( dxm*pres1 + dx*pres2 ) + dy*( dxm*pres3 + dx*pres4 )))
 
 
@@ -3229,7 +3213,6 @@ case (VERTISLEVEL)
 
    end select   ! incoming vert was model level
 
-
 ! -------------------------------------------------------
 ! incoming vertical coordinate is 'pressure' in Pa
 ! -------------------------------------------------------
@@ -3240,13 +3223,24 @@ case (VERTISPRESSURE)
 
    ! get model pressure profile and
    ! get pressure vertical co-ordinate in model level number
-   allocate(v_p(0:wrf%dom(id)%bt))
-   call get_model_pressure_profile(i,j,dx,dy,dxm,dym,wrf%dom(id)%bt,x,id,v_p)
-   call pres_to_zk(zin, v_p, wrf%dom(id)%bt,zk,lev0)
+   allocate(v_p(0:wrf%dom(id)%bt)) 
+   !HK This has already been called in model interpolate
+   ! - not for observations that were not in the assimilate catagory
+   call get_model_pressure_profile_distrib(i,j,dx,dy,dxm,dym,wrf%dom(id)%bt,id,v_p, state_handle,1)
+
+     !if (my_task_id() == 0) then
+     !    write(10, *) v_p
+     !endif
+
+   call pres_to_zk(zin, v_p(:), wrf%dom(id)%bt, zk, lev0)
    deallocate(v_p)
 
+     !if (my_task_id() == 0) then
+     !    write(10, *) zk
+     !endif
+
    ! if you cannot get a model level out of the pressure profile, bail to end
-   if (zk == missing_r8) goto 100
+   if ( zk == missing_r8 ) goto 100 !HK I don't think zk = missing_r8 even if there is an error
 
    ! convert into:
    select case (ztypeout)
@@ -3268,26 +3262,32 @@ case (VERTISPRESSURE)
    case (VERTISHEIGHT)
       ! adding 0.5 to get to the staggered vertical grid
       ! because height is on staggered vertical grid
-      call toGrid(zk+0.5,k,dz,dzm)
+      call toGrid(zk+0.5, k, dz, dzm)
 
       ! Check that integer height index is in valid range.  if not, bail to end
       if(.not. boundsCheck(k, .false., id, dim=3, type=wrf%dom(id)%type_gz)) goto 100
 
+      ! HK should check whether this is state or not. If it is state, there is no need to 
+      ! do all four corners, it is the lower left corner.
+
       ! compute height at all neighboring mass points and interpolate
-      hgta = model_height_w(ll(1), ll(2), k  ,id,x)
-      hgtb = model_height_w(ll(1), ll(2), k+1,id,x)
+      hgta = model_height_w_distrib(ll(1), ll(2), k  ,id, state_handle)
+      hgtb = model_height_w_distrib(ll(1), ll(2), k+1,id, state_handle)
       hgt1 = dzm*hgta + dz*hgtb
-      hgta = model_height_w(lr(1), lr(2), k  ,id,x)
-      hgtb = model_height_w(lr(1), lr(2), k+1,id,x)
+      hgta = model_height_w_distrib(lr(1), lr(2), k  ,id, state_handle)
+      hgtb = model_height_w_distrib(lr(1), lr(2), k+1,id, state_handle)
       hgt2 = dzm*hgta + dz*hgtb
-      hgta = model_height_w(ul(1), ul(2), k  ,id,x)
-      hgtb = model_height_w(ul(1), ul(2), k+1,id,x)
+      hgta = model_height_w_distrib(ul(1), ul(2), k  ,id, state_handle)
+      hgtb = model_height_w_distrib(ul(1), ul(2), k+1,id, state_handle)
       hgt3 = dzm*hgta + dz*hgtb
-      hgta = model_height_w(ur(1), ur(2), k  ,id,x)
-      hgtb = model_height_w(ur(1), ur(2), k+1,id,x)
+      hgta = model_height_w_distrib(ur(1), ur(2), k  ,id, state_handle)
+      hgtb = model_height_w_distrib(ur(1), ur(2), k+1,id, state_handle)
       hgt4 = dzm*hgta + dz*hgtb
       zout = dym*( dxm*hgt1 + dx*hgt2 ) + dy*( dxm*hgt3 + dx*hgt4 )
-
+      
+     !if (my_task_id() == 0) then
+     !    write(10, *) zout
+     !endif
 
    ! -------------------------------------------------------
    ! incoming vertical coordinate is 'pressure' in Pa
@@ -3300,12 +3300,11 @@ case (VERTISPRESSURE)
       if(.not. boundsCheck(k, .false., id, dim=3, type=wrf%dom(id)%type_t)) goto 100
 
       ! compute surface pressure at all neighboring mass points and interpolate
-      pres1 = model_pressure_s(ll(1), ll(2), id, x)
-      pres2 = model_pressure_s(lr(1), lr(2), id, x)
-      pres3 = model_pressure_s(ul(1), ul(2), id, x)
-      pres4 = model_pressure_s(ur(1), ur(2), id, x)
+      pres1 = model_pressure_s_distrib(ll(1), ll(2), id, state_handle)
+      pres2 = model_pressure_s_distrib(lr(1), lr(2), id, state_handle)
+      pres3 = model_pressure_s_distrib(ul(1), ul(2), id, state_handle)
+      pres4 = model_pressure_s_distrib(ur(1), ur(2), id, state_handle)
       zout = -log(zin / (dym*( dxm*pres1 + dx*pres2 ) + dy*( dxm*pres3 + dx*pres4 )))
-
 
    ! -------------------------------------------------------
    ! incoming vertical coordinate is 'pressure'
@@ -3332,7 +3331,7 @@ case (VERTISHEIGHT)
    ! get model height profile and
    ! get height vertical co-ordinate in model level number 
    allocate(v_h(0:wrf%dom(id)%bt))
-   call get_model_height_profile(i,j,dx,dy,dxm,dym,wrf%dom(id)%bt,x,id,v_h)
+   call get_model_height_profile_distrib(i,j,dx,dy,dxm,dym,wrf%dom(id)%bt,id,v_h, state_handle,1)
    call height_to_zk(zin, v_h, wrf%dom(id)%bt,zk,lev0)
    deallocate(v_h)
 
@@ -3360,17 +3359,17 @@ case (VERTISHEIGHT)
       if(.not. boundsCheck(k, .false., id, dim=3, type=wrf%dom(id)%type_t)) goto 100
 
       ! compute pressure at all neighboring mass points and interpolate
-      presa = model_pressure_t(ll(1), ll(2), k  ,id,x)
-      presb = model_pressure_t(ll(1), ll(2), k+1,id,x)
+      presa = scalar(model_pressure_t_distrib(ll(1), ll(2), k  ,id,state_handle,1))
+      presb = scalar(model_pressure_t_distrib(ll(1), ll(2), k+1,id,state_handle,1))
       pres1 = dzm*presa + dz*presb
-      presa = model_pressure_t(lr(1), lr(2), k  ,id,x)
-      presb = model_pressure_t(lr(1), lr(2), k+1,id,x)
+      presa = scalar(model_pressure_t_distrib(lr(1), lr(2), k  ,id,state_handle,1))
+      presb = scalar(model_pressure_t_distrib(lr(1), lr(2), k+1,id,state_handle,1))
       pres2 = dzm*presa + dz*presb
-      presa = model_pressure_t(ul(1), ul(2), k  ,id,x)
-      presb = model_pressure_t(ul(1), ul(2), k+1,id,x)
+      presa = scalar(model_pressure_t_distrib(ul(1), ul(2), k  ,id,state_handle,1))
+      presb = scalar(model_pressure_t_distrib(ul(1), ul(2), k+1,id,state_handle,1))
       pres3 = dzm*presa + dz*presb
-      presa = model_pressure_t(ur(1), ur(2), k  ,id,x)
-      presb = model_pressure_t(ur(1), ur(2), k+1,id,x)
+      presa = scalar(model_pressure_t_distrib(ur(1), ur(2), k  ,id,state_handle,1))
+      presb = scalar(model_pressure_t_distrib(ur(1), ur(2), k+1,id,state_handle,1))
       pres4 = dzm*presa + dz*presb
       zout = dym*( dxm*pres1 + dx*pres2 ) + dy*( dxm*pres3 + dx*pres4 )
 
@@ -3386,25 +3385,25 @@ case (VERTISHEIGHT)
       if(.not. boundsCheck(k, .false., id, dim=3, type=wrf%dom(id)%type_t)) goto 100
 
       ! pressure at height
-      presa = model_pressure_t(ll(1), ll(2), k  ,id,x)
-      presb = model_pressure_t(ll(1), ll(2), k+1,id,x)
+      presa = scalar(model_pressure_t_distrib(ll(1), ll(2), k  ,id,state_handle,1))
+      presb = scalar(model_pressure_t_distrib(ll(1), ll(2), k+1,id,state_handle,1))
       pres1 = dzm*presa + dz*presb
-      presa = model_pressure_t(lr(1), lr(2), k  ,id,x)
-      presb = model_pressure_t(lr(1), lr(2), k+1,id,x)
+      presa = scalar(model_pressure_t_distrib(lr(1), lr(2), k  ,id,state_handle,1))
+      presb = scalar(model_pressure_t_distrib(lr(1), lr(2), k+1,id,state_handle,1))
       pres2 = dzm*presa + dz*presb
-      presa = model_pressure_t(ul(1), ul(2), k  ,id,x)
-      presb = model_pressure_t(ul(1), ul(2), k+1,id,x)
+      presa = scalar(model_pressure_t_distrib(ul(1), ul(2), k  ,id,state_handle,1))
+      presb = scalar(model_pressure_t_distrib(ul(1), ul(2), k+1,id,state_handle,1))
       pres3 = dzm*presa + dz*presb
-      presa = model_pressure_t(ur(1), ur(2), k  ,id,x)
-      presb = model_pressure_t(ur(1), ur(2), k+1,id,x)
+      presa = scalar(model_pressure_t_distrib(ur(1), ur(2), k  ,id,state_handle,1))
+      presb = scalar(model_pressure_t_distrib(ur(1), ur(2), k+1,id,state_handle,1))
       pres4 = dzm*presa + dz*presb
       zout = dym*( dxm*pres1 + dx*pres2 ) + dy*( dxm*pres3 + dx*pres4 )
  
       ! surface pressure
-      pres1 = model_pressure_s(ll(1), ll(2), id, x)
-      pres2 = model_pressure_s(lr(1), lr(2), id, x)
-      pres3 = model_pressure_s(ul(1), ul(2), id, x) 
-      pres4 = model_pressure_s(ur(1), ur(2), id, x)
+      pres1 = model_pressure_s_distrib(ll(1), ll(2), id, state_handle)
+      pres2 = model_pressure_s_distrib(lr(1), lr(2), id, state_handle)
+      pres3 = model_pressure_s_distrib(ul(1), ul(2), id, state_handle) 
+      pres4 = model_pressure_s_distrib(ur(1), ur(2), id, state_handle)
       zout = -log(zout / (dym*( dxm*pres1 + dx*pres2 ) + dy*( dxm*pres3 + dx*pres4 )))
 
 
@@ -3431,16 +3430,16 @@ case (VERTISSCALEHEIGHT)
    ! get corresponding mass level zk, then get neighboring mass 
    ! level indices and compute weights
 
-   pres1 = model_pressure_s(ll(1), ll(2), id,x) 
-   pres2 = model_pressure_s(lr(1), lr(2), id,x)
-   pres3 = model_pressure_s(ul(1), ul(2), id,x) 
-   pres4 = model_pressure_s(ur(1), ur(2), id,x) 
+   pres1 = model_pressure_s_distrib(ll(1), ll(2), id,state_handle) 
+   pres2 = model_pressure_s_distrib(lr(1), lr(2), id,state_handle)
+   pres3 = model_pressure_s_distrib(ul(1), ul(2), id,state_handle) 
+   pres4 = model_pressure_s_distrib(ur(1), ur(2), id,state_handle) 
    psurf = dym*( dxm*pres1 + dx*pres2 ) + dy*( dxm*pres3 + dx*pres4 )
 
    ! get model pressure profile and
    ! get pressure vertical co-ordinate in model level number
    allocate(v_p(0:wrf%dom(id)%bt))
-   call get_model_pressure_profile(i,j,dx,dy,dxm,dym,wrf%dom(id)%bt,x,id,v_p)
+   call get_model_pressure_profile_distrib(i,j,dx,dy,dxm,dym,wrf%dom(id)%bt,id,v_p, state_handle, 1)
    call pres_to_zk(exp(-zin)*psurf, v_p, wrf%dom(id)%bt,zk,lev0)
    deallocate(v_p)
 
@@ -3473,17 +3472,17 @@ case (VERTISSCALEHEIGHT)
       if(.not. boundsCheck(k, .false., id, dim=3, type=wrf%dom(id)%type_gz)) goto 100
 
       ! compute height at all neighboring mass points and interpolate
-      hgta = model_height_w(ll(1), ll(2), k  ,id,x)
-      hgtb = model_height_w(ll(1), ll(2), k+1,id,x)
+      hgta = model_height_w_distrib(ll(1), ll(2), k  ,id,state_handle)
+      hgtb = model_height_w_distrib(ll(1), ll(2), k+1,id,state_handle)
       hgt1 = dzm*hgta + dz*hgtb
-      hgta = model_height_w(lr(1), lr(2), k  ,id,x)
-      hgtb = model_height_w(lr(1), lr(2), k+1,id,x)
+      hgta = model_height_w_distrib(lr(1), lr(2), k  ,id,state_handle)
+      hgtb = model_height_w_distrib(lr(1), lr(2), k+1,id,state_handle)
       hgt2 = dzm*hgta + dz*hgtb
-      hgta = model_height_w(ul(1), ul(2), k  ,id,x)
-      hgtb = model_height_w(ul(1), ul(2), k+1,id,x)
+      hgta = model_height_w_distrib(ul(1), ul(2), k  ,id,state_handle)
+      hgtb = model_height_w_distrib(ul(1), ul(2), k+1,id,state_handle)
       hgt3 = dzm*hgta + dz*hgtb
-      hgta = model_height_w(ur(1), ur(2), k  ,id,x)
-      hgtb = model_height_w(ur(1), ur(2), k+1,id,x)
+      hgta = model_height_w_distrib(ur(1), ur(2), k  ,id,state_handle)
+      hgtb = model_height_w_distrib(ur(1), ur(2), k+1,id,state_handle)
       hgt4 = dzm*hgta + dz*hgtb
       zout = dym*( dxm*hgt1 + dx*hgt2 ) + dy*( dxm*hgt3 + dx*hgt4 )
 
@@ -3532,10 +3531,10 @@ case(VERTISSURFACE)
    case (VERTISPRESSURE)
 
       ! compute surface pressure at all neighboring mass points
-      pres1 = model_pressure_s(ll(1), ll(2), id,x)
-      pres2 = model_pressure_s(lr(1), lr(2), id,x)
-      pres3 = model_pressure_s(ul(1), ul(2), id,x)
-      pres4 = model_pressure_s(ur(1), ur(2), id,x)
+      pres1 = model_pressure_s_distrib(ll(1), ll(2), id, state_handle)
+      pres2 = model_pressure_s_distrib(lr(1), lr(2), id, state_handle)
+      pres3 = model_pressure_s_distrib(ul(1), ul(2), id, state_handle)
+      pres4 = model_pressure_s_distrib(ur(1), ur(2), id, state_handle)
       zout = dym*( dxm*pres1 + dx*pres2 ) + dy*( dxm*pres3 + dx*pres4 )
 
 
@@ -3577,7 +3576,6 @@ case(VERTISSURFACE)
 
    end select   ! incoming vert was surface
 
-
 ! -------------------------------------------------------
 ! incoming vertical coordinate has no case section
 ! -------------------------------------------------------
@@ -3596,11 +3594,12 @@ end select   ! incoming z vertical type
 ! Returned location 
 location = set_location(xyz_loc(1),xyz_loc(2),zout,ztypeout)
 
+!if(my_task_id() == 0 ) print*, xyz_loc(1), xyz_loc(2), zout, ztypeout
+
 ! Set successful return code only if zout has good value
 if(zout /= missing_r8) istatus = 0
 
 end subroutine vert_convert
-
 
 !#######################################################################
 
@@ -3687,21 +3686,14 @@ end subroutine get_wrf_horizontal_location
 !***********************************************************************
 
 
-function nc_write_model_atts( ncFileID ) result (ierr)
+subroutine nc_write_model_atts( ncid, dom_id ) 
 !-----------------------------------------------------------------
 ! Writes the model-specific attributes to a netCDF file
-! A. Caya May 7 2003
-! T. Hoar Mar 8 2004 writes prognostic flavor
+
+integer, intent(in) :: ncid      ! netCDF file identifier
+integer, intent(in) :: dom_id
 
 logical, parameter :: write_precip = .false.
-
-integer, intent(in)  :: ncFileID      ! netCDF file identifier
-integer              :: ierr          ! return value of function
-
-!-----------------------------------------------------------------
-
-integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
-integer :: StateVarDimID, StateVarID, TimeDimID
 
 integer, dimension(num_domains) :: weDimID, weStagDimID, snDimID, snStagDimID, &
      btDimID, btStagDimID, slSDimID, tmp
@@ -3710,11 +3702,12 @@ integer :: MemberDimID, DomDimID
 integer :: DXVarID, DYVarID, TRUELAT1VarID, TRUELAT2VarID, STAND_LONVarID
 integer :: CEN_LATVarID, CEN_LONVarID, MAP_PROJVarID
 integer :: PERIODIC_XVarID, POLARVarID
-integer :: metadataID, wrfStateID, wrfDimID, WRFStateVarID, WRFStateDimID
 
 integer, dimension(num_domains) :: DNVarID, ZNUVarID, DNWVarID, phbVarID, &
      MubVarID, LonVarID, LatVarID, ilevVarID, XlandVarID, hgtVarID , LatuVarID, &
      LatvVarID, LonuVarID, LonvVarID, ZNWVarID
+
+integer :: TimeDimID
 
 ! currently unused, but if needed could be added back in.  these fields
 ! only appear to be supported in certain projections, so the code should
@@ -3722,133 +3715,88 @@ integer, dimension(num_domains) :: DNVarID, ZNUVarID, DNWVarID, phbVarID, &
 !integer, dimension(num_domains) :: MapFacMVarID, MapFacUVarID, MapFacVVarID
 
 integer :: var_id
-integer :: i, id
+integer :: i, id, ret
 
 character(len=129) :: title
-
-character(len=8)      :: crdate      ! needed by F90 DATE_AND_TIME intrinsic
-character(len=10)     :: crtime      ! needed by F90 DATE_AND_TIME intrinsic
-character(len=5)      :: crzone      ! needed by F90 DATE_AND_TIME intrinsic
-integer, dimension(8) :: values      ! needed by F90 DATE_AND_TIME intrinsic
-character(len=NF90_MAX_NAME) :: str1
+character(len=32) :: context = 'nc_write_model_atts'
 
 character (len=1)     :: idom
 
 character(len=129), allocatable, dimension(:) :: textblock
-integer :: nlines, linelen
-integer :: linelenDimID, nlinesDimID, nmlVarID
 integer :: ind, my_index
 character(len=NF90_MAX_NAME) :: attname, varname
 character(len=129) :: unitsval, descriptionval, coordinatesval, long_nameval, coordinate_char
-integer, dimension(5) :: dimids_3D
-integer, dimension(4) :: dimids_2D
 logical               :: debug = .false.
+character(len=256) :: filename
 
-!-----------------------------------------------------------------
 
-ierr = 0     ! assume normal termination
 
-!-----------------------------------------------------------------
-! make sure ncFileID refers to an open netCDF file, 
-! and then put into define mode.
-!-----------------------------------------------------------------
+! use netcdf file id for identification
+write(filename,*) 'ncid', ncid
 
-call nc_check(nf90_get_att(ncFileID, NF90_GLOBAL, 'title', title), 'nc_write_model_atts','get_att')
-call nc_check(nf90_Inquire(ncFileID, nDimensions, nVariables, nAttributes, unlimitedDimID), &
-              'nc_write_model_atts','inquire')
-call nc_check(nf90_Redef(ncFileID),'nc_write_model_atts','redef')
-
-!-----------------------------------------------------------------
-! We need the dimension ID for the number of copies 
-!-----------------------------------------------------------------
-
-call nc_check(nf90_inq_dimid(ncid=ncFileID, name="NMLlinelen", dimid=linelenDimID), &
-              'nc_write_model_atts','inq_dimid NMLlinelen')
-call nc_check(nf90_inq_dimid(ncid=ncFileID, name="copy", dimid=MemberDimID), &
-              'nc_write_model_atts','inq_dimid copy')
-call nc_check(nf90_inq_dimid(ncid=ncFileID, name="time", dimid= TimeDimID), &
-              'nc_write_model_atts','inq_dimid time')
-
-if ( TimeDimID /= unlimitedDimId ) then
-   write(errstring,*)'Time Dimension ID ',TimeDimID, &
-        ' must match Unlimited Dimension ID ',unlimitedDimID
-   call error_handler(E_ERR,'nc_write_model_atts', errstring, source, revision, revdate)
-endif
-
-!-----------------------------------------------------------------
-! Define the model size, state variable dimension ... whatever ...
-!-----------------------------------------------------------------
-call nc_check(nf90_def_dim(ncid=ncFileID, name="StateVariable", &
-              len=wrf%model_size, dimid = StateVarDimID), &
-              'nc_write_model_atts','def_dim StateVariable')
-
-!-----------------------------------------------------------------
+!-------------------------------------------------------------------------------
+! Put file into define mode and
 ! Write Global Attributes 
-!-----------------------------------------------------------------
-call DATE_AND_TIME(crdate,crtime,crzone,values)
-write(str1,'(''YYYY MM DD HH MM SS = '',i4,5(1x,i2.2))') &
-                  values(1), values(2), values(3), values(5), values(6), values(7)
+!-------------------------------------------------------------------------------
+call nc_begin_define_mode(ncid)
 
-call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, "creation_date",str1), &
-              'nc_write_model_atts','put_att creation_date')
-call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, "model","WRF"), &
-              'nc_write_model_atts','put_att model')
-call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, "model_source",source), &
-              'nc_write_model_atts','put_att model_source')
-call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, "model_revision",revision), &
-              'nc_write_model_atts','put_att model_revision')
-call nc_check(nf90_put_att(ncFileID, NF90_GLOBAL, "model_revdate",revdate), &
-              'nc_write_model_atts','put_att model_revdate')
+call nc_add_global_creation_time(ncid)
 
-!-----------------------------------------------------------------
-! how about namelist input? might be nice to save ...
-! long lines are truncated when read into textblock
-!-----------------------------------------------------------------
+call nc_add_global_attribute(ncid, "model_source", source )
+call nc_add_global_attribute(ncid, "model_revision", revision )
+call nc_add_global_attribute(ncid, "model_revdate", revdate )
 
-call find_textfile_dims(wrf_nml_file, nlines, linelen)
-if (nlines <= 0 .or. linelen <= 0) have_wrf_nml_file = .false.
-
-if (have_wrf_nml_file) then
-   allocate(textblock(nlines))
-   textblock = ''
-
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="nlines", &
-                 len = nlines, dimid = nlinesDimID), &
-                 'nc_write_model_atts', 'def_dim nlines ')
-endif
+call nc_add_global_attribute(ncid, "model", "wrf")
 
 !-----------------------------------------------------------------
 ! Define the dimensions IDs
 !-----------------------------------------------------------------
 
-call nc_check(nf90_def_dim(ncid=ncFileID, name="domain", &
+!>@todo all the wrf files use Time as the first dimension
+!> but if we are creating a file from scratch, we need this
+!> to be made
+ret = nf90_inq_dimid(ncid, "Time", TimeDimID)
+if (ret /= NF90_NOERR) then
+   call nc_check(nf90_def_dim(ncid=ncid, name="Time", &
+                 len = 1,  dimid = TimeDimID), &
+                 'nc_write_model_atts','def_dim domain')
+endif
+
+!>@todo FIXME we shouldn't need domain anymore because this
+!> routine is called once per domain.
+call nc_check(nf90_def_dim(ncid=ncid, name="domain", &
               len = num_domains,  dimid = DomDimID), &
               'nc_write_model_atts','def_dim domain')
 
-do id=1,num_domains
-   write( idom , '(I1)') id
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="west_east_d0"//idom,        &
+!>@todo FIXME all the variables below should have Time as
+!> the first dimension.  they shouldn't have _d0X in their
+!> names.
+
+!do id=1,num_domains
+   id = dom_id
+!   write( idom , '(I1)') dom_id
+   call nc_check(nf90_def_dim(ncid=ncid, name='west_east', &
                  len = wrf%dom(id)%we,  dimid = weDimID(id)), &
-                 'nc_write_model_atts','def_dim west_east_d0'//idom)
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="west_east_stag_d0"//idom,   &
+                 'nc_write_model_atts','def_dim west_east')
+   call nc_check(nf90_def_dim(ncid=ncid, name='west_east_stag',   &
                  len = wrf%dom(id)%wes, dimid = weStagDimID(id)), &
-                 'nc_write_model_atts','def_dim west_east_stag_d0'//idom)
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="south_north_d0"//idom,      &
+                 'nc_write_model_atts','def_dim west_east_stag')
+   call nc_check(nf90_def_dim(ncid=ncid, name='south_north',      &
                  len = wrf%dom(id)%sn,  dimid = snDimID(id)), &
-                 'nc_write_model_atts','def_dim south_north_d0'//idom)
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="south_north_stag_d0"//idom, &
+                 'nc_write_model_atts','def_dim south_north')
+   call nc_check(nf90_def_dim(ncid=ncid, name='south_north_stag', &
                  len = wrf%dom(id)%sns, dimid = snStagDimID(id)), &
-                 'nc_write_model_atts','def_dim south_north_stag_d0'//idom)
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="bottom_top_d0"//idom,       &
+                 'nc_write_model_atts','def_dim south_north_stag')
+   call nc_check(nf90_def_dim(ncid=ncid, name='bottom_top',       &
                  len = wrf%dom(id)%bt,  dimid = btDimID(id)), &
-                 'nc_write_model_atts','def_dim bottom_top_d0'//idom)
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="bottom_top_stag_d0"//idom,  &
+                 'nc_write_model_atts','def_dim bottom_top')
+   call nc_check(nf90_def_dim(ncid=ncid, name='bottom_top_stag',  &
                  len = wrf%dom(id)%bts, dimid = btStagDimID(id)), &
-                 'nc_write_model_atts','def_dim bottom_top_stag_d0'//idom)
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="soil_layers_stag_d0"//idom,  &
+                 'nc_write_model_atts','def_dim bottom_top_stag')
+   call nc_check(nf90_def_dim(ncid=ncid, name='soil_layers_stag',  &
                  len = wrf%dom(id)%sls, dimid = slSDimID(id)), &
-                 'nc_write_model_atts','def_dim soil_layers_stag_d0'//idom)
-enddo
+                 'nc_write_model_atts','def_dim soil_layers_stag')
+!enddo
 
 !-----------------------------------------------------------------
 ! Create the (empty) Variables and the Attributes
@@ -3859,975 +3807,503 @@ enddo
 ! Commented block is from wrfinput
 !-----------------------------------------------------------------
 
-if (have_wrf_nml_file) then
-   call nc_check(nf90_def_var(ncFileID,name="WRFnml", xtype=nf90_char,    &
-                 dimids = (/ linelenDimID, nlinesDimID /),  varid=nmlVarID), &
-                 'nc_write_model_atts', 'def_var WRFnml')
-   call nc_check(nf90_put_att(ncFileID, nmlVarID, "long_name",       &
-                 "namelist.input contents"), 'nc_write_model_atts', 'put_att WRFnml')
-endif
-
-call nc_check(nf90_def_var(ncFileID, name="DX", xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='DX', xtype=nf90_real, &
               dimids= DomDimID, varid=DXVarID), &
               'nc_write_model_atts','def_var DX')
-call nc_check(nf90_put_att(ncFileID, DXVarID, "long_name", "X HORIZONTAL RESOLUTION"), &
+call nc_check(nf90_put_att(ncid, DXVarID, 'long_name', 'X HORIZONTAL RESOLUTION'), &
               'nc_write_model_atts','put_att DX long_name')
-call nc_check(nf90_put_att(ncFileID, DXVarID, "description", "X HORIZONTAL RESOLUTION"), &
+call nc_check(nf90_put_att(ncid, DXVarID, 'description', 'X HORIZONTAL RESOLUTION'), &
               'nc_write_model_atts','put_att DX description')
-call nc_check(nf90_put_att(ncFileID, DXVarID, "units", "m"), &
+call nc_check(nf90_put_att(ncid, DXVarID, 'units', 'm'), &
               'nc_write_model_atts','put_att DX units')
 
-call nc_check(nf90_def_var(ncFileID, name="DY", xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='DY', xtype=nf90_real, &
               dimids= DomDimID, varid=DYVarID), &
               'nc_write_model_atts','def_var DY')
-call nc_check(nf90_put_att(ncFileID, DYVarID, "long_name", "Y HORIZONTAL RESOLUTION"), &
+call nc_check(nf90_put_att(ncid, DYVarID, 'long_name', 'Y HORIZONTAL RESOLUTION'), &
               'nc_write_model_atts','put_att DY long_name')
-call nc_check(nf90_put_att(ncFileID, DYVarID, "description", "Y HORIZONTAL RESOLUTION"), &
+call nc_check(nf90_put_att(ncid, DYVarID, 'description', 'Y HORIZONTAL RESOLUTION'), &
               'nc_write_model_atts','put_att DY description')
-call nc_check(nf90_put_att(ncFileID, DYVarID, "units", "m"), &
+call nc_check(nf90_put_att(ncid, DYVarID, 'units', 'm'), &
               'nc_write_model_atts','put_att DY units')
 
-call nc_check(nf90_def_var(ncFileID, name="TRUELAT1", xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='TRUELAT1', xtype=nf90_real, &
               dimids= DomDimID, varid=TRUELAT1VarID), &
               'nc_write_model_atts','def_var TRUELAT1')
-call nc_check(nf90_put_att(ncFileID, TRUELAT1VarID, "long_name", &
-              "first standard parallel"), &
+call nc_check(nf90_put_att(ncid, TRUELAT1VarID, 'long_name', &
+              'first standard parallel'), &
               'nc_write_model_atts','put_att TRUELAT1 long_name')
-call nc_check(nf90_put_att(ncFileID, TRUELAT1VarID, "description", &
-              "first standard parallel"), &
+call nc_check(nf90_put_att(ncid, TRUELAT1VarID, 'description', &
+              'first standard parallel'), &
               'nc_write_model_atts','put_att TRUELAT1 description')
-call nc_check(nf90_put_att(ncFileID, TRUELAT1VarID, "units", &
-              "degrees, negative is south"), &
+call nc_check(nf90_put_att(ncid, TRUELAT1VarID, 'units', &
+              'degrees, negative is south'), &
               'nc_write_model_atts','put_att TRUELAT1 units')
 
-call nc_check(nf90_def_var(ncFileID, name="TRUELAT2", xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='TRUELAT2', xtype=nf90_real, &
               dimids= DomDimID, varid=TRUELAT2VarID), &
               'nc_write_model_atts','def_var TRUELAT2')
-call nc_check(nf90_put_att(ncFileID, TRUELAT2VarID, "long_name", &
-              "second standard parallel"), &
+call nc_check(nf90_put_att(ncid, TRUELAT2VarID, 'long_name', &
+              'second standard parallel'), &
               'nc_write_model_atts','put_att TRUELAT2 long_name')
-call nc_check(nf90_put_att(ncFileID, TRUELAT2VarID, "description", &
-              "second standard parallel"), &
+call nc_check(nf90_put_att(ncid, TRUELAT2VarID, 'description', &
+              'second standard parallel'), &
               'nc_write_model_atts','put_att TRUELAT2 description')
-call nc_check(nf90_put_att(ncFileID, TRUELAT2VarID, "units", &
-              "degrees, negative is south"), &
+call nc_check(nf90_put_att(ncid, TRUELAT2VarID, 'units', &
+              'degrees, negative is south'), &
               'nc_write_model_atts','put_att TRUELAT2 units')
 
-call nc_check(nf90_def_var(ncFileID, name="STAND_LON", xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='STAND_LON', xtype=nf90_real, &
               dimids= DomDimID, varid=STAND_LONVarID), &
               'nc_write_model_atts','def_var STAND_LON')
-call nc_check(nf90_put_att(ncFileID, STAND_LONVarID, "long_name", &
-              "standard longitude"), &
+call nc_check(nf90_put_att(ncid, STAND_LONVarID, 'long_name', &
+              'standard longitude'), &
               'nc_write_model_atts','put_att STAND_LON long_name')
-call nc_check(nf90_put_att(ncFileID, STAND_LONVarID, "description", &
-              "standard longitude"), &
+call nc_check(nf90_put_att(ncid, STAND_LONVarID, 'description', &
+              'standard longitude'), &
               'nc_write_model_atts','put_att STAND_LON description')
-call nc_check(nf90_put_att(ncFileID, STAND_LONVarID, "units", &
-              "degrees, negative is west"), &
+call nc_check(nf90_put_att(ncid, STAND_LONVarID, 'units', &
+              'degrees, negative is west'), &
               'nc_write_model_atts','put_att STAND_LON units')
 
-call nc_check(nf90_def_var(ncFileID, name="CEN_LAT", xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='CEN_LAT', xtype=nf90_real, &
               dimids= DomDimID, varid=CEN_LATVarID), &
               'nc_write_model_atts','def_var CEN_LAT')
-call nc_check(nf90_put_att(ncFileID, CEN_LATVarID, "long_name", &
-              "center latitude"), &
+call nc_check(nf90_put_att(ncid, CEN_LATVarID, 'long_name', &
+              'center latitude'), &
               'nc_write_model_atts','put_att CEN_LAT long_name')
-call nc_check(nf90_put_att(ncFileID, CEN_LATVarID, "description", &
-              "center latitude"), &
+call nc_check(nf90_put_att(ncid, CEN_LATVarID, 'description', &
+              'center latitude'), &
               'nc_write_model_atts','put_att CEN_LAT description')
-call nc_check(nf90_put_att(ncFileID, CEN_LATVarID, "units", &
-              "degrees, negative is south"), &
+call nc_check(nf90_put_att(ncid, CEN_LATVarID, 'units', &
+              'degrees, negative is south'), &
               'nc_write_model_atts','put_att CEN_LAT units')
 
-call nc_check(nf90_def_var(ncFileID, name="CEN_LON", xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='CEN_LON', xtype=nf90_real, &
               dimids= DomDimID, varid=CEN_LONVarID), &
               'nc_write_model_atts','def_var CEN_LON')
-call nc_check(nf90_put_att(ncFileID, CEN_LONVarID, "long_name", &
-              "central longitude"), &
+call nc_check(nf90_put_att(ncid, CEN_LONVarID, 'long_name', &
+              'central longitude'), &
               'nc_write_model_atts','put_att CEN_LON long_name')
-call nc_check(nf90_put_att(ncFileID, CEN_LONVarID, "description", &
-              "central longitude"), &
+call nc_check(nf90_put_att(ncid, CEN_LONVarID, 'description', &
+              'central longitude'), &
               'nc_write_model_atts','put_att CEN_LON description')
-call nc_check(nf90_put_att(ncFileID, CEN_LONVarID, "units", &
-              "degrees, negative is west"), &
+call nc_check(nf90_put_att(ncid, CEN_LONVarID, 'units', &
+              'degrees, negative is west'), &
               'nc_write_model_atts','put_att CEN_LON units')
 
-call nc_check(nf90_def_var(ncFileID, name="MAP_PROJ", xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='MAP_PROJ', xtype=nf90_real, &
               dimids= DomDimID, varid=MAP_PROJVarID), &
               'nc_write_model_atts','def_var MAP_PROJ')
-call nc_check(nf90_put_att(ncFileID, MAP_PROJVarID, "long_name", &
-              "domain map projection"), &
+call nc_check(nf90_put_att(ncid, MAP_PROJVarID, 'long_name', &
+              'domain map projection'), &
               'nc_write_model_atts','put_att MAP_PROJ long_name')
-call nc_check(nf90_put_att(ncFileID, MAP_PROJVarID, "description", &
-              "domain map projection"), &
+call nc_check(nf90_put_att(ncid, MAP_PROJVarID, 'description', &
+              'domain map projection'), &
               'nc_write_model_atts','put_att MAP_PROJ description')
-call nc_check(nf90_put_att(ncFileID, MAP_PROJVarID, "units", &
-              "0=none, 1=Lambert, 2=polar, 3=Mercator, 5=Cylindrical, 6=Cassini"), &
+call nc_check(nf90_put_att(ncid, MAP_PROJVarID, 'units', &
+              '0=none, 1=Lambert, 2=polar, 3=Mercator, 5=Cylindrical, 6=Cassini'), &
               'nc_write_model_atts','put_att MAP_PROJ units')
 
 !nc -- we need to add in code here to report the domain values for the 
 !        boundary condition flags periodic_x and polar.  Since these are
 !        carried internally as logicals, they will first need to be 
 !        converted back to integers.
-call nc_check(nf90_def_var(ncFileID, name="PERIODIC_X", xtype=nf90_int, &
+call nc_check(nf90_def_var(ncid, name='PERIODIC_X', xtype=nf90_int, &
               dimids= DomDimID, varid=PERIODIC_XVarID), &
               'nc_write_model_atts','def_var PERIODIC_X')
-call nc_check(nf90_put_att(ncFileID, PERIODIC_XVarID, "long_name", &
-              "Longitudinal periodic b.c. flag"), &
+call nc_check(nf90_put_att(ncid, PERIODIC_XVarID, 'long_name', &
+              'Longitudinal periodic b.c. flag'), &
               'nc_write_model_atts','put_att PERIODIC_X long_name')
-call nc_check(nf90_put_att(ncFileID, PERIODIC_XVarID, "description", &
-              "Longitudinal periodic b.c. flag"), &
+call nc_check(nf90_put_att(ncid, PERIODIC_XVarID, 'description', &
+              'Longitudinal periodic b.c. flag'), &
               'nc_write_model_atts','put_att PERIODIC_X desciption')
-call nc_check(nf90_put_att(ncFileID, PERIODIC_XVarID, "units", &
-              "logical: 1 = .true., 0 = .false."), &
+call nc_check(nf90_put_att(ncid, PERIODIC_XVarID, 'units', &
+              'logical: 1 = .true., 0 = .false.'), &
               'nc_write_model_atts','put_att PERIODIC_X units')
 
-call nc_check(nf90_def_var(ncFileID, name="POLAR", xtype=nf90_int, &
+call nc_check(nf90_def_var(ncid, name='POLAR', xtype=nf90_int, &
               dimids= DomDimID, varid=POLARVarID), &
               'nc_write_model_atts','def_var POLAR')
-call nc_check(nf90_put_att(ncFileID, POLARVarID, "long_name", &
-              "Polar periodic b.c. flag"), &
+call nc_check(nf90_put_att(ncid, POLARVarID, 'long_name', &
+              'Polar periodic b.c. flag'), &
               'nc_write_model_atts','put_att POLAR long_name')
-call nc_check(nf90_put_att(ncFileID, POLARVarID, "description", &
-              "Polar periodic b.c. flag"), &
+call nc_check(nf90_put_att(ncid, POLARVarID, 'description', &
+              'Polar periodic b.c. flag'), &
               'nc_write_model_atts','put_att POLAR description')
-call nc_check(nf90_put_att(ncFileID, POLARVarID, "units", &
-              "logical: 1 = .true., 0 = .false."), &
+call nc_check(nf90_put_att(ncid, POLARVarID, 'units', &
+              'logical: 1 = .true., 0 = .false.'), &
               'nc_write_model_atts','put_att POLAR units')
 
 
 
-do id=1,num_domains
-   write( idom , '(I1)') id
+write( idom , '(I1)') dom_id
 
-   call nc_check(nf90_def_var(ncFileID, name="DN_d0"//idom, xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='DN', xtype=nf90_real, &
                  dimids= btDimID(id), varid=DNVarID(id)), &
                  'nc_write_model_atts','def_var DN_do'//idom)
-   call nc_check(nf90_put_att(ncFileID, DNVarID(id), "long_name", &
-                 "dn values on half (mass) levels"), &
+call nc_check(nf90_put_att(ncid, DNVarID(id), 'long_name', &
+                 'dn values on half (mass) levels'), &
                  'nc_write_model_atts','put_att DN_do'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, DNVarID(id), "description", &
-                 "dn values on half (mass) levels"), &
+call nc_check(nf90_put_att(ncid, DNVarID(id), 'description', &
+                 'dn values on half (mass) levels'), &
                  'nc_write_model_atts','put_att DN_do'//idom//' description')
-   call nc_check(nf90_put_att(ncFileID, DNVarID(id), "units", &
-                 ""), &
+call nc_check(nf90_put_att(ncid, DNVarID(id), 'units', &
+                 ''), &
                  'nc_write_model_atts','put_att DN_do'//idom//' units')
 
-   call nc_check(nf90_def_var(ncFileID, name="ZNU_d0"//idom, xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='ZNU', xtype=nf90_real, &
                  dimids= btDimID(id), varid=ZNUVarID(id)), &
-                 'nc_write_model_atts','def_var ZNU_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, ZNUVarID(id), "long_name", &
-                 "eta values on half (mass) levels"), &
-                 'nc_write_model_atts','put_att ZNU_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, ZNUVarID(id), "description", &
-                 "eta values on half (mass) levels"), &
-                 'nc_write_model_atts','put_att ZNU_d0'//idom//' description')
-   call nc_check(nf90_put_att(ncFileID, ZNUVarID(id), "units", &
-                 ""), &
-                 'nc_write_model_atts','put_att ZNU_d0'//idom//' units')
+                 'nc_write_model_atts','def_var ZNU')
+call nc_check(nf90_put_att(ncid, ZNUVarID(id), 'long_name', &
+                 'eta values on half (mass) levels'), &
+                 'nc_write_model_atts','put_att ZNU'//' long_name')
+call nc_check(nf90_put_att(ncid, ZNUVarID(id), 'description', &
+                 'eta values on half (mass) levels'), &
+                 'nc_write_model_atts','put_att ZNU'//' description')
+call nc_check(nf90_put_att(ncid, ZNUVarID(id), 'units', &
+                 ''), &
+                 'nc_write_model_atts','put_att ZNU'//' units')
 
-   call nc_check(nf90_def_var(ncFileID, name="ZNW_d0"//idom, xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='ZNW', xtype=nf90_real, &
                  dimids= btStagDimID(id), varid=ZNWVarID(id)), &
-                 'nc_write_model_atts','def_var ZNW_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, ZNWVarID(id), "long_name", &
-                 "eta values on full (mass) levels"), &
-                 'nc_write_model_atts','put_att ZNW_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, ZNWVarID(id), "description", &
-                 "eta values on full (mass) levels"), &
-                 'nc_write_model_atts','put_att ZNW_d0'//idom//' description')
-   call nc_check(nf90_put_att(ncFileID, ZNWVarID(id), "units", &
-                 ""), &
-                 'nc_write_model_atts','put_att ZNW_d0'//idom//' units')
+                 'nc_write_model_atts','def_var ZNW')
+call nc_check(nf90_put_att(ncid, ZNWVarID(id), 'long_name', &
+                 'eta values on full (mass) levels'), &
+                 'nc_write_model_atts','put_att ZNW'//' long_name')
+call nc_check(nf90_put_att(ncid, ZNWVarID(id), 'description', &
+                 'eta values on full (mass) levels'), &
+                 'nc_write_model_atts','put_att ZNW'//' description')
+call nc_check(nf90_put_att(ncid, ZNWVarID(id), 'units', &
+                 ''), &
+                 'nc_write_model_atts','put_att ZNW'//' units')
 
-   call nc_check(nf90_def_var(ncFileID, name="DNW_d0"//idom, xtype=nf90_real, &
+call nc_check(nf90_def_var(ncid, name='DNW', xtype=nf90_real, &
                  dimids= btDimID(id), varid=DNWVarID(id)), &
-                 'nc_write_model_atts','def_var DNW_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, DNWVarID(id), "long_name", &
-                 "dn values on full (w) levels"), &
-                 'nc_write_model_atts','def_var DNW_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, DNWVarID(id), "description", &
-                 "dn values on full (w) levels"), &
-                 'nc_write_model_atts','def_var DNW_d0'//idom//' description')
-   call nc_check(nf90_put_att(ncFileID, DNWVarID(id), "units", &
-                 ""), &
-                 'nc_write_model_atts','def_var DNW_d0'//idom//' units')
+                 'nc_write_model_atts','def_var DNW')
+call nc_check(nf90_put_att(ncid, DNWVarID(id), 'long_name', &
+                 'dn values on full (w) levels'), &
+                 'nc_write_model_atts','def_var DNW'//' long_name')
+call nc_check(nf90_put_att(ncid, DNWVarID(id), 'description', &
+                 'dn values on full (w) levels'), &
+                 'nc_write_model_atts','def_var DNW'//' description')
+call nc_check(nf90_put_att(ncid, DNWVarID(id), 'units', &
+                 ''), &
+                 'nc_write_model_atts','def_var DNW'//' units')
 
 !
 !    float MUB(Time, south_north, west_east) ;
 !            MUB:FieldType = 104 ;
-!            MUB:MemoryOrder = "XY " ;
-!            MUB:stagger = "" ;
-             coordinate_char = "XLONG_d0"//idom//" XLAT_d0"//idom
-   call nc_check(nf90_def_var(ncFileID, name="MUB_d0"//idom, xtype=nf90_real, &
+!            MUB:MemoryOrder = 'XY ' ;
+!            MUB:stagger = '' ;
+             coordinate_char = 'XLONG'//' XLAT'
+call nc_check(nf90_def_var(ncid, name='MUB', xtype=nf90_real, &
                  dimids= (/ weDimID(id), snDimID(id) /), varid=MubVarID(id)), &
-                 'nc_write_model_atts','def_var MUB_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, MubVarID(id), "long_name", &
-                 "base state dry air mass in column"), &
-                 'nc_write_model_atts','put_att MUB_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, MubVarID(id), "description", &
-                 "base state dry air mass in column"), &
-                 'nc_write_model_atts','put_att MUB_d0'//idom//' description')
-   call nc_check(nf90_put_att(ncFileID, MubVarID(id), "units", "Pa"), &
-                 'nc_write_model_atts','put_att MUB_d0'//idom//' units')
-   call nc_check(nf90_put_att(ncFileID, MubVarID(id), "coordinates", &
+                 'nc_write_model_atts','def_var MUB')
+call nc_check(nf90_put_att(ncid, MubVarID(id), 'long_name', &
+                 'base state dry air mass in column'), &
+                 'nc_write_model_atts','put_att MUB'//' long_name')
+call nc_check(nf90_put_att(ncid, MubVarID(id), 'description', &
+                 'base state dry air mass in column'), &
+                 'nc_write_model_atts','put_att MUB'//' description')
+call nc_check(nf90_put_att(ncid, MubVarID(id), 'units', 'Pa'), &
+                 'nc_write_model_atts','put_att MUB'//' units')
+call nc_check(nf90_put_att(ncid, MubVarID(id), 'coordinates', &
                  trim(coordinate_char)), &
-                 'nc_write_model_atts','put_att MUB_d0'//idom//' coordinates')
+                 'nc_write_model_atts','put_att MUB'//' coordinates')
 
 ! Longitudes
 !      float XLONG(Time, south_north, west_east) ;
 !         XLONG:FieldType = 104 ;
-!         XLONG:MemoryOrder = "XY " ;
-!         XLONG:stagger = "" ;
-   call nc_check(nf90_def_var(ncFileID, name="XLONG_d0"//idom, xtype=nf90_real, &
+!         XLONG:MemoryOrder = 'XY ' ;
+!         XLONG:stagger = '' ;
+   call nc_check(nf90_def_var(ncid, name='XLONG', xtype=nf90_real, &
                  dimids= (/ weDimID(id), snDimID(id) /), varid=LonVarID(id)),  &
-                 'nc_write_model_atts','def_var XLONG_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, LonVarID(id), "long_name", &
-                 "LONGITUDE, WEST IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLONG_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, LonVarID(id), "units", "degrees_east"), &
-                 'nc_write_model_atts','put_att XLONG_d0'//idom//' units')
-   call nc_check(nf90_put_att(ncFileID, LonVarID(id), "valid_range", &
+                 'nc_write_model_atts','def_var XLONG')
+   call nc_check(nf90_put_att(ncid, LonVarID(id), 'long_name', &
+                 'LONGITUDE, WEST IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLONG'//' long_name')
+   call nc_check(nf90_put_att(ncid, LonVarID(id), 'units', 'degrees_east'), &
+                 'nc_write_model_atts','put_att XLONG'//' units')
+   call nc_check(nf90_put_att(ncid, LonVarID(id), 'valid_range', &
                  (/ -180.0_r8, 180.0_r8 /)), &
-                 'nc_write_model_atts','put_att XLONG_d0'//idom//' valid_range')
-   call nc_check(nf90_put_att(ncFileID, LonVarID(id), "description", &
-                 "LONGITUDE, WEST IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLONG_d0'//idom//' description')
+                 'nc_write_model_atts','put_att XLONG'//' valid_range')
+   call nc_check(nf90_put_att(ncid, LonVarID(id), 'description', &
+                 'LONGITUDE, WEST IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLONG'//' description')
 
 !      float XLONG_U(Time, south_north, west_east_stag) ;
 !         XLONG:FieldType = 104 ;
-!         XLONG:MemoryOrder = "XY " ;
-!         XLONG:stagger = "" ;
-   call nc_check(nf90_def_var(ncFileID, name="XLONG_U_d0"//idom, xtype=nf90_real, &
+!         XLONG:MemoryOrder = 'XY ' ;
+!         XLONG:stagger = '' ;
+   call nc_check(nf90_def_var(ncid, name='XLONG_U', xtype=nf90_real, &
                  dimids= (/ weStagDimID(id), snDimID(id) /), varid=LonuVarID(id)),  &
-                 'nc_write_model_atts','def_var XLONG_U_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, LonVarID(id), "long_name", &
-                 "LONGITUDE, WEST IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLONG_U_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, LonuVarID(id), "units", "degrees_east"), &
-                 'nc_write_model_atts','put_att XLONG_U_d0'//idom//' units')
-   call nc_check(nf90_put_att(ncFileID, LonuVarID(id), "valid_range", &
+                 'nc_write_model_atts','def_var XLONG_U')
+   call nc_check(nf90_put_att(ncid, LonVarID(id), 'long_name', &
+                 'LONGITUDE, WEST IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLONG_U'//' long_name')
+   call nc_check(nf90_put_att(ncid, LonuVarID(id), 'units', 'degrees_east'), &
+                 'nc_write_model_atts','put_att XLONG_U'//' units')
+   call nc_check(nf90_put_att(ncid, LonuVarID(id), 'valid_range', &
                  (/ -180.0_r8, 180.0_r8 /)), &
-                 'nc_write_model_atts','put_att XLONG_U_d0'//idom//' valid_range')
-   call nc_check(nf90_put_att(ncFileID, LonuVarID(id), "description", &
-                 "LONGITUDE, WEST IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLONG_U_d0'//idom//' description')
+                 'nc_write_model_atts','put_att XLONG_U'//' valid_range')
+   call nc_check(nf90_put_att(ncid, LonuVarID(id), 'description', &
+                 'LONGITUDE, WEST IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLONG_U'//' description')
 
 !      float XLONG_V(Time, south_north_stag, west_east) ;
 !         XLONG:FieldType = 104 ;
-!         XLONG:MemoryOrder = "XY " ;
-!         XLONG:stagger = "" ;
-   call nc_check(nf90_def_var(ncFileID, name="XLONG_V_d0"//idom, xtype=nf90_real, &
+!         XLONG:MemoryOrder = 'XY ' ;
+!         XLONG:stagger = '' ;
+call nc_check(nf90_def_var(ncid, name='XLONG_V', xtype=nf90_real, &
                  dimids= (/ weDimID(id), snStagDimID(id) /), varid=LonvVarID(id)),  &
-                 'nc_write_model_atts','def_var XLONG_V_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, LonvVarID(id), "long_name", &
-                 "LONGITUDE, WEST IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLONG_V_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, LonvVarID(id), "units", "degrees_east"), &
-                 'nc_write_model_atts','put_att XLONG_V_d0'//idom//' units')
-   call nc_check(nf90_put_att(ncFileID, LonvVarID(id), "valid_range", &
+                 'nc_write_model_atts','def_var XLONG_V')
+call nc_check(nf90_put_att(ncid, LonvVarID(id), 'long_name', &
+                 'LONGITUDE, WEST IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLONG_V'//' long_name')
+call nc_check(nf90_put_att(ncid, LonvVarID(id), 'units', 'degrees_east'), &
+                 'nc_write_model_atts','put_att XLONG_V'//' units')
+call nc_check(nf90_put_att(ncid, LonvVarID(id), 'valid_range', &
                  (/ -180.0_r8, 180.0_r8 /)), &
-                 'nc_write_model_atts','put_att XLONG_V_d0'//idom//' valid_range')
-   call nc_check(nf90_put_att(ncFileID, LonvVarID(id), "description", &
-                 "LONGITUDE, WEST IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLONG_V_d0'//idom//' description')
+                 'nc_write_model_atts','put_att XLONG_V'//' valid_range')
+call nc_check(nf90_put_att(ncid, LonvVarID(id), 'description', &
+                 'LONGITUDE, WEST IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLONG_V'//' description')
 
 ! Latitudes
 !      float XLAT(Time, south_north, west_east) ;
 !         XLAT:FieldType = 104 ;
-!         XLAT:MemoryOrder = "XY " ;
-!         XLAT:stagger = "" ;
-   call nc_check(nf90_def_var(ncFileID, name="XLAT_d0"//idom, xtype=nf90_real, &
+!         XLAT:MemoryOrder = 'XY ' ;
+!         XLAT:stagger = '' ;
+call nc_check(nf90_def_var(ncid, name='XLAT', xtype=nf90_real, &
                  dimids=(/ weDimID(id), snDimID(id) /), varid=LatVarID(id)), &
-                 'nc_write_model_atts','def_var XLAT_d0'//idom) 
-   call nc_check(nf90_put_att(ncFileID, LatVarID(id), "long_name", &
-                 "LATITUDE, SOUTH IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLAT_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, LatVarID(id), "units", "degrees_north"), &
-                 'nc_write_model_atts','put_att XLAT_d0'//idom//' units')
-   call nc_check(nf90_put_att(ncFileID, LatVarID(id), "valid_range", &
+                 'nc_write_model_atts','def_var XLAT') 
+call nc_check(nf90_put_att(ncid, LatVarID(id), 'long_name', &
+                 'LATITUDE, SOUTH IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLAT'//' long_name')
+call nc_check(nf90_put_att(ncid, LatVarID(id), 'units', 'degrees_north'), &
+                 'nc_write_model_atts','put_att XLAT'//' units')
+call nc_check(nf90_put_att(ncid, LatVarID(id), 'valid_range', &
                  (/ -90.0_r8, 90.0_r8 /)), &
-                 'nc_write_model_atts','put_att XLAT_d0'//idom//' valid_range')
-   call nc_check(nf90_put_att(ncFileID, LatVarID(id), "description", &
-                 "LATITUDE, SOUTH IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLAT_d0'//idom//' description')
+                 'nc_write_model_atts','put_att XLAT'//' valid_range')
+call nc_check(nf90_put_att(ncid, LatVarID(id), 'description', &
+                 'LATITUDE, SOUTH IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLAT'//' description')
 
 !      float XLAT_U(Time, south_north, west_east_stag) ;
 !         XLAT_U:FieldType = 104 ;
-!         XLAT_U:MemoryOrder = "XY " ;
-!         XLAT_U:stagger = "" ;
-   call nc_check(nf90_def_var(ncFileID, name="XLAT_U_d0"//idom, xtype=nf90_real, &
+!         XLAT_U:MemoryOrder = 'XY ' ;
+!         XLAT_U:stagger = '' ;
+call nc_check(nf90_def_var(ncid, name='XLAT_U', xtype=nf90_real, &
                  dimids=(/ weStagDimID(id), snDimID(id) /), varid=LatuVarID(id)), &
-                 'nc_write_model_atts','def_var XLAT_U_d0'//idom) 
-   call nc_check(nf90_put_att(ncFileID, LatuVarID(id), "long_name", &
-                 "LATITUDE, SOUTH IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLAT_U_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, LatuVarID(id), "units", "degrees_north"), &
-                 'nc_write_model_atts','put_att XLAT_U_d0'//idom//' units')
-   call nc_check(nf90_put_att(ncFileID, LatuVarID(id), "valid_range", &
+                 'nc_write_model_atts','def_var XLAT_U') 
+call nc_check(nf90_put_att(ncid, LatuVarID(id), 'long_name', &
+                 'LATITUDE, SOUTH IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLAT_U'//' long_name')
+call nc_check(nf90_put_att(ncid, LatuVarID(id), 'units', 'degrees_north'), &
+                 'nc_write_model_atts','put_att XLAT_U'//' units')
+call nc_check(nf90_put_att(ncid, LatuVarID(id), 'valid_range', &
                  (/ -90.0_r8, 90.0_r8 /)), &
-                 'nc_write_model_atts','put_att XLAT_U_d0'//idom//' valid_range')
-   call nc_check(nf90_put_att(ncFileID, LatuVarID(id), "description", &
-                 "LATITUDE, SOUTH IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLAT_U_d0'//idom//' description')
+                 'nc_write_model_atts','put_att XLAT_U'//' valid_range')
+call nc_check(nf90_put_att(ncid, LatuVarID(id), 'description', &
+                 'LATITUDE, SOUTH IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLAT_U'//' description')
 
 !      float XLAT_V(Time, south_north_stag, west_east) ;
 !         XLAT_V:FieldType = 104 ;
-!         XLAT_V:MemoryOrder = "XY " ;
-!         XLAT_V:stagger = "" ;
-   call nc_check(nf90_def_var(ncFileID, name="XLAT_V_d0"//idom, xtype=nf90_real, &
+!         XLAT_V:MemoryOrder = 'XY ' ;
+!         XLAT_V:stagger = '' ;
+call nc_check(nf90_def_var(ncid, name='XLAT_V', xtype=nf90_real, &
                  dimids=(/ weDimID(id), snStagDimID(id) /), varid=LatvVarID(id)), &
-                 'nc_write_model_atts','def_var XLAT_V_d0'//idom) 
-   call nc_check(nf90_put_att(ncFileID, LatvVarID(id), "long_name", &
-                 "LATITUDE, SOUTH IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLAT_V_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, LatvVarID(id), "units", "degrees_north"), &
-                 'nc_write_model_atts','put_att XLAT_V_d0'//idom//' units')
-   call nc_check(nf90_put_att(ncFileID, LatvVarID(id), "valid_range", &
+                 'nc_write_model_atts','def_var XLAT_V') 
+call nc_check(nf90_put_att(ncid, LatvVarID(id), 'long_name', &
+                 'LATITUDE, SOUTH IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLAT_V'//' long_name')
+call nc_check(nf90_put_att(ncid, LatvVarID(id), 'units', 'degrees_north'), &
+                 'nc_write_model_atts','put_att XLAT_V'//' units')
+call nc_check(nf90_put_att(ncid, LatvVarID(id), 'valid_range', &
                  (/ -90.0_r8, 90.0_r8 /)), &
-                 'nc_write_model_atts','put_att XLAT_V_d0'//idom//' valid_range')
-   call nc_check(nf90_put_att(ncFileID, LatvVarID(id), "description", &
-                 "LATITUDE, SOUTH IS NEGATIVE"), &
-                 'nc_write_model_atts','put_att XLAT_V_d0'//idom//' description')
+                 'nc_write_model_atts','put_att XLAT_V'//' valid_range')
+call nc_check(nf90_put_att(ncid, LatvVarID(id), 'description', &
+                 'LATITUDE, SOUTH IS NEGATIVE'), &
+                 'nc_write_model_atts','put_att XLAT_V'//' description')
 
 ! grid levels
-   call nc_check(nf90_def_var(ncFileID, name="level_d0"//idom, xtype=nf90_short, &
+call nc_check(nf90_def_var(ncid, name='level', xtype=nf90_short, &
                  dimids=btDimID(id), varid=ilevVarID(id)), &
-                 'nc_write_model_atts','def_var level_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, ilevVarID(id), "long_name", &
-                 "level index"), &
-                 'nc_write_model_atts','put_att level_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, ilevVarID(id), "description", &
-                 "level index"), &
-                 'nc_write_model_atts','put_att level_d0'//idom//' description')
-   call nc_check(nf90_put_att(ncFileID, ilevVarID(id), "units", &
-                 ""), &
-                 'nc_write_model_atts','put_att level_d0'//idom//' units')
+                 'nc_write_model_atts','def_var level')
+call nc_check(nf90_put_att(ncid, ilevVarID(id), 'long_name', &
+                 'level index'), &
+                 'nc_write_model_atts','put_att level'//' long_name')
+call nc_check(nf90_put_att(ncid, ilevVarID(id), 'description', &
+                 'level index'), &
+                 'nc_write_model_atts','put_att level'//' description')
+call nc_check(nf90_put_att(ncid, ilevVarID(id), 'units', &
+                 ''), &
+                 'nc_write_model_atts','put_att level'//' units')
 
 ! Land Mask
 !    float XLAND(Time, south_north, west_east) ;
 !            XLAND:FieldType = 104 ;
-!            XLAND:MemoryOrder = "XY " ;
-!            XLAND:units = "NA" ;
-!            XLAND:stagger = "" ;
-             coordinate_char = "XLONG_d0"//idom//" XLAT_d0"//idom
-   call nc_check(nf90_def_var(ncFileID, name="XLAND_d0"//idom, xtype=nf90_short, &
+!            XLAND:MemoryOrder = 'XY ' ;
+!            XLAND:units = 'NA' ;
+!            XLAND:stagger = '' ;
+             coordinate_char = 'XLONG'//' XLAT'
+call nc_check(nf90_def_var(ncid, name='XLAND', xtype=nf90_short, &
                  dimids= (/ weDimID(id), snDimID(id) /), varid=XlandVarID(id)),  &
-                 'nc_write_model_atts','def_var XLAND_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, XlandVarID(id), "long_name", &
-                 "LAND MASK (1 FOR LAND, 2 FOR WATER)"), &
-                 'nc_write_model_atts','put_att XLAND_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, XlandVarID(id), "units", " "), &
-                 'nc_write_model_atts','put_att XLAND_d0'//idom//' units')
-   call nc_check(nf90_put_att(ncFileID, XlandVarID(id), "coordinates", &
+                 'nc_write_model_atts','def_var XLAND')
+call nc_check(nf90_put_att(ncid, XlandVarID(id), 'long_name', &
+                 'LAND MASK (1 FOR LAND, 2 FOR WATER)'), &
+                 'nc_write_model_atts','put_att XLAND'//' long_name')
+call nc_check(nf90_put_att(ncid, XlandVarID(id), 'units', ' '), &
+                 'nc_write_model_atts','put_att XLAND'//' units')
+call nc_check(nf90_put_att(ncid, XlandVarID(id), 'coordinates', &
                  trim(coordinate_char)), &
-                 'nc_write_model_atts','put_att XLAND_d0'//idom//' coordinates')
-   call nc_check(nf90_put_att(ncFileID, XlandVarID(id), "valid_range", (/ 1, 2 /)), &
-                 'nc_write_model_atts','put_att XLAND_d0'//idom//' valid_range')
-   call nc_check(nf90_put_att(ncFileID, XlandVarID(id), "description", &
-                 "LAND MASK (1 FOR LAND, 2 FOR WATER)"), &
-                 'nc_write_model_atts','put_att XLAND_d0'//idom//' description')
+                 'nc_write_model_atts','put_att XLAND'//' coordinates')
+call nc_check(nf90_put_att(ncid, XlandVarID(id), 'valid_range', (/ 1, 2 /)), &
+                 'nc_write_model_atts','put_att XLAND'//' valid_range')
+call nc_check(nf90_put_att(ncid, XlandVarID(id), 'description', &
+                 'LAND MASK (1 FOR LAND, 2 FOR WATER)'), &
+                 'nc_write_model_atts','put_att XLAND'//' description')
 
 ! PHB
 !    float PHB(Time, bottom_top_stag, south_north, west_east) ;
 !            PHB:FieldType = 104 ;
-!            PHB:MemoryOrder = "XYZ" ;
-!            PHB:stagger = "Z" ;
-             coordinate_char = "XLONG_d0"//idom//" XLAT_d0"//idom
-   call nc_check(nf90_def_var(ncFileID, name="PHB_d0"//idom, xtype=nf90_real, &
+!            PHB:MemoryOrder = 'XYZ' ;
+!            PHB:stagger = 'Z' ;
+             coordinate_char = 'XLONG'//' XLAT'
+call nc_check(nf90_def_var(ncid, name='PHB', xtype=nf90_real, &
         dimids= (/ weDimID(id), snDimID(id), btStagDimID(id) /), varid=phbVarId(id)), &
-        'nc_write_model_atts','def_var PHB_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, phbVarId(id), "long_name", &
-                 "base-state geopotential"), &
-                 'nc_write_model_atts','put_att PHB_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, phbVarId(id), "description", &
-                 "base-state geopotential"), &
-                 'nc_write_model_atts','put_att PHB_d0'//idom//' description')
-   call nc_check(nf90_put_att(ncFileID, phbVarId(id), "units", "m2/s2"), &
-                 'nc_write_model_atts','put_att PHB_d0'//idom//' units')
-   call nc_check(nf90_put_att(ncFileID, phbVarId(id), "coordinates", &
+        'nc_write_model_atts','def_var PHB')
+call nc_check(nf90_put_att(ncid, phbVarId(id), 'long_name', &
+                 'base-state geopotential'), &
+                 'nc_write_model_atts','put_att PHB'//' long_name')
+call nc_check(nf90_put_att(ncid, phbVarId(id), 'description', &
+                 'base-state geopotential'), &
+                 'nc_write_model_atts','put_att PHB'//' description')
+call nc_check(nf90_put_att(ncid, phbVarId(id), 'units', 'm2/s2'), &
+                 'nc_write_model_atts','put_att PHB'//' units')
+call nc_check(nf90_put_att(ncid, phbVarId(id), 'coordinates', &
                  trim(coordinate_char)), &
-                 'nc_write_model_atts','put_att PHB_d0'//idom//' coordinates')
-   call nc_check(nf90_put_att(ncFileID, phbVarId(id), "units_long_name", "m{2} s{-2}"), &
-                 'nc_write_model_atts','put_att PHB_d0'//idom//' units_long_name')
+                 'nc_write_model_atts','put_att PHB'//' coordinates')
+call nc_check(nf90_put_att(ncid, phbVarId(id), 'units_long_name', 'm{2} s{-2}'), &
+                 'nc_write_model_atts','put_att PHB'//' units_long_name')
 
-             coordinate_char = "XLONG_d0"//idom//" XLAT_d0"//idom
-   call nc_check(nf90_def_var(ncFileID, name="HGT_d0"//idom, xtype=nf90_real, &
+             coordinate_char = 'XLONG'//' XLAT'
+call nc_check(nf90_def_var(ncid, name='HGT', xtype=nf90_real, &
                  dimids= (/ weDimID(id), snDimID(id) /), varid=hgtVarId(id)), &
-                 'nc_write_model_atts','def_var HGT_d0'//idom)
-   call nc_check(nf90_put_att(ncFileID, hgtVarId(id), "long_name", "Terrain Height"), &
-                 'nc_write_model_atts','put_att HGT_d0'//idom//' long_name')
-   call nc_check(nf90_put_att(ncFileID, hgtVarId(id), "description", "Terrain Height"), &
-                 'nc_write_model_atts','put_att HGT_d0'//idom//' description')
-   call nc_check(nf90_put_att(ncFileID, hgtVarId(id), "units", "m"), &
-                 'nc_write_model_atts','put_att HGT_d0'//idom//' units')
-   call nc_check(nf90_put_att(ncFileID, hgtVarId(id), "coordinates", &
+                 'nc_write_model_atts','def_var HGT')
+call nc_check(nf90_put_att(ncid, hgtVarId(id), 'long_name', 'Terrain Height'), &
+                 'nc_write_model_atts','put_att HGT'//' long_name')
+call nc_check(nf90_put_att(ncid, hgtVarId(id), 'description', 'Terrain Height'), &
+                 'nc_write_model_atts','put_att HGT'//' description')
+call nc_check(nf90_put_att(ncid, hgtVarId(id), 'units', 'm'), &
+                 'nc_write_model_atts','put_att HGT'//' units')
+call nc_check(nf90_put_att(ncid, hgtVarId(id), 'coordinates', &
                  trim(coordinate_char)), &
-                 'nc_write_model_atts','put_att HGT_d0'//idom//' coordinates')
-   call nc_check(nf90_put_att(ncFileID, hgtVarId(id), "units_long_name", "meters"), &
-                 'nc_write_model_atts','put_att HGT_d0'//idom//' units_long_name')
-
-   ! can't deal with precip yet - need to leave hard coded 
-
-   if ( trim(adjustl(title(1:2))) == 'pr' .and. write_precip ) then
-
-     call nc_check(nf90_def_var(ncid=ncFileID, name="RAINC_d0"//idom, xtype=nf90_real, &
-          dimids = (/ weDimID(id), snDimID(id), MemberDimID, unlimitedDimID /), &
-          varid  = var_id),'nc_write_model_atts','def_var RAINC_d0'//idom)
-     call nc_check(nf90_put_att(ncFileID, var_id, "units", "mm"), &
-                   'nc_write_model_atts','put_att RAINC_d0'//idom//' units')
-     call nc_check(nf90_put_att(ncFileID, var_id, "long_name", & 
-                   "ACCUMULATED TOTAL CUMULUS PRECIPITATION"), &
-                   'nc_write_model_atts','put_att RAINC_d0'//idom//' long_name')
-     call nc_check(nf90_put_att(ncFileID, var_id, "description", & 
-                   "ACCUMULATED TOTAL CUMULUS PRECIPITATION"), &
-                   'nc_write_model_atts','put_att RAINC_d0'//idom//' description')
-
-     call nc_check(nf90_def_var(ncid=ncFileID, name="RAINNC_d0"//idom, xtype=nf90_real, &
-          dimids = (/ weDimID(id), snDimID(id), MemberDimID, unlimitedDimID /), &
-          varid  = var_id),'nc_write_model_atts','def_var RAINNC_d0'//idom)
-     call nc_check(nf90_put_att(ncFileID, var_id, "units", "mm"), &
-                   'nc_write_model_atts','put_att RAINNC_d0'//idom//' units')
-     call nc_check(nf90_put_att(ncFileID, var_id, "long_name", & 
-                   "ACCUMULATED TOTAL GRID POINT PRECIPITATION"), &
-                   'nc_write_model_atts','put_att RAINNC_d0'//idom//' long_name')
-     call nc_check(nf90_put_att(ncFileID, var_id, "description", & 
-                   "ACCUMULATED TOTAL GRID POINT PRECIPITATION"), &
-                   'nc_write_model_atts','put_att RAINNC_d0'//idom//' description')
-
-   endif
-
-enddo
-
-if ( output_state_vector ) then
-
-   !-----------------------------------------------------------------
-   ! Create attributes for the state vector 
-   !-----------------------------------------------------------------
-
-   call nc_check(nf90_inq_dimid(ncFileID, "metadatalength", metadataID), &
-                 'nc_write_model_atts','inq_dimid metadatalength')
-
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="WRFStateVariables", &
-                 len = wrf%dom(1)%number_of_wrf_variables,  dimid = wrfStateID), &
-                 'nc_write_model_atts','def_dim WRFStateVariables')
-
-   call nc_check(nf90_def_dim(ncid=ncFileID, name="WRFVarDimension", &
-                 len = 3,  dimid = wrfDimID), &
-                 'nc_write_model_atts','def_dim WRFVarDimensionID')
-
-   ! Define the state variable name variable
-   call nc_check(nf90_def_var(ncid=ncFileID,name="WRFStateVariables", xtype=nf90_char, &
-                 dimids=(/ metadataID, wrfStateID /), varid=WRFStateVarID), &
-                 'nc_write_model_atts','def_var WRFStateVariables')
-
-   call nc_check(nf90_put_att(ncFileID, WRFStateVarID, "long_name", &
-                 "WRF State Variable Name"), &
-                 'nc_write_model_atts','put_att WRFStateVariables long_name')
-
-   ! Define the WRF state variable dimension lengths
-   call nc_check(nf90_def_var(ncid=ncFileID,name="WRFStateDimensions", xtype=nf90_int, &
-                 dimids=(/ wrfDimID, wrfStateID, DomDimID /), varid=WRFStateDimID), &
-                 'nc_write_model_atts','def_var WRFStateDimensions')
-
-   call nc_check(nf90_put_att(ncFileID, WRFStateDimID, "long_name", &
-                 "WRF State Variable Dimensions"), &
-                 'nc_write_model_atts','put_att WRFStateDimensions long_name')
-
-   ! Define the actual state vector
-
-   call nc_check(nf90_def_var(ncid=ncFileID, name="state", xtype=nf90_real, &
-                 dimids = (/ StateVarDimID, MemberDimID, unlimitedDimID /), &
-                 varid=StateVarID), &
-                 'nc_write_model_atts','def_var state')
-   call nc_check(nf90_put_att(ncFileID, StateVarID, "long_name", &
-                 "model state or fcopy"), &
-                 'nc_write_model_atts','put_att state long_name')
-
-   ! only define those that are present in the state vector
-   do id = 1,num_domains ! this makes sure we get them all 
-   write( idom , '(I1)') id
-   do ind = 1,wrf%dom(id)%number_of_wrf_variables
-
-      ! actual location in state variable table
-      my_index =  wrf%dom(id)%var_index_list(ind)
-      ! units
-      attname = trim(wrf_state_variables(1,my_index))//'_units'
-
-      ! if we didn't already write it, do it now
-      if ( nf90_inquire_attribute(ncFileID,StateVarID,trim(attname)) &
-           /= NF90_NOERR ) then
-
-         unitsval = trim(wrf%dom(id)%units(ind))
-         call nc_check(nf90_put_att(ncFileID, StateVarId, trim(attname),&
-                    unitsval), &
-                    'nc_write_model_atts','put_att state '//trim(attname))
-      endif
-
-      ! description
-      attname = trim(wrf_state_variables(1,my_index))//'_description'
-      if ( nf90_inquire_attribute(ncFileID,StateVarID,trim(attname)) &
-           /= NF90_NOERR ) then
-         descriptionval = trim(wrf%dom(id)%description(ind))
-         call nc_check(nf90_put_att(ncFileID, StateVarId, trim(attname),&
-                    descriptionval), &
-                    'nc_write_model_atts','put_att state '//trim(attname))
-      endif
-
-      ! long_name - same as description
-      attname = trim(wrf_state_variables(1,my_index))//'_long_name'
-      if ( nf90_inquire_attribute(ncFileID,StateVarID,trim(attname)) &
-           /= NF90_NOERR ) then
-         long_nameval = trim(wrf%dom(id)%description(ind))
-         call nc_check(nf90_put_att(ncFileID, StateVarId, trim(attname),&
-                    long_nameval), &
-                    'nc_write_model_atts','put_att state '//trim(attname))
-      endif
-
-      ! coordinates - define the name of the (sometimes staggered) 
-      !               coordinate variables to use to decode locations
-      attname = trim(wrf_state_variables(1,my_index))//'_coordinates'
-      if ( nf90_inquire_attribute(ncFileID,StateVarID,trim(attname)) &
-           /= NF90_NOERR ) then
-         coordinatesval = trim(wrf%dom(id)%coordinates(ind))
-         if (coordinatesval(1:7) .eq. 'XLONG_U') then
-           coordinate_char = "XLONG_U_d0"//idom//" XLAT_U_d0"//idom
-         else if (coordinatesval(1:7) .eq. 'XLONG_V') then
-           coordinate_char = "XLONG_V_d0"//idom//" XLAT_V_d0"//idom
-         else
-           coordinate_char = "XLONG_d0"//idom//" XLAT_d0"//idom
-         end if
-         call nc_check(nf90_put_att(ncFileID, StateVarId, trim(attname),&
-                    trim(coordinate_char)), &
-                    'nc_write_model_atts','put_att state '//trim(attname))
-      endif
-
-   enddo
-   enddo
-
-   ! Leave define mode so we can actually fill the variables.
-
-   call nc_check(nf90_enddef(ncfileID),'nc_write_model_atts','enddef')
-
-   do ind = 1,wrf%dom(1)%number_of_wrf_variables
-      my_index =  wrf%dom(1)%var_index_list(ind)
-      call nc_check(nf90_put_var(ncFileID,WRFStateVarID,trim(wrf_state_variables(1,my_index)), &
-                    start = (/ 1, ind /), count = (/ len_trim(wrf_state_variables(1,my_index)),  1 /)), &
-                    'nc_write_model_atts', 'put_var WRFStateVariables')
-   enddo
-
-   do id = 1, num_domains
-      do ind = 1,wrf%dom(id)%number_of_wrf_variables
-        call nc_check(nf90_put_var(ncFileID,WRFStateDimID,wrf%dom(id)%var_size(:,ind), &
-                      start = (/ 1, ind, id /), count = (/ 3, 1, 1 /)), &
-                      'nc_write_model_atts', 'put_var WRFStateDimensions')
-      enddo
-   enddo
-
-else ! physical arrays
-
-do id=1,num_domains
-   write( idom , '(I1)') id
-
-   !----------------------------------------------------------------------------
-   ! Create the (empty) Prognostic Variables and their attributes
-   !----------------------------------------------------------------------------
-
-   do ind = 1,wrf%dom(id)%number_of_wrf_variables
-
-      ! actual location in state variable table
-      my_index =  wrf%dom(id)%var_index_list(ind)
-
-      varname = trim(wrf_state_variables(1,my_index))//'_d0'//idom
-
-      if ( debug ) write(*,*) 'Defining variable ',varname
-
-      if ( wrf%dom(id)%var_size(3,my_index) > 1 ) then ! 3D variable
-
-         dimids_3D(4:5) = (/MemberDimID,unlimitedDimID/)
-
-         ! get first two dimensions based on stagger (could do this
-         ! differently)
-         select case (trim(wrf%dom(id)%stagger(ind)))
-         case ('Z')  ! mass grid staggered vertical
-           dimids_3D(1:2)=(/weDimID(id),snDimId(id)/)
-         case ('X')  ! U grid unstaggered vertical
-           dimids_3D(1:2)=(/weStagDimID(id),snDimId(id)/)
-         case ('Y')  ! V grid unstaggered vertical
-           dimids_3D(1:2)=(/weDimID(id),snStagDimId(id)/)
-         case default 
-           dimids_3D(1:2)=(/weDimID(id),snDimId(id)/)
-         end select
-
-         ! vertical dimension can be stag, unstag, or staggered soil
-         ! need to use if/then/else instead of select because testing
-         ! is against variables
-         if ( wrf%dom(id)%var_size(3,my_index) == wrf%dom(id)%bts ) then
-           dimids_3D(3)=btStagDimID(id)
-         elseif ( wrf%dom(id)%var_size(3,my_index) == wrf%dom(id)%bt ) then
-           dimids_3D(3)=btDimID(id)
-         elseif ( wrf%dom(id)%var_size(3,my_index) == wrf%dom(id)%sls ) then
-           dimids_3D(3)=slSDimID(id)
-         else
-           write(errstring,*)'Could not determine dim_id for vertical dimension to output variable '//varname
-           call error_handler(E_ERR,'nc_write_model_atts',errstring,source, revision,revdate)
-         endif
-
-         if ( debug ) write(*,*) '3D with dim ids ',dimids_3D
-
-         call nc_check(nf90_def_var(ncid=ncFileID, name=varname,  &
-                    xtype=nf90_real,dimids=dimids_3D, varid=var_id), &
-                    'nc_write_model_atts','def_var '//varname)
-
-      else ! must be 2D
-
-         dimids_2D(3:4) = (/MemberDimID,unlimitedDimID/)
-
-         select case (trim(wrf%dom(id)%stagger(ind)))
-         case ('Z')  ! mass grid staggered vertical
-           dimids_2D(1:2)=(/weDimID(id),snDimId(id)/)
-         case ('X')  ! U grid unstaggered vertical
-           dimids_2D(1:2)=(/weStagDimID(id),snDimId(id)/)
-         case ('Y')  ! V grid unstaggered vertical
-           dimids_2D(1:2)=(/weDimID(id),snStagDimId(id)/)
-         case default 
-           dimids_2D(1:2)=(/weDimID(id),snDimId(id)/)
-         end select
-
-         if ( debug ) write(*,*) '2D with dim ids ',dimids_2D
-
-         call nc_check(nf90_def_var(ncid=ncFileID, name=varname,  &
-                    xtype=nf90_real,dimids=dimids_2D, varid=var_id), &
-                    'nc_write_model_atts','def_var '//varname)
-
-      endif ! 3D or 2D
-
-      unitsval = trim(wrf%dom(id)%units(my_index))
-
-      call nc_check(nf90_put_att(ncFileID, var_id, "units", trim(unitsval)), &
-                 'nc_write_model_atts','put_att '//varname//' units')
-
-      descriptionval = trim(wrf%dom(id)%description(my_index))
-
-      call nc_check(nf90_put_att(ncFileID, var_id, "description", trim(descriptionval)), &
-                 'nc_write_model_atts','put_att '//varname//' description')
-
-      long_nameval = trim(wrf%dom(id)%description(my_index))
-
-      call nc_check(nf90_put_att(ncFileID, var_id, "long_name", trim(long_nameval)), &
-                 'nc_write_model_atts','put_att '//varname//' long_name')
-
-      coordinatesval = trim(wrf%dom(id)%coordinates(my_index))
-      if (coordinatesval(1:7) .eq. 'XLONG_U') then
-        coordinate_char = "XLONG_U_d0"//idom//" XLAT_U_d0"//idom
-      else if (coordinatesval(1:7) .eq. 'XLONG_V') then
-        coordinate_char = "XLONG_V_d0"//idom//" XLAT_V_d0"//idom
-      else
-        coordinate_char = "XLONG_d0"//idom//" XLAT_d0"//idom
-      end if
-      call nc_check(nf90_put_att(ncFileID, var_id, "coordinates", trim(coordinate_char)), &
-                 'nc_write_model_atts','put_att '//varname//' coordinates')
-
-
-      !------No info on long_name or units_long_name right now!
-!      call nc_check(nf90_put_att(ncFileID, var_id, "long_name", "x-wind component"), &
-!                 'nc_write_model_atts','put_att U_d0'//idom//' long_name')
-!      call nc_check(nf90_put_att(ncFileID, var_id, "units_long_name", "m s{-1}"), &
-!                 'nc_write_model_atts','put_att U_d0'//idom//' units_long_name')
-
-   enddo ! variables
- 
-enddo ! domains
+                 'nc_write_model_atts','put_att HGT'//' coordinates')
+call nc_check(nf90_put_att(ncid, hgtVarId(id), 'units_long_name', 'meters'), &
+                 'nc_write_model_atts','put_att HGT'//' units_long_name')
 
 ! Leave define mode so we can actually fill the variables.
-call nc_check(nf90_enddef(ncfileID),'nc_write_model_atts','enddef')
-
-endif
+call nc_end_define_mode(ncid)
 
 !-----------------------------------------------------------------
 ! Fill the variables we can
 !-----------------------------------------------------------------
 
-if (have_wrf_nml_file) then
-   call file_to_text(wrf_nml_file, textblock)
-   call nc_check(nf90_put_var(ncFileID, nmlVarID, textblock ), &
-                 'nc_write_model_atts', 'put_var nmlVarID')
-   deallocate(textblock)
-endif
-
-call nc_check(nf90_put_var(ncFileID,        DXVarID, wrf%dom(1:num_domains)%dx), &
+call nc_check(nf90_put_var(ncid,        DXVarID, wrf%dom(1:num_domains)%dx), &
               'nc_write_model_atts','put_var dx')
-call nc_check(nf90_put_var(ncFileID,        DYVarID, wrf%dom(1:num_domains)%dy), &
+call nc_check(nf90_put_var(ncid,        DYVarID, wrf%dom(1:num_domains)%dy), &
               'nc_write_model_atts','put_var dy')
-call nc_check(nf90_put_var(ncFileID,  TRUELAT1VarID, wrf%dom(1:num_domains)%proj%truelat1), &
+call nc_check(nf90_put_var(ncid,  TRUELAT1VarID, wrf%dom(1:num_domains)%proj%truelat1), &
               'nc_write_model_atts','put_var truelat1')
-call nc_check(nf90_put_var(ncFileID,  TRUELAT2VarID, wrf%dom(1:num_domains)%proj%truelat2), &
+call nc_check(nf90_put_var(ncid,  TRUELAT2VarID, wrf%dom(1:num_domains)%proj%truelat2), &
               'nc_write_model_atts','put_var truelat2')
-call nc_check(nf90_put_var(ncFileID, STAND_LONVarID, wrf%dom(1:num_domains)%proj%stdlon), &
+call nc_check(nf90_put_var(ncid, STAND_LONVarID, wrf%dom(1:num_domains)%proj%stdlon), &
               'nc_write_model_atts','put_var stdlon')
-call nc_check(nf90_put_var(ncFileID,   CEN_LATVarID, wrf%dom(1:num_domains)%cen_lat), &
+call nc_check(nf90_put_var(ncid,   CEN_LATVarID, wrf%dom(1:num_domains)%cen_lat), &
               'nc_write_model_atts','put_var cen_lat')
-call nc_check(nf90_put_var(ncFileID,   CEN_LONVarID, wrf%dom(1:num_domains)%cen_lon), &
+call nc_check(nf90_put_var(ncid,   CEN_LONVarID, wrf%dom(1:num_domains)%cen_lon), &
               'nc_write_model_atts','put_var cen_lon')
-call nc_check(nf90_put_var(ncFileID,  MAP_PROJVarID, wrf%dom(1:num_domains)%map_proj), &
+call nc_check(nf90_put_var(ncid,  MAP_PROJVarID, wrf%dom(1:num_domains)%map_proj), &
               'nc_write_model_atts','put_var map_proj')
 
 !nc -- convert internally logical boundary condition variables into integers before filling
-do id=1,num_domains
-   if ( wrf%dom(id)%periodic_x ) then
-      tmp(id) = 1
-   else
-      tmp(id) = 0
-   endif
-end do
-call nc_check(nf90_put_var(ncFileID, PERIODIC_XVarID, tmp(1:num_domains) ), &
+if ( wrf%dom(dom_id)%periodic_x ) then
+   tmp(dom_id) = 1
+else
+   tmp(dom_id) = 0
+endif
+call nc_check(nf90_put_var(ncid, PERIODIC_XVarID, tmp(1:num_domains) ), &
               'nc_write_model_atts','put_var PERIODIC_XVarID')
 
-do id=1,num_domains
-   if ( wrf%dom(id)%polar ) then
-      tmp(id) = 1
-   else
-      tmp(id) = 0
-   endif
-end do
-call nc_check(nf90_put_var(ncFileID, POLARVarID, tmp(1:num_domains) ), &
+if ( wrf%dom(dom_id)%polar ) then
+   tmp(dom_id) = 1
+else
+   tmp(dom_id) = 0
+endif
+call nc_check(nf90_put_var(ncid, POLARVarID, tmp(1:num_domains) ), &
               'nc_write_model_atts','put var POLARVarID')
 
 
-do id=1,num_domains
-
 ! defining grid levels
-   call nc_check(nf90_put_var(ncFileID,       DNVarID(id), wrf%dom(id)%dn), &
+call nc_check(nf90_put_var(ncid,       DNVarID(id), wrf%dom(id)%dn), &
               'nc_write_model_atts','put_var dn')
-   call nc_check(nf90_put_var(ncFileID,      ZNUVarID(id), wrf%dom(id)%znu), &
+call nc_check(nf90_put_var(ncid,      ZNUVarID(id), wrf%dom(id)%znu), &
               'nc_write_model_atts','put_var znu')
-   call nc_check(nf90_put_var(ncFileID,      ZNWVarID(id), wrf%dom(id)%znw), &
+call nc_check(nf90_put_var(ncid,      ZNWVarID(id), wrf%dom(id)%znw), &
               'nc_write_model_atts','put_var znw')
-   call nc_check(nf90_put_var(ncFileID,      DNWVarID(id), wrf%dom(id)%dnw), &
+call nc_check(nf90_put_var(ncid,      DNWVarID(id), wrf%dom(id)%dnw), &
               'nc_write_model_atts','put_var dnw')
 
 ! defining horizontal
-   call nc_check(nf90_put_var(ncFileID,      mubVarID(id), wrf%dom(id)%mub), &
+call nc_check(nf90_put_var(ncid,      mubVarID(id), wrf%dom(id)%mub), &
               'nc_write_model_atts','put_var mub')
-   call nc_check(nf90_put_var(ncFileID,      LonVarID(id), wrf%dom(id)%longitude), &
+call nc_check(nf90_put_var(ncid,      LonVarID(id), wrf%dom(id)%longitude), &
               'nc_write_model_atts','put_var longitude')
-   call nc_check(nf90_put_var(ncFileID,      LonuVarID(id), wrf%dom(id)%longitude_u), &
+call nc_check(nf90_put_var(ncid,      LonuVarID(id), wrf%dom(id)%longitude_u), &
               'nc_write_model_atts','put_var longitude_u')
-   call nc_check(nf90_put_var(ncFileID,      LonvVarID(id), wrf%dom(id)%longitude_v), &
+call nc_check(nf90_put_var(ncid,      LonvVarID(id), wrf%dom(id)%longitude_v), &
               'nc_write_model_atts','put_var longitude_v')
-   call nc_check(nf90_put_var(ncFileID,      LatVarID(id), wrf%dom(id)%latitude), &
+call nc_check(nf90_put_var(ncid,      LatVarID(id), wrf%dom(id)%latitude), &
               'nc_write_model_atts','put_var latitude')
-   call nc_check(nf90_put_var(ncFileID,      LatuVarID(id), wrf%dom(id)%latitude_u), &
+call nc_check(nf90_put_var(ncid,      LatuVarID(id), wrf%dom(id)%latitude_u), &
               'nc_write_model_atts','put_var latitude_u')
-   call nc_check(nf90_put_var(ncFileID,      LatvVarID(id), wrf%dom(id)%latitude_v), &
+call nc_check(nf90_put_var(ncid,      LatvVarID(id), wrf%dom(id)%latitude_v), &
               'nc_write_model_atts','put_var latitude_v')
-   call nc_check(nf90_put_var(ncFileID,     ilevVarID(id), (/ (i,i=1,wrf%dom(id)%bt) /)), &
+call nc_check(nf90_put_var(ncid,     ilevVarID(id), (/ (i,i=1,wrf%dom(id)%bt) /)), &
               'nc_write_model_atts','put_var bt')
-   call nc_check(nf90_put_var(ncFileID,    XlandVarID(id), wrf%dom(id)%land), &
+call nc_check(nf90_put_var(ncid,    XlandVarID(id), wrf%dom(id)%land), &
               'nc_write_model_atts','put_var land')
-!   call nc_check(nf90_put_var(ncFileID,  MapFacMVarID(id), wrf%dom(id)%mapfac_m), &
+!   call nc_check(nf90_put_var(ncid,  MapFacMVarID(id), wrf%dom(id)%mapfac_m), &
 !             'nc_write_model_atts','put_var mapfac_m')
-!   call nc_check(nf90_put_var(ncFileID,  MapFacUVarID(id), wrf%dom(id)%mapfac_u), &
+!   call nc_check(nf90_put_var(ncid,  MapFacUVarID(id), wrf%dom(id)%mapfac_u), &
 !             'nc_write_model_atts','put_var mapfac_u')
-!   call nc_check(nf90_put_var(ncFileID,  MapFacVVarID(id), wrf%dom(id)%mapfac_v), &
+!   call nc_check(nf90_put_var(ncid,  MapFacVVarID(id), wrf%dom(id)%mapfac_v), &
 !             'nc_write_model_atts','put_var mapfac_v')
-   call nc_check(nf90_put_var(ncFileID,      phbVarID(id), wrf%dom(id)%phb), &
+call nc_check(nf90_put_var(ncid,      phbVarID(id), wrf%dom(id)%phb), &
               'nc_write_model_atts','put_var phb')
-   call nc_check(nf90_put_var(ncFileID,      hgtVarID(id), wrf%dom(id)%hgt), &
+call nc_check(nf90_put_var(ncid,      hgtVarID(id), wrf%dom(id)%hgt), &
               'nc_write_model_atts','put_var hgt')
 
-enddo
 
 !-----------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
 !-----------------------------------------------------------------
 
-call nc_check(nf90_sync(ncFileID),'nc_write_model_atts','sync')
+call nc_synchronize_file(ncid)
 
-end function nc_write_model_atts
-
-
-
-function nc_write_model_vars( ncFileID, statevec, copyindex, timeindex ) result (ierr)
-!-----------------------------------------------------------------
-! Writes the model-specific variables to a netCDF file
-! TJH 25 June 2003
-!
-! TJH 29 July 2003 -- for the moment, all errors are fatal, so the
-! return code is always '0 == normal', since the fatal errors stop execution.
+end subroutine nc_write_model_atts
 
 
-integer,                intent(in) :: ncFileID      ! netCDF file identifier
-real(r8), dimension(:), intent(in) :: statevec
-integer,                intent(in) :: copyindex
-integer,                intent(in) :: timeindex
-integer                            :: ierr          ! return value of function
-
-!-----------------------------------------------------------------
-
-logical, parameter :: debug = .false.  
-integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
-integer :: StateVarID, VarID, id, ind, my_index
-integer :: i,j
-real(r8), allocatable, dimension(:,:)   :: temp2d
-real(r8), allocatable, dimension(:,:,:) :: temp3d
-character(len=NF90_MAX_NAME) :: varname
-character(len=1) :: idom
-integer, dimension(2) :: dimsizes_2D
-integer, dimension(3) :: dimsizes_3D
-
-ierr = 0     ! assume normal termination
-
-!-----------------------------------------------------------------
-! make sure ncFileID refers to an open netCDF file, 
-! then get all the Variable ID's we need.
-!-----------------------------------------------------------------
-
-call nc_check(nf90_Inquire(ncFileID, nDimensions, nVariables, nAttributes, unlimitedDimID), &
-              'nc_write_model_vars','inquire')
-
-if ( output_state_vector ) then
-
-   call nc_check(nf90_inq_varid(ncFileID, "state", StateVarID), &
-              'nc_write_model_vars','inq_varid state')
-   call nc_check(nf90_put_var(ncFileID, StateVarID, statevec, &
-                start=(/ 1, copyindex, timeindex /)), &
-              'nc_write_model_vars','put_var statevec')
-
-else
-
-j = 0
-
-do id=1,num_domains
-
-   write( idom , '(I1)') id
-
-   !----------------------------------------------------------------------------
-   ! Fill the variables
-   !----------------------------------------------------------------------------
-
-   do ind = 1,wrf%dom(id)%number_of_wrf_variables
-
-      ! actual location in state variable table
-      my_index =  wrf%dom(id)%var_index_list(ind)
-
-      varname = trim(wrf_state_variables(1,my_index))//'_d0'//idom
-
-      call nc_check(nf90_inq_varid(ncFileID, trim(varname), VarID), &
-                 'nc_write_model_vars','inq_varid '//trim(varname))
-
-      i       = j + 1
-      j       = i + wrf%dom(id)%var_size(1,ind) *  &
-                    wrf%dom(id)%var_size(2,ind) *  &
-                    wrf%dom(id)%var_size(3,ind) - 1 
-
-      if (debug) write(*,'(a10,'' = statevec('',i7,'':'',i7,'') with dims '',3(1x,i3))') &
-              trim(varname),i,j,wrf%dom(id)%var_size(1,ind),wrf%dom(id)%var_size(2,ind),wrf%dom(id)%var_size(3,ind)
-
-      if ( wrf%dom(id)%var_size(3,ind) > 1 ) then
-
-         dimsizes_3D = (/wrf%dom(id)%var_size(1,ind), &
-                         wrf%dom(id)%var_size(2,ind), &
-                         wrf%dom(id)%var_size(3,ind)/)
-
-         allocate ( temp3d(dimsizes_3D(1),dimsizes_3D(2),dimsizes_3D(3)) )
-         temp3d  = reshape(statevec(i:j), (/ dimsizes_3D(1),dimsizes_3D(2),dimsizes_3D(3) /) ) 
-         call nc_check(nf90_put_var( ncFileID, VarID, temp3d, &
-                                  start=(/ 1, 1, 1, copyindex, timeindex /) ), &
-                    'nc_write_model_vars','put_var '//trim(varname))
-         deallocate(temp3d)
-
-      else ! must be 2D
-
-         dimsizes_2D = (/wrf%dom(id)%var_size(1,ind), &
-                         wrf%dom(id)%var_size(2,ind)/)
-
-         allocate ( temp2d(dimsizes_2D(1),dimsizes_2D(2)) )
-         temp2d  = reshape(statevec(i:j), (/ dimsizes_3D(1),dimsizes_3D(2) /) )
-         call nc_check(nf90_put_var( ncFileID, VarID, temp2d, &
-                                  start=(/ 1, 1, copyindex, timeindex /) ), &
-                    'nc_write_model_vars','put_var '//trim(varname))
-         deallocate(temp2d)
-
-
-      endif
-
-   enddo ! variables
-
-enddo ! domains
-
-endif
-
-!-----------------------------------------------------------------
-! Flush the buffer and leave netCDF file open
-!-----------------------------------------------------------------
-
-call nc_check(nf90_sync(ncFileID), 'nc_write_model_vars','sync')
-
-end function nc_write_model_vars
-
-!-------------------------------
-
-!  public stubs
-
-!**********************************************
-
-subroutine adv_1step(x, Time)
-
-! Does single time-step advance with vector state as
-! input and output.
-
-  real(r8), intent(inout) :: x(:)
-
-! Time is needed for more general models like this; need to add in to 
-! low-order models
-  type(time_type), intent(in) :: Time
-
-call error_handler(E_ERR,'adv_1step', &
-                  'WRF model cannot be called as a subroutine; async cannot = 0', &
-                  source, revision, revdate)
-
-
-end subroutine adv_1step
-
-!**********************************************
+!#######################################################################
 
 subroutine end_model()
-! nothing to do, which is fine.
+
+deallocate(domain_id)
 
 end subroutine end_model
-
-!**********************************************
-
-subroutine init_time(i_time)
-! For now returns value of Time_init which is set in initialization routines.
-
-  type(time_type), intent(out) :: i_time
-
-!Where should initial time come from here?
-! WARNING: CURRENTLY SET TO 0
-  i_time = set_time(0, 0)
-
-end subroutine init_time
-
-!**********************************************
-
-subroutine init_conditions(x)
-! Reads in restart initial conditions and converts to vector
-
-! Following changed to intent(inout) for ifc compiler;should be like this
-  real(r8), intent(inout) :: x(:)
-
-call error_handler(E_MSG,'init_conditions:', &
-                  'WARNING!!  WRF model has no built-in default state')
-call error_handler(E_MSG,'init_conditions:', &
-                  "cannot run with 'start_from_restart = .false.' ")
-call error_handler(E_ERR,'init_conditions', &
-                  'use ensemble_init in the WRF utils dir, or use wrf_to_dart', &
-                  source, revision, revdate)
-
-end subroutine init_conditions
-
-
 
 !#######################################################################
 
@@ -4847,6 +4323,26 @@ subroutine toGrid (x, j, dx, dxm)
   dxm= 1.0_r8 - dx
 
 end subroutine toGrid
+
+!#######################################################################
+
+subroutine toGrid_distrib(x, ens_size, j, dx, dxm)
+!HK I don't think this is needed.
+!  Transfer obs. x to grid j and calculate its
+!  distance to grid j and j+1
+
+  integer,  intent(in)  :: ens_size
+  real(r8), intent(in)  :: x(ens_size)
+  real(r8), intent(out) :: dx(ens_size), dxm(ens_size)
+  integer,  intent(out) :: j(ens_size)
+
+  j = int (x)
+
+  dx = x - real (j)
+
+  dxm= 1.0_r8 - dx
+
+end subroutine toGrid_distrib
 
 !#######################################################################
 
@@ -4873,7 +4369,11 @@ subroutine pres_to_zk(pres, mdl_v, n3, zk, lev0)
   ! sigma value but set lev0 true
   if(pres <= mdl_v(0) .and. pres > mdl_v(1)) then
     lev0 = .true.
+    if (log_vert_interp) then
+       zk = (log(mdl_v(0)) - log(pres))/(log(mdl_v(0)) - log(mdl_v(1)))
+    else
     zk = (mdl_v(0) - pres)/(mdl_v(0) - mdl_v(1))
+    endif
     return
    endif
 
@@ -4881,12 +4381,71 @@ subroutine pres_to_zk(pres, mdl_v, n3, zk, lev0)
   ! as a real number, including the fraction between the levels.
   do k = 1,n3-1
      if(pres <= mdl_v(k) .and. pres >= mdl_v(k+1)) then
+        if (log_vert_interp) then
+           zk = real(k) + (log(mdl_v(k)) - log(pres))/(log(mdl_v(k)) - log(mdl_v(k+1)))
+        else
         zk = real(k) + (mdl_v(k) - pres)/(mdl_v(k) - mdl_v(k+1))
+        endif
         exit
      endif
   enddo
 
 end subroutine pres_to_zk
+
+!#######################################################################
+
+subroutine pres_to_zk_distrib(pres, mdl_v, n3, ens_size, zk, lev0)
+! Calculate the model level "zk" on half (mass) levels,
+! corresponding to pressure "pres".
+
+  integer,  intent(in)  :: n3
+  real(r8), intent(in)  :: pres
+  integer,  intent(in)  :: ens_size
+  real(r8), intent(in)  :: mdl_v(0:n3, ens_size)
+  real(r8), intent(out) :: zk(ens_size)
+  logical,  intent(out) :: lev0(ens_size)
+
+  integer  :: k, e
+
+  zk = missing_r8
+  lev0 = .false.
+
+  do e = 1, ens_size
+
+     ! if out of range completely, return missing_r8 and lev0 false
+     if (pres > mdl_v(0,e) .or. pres < mdl_v(n3,e)) then
+        ! do nothing, keep zk(e) = missing_r8 and lev0(e) = false
+
+     ! if above surface but below lowest sigma level, return the
+     ! sigma value but set lev0 true
+     elseif(pres <= mdl_v(0,e) .and. pres > mdl_v(1,e)) then
+        lev0(e) = .true.
+        if (log_vert_interp) then
+           zk(e) = (log(mdl_v(0,e)) - log(pres))/(log(mdl_v(0,e)) - log(mdl_v(1,e)))
+        else
+           zk(e) = (mdl_v(0,e) - pres)/(mdl_v(0,e) - mdl_v(1,e))
+        endif
+
+     else
+
+        ! find the 2 sigma levels the value is between and return that
+        ! as a real number, including the fraction between the levels.
+        do k = 1, n3-1
+           if(pres <= mdl_v(k,e) .and. pres >= mdl_v(k+1,e)) then
+              if (log_vert_interp) then
+                 zk(e) = real(k) + (log(mdl_v(k,e)) - log(pres))/(log(mdl_v(k,e)) - log(mdl_v(k+1,e)))
+              else
+                 zk(e) = real(k) + (mdl_v(k,e) - pres)/(mdl_v(k,e) - mdl_v(k+1,e))
+              endif
+              exit
+           endif
+        enddo
+
+     endif
+
+  enddo
+
+end subroutine pres_to_zk_distrib
 
 !#######################################################################
 
@@ -4930,20 +4489,29 @@ end subroutine height_to_zk
 
 !#######################################################
 
-subroutine get_model_pressure_profile(i,j,dx,dy,dxm,dym,n,x,id,v_p)
+subroutine get_model_pressure_profile_distrib(i,j,dx,dy,dxm,dym,n,id,v_p, state_handle, ens_size)
 
 ! Calculate the full model pressure profile on half (mass) levels,
 ! horizontally interpolated at the observation location.
 
 integer,  intent(in)  :: i,j,n,id
 real(r8), intent(in)  :: dx,dy,dxm,dym
-real(r8), intent(in)  :: x(:)
-real(r8), intent(out) :: v_p(0:n)
+integer, intent(in)   :: ens_size
+real(r8), intent(out) :: v_p(0:n, ens_size)
+type(ensemble_type), intent(in)  :: state_handle
+integer e !< for ensemble loop
 
 integer, dimension(2) :: ll, lr, ul, ur
-integer  :: ill,ilr,iul,iur,k, rc
-real(r8) :: pres1, pres2, pres3, pres4
+integer(i8)           :: ill, ilr, iul, iur
+integer               :: k, rc
+real(r8), allocatable :: pres1(:), pres2(:), pres3(:), pres4(:)
 logical  :: debug = .false.
+
+!HK 
+real(r8), allocatable :: x_ill(:), x_ilr(:), x_iul(:), x_iur(:)
+
+allocate(pres1(ens_size), pres2(ens_size), pres3(ens_size), pres4(ens_size))
+allocate(x_ill(ens_size), x_ilr(ens_size), x_iul(ens_size), x_iur(ens_size))
 
 if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
      boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) then
@@ -4952,101 +4520,130 @@ if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t 
    if ( rc .ne. 0 ) &
         print*, 'model_mod.f90 :: get_model_pressure_profile :: getCorners rc = ', rc
 
+
    do k=1,n
-      pres1 = model_pressure_t(ll(1), ll(2), k,id,x)
-      pres2 = model_pressure_t(lr(1), lr(2), k,id,x)
-      pres3 = model_pressure_t(ul(1), ul(2), k,id,x)
-      pres4 = model_pressure_t(ur(1), ur(2), k,id,x)
-      v_p(k) = dym*( dxm*pres1 + dx*pres2 ) + dy*( dxm*pres3 + dx*pres4 )
+      pres1 = model_pressure_t_distrib(ll(1), ll(2), k,id,state_handle, ens_size)
+      pres2 = model_pressure_t_distrib(lr(1), lr(2), k,id,state_handle, ens_size)
+      pres3 = model_pressure_t_distrib(ul(1), ul(2), k,id,state_handle, ens_size)
+      pres4 = model_pressure_t_distrib(ur(1), ur(2), k,id,state_handle, ens_size)
+
+      v_p(k, :) = interp_4pressure_distrib(pres1, pres2, pres3, pres4, dx, dxm, dy, dym, ens_size)
    enddo
 
+
    if (debug) &
-        print*, 'model_mod.f90 :: get_model_pressure_profile :: n, v_p() ', n, v_p(1:n)
+        print*, 'model_mod.f90 :: get_model_pressure_profile :: n, v_p() ', n, v_p(1:n, :)
 
    if ( wrf%dom(id)%type_ps >= 0 ) then
 
-      ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_ps)
-      iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_ps)
-      ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_ps)
-      iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_ps)
+      ill = get_dart_vector_index(ll(1), ll(2), 1, domain_id(id), wrf%dom(id)%type_ps)
+      ilr = get_dart_vector_index(lr(1), lr(2), 1, domain_id(id), wrf%dom(id)%type_ps)
+      iul = get_dart_vector_index(ul(1), ul(2), 1, domain_id(id), wrf%dom(id)%type_ps)
+      iur = get_dart_vector_index(ur(1), ur(2), 1, domain_id(id), wrf%dom(id)%type_ps)
+
+      x_ill = get_state(ill, state_handle)
+      x_ilr = get_state(ilr, state_handle)
+      x_iul = get_state(iul, state_handle)
+      x_iur = get_state(iur, state_handle)
 
       ! I'm not quite sure where this comes from, but I will trust them on it....
-      if ( x(ill) /= 0.0_r8 .and. x(ilr) /= 0.0_r8 .and. x(iul) /= 0.0_r8 .and. &
-           x(iur) /= 0.0_r8 ) then
+      ! Do you have to do this per ensemble?
+      !> @todo This is messy
+      do e = 1,ens_size
 
-         v_p(0) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+         if ( x_ill(e) /= 0.0_r8 .and. x_ilr(e) /= 0.0_r8 .and. x_iul(e) /= 0.0_r8 .and. &
+              x_iur(e) /= 0.0_r8 ) then
 
-      else
+            v_p(0,e:e) = interp_4pressure_distrib(x_ill(e:e), x_ilr(e:e), x_iul(e:e), x_iur(e:e), dx, dxm, dy, dym, 1)
 
-         pres1 = model_pressure_t(ll(1), ll(2), 2,id,x)
-         pres2 = model_pressure_t(lr(1), lr(2), 2,id,x)
-         pres3 = model_pressure_t(ul(1), ul(2), 2,id,x)
-         pres4 = model_pressure_t(ur(1), ur(2), 2,id,x)
+         else
 
-         v_p(0) = (3.0_r8*v_p(1) - &
-              dym*( dxm*pres1 + dx*pres2 ) - dy*( dxm*pres3 + dx*pres4 ))/2.0_r8
+            ! HK I think this is a bug, you are just  going to grab the first copy - is this fixed?
+            ! in each iteration of the loop
+            call error_handler(E_WARN, 'model_mod.f90 check for correctness', 'Helen')
+            pres1 = model_pressure_t_distrib(ll(1), ll(2), 2,id,state_handle, ens_size)
+            pres2 = model_pressure_t_distrib(lr(1), lr(2), 2,id,state_handle, ens_size)
+            pres3 = model_pressure_t_distrib(ul(1), ul(2), 2,id,state_handle, ens_size)
+            pres4 = model_pressure_t_distrib(ur(1), ur(2), 2,id,state_handle, ens_size)
 
-      endif
+            v_p(0,e:e) = interp_4pressure_distrib(pres1(e:e), pres2(e:e), pres3(e:e), pres4(e:e), dx, dxm, dy, dym, 1, &
+                  extrapolate=.true., edgep=v_p(1,e))
+
+         endif
+
+      enddo
 
    else
 
-      pres1 = model_pressure_t(ll(1), ll(2), 2,id,x)
-      pres2 = model_pressure_t(lr(1), lr(2), 2,id,x)
-      pres3 = model_pressure_t(ul(1), ul(2), 2,id,x)
-      pres4 = model_pressure_t(ur(1), ur(2), 2,id,x)
+      pres1 = model_pressure_t_distrib(ll(1), ll(2), 2,id,state_handle, ens_size)
+      pres2 = model_pressure_t_distrib(lr(1), lr(2), 2,id,state_handle, ens_size)
+      pres3 = model_pressure_t_distrib(ul(1), ul(2), 2,id,state_handle, ens_size)
+      pres4 = model_pressure_t_distrib(ur(1), ur(2), 2,id,state_handle, ens_size)
 
-      v_p(0) = (3.0_r8*v_p(1) - &
-           dym*( dxm*pres1 + dx*pres2 ) - dy*( dxm*pres3 + dx*pres4 ))/2.0_r8
+      v_p(0,:) = interp_4pressure_distrib(pres1, pres2, pres3, pres4, dx, dxm, dy, dym, ens_size, &
+              extrapolate=.true., edgep=v_p(1,:))
 
    endif
 
    if (debug) &
-        print*, 'model_mod.f90 :: get_model_pressure_profile :: v_p(0) ', v_p(0)
+        print*, 'model_mod.f90 :: get_model_pressure_profile :: v_p(0) ', v_p(0, :)
 else
-
-   v_p(:) = missing_r8
+   v_p(:,:) = missing_r8
 
 endif
 
-end subroutine get_model_pressure_profile
+deallocate(pres1, pres2, pres3, pres4, x_ill, x_ilr, x_iul, x_iur)
+
+end subroutine get_model_pressure_profile_distrib
 
 !#######################################################
-
-function model_pressure(i,j,k,id,var_type,x)
+!> Only for the mean value.
+!> Used in get_state_meta_data for the vertical conversion
+function model_pressure_distrib(i, j, k, id, var_type, state_handle)
 
 ! Calculate the pressure at grid point (i,j,k), domain id.
 ! The grid is defined according to var_type.
 
-integer,  intent(in)  :: i,j,k,id,var_type
-real(r8), intent(in)  :: x(:)
-real(r8)              :: model_pressure
+type(ensemble_type), intent(in) :: state_handle
+integer,             intent(in) :: i,j,k,id,var_type
+real(r8)                        :: model_pressure_distrib
 
-integer  :: off
+integer  :: off, type_x
 real(r8) :: pres1, pres2
+integer  :: ens_size
 
-model_pressure = missing_r8
+model_pressure_distrib = missing_r8
+
+! since we are only working with the mean copy
+ens_size = 1
 
 ! If W-grid (on ZNW levels), then we need to average in vertical, unless
 !   we are at the upper or lower boundary in which case we will extrapolate.
 if( (var_type == wrf%dom(id)%type_w) .or. (var_type == wrf%dom(id)%type_gz) ) then
 
+   if (var_type == wrf%dom(id)%type_w) then
+      type_x = wrf%dom(id)%type_w
+   else
+      type_x = wrf%dom(id)%type_gz
+   endif
+
    if( k == 1 ) then
 
-      pres1 = model_pressure_t(i,j,k,  id,x)
-      pres2 = model_pressure_t(i,j,k+1,id,x)
-      model_pressure = (3.0_r8*pres1 - pres2)/2.0_r8
+      pres1 = scalar(model_pressure_t_distrib(i, j, k,  id, state_handle, ens_size))
+      pres2 = scalar(model_pressure_t_distrib(i, j, k+1,id, state_handle, ens_size))
+      model_pressure_distrib = interp_pressure(pres1, pres2, extrapolate=.true.)
 
-   elseif( k == wrf%dom(id)%var_size(3,wrf%dom(id)%type_w) ) then
+   elseif( k == wrf%dom(id)%var_size(3,type_x) ) then
 
-      pres1 = model_pressure_t(i,j,k-1,id,x)
-      pres2 = model_pressure_t(i,j,k-2,id,x)
-      model_pressure = (3.0_r8*pres1 - pres2)/2.0_r8
+      pres1 = scalar(model_pressure_t_distrib(i,j,k-1,id, state_handle, ens_size))
+      pres2 = scalar(model_pressure_t_distrib(i,j,k-2,id, state_handle, ens_size))
+      model_pressure_distrib = interp_pressure(pres1, pres2, extrapolate=.true.)
 
    else
 
-      pres1 = model_pressure_t(i,j,k,  id,x)
-      pres2 = model_pressure_t(i,j,k-1,id,x)
-      model_pressure = (pres1 + pres2)/2.0_r8
+      pres1 = scalar(model_pressure_t_distrib(i, j, k,  id, state_handle, ens_size))
+      pres2 = scalar(model_pressure_t_distrib(i, j, k-1,id, state_handle, ens_size))
+      model_pressure_distrib = interp_pressure(pres1, pres2)
 
    endif
 
@@ -5060,16 +4657,16 @@ elseif( var_type == wrf%dom(id)%type_u ) then
       if ( wrf%dom(id)%periodic_x ) then
 
          ! We are at seam in longitude, take first and last M-grid points
-         pres1 = model_pressure_t(i-1,j,k,id,x)
-         pres2 = model_pressure_t(1,  j,k,id,x)
-         model_pressure = (pres1 + pres2)/2.0_r8
+         pres1 = scalar(model_pressure_t_distrib(i-1,j,k,id, state_handle, ens_size))
+         pres2 = scalar(model_pressure_t_distrib(1,  j,k,id, state_handle, ens_size))
+         model_pressure_distrib = interp_pressure(pres1, pres2, vertical=.false.)
          
       else
 
          ! If not periodic, then try extrapolating
-         pres1 = model_pressure_t(i-1,j,k,id,x)
-         pres2 = model_pressure_t(i-2,j,k,id,x)
-         model_pressure = (3.0_r8*pres1 - pres2)/2.0_r8
+         pres1 = scalar(model_pressure_t_distrib(i-1,j,k,id, state_handle, ens_size))
+         pres2 = scalar(model_pressure_t_distrib(i-2,j,k,id, state_handle, ens_size))
+         model_pressure_distrib = interp_pressure(pres1, pres2, extrapolate=.true., vertical=.false.)
 
       endif
 
@@ -5079,24 +4676,24 @@ elseif( var_type == wrf%dom(id)%type_u ) then
       if ( wrf%dom(id)%periodic_x ) then
 
          ! We are at seam in longitude, take first and last M-grid points
-         pres1 = model_pressure_t(i,             j,k,id,x)
-         pres2 = model_pressure_t(wrf%dom(id)%we,j,k,id,x)
-         model_pressure = (pres1 + pres2)/2.0_r8
+         pres1 = scalar(model_pressure_t_distrib(i,             j,k,id, state_handle, ens_size))
+         pres2 = scalar(model_pressure_t_distrib(wrf%dom(id)%we,j,k,id, state_handle, ens_size))
+         model_pressure_distrib = interp_pressure(pres1, pres2, vertical=.false.)
          
       else
 
          ! If not periodic, then try extrapolating
-         pres1 = model_pressure_t(i,  j,k,id,x)
-         pres2 = model_pressure_t(i+1,j,k,id,x)
-         model_pressure = (3.0_r8*pres1 - pres2)/2.0_r8
+         pres1 = scalar(model_pressure_t_distrib(i,  j,k,id, state_handle, ens_size))
+         pres2 = scalar(model_pressure_t_distrib(i+1,j,k,id, state_handle, ens_size))
+         model_pressure_distrib = interp_pressure(pres1, pres2, extrapolate=.true., vertical=.false.)
 
       endif
 
    else
 
-      pres1 = model_pressure_t(i,  j,k,id,x)
-      pres2 = model_pressure_t(i-1,j,k,id,x)
-      model_pressure = (pres1 + pres2)/2.0_r8
+      pres1 = scalar(model_pressure_t_distrib(i,  j,k,id, state_handle, ens_size))
+      pres2 = scalar(model_pressure_t_distrib(i-1,j,k,id, state_handle, ens_size))
+      model_pressure_distrib = interp_pressure(pres1, pres2, vertical=.false.)
 
    endif
 
@@ -5113,16 +4710,16 @@ elseif( var_type == wrf%dom(id)%type_v ) then
          off = i + wrf%dom(id)%we/2
          if ( off > wrf%dom(id)%we ) off = off - wrf%dom(id)%we
 
-         pres1 = model_pressure_t(off,j-1,k,id,x)
-         pres2 = model_pressure_t(i  ,j-1,k,id,x)
-         model_pressure = (pres1 + pres2)/2.0_r8
+         pres1 = scalar(model_pressure_t_distrib(off,j-1,k,id, state_handle, ens_size))
+         pres2 = scalar(model_pressure_t_distrib(i  ,j-1,k,id, state_handle, ens_size))
+         model_pressure_distrib = interp_pressure(pres1, pres2, vertical=.false.)
 
       ! If not periodic, then try extrapolating
       else
 
-         pres1 = model_pressure_t(i,j-1,k,id,x)
-         pres2 = model_pressure_t(i,j-2,k,id,x)
-         model_pressure = (3.0_r8*pres1 - pres2)/2.0_r8
+         pres1 = scalar(model_pressure_t_distrib(i,j-1,k,id, state_handle, ens_size))
+         pres2 = scalar(model_pressure_t_distrib(i,j-2,k,id, state_handle, ens_size))
+         model_pressure_distrib = interp_pressure(pres1, pres2, extrapolate=.true., vertical=.false.)
 
       endif
 
@@ -5135,24 +4732,24 @@ elseif( var_type == wrf%dom(id)%type_v ) then
          off = i + wrf%dom(id)%we/2
          if ( off > wrf%dom(id)%we ) off = off - wrf%dom(id)%we
 
-         pres1 = model_pressure_t(off,j,k,id,x)
-         pres2 = model_pressure_t(i,  j,k,id,x)
-         model_pressure = (pres1 + pres2)/2.0_r8
+         pres1 = scalar(model_pressure_t_distrib(off,j,k,id, state_handle, ens_size))
+         pres2 = scalar(model_pressure_t_distrib(i,  j,k,id, state_handle, ens_size))
+         model_pressure_distrib = interp_pressure(pres1, pres2, vertical=.false.)
 
       ! If not periodic, then try extrapolating
       else
 
-         pres1 = model_pressure_t(i,j,  k,id,x)
-         pres2 = model_pressure_t(i,j+1,k,id,x)
-         model_pressure = (3.0_r8*pres1 - pres2)/2.0_r8
+         pres1 = scalar(model_pressure_t_distrib(i,j,  k,id, state_handle, ens_size))
+         pres2 = scalar(model_pressure_t_distrib(i,j+1,k,id, state_handle, ens_size))
+         model_pressure_distrib = interp_pressure(pres1, pres2, extrapolate=.true., vertical=.false.)
 
       endif
 
    else
 
-      pres1 = model_pressure_t(i,j,  k,id,x)
-      pres2 = model_pressure_t(i,j-1,k,id,x)
-      model_pressure = (pres1 + pres2)/2.0_r8
+      pres1 = scalar(model_pressure_t_distrib(i,j,  k,id, state_handle, ens_size))
+      pres2 = scalar(model_pressure_t_distrib(i,j-1,k,id, state_handle, ens_size))
+      model_pressure_distrib = interp_pressure(pres1, pres2, vertical=.false.)
 
    endif
 
@@ -5163,31 +4760,32 @@ elseif( var_type == wrf%dom(id)%type_mu    .or. var_type == wrf%dom(id)%type_tsl
         var_type == wrf%dom(id)%type_q2    .or. var_type == wrf%dom(id)%type_tsk  .or. &
         var_type == wrf%dom(id)%type_smois .or. var_type == wrf%dom(id)%type_sh2o) then
 
-   model_pressure = model_pressure_s(i,j,id,x)
-
+   model_pressure_distrib = model_pressure_s_distrib(i,j,id, state_handle)
+    
 else
 
-   model_pressure = model_pressure_t(i,j,k,id,x)
+   pres1 = scalar(model_pressure_t_distrib(i,j,k,id, state_handle, ens_size))
+   model_pressure_distrib = pres1
 
 endif
 
-end function model_pressure
+end function model_pressure_distrib
 
 !#######################################################
 
-function model_surface_pressure(i,j,id,var_type,x)
+function model_surface_pressure_distrib(i, j, id, var_type, state_handle)
 
 ! Calculate the surface pressure at grid point (i,j), domain id.
 ! The grid is defined according to var_type.
 
-integer,  intent(in)  :: i,j,id,var_type
-real(r8), intent(in)  :: x(:)
-real(r8)              :: model_surface_pressure
+type(ensemble_type), intent(in) :: state_handle
+integer,            intent(in)  :: i,j,id,var_type
+real(r8)              :: model_surface_pressure_distrib
 
 integer  :: off
 real(r8) :: pres1, pres2
 
-model_surface_pressure = missing_r8
+model_surface_pressure_distrib = missing_r8
 
 
 ! If U-grid, then pressure is defined between U points, so average --
@@ -5200,16 +4798,16 @@ if( var_type == wrf%dom(id)%type_u ) then
       if ( wrf%dom(id)%periodic_x ) then
 
          ! We are at seam in longitude, take first and last M-grid points
-         pres1 = model_pressure_s(i-1,j,id,x)
-         pres2 = model_pressure_s(1,  j,id,x)
-         model_surface_pressure = (pres1 + pres2)/2.0_r8
+         pres1 = model_pressure_s_distrib(i-1,j,id, state_handle)
+         pres2 = model_pressure_s_distrib(1,  j,id, state_handle)
+         model_surface_pressure_distrib = interp_pressure(pres1, pres2, vertical=.false.)
          
       else
 
          ! If not periodic, then try extrapolating
-         pres1 = model_pressure_s(i-1,j,id,x)
-         pres2 = model_pressure_s(i-2,j,id,x)
-         model_surface_pressure = (3.0_r8*pres1 - pres2)/2.0_r8
+         pres1 = model_pressure_s_distrib(i-1,j,id, state_handle)
+         pres2 = model_pressure_s_distrib(i-2,j,id, state_handle)
+         model_surface_pressure_distrib = interp_pressure(pres1, pres2, extrapolate=.true., vertical=.false.)
 
       endif
 
@@ -5219,24 +4817,24 @@ if( var_type == wrf%dom(id)%type_u ) then
       if ( wrf%dom(id)%periodic_x ) then
 
          ! We are at seam in longitude, take first and last M-grid points
-         pres1 = model_pressure_s(i,             j,id,x)
-         pres2 = model_pressure_s(wrf%dom(id)%we,j,id,x)
-         model_surface_pressure = (pres1 + pres2)/2.0_r8
+         pres1 = model_pressure_s_distrib(i,             j,id, state_handle)
+         pres2 = model_pressure_s_distrib(wrf%dom(id)%we,j,id, state_handle)
+         model_surface_pressure_distrib = interp_pressure(pres1, pres2, vertical=.false.)
          
       else
 
          ! If not periodic, then try extrapolating
-         pres1 = model_pressure_s(i,  j,id,x)
-         pres2 = model_pressure_s(i+1,j,id,x)
-         model_surface_pressure = (3.0_r8*pres1 - pres2)/2.0_r8
+         pres1 = model_pressure_s_distrib(i,  j,id, state_handle)
+         pres2 = model_pressure_s_distrib(i+1,j,id, state_handle)
+         model_surface_pressure_distrib = interp_pressure(pres1, pres2, extrapolate=.true., vertical=.false.)
 
       endif
 
    else
 
-      pres1 = model_pressure_s(i,  j,id,x)
-      pres2 = model_pressure_s(i-1,j,id,x)
-      model_surface_pressure = (pres1 + pres2)/2.0_r8
+      pres1 = model_pressure_s_distrib(i,  j,id, state_handle)
+      pres2 = model_pressure_s_distrib(i-1,j,id, state_handle)
+      model_surface_pressure_distrib = interp_pressure(pres1, pres2, vertical=.false.)
 
    endif
 
@@ -5253,16 +4851,16 @@ elseif( var_type == wrf%dom(id)%type_v ) then
          off = i + wrf%dom(id)%we/2
          if ( off > wrf%dom(id)%we ) off = off - wrf%dom(id)%we
 
-         pres1 = model_pressure_s(off,j-1,id,x)
-         pres2 = model_pressure_s(i  ,j-1,id,x)
-         model_surface_pressure = (pres1 + pres2)/2.0_r8
+         pres1 = model_pressure_s_distrib(off,j-1,id, state_handle)
+         pres2 = model_pressure_s_distrib(i  ,j-1,id, state_handle)
+         model_surface_pressure_distrib = interp_pressure(pres1, pres2, vertical=.false.)
 
       ! If not periodic, then try extrapolating
       else
 
-         pres1 = model_pressure_s(i,j-1,id,x)
-         pres2 = model_pressure_s(i,j-2,id,x)
-         model_surface_pressure = (3.0_r8*pres1 - pres2)/2.0_r8
+         pres1 = model_pressure_s_distrib(i,j-1,id, state_handle)
+         pres2 = model_pressure_s_distrib(i,j-2,id, state_handle)
+         model_surface_pressure_distrib = interp_pressure(pres1, pres2, extrapolate=.true., vertical=.false.)
 
       endif
 
@@ -5275,52 +4873,54 @@ elseif( var_type == wrf%dom(id)%type_v ) then
          off = i + wrf%dom(id)%we/2
          if ( off > wrf%dom(id)%we ) off = off - wrf%dom(id)%we
 
-         pres1 = model_pressure_s(off,j,id,x)
-         pres2 = model_pressure_s(i,  j,id,x)
-         model_surface_pressure = (pres1 + pres2)/2.0_r8
+         pres1 = model_pressure_s_distrib(off,j,id, state_handle)
+         pres2 = model_pressure_s_distrib(i,  j,id, state_handle)
+         model_surface_pressure_distrib = interp_pressure(pres1, pres2, vertical=.false.)
 
       ! If not periodic, then try extrapolating
       else
 
-         pres1 = model_pressure_s(i,j,  id,x)
-         pres2 = model_pressure_s(i,j+1,id,x)
-         model_surface_pressure = (3.0_r8*pres1 - pres2)/2.0_r8
+         pres1 = model_pressure_s_distrib(i,j,  id, state_handle)
+         pres2 = model_pressure_s_distrib(i,j+1,id, state_handle)
+         model_surface_pressure_distrib = interp_pressure(pres1, pres2, extrapolate=.true., vertical=.false.)
 
       endif
 
    else
 
-      pres1 = model_pressure_s(i,j,  id,x)
-      pres2 = model_pressure_s(i,j-1,id,x)
-      model_surface_pressure = (pres1 + pres2)/2.0_r8
+      pres1 = model_pressure_s_distrib(i,j,  id, state_handle)
+      pres2 = model_pressure_s_distrib(i,j-1,id, state_handle)
+      model_surface_pressure_distrib = interp_pressure(pres1, pres2, vertical=.false.)
 
    endif
 
 else
 
-   model_surface_pressure = model_pressure_s(i,j,id,x)
+   model_surface_pressure_distrib = model_pressure_s_distrib(i,j,id, state_handle)
 
 endif
 
-end function model_surface_pressure
+end function model_surface_pressure_distrib
 
 !#######################################################
 
-function model_pressure_t(i,j,k,id,x)
+function model_pressure_t_distrib(i,j,k,id,state_handle, ens_size)
 
 ! Calculate total pressure on mass point (half (mass) levels, T-point).
 
-integer,  intent(in)  :: i,j,k,id
-real(r8), intent(in)  :: x(:)
-real(r8)              :: model_pressure_t
+integer,             intent(in) :: ens_size
+integer,             intent(in) :: i,j,k,id
+type(ensemble_type), intent(in) :: state_handle
+real(r8) :: model_pressure_t_distrib(ens_size)
 
 real (kind=r8), PARAMETER    :: rd_over_rv = gas_constant / gas_constant_v
 real (kind=r8), PARAMETER    :: cpovcv = 1.4_r8        ! cp / (cp - gas_constant)
 
-integer  :: iqv,it
-real(r8) :: qvf1,rho
+integer(i8) :: iqv !< I think this is i for index
+integer(i8) :: it !< change to array
+real(r8) :: qvf1(ens_size),rho(ens_size), x_iqv(ens_size), x_it(ens_size)
 
-model_pressure_t = missing_r8
+model_pressure_t_distrib = missing_r8
 
 ! Adapted the code from WRF module_big_step_utilities_em.F ----
 !         subroutine calc_p_rho_phi      Y.-R. Guo (10/20/2004)
@@ -5333,30 +4933,38 @@ if (wrf%dom(id)%type_qv < 0 .or. wrf%dom(id)%type_t < 0) then
        source, revision, revdate)
 endif
 
-iqv = wrf%dom(id)%dart_ind(i,j,k,wrf%dom(id)%type_qv)
-it  = wrf%dom(id)%dart_ind(i,j,k,wrf%dom(id)%type_t)
+iqv = get_dart_vector_index(i,j,k, domain_id(id), wrf%dom(id)%type_qv)
+it  = get_dart_vector_index(i,j,k, domain_id(id), wrf%dom(id)%type_t)
 
-qvf1 = 1.0_r8 + x(iqv) / rd_over_rv
+x_iqv = get_state(iqv, state_handle)
+x_it  = get_state(it, state_handle)
 
-rho = model_rho_t(i,j,k,id,x)
+qvf1(:) = 1.0_r8 + x_iqv(:) / rd_over_rv
+!print*, 'qvf1 ', qvf1
+
+rho(:) = model_rho_t_distrib(i,j,k,id,state_handle, ens_size)
+!print*, 'rho ', rho
 
 ! .. total pressure:
-model_pressure_t = ps0 * ( (gas_constant*(ts0+x(it))*qvf1) / &
+model_pressure_t_distrib = ps0 * ( (gas_constant*(ts0+x_it)*qvf1) / &
      (ps0/rho) )**cpovcv
 
-end function model_pressure_t
+end function model_pressure_t_distrib
 
 !#######################################################
 
-function model_pressure_s(i,j,id,x)
+function model_pressure_s_distrib(i, j, id, state_handle)
 
 ! compute pressure at surface at mass point
 
-integer,  intent(in)  :: i,j,id
-real(r8), intent(in)  :: x(:)
-real(r8)              :: model_pressure_s
+integer,             intent(in) :: i,j,id
+type(ensemble_type), intent(in) :: state_handle
 
-integer  :: ips, imu
+real(r8)              :: model_pressure_s_distrib
+
+integer(i8) :: ips, imu
+real(r8)    :: x_imu, x_ips
+
 
 ! make sure one of these is good.
 if ( wrf%dom(id)%type_mu < 0 .and. wrf%dom(id)%type_ps < 0 ) then
@@ -5366,32 +4974,231 @@ if ( wrf%dom(id)%type_mu < 0 .and. wrf%dom(id)%type_ps < 0 ) then
 endif
 
 if ( wrf%dom(id)%type_ps >= 0 ) then
-   ips = wrf%dom(id)%dart_ind(i,j,1,wrf%dom(id)%type_ps)
-   model_pressure_s = x(ips)
+   ips = get_dart_vector_index(i,j,1, domain_id(id), wrf%dom(id)%type_ps)
+   x_ips = scalar(get_state(ips, state_handle))
+   model_pressure_s_distrib = x_ips
 
 else
-   imu = wrf%dom(id)%dart_ind(i,j,1,wrf%dom(id)%type_mu)
-   model_pressure_s = wrf%dom(id)%p_top + wrf%dom(id)%mub(i,j) + x(imu)
+   imu = get_dart_vector_index(i,j,1, domain_id(id), wrf%dom(id)%type_mu)
+   x_imu = minval(get_state(imu, state_handle))
+   model_pressure_s_distrib = wrf%dom(id)%p_top + wrf%dom(id)%mub(i,j) + x_imu
 
 endif
 
-
-end function model_pressure_s
+end function model_pressure_s_distrib
 
 !#######################################################
 
-function model_rho_t(i,j,k,id,x)
+function interp_pressure(p1, p2, extrapolate, vertical)
+ 
+! interpolate halfway between pressures 1 and 2 in log units.
+! if extrapolate is true, extrapolate where 1 is the edge and
+! 2 is the inner value, going 1/2 grid cell out.
+
+real(r8), intent(in)           :: p1, p2
+logical,  intent(in), optional :: extrapolate
+logical,  intent(in), optional :: vertical
+real(r8)                       :: interp_pressure
+
+logical  :: do_interp
+logical  :: is_vert
+real(r8) :: intermediate
+
+! default is to do interpolation; only extrapolate if the optional
+! arg is specified and if it is true.
+do_interp = .true.
+if (present(extrapolate)) then
+   if (extrapolate) do_interp = .false.
+endif
+
+! if vert is specified and is false, check log_horz_interpM instead
+! of log_vert_interp to decide log vs linear interpolation for the
+! Midpoint value.  default is to do vertical interpolation.
+is_vert = .true.
+if (present(vertical)) then
+   is_vert = vertical
+endif
+
+! once we like the results, remove the log_vert_interp test.
+if (do_interp) then
+   if ((      is_vert .and. log_vert_interp )  .or. &
+       (.not. is_vert .and. log_horz_interpM)) then
+      interp_pressure = exp((log(p1) + log(p2))/2.0_r8)
+   else
+      interp_pressure = (p1 + p2)/2.0_r8
+   endif
+else
+   if ((      is_vert .and. log_vert_interp )  .or. &
+       (.not. is_vert .and. log_horz_interpM)) then
+      intermediate = (3.0_r8*log(p1) - log(p2))/2.0_r8
+      if (intermediate <= 0.0_r8) then
+         interp_pressure = p1
+      else
+         interp_pressure = exp(intermediate)
+      endif
+   else
+      interp_pressure = (3.0_r8*p1 - p2)/2.0_r8
+   endif
+endif
+
+end function interp_pressure
+
+!#######################################################
+
+function interp_4pressure_distrib(p1, p2, p3, p4, dx, dxm, dy, dym, ens_size, extrapolate, edgep)
+ 
+! given 4 corners of a quad, where the p1, p2, p3 and p4 points are
+! respectively:  lower left, lower right, upper left, upper right
+! and dx is the distance in x, dxm is 1.0-dx, dy is distance in y
+! and dym is 1.0-dy, interpolate the pressure while converted to log.
+! if extrapolate is true, extrapolate where edgep is the edge pressure
+! and the 4 points and dx/dy give the location of the inner point.
+
+integer, intent(in)                :: ens_size
+real(r8), intent(in)               :: p1(ens_size), p2(ens_size), p3(ens_size), p4(ens_size)
+real(r8), intent(in)               :: dx, dxm, dy, dym
+logical,  intent(in), optional     :: extrapolate
+real(r8), intent(in), optional     :: edgep(ens_size)
+real(r8)                           :: interp_4pressure_distrib(ens_size)
+
+logical  :: do_interp
+real(r8) :: intermediate(ens_size)
+real(r8) :: l1(ens_size), l2(ens_size), l3(ens_size), l4(ens_size)
+
+!HK
+integer :: i
+
+! default is to do interpolation; only extrapolate if the optional
+! arg is specified and if it is true.  for extrapolation 'edgep' is
+! required; it is unused for interpolation.
+do_interp = .true.
+if (present(extrapolate)) then
+   if (extrapolate) do_interp = .false.
+endif
+
+if (.not. do_interp .and. .not. present(edgep)) then
+  call error_handler(E_ERR, 'interp_4pressure:', &
+      'edgep must be specified for extrapolation.  internal error.', &
+       source, revision, revdate)
+endif
+
+if (log_horz_interpQ) then
+   l1 = log(p1)
+   l2 = log(p2)
+   l3 = log(p3)
+   l4 = log(p4)
+endif
+
+
+! once we like the results, remove the log_horz_interpQ test.
+if (do_interp) then
+   if (log_horz_interpQ) then
+      interp_4pressure_distrib = exp(dym*( dxm*l1 + dx*l2 ) + dy*( dxm*l3 + dx*l4 ))
+   else
+      interp_4pressure_distrib = dym*( dxm*p1 + dx*p2 ) + dy*( dxm*p3 + dx*p4 )
+   endif
+else
+   if (log_horz_interpQ) then
+      intermediate = (3.0_r8*log(edgep) - &
+                 dym*( dxm*l1 + dx*l2 ) - dy*( dxm*l3 + dx*l4 ))/2.0_r8
+
+      do i = 1, size(intermediate)
+         if (intermediate(i) <= 0.0_r8) then
+            interp_4pressure_distrib(i) = edgep(i) !> @todo is this correct?
+         else
+            interp_4pressure_distrib(i) = exp(intermediate(i))
+         endif
+      enddo
+   else
+      interp_4pressure_distrib = (3.0_r8*edgep - &
+                 dym*( dxm*p1 + dx*p2 ) - dy*( dxm*p3 + dx*p4 ))/2.0_r8
+   endif
+endif
+
+end function interp_4pressure_distrib
+
+!#######################################################
+!> Interpolate function
+function interp_4pressure(p1, p2, p3, p4, dx, dxm, dy, dym, extrapolate, edgep)
+ 
+! given 4 corners of a quad, where the p1, p2, p3 and p4 points are
+! respectively:  lower left, lower right, upper left, upper right
+! and dx is the distance in x, dxm is 1.0-dx, dy is distance in y
+! and dym is 1.0-dy, interpolate the pressure while converted to log.
+! if extrapolate is true, extrapolate where edgep is the edge pressure
+! and the 4 points and dx/dy give the location of the inner point.
+
+real(r8), intent(in)               :: p1, p2, p3, p4
+real(r8), intent(in)               :: dx, dxm, dy, dym
+logical,  intent(in), optional     :: extrapolate
+real(r8), intent(in), optional     :: edgep
+real(r8)                           :: interp_4pressure
+
+logical  :: do_interp
+real(r8) :: intermediate
+real(r8) :: l1, l2, l3, l4
+
+! default is to do interpolation; only extrapolate if the optional
+! arg is specified and if it is true.  for extrapolation 'edgep' is
+! required; it is unused for interpolation.
+do_interp = .true.
+if (present(extrapolate)) then
+   if (extrapolate) do_interp = .false.
+endif
+
+if (.not. do_interp .and. .not. present(edgep)) then
+  call error_handler(E_ERR, 'interp_4pressure:', &
+      'edgep must be specified for extrapolation.  internal error.', &
+       source, revision, revdate)
+endif
+
+if (log_horz_interpQ) then
+   l1 = log(p1)
+   l2 = log(p2)
+   l3 = log(p3)
+   l4 = log(p4)
+endif
+
+
+! once we like the results, remove the log_horz_interpQ test.
+if (do_interp) then
+   if (log_horz_interpQ) then
+      interp_4pressure = exp(dym*( dxm*l1 + dx*l2 ) + dy*( dxm*l3 + dx*l4 ))
+   else
+      interp_4pressure = dym*( dxm*p1 + dx*p2 ) + dy*( dxm*p3 + dx*p4 )
+   endif
+else
+   if (log_horz_interpQ) then
+      intermediate = (3.0_r8*log(edgep) - &
+                 dym*( dxm*l1 + dx*l2 ) - dy*( dxm*l3 + dx*l4 ))/2.0_r8
+      if (intermediate <= 0.0_r8) then
+         interp_4pressure = edgep
+      else
+         interp_4pressure = exp(intermediate)
+      endif
+   else
+      interp_4pressure = (3.0_r8*edgep - &
+                 dym*( dxm*p1 + dx*p2 ) - dy*( dxm*p3 + dx*p4 ))/2.0_r8
+   endif
+endif
+
+end function interp_4pressure
+
+!#######################################################
+
+function model_rho_t_distrib(i,j,k,id,state_handle, ens_size)
 
 ! Calculate the total density on mass point (half (mass) levels, T-point).
 
-integer,  intent(in)  :: i,j,k,id
-real(r8), intent(in)  :: x(:)
-real(r8)              :: model_rho_t
+integer,             intent(in)  :: ens_size
+integer,             intent(in)  :: i,j,k,id
+type(ensemble_type), intent(in)  :: state_handle
+real(r8) :: model_rho_t_distrib(ens_size)
 
-integer  :: imu,iph,iphp1
-real(r8) :: ph_e
+integer(i8) :: imu,iph,iphp1
+real(r8)    :: ph_e(ens_size), x_imu(ens_size), x_iph(ens_size), x_iphp1(ens_size)
 
-model_rho_t = missing_r8
+model_rho_t_distrib(:) = missing_r8
 
 ! Adapted the code from WRF module_big_step_utilities_em.F ----
 !         subroutine calc_p_rho_phi      Y.-R. Guo (10/20/2004)
@@ -5404,22 +5211,26 @@ if (wrf%dom(id)%type_mu < 0 .or. wrf%dom(id)%type_gz < 0) then
        source, revision, revdate)
 endif
 
-imu   = wrf%dom(id)%dart_ind(i,j,1,  wrf%dom(id)%type_mu)
-iph   = wrf%dom(id)%dart_ind(i,j,k,  wrf%dom(id)%type_gz)
-iphp1 = wrf%dom(id)%dart_ind(i,j,k+1,wrf%dom(id)%type_gz)
+imu   = get_dart_vector_index(i,j,1,   domain_id(id), wrf%dom(id)%type_mu)
+iph   = get_dart_vector_index(i,j,k,   domain_id(id), wrf%dom(id)%type_gz)
+iphp1 = get_dart_vector_index(i,j,k+1, domain_id(id), wrf%dom(id)%type_gz)
 
-ph_e = ( (x(iphp1) + wrf%dom(id)%phb(i,j,k+1)) &
-       - (x(iph)   + wrf%dom(id)%phb(i,j,k  )) ) / wrf%dom(id)%dnw(k)
+x_imu = get_state(imu, state_handle)
+x_iph = get_state(iph, state_handle)
+x_iphp1 = get_state(iphp1, state_handle)
+
+ph_e = ( (x_iphp1 + wrf%dom(id)%phb(i,j,k+1)) &
+       - (x_iph   + wrf%dom(id)%phb(i,j,k  )) ) / wrf%dom(id)%dnw(k)
 
 ! now calculate rho = - mu / dphi/deta
 
-model_rho_t = - (wrf%dom(id)%mub(i,j)+x(imu)) / ph_e
+model_rho_t_distrib(:) = - (wrf%dom(id)%mub(i,j)+x_imu) / ph_e
 
-end function model_rho_t
+end function model_rho_t_distrib
 
 !#######################################################
 
-subroutine get_model_height_profile(i,j,dx,dy,dxm,dym,n,x,id,v_h)
+subroutine get_model_height_profile_distrib(i,j,dx,dy,dxm,dym,n,id,v_h, state_handle, ens_size)
 
 ! Calculate the model height profile on half (mass) levels,
 ! horizontally interpolated at the observation location.
@@ -5428,13 +5239,20 @@ subroutine get_model_height_profile(i,j,dx,dy,dxm,dym,n,x,id,v_h)
 
 integer,  intent(in)  :: i,j,n,id
 real(r8), intent(in)  :: dx,dy,dxm,dym
-real(r8), intent(in)  :: x(:)
-real(r8), intent(out) :: v_h(0:n)
+integer,  intent(in)  :: ens_size
+real(r8), intent(out) :: v_h(0:n, ens_size)
+type(ensemble_type), intent(in)  :: state_handle
+integer e !< for ensemble loop
 
-real(r8)  :: fll(n+1), geop, lat
-integer   :: ill,iul,ilr,iur,k, rc
+real(r8)              :: fll(n+1, ens_size), geop(ens_size), lat(ens_size)
+integer(i8)           :: ill, iul, ilr, iur
+integer               :: k, rc
 integer, dimension(2) :: ll, lr, ul, ur
 logical   :: debug = .false.
+
+real(r8), allocatable :: x_ill(:), x_ilr(:), x_iul(:), x_iur(:)
+
+allocate(x_ill(ens_size), x_ilr(ens_size), x_iul(ens_size), x_iur(ens_size))
 
 if (wrf%dom(id)%type_gz < 0) then
   call error_handler(E_ERR, 'get_model_height_profile:', &
@@ -5451,38 +5269,46 @@ if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_gz
 
    do k = 1, wrf%dom(id)%var_size(3,wrf%dom(id)%type_gz)
 
-      ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_gz)
-      iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_gz)
-      ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_gz)
-      iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_gz)
+      ill = get_dart_vector_index(ll(1), ll(2), k, domain_id(id), wrf%dom(id)%type_gz)
+      iul = get_dart_vector_index(ul(1), ul(2), k, domain_id(id), wrf%dom(id)%type_gz)
+      ilr = get_dart_vector_index(lr(1), lr(2), k, domain_id(id), wrf%dom(id)%type_gz)
+      iur = get_dart_vector_index(ur(1), ur(2), k, domain_id(id), wrf%dom(id)%type_gz)
 
-      geop = ( dym*( dxm*( wrf%dom(id)%phb(ll(1),ll(2),k) + x(ill) ) + &
-                      dx*( wrf%dom(id)%phb(lr(1),lr(2),k) + x(ilr) ) ) + &
-                dy*( dxm*( wrf%dom(id)%phb(ul(1),ul(2),k) + x(iul) ) + &
-                      dx*( wrf%dom(id)%phb(ur(1),ur(2),k) + x(iur) ) ) )/gravity
+      x_ill = get_state(ill, state_handle)
+      x_ilr = get_state(ilr, state_handle)
+      x_iul = get_state(iul, state_handle)
+      x_iur = get_state(iur, state_handle)
 
-      lat = ( wrf%dom(id)%latitude(ll(1),ll(2)) + &
+      geop(:) = ( dym*( dxm*( wrf%dom(id)%phb(ll(1),ll(2),k) + x_ill ) + &
+                      dx*( wrf%dom(id)%phb(lr(1),lr(2),k) + x_ilr ) ) + &
+                dy*( dxm*( wrf%dom(id)%phb(ul(1),ul(2),k) + x_iul ) + &
+                      dx*( wrf%dom(id)%phb(ur(1),ur(2),k) + x_iur ) ) )/gravity
+
+      lat(:) = ( wrf%dom(id)%latitude(ll(1),ll(2)) + &
               wrf%dom(id)%latitude(lr(1),lr(2)) + &
               wrf%dom(id)%latitude(ul(1),ul(2)) + &
               wrf%dom(id)%latitude(ur(1),ur(2)) ) / 4.0_r8
 
-      fll(k) = compute_geometric_height(geop, lat)
+      do e = 1, ens_size
+         fll(k, e) = compute_geometric_height(geop(e), lat(e))
+      enddo
+
    end do
 
    do k=1,n
-      v_h(k) = 0.5_r8*(fll(k) + fll(k+1) )
+      v_h(k, :) = 0.5_r8*(fll(k, :) + fll(k+1, :) )
    end do
 
-   v_h(0) = dym*( dxm*wrf%dom(id)%hgt(ll(1), ll(2)) + &
+   v_h(0, :) = dym*( dxm*wrf%dom(id)%hgt(ll(1), ll(2)) + &
                    dx*wrf%dom(id)%hgt(lr(1), lr(2)) ) + &
              dy*( dxm*wrf%dom(id)%hgt(ul(1), ul(2)) + &
                    dx*wrf%dom(id)%hgt(ur(1), ur(2)) )
 
    if (debug) &
-        print*, 'model_mod.f90 :: get_model_height_profile :: n, v_h() ', n, v_h(1:n)
+        print*, 'model_mod.f90 :: get_model_height_profile :: n, v_h() ', n, v_h(1:n, :)
 
    if (debug) &
-        print*, 'model_mod.f90 :: get_model_height_profile :: v_h(0) ', v_h(0)
+        print*, 'model_mod.f90 :: get_model_height_profile :: v_h(0) ', v_h(0, :)
  
 ! If the boundsCheck functions return an unsatisfactory integer index, then set
 !   fld as missing data
@@ -5492,27 +5318,29 @@ else
    print*,i,j,dx,dy,dxm,dym,n,id,wrf%dom(id)%var_size(1,wrf%dom(id)%type_gz), &
         wrf%dom(id)%var_size(2,wrf%dom(id)%type_gz)
 
-   v_h(:) =  missing_r8
+   v_h(:, :) =  missing_r8
 
 endif
 
-end subroutine get_model_height_profile
+end subroutine get_model_height_profile_distrib
 
 !#######################################################
 
-function model_height(i,j,k,id,var_type,x)
+function model_height_distrib(i,j,k,id,var_type, state_handle)
 
 ! This routine used to compute geopotential heights; it now
 ! computes geometric heights.
 
-integer,  intent(in)  :: i,j,k,id,var_type
-real(r8), intent(in)  :: x(:)
-real(r8)              :: model_height
+type(ensemble_type), intent(in) :: state_handle
+integer,             intent(in) :: i,j,k,id,var_type
+real(r8)                        :: model_height_distrib
 
-integer   :: i1, i2, i3, i4, off
-real(r8)  :: geop, lat
+integer(i8)  :: i1, i2, i3, i4
+integer      :: off
+real(r8)     :: x_i1(1), x_i2(1), x_i3(1), x_i4(1)
+real(r8)     :: geop, lat
 
-model_height = missing_r8
+model_height_distrib = missing_r8
 
 if (wrf%dom(id)%type_gz < 0) then
   call error_handler(E_ERR, 'model_height:', &
@@ -5523,9 +5351,11 @@ endif
 ! If W-grid (on ZNW levels), then we are fine because it is native to GZ
 if( (var_type == wrf%dom(id)%type_w) .or. (var_type == wrf%dom(id)%type_gz) ) then
 
-   i1 = wrf%dom(id)%dart_ind(i,j,k,wrf%dom(id)%type_gz)
-   geop = (wrf%dom(id)%phb(i,j,k)+x(i1))/gravity
-   model_height = compute_geometric_height(geop, wrf%dom(id)%latitude(i, j))
+   i1 = get_dart_vector_index(i,j,k, domain_id(id),wrf%dom(id)%type_gz)
+   x_i1 = get_state(i1, state_handle)
+
+   geop = minval((wrf%dom(id)%phb(i,j,k)+x_i1)/gravity)
+   model_height_distrib = compute_geometric_height(geop, wrf%dom(id)%latitude(i, j))
 
 ! If U-grid, then height is defined between U points, both in horizontal 
 !   and in vertical, so average -- averaging depends on longitude periodicity
@@ -5537,40 +5367,52 @@ elseif( var_type == wrf%dom(id)%type_u ) then
       if ( wrf%dom(id)%periodic_x ) then
 
          ! We are at the seam in longitude, so take first and last mass points
-         i1 = wrf%dom(id)%dart_ind(i-1,j,k  ,wrf%dom(id)%type_gz)
-         i2 = wrf%dom(id)%dart_ind(i-1,j,k+1,wrf%dom(id)%type_gz)
-         i3 = wrf%dom(id)%dart_ind(1,  j,k  ,wrf%dom(id)%type_gz)
-         i4 = wrf%dom(id)%dart_ind(1,  j,k+1,wrf%dom(id)%type_gz)
+         i1 = get_dart_vector_index(i-1,j,k  , domain_id(id),wrf%dom(id)%type_gz)
+         i2 = get_dart_vector_index(i-1,j,k+1, domain_id(id),wrf%dom(id)%type_gz)
+         i3 = get_dart_vector_index(1,  j,k  , domain_id(id),wrf%dom(id)%type_gz)
+         i4 = get_dart_vector_index(1,  j,k+1, domain_id(id),wrf%dom(id)%type_gz)
 
-         geop = ( (wrf%dom(id)%phb(i-1,j,k  ) + x(i1)) &
-                 +(wrf%dom(id)%phb(i-1,j,k+1) + x(i2)) &
-                 +(wrf%dom(id)%phb(1  ,j,k  ) + x(i3)) &
-                 +(wrf%dom(id)%phb(1  ,j,k+1) + x(i4)) )/(4.0_r8*gravity)
+         x_i1 = get_state(i1, state_handle)
+         x_i2 = get_state(i2, state_handle)
+         x_i3 = get_state(i3, state_handle)
+         x_i4 = get_state(i4, state_handle)
+
+
+         geop = minval(( (wrf%dom(id)%phb(i-1,j,k  ) + x_i1) &
+                 +(wrf%dom(id)%phb(i-1,j,k+1) + x_i2) &
+                 +(wrf%dom(id)%phb(1  ,j,k  ) + x_i3) &
+                 +(wrf%dom(id)%phb(1  ,j,k+1) + x_i4) )/(4.0_r8*gravity))
          
          lat = ( wrf%dom(id)%latitude(i-1,j)  &
                 +wrf%dom(id)%latitude(i-1,j)  &
                 +wrf%dom(id)%latitude(1  ,j)  &
                 +wrf%dom(id)%latitude(1  ,j) ) / 4.0_r8
 
-         model_height = compute_geometric_height(geop, lat)
+         model_height_distrib = compute_geometric_height(geop, lat)
          
       else
 
          ! If not periodic, then try extrapolating
-         i1 = wrf%dom(id)%dart_ind(i-1,j,k  ,wrf%dom(id)%type_gz)
-         i2 = wrf%dom(id)%dart_ind(i-1,j,k+1,wrf%dom(id)%type_gz)
+         i1 = get_dart_vector_index(i-1,j,k  , domain_id(id),wrf%dom(id)%type_gz)
+         i2 = get_dart_vector_index(i-1,j,k+1, domain_id(id),wrf%dom(id)%type_gz)
 
-         geop = ( 3.0_r8*(wrf%dom(id)%phb(i-1,j,k  )+x(i1)) &
-                 +3.0_r8*(wrf%dom(id)%phb(i-1,j,k+1)+x(i2)) &
-                        -(wrf%dom(id)%phb(i-2,j,k  )+x(i1-1)) &
-                        -(wrf%dom(id)%phb(i-2,j,k+1)+x(i2-1)) )/(4.0_r8*gravity)
+         x_i1 = get_state(i1, state_handle)
+         x_i2 = get_state(i2, state_handle)
+         x_i3 = get_state(i1 -1, state_handle)
+         x_i4 = get_state(i2 -1, state_handle)
+
+
+         geop = minval(( 3.0_r8*(wrf%dom(id)%phb(i-1,j,k  )+x_i1) &
+                 +3.0_r8*(wrf%dom(id)%phb(i-1,j,k+1)+x_i2) &
+                        -(wrf%dom(id)%phb(i-2,j,k  )+x_i3) &
+                        -(wrf%dom(id)%phb(i-2,j,k+1)+x_i4) )/(4.0_r8*gravity))
 
          lat = ( 3.0_r8*wrf%dom(id)%latitude(i-1,j)  &
                 +3.0_r8*wrf%dom(id)%latitude(i-1,j)  &
                        -wrf%dom(id)%latitude(i-2,j)  &
                        -wrf%dom(id)%latitude(i-2,j)) / 4.0_r8
 
-         model_height = compute_geometric_height(geop, lat)
+         model_height_distrib = compute_geometric_height(geop, lat)
 
       endif
 
@@ -5581,59 +5423,76 @@ elseif( var_type == wrf%dom(id)%type_u ) then
 
          ! We are at the seam in longitude, so take first and last mass points
          off = wrf%dom(id)%we
-         i1 = wrf%dom(id)%dart_ind(i  ,j,k  ,wrf%dom(id)%type_gz)
-         i2 = wrf%dom(id)%dart_ind(i  ,j,k+1,wrf%dom(id)%type_gz)
-         i3 = wrf%dom(id)%dart_ind(off,j,k  ,wrf%dom(id)%type_gz)
-         i4 = wrf%dom(id)%dart_ind(off,j,k+1,wrf%dom(id)%type_gz)
+         i1 = get_dart_vector_index(i  ,j,k  ,domain_id(id),wrf%dom(id)%type_gz)
+         i2 = get_dart_vector_index(i  ,j,k+1,domain_id(id),wrf%dom(id)%type_gz)
+         i3 = get_dart_vector_index(off,j,k  ,domain_id(id),wrf%dom(id)%type_gz)
+         i4 = get_dart_vector_index(off,j,k+1,domain_id(id),wrf%dom(id)%type_gz)
 
-         geop = ( (wrf%dom(id)%phb(i  ,j,k  ) + x(i1)) &
-                 +(wrf%dom(id)%phb(i  ,j,k+1) + x(i2)) &
-                 +(wrf%dom(id)%phb(off,j,k  ) + x(i3)) &
-                 +(wrf%dom(id)%phb(off,j,k+1) + x(i4)) )/(4.0_r8*gravity)
+         x_i1 = get_state(i1, state_handle)
+         x_i2 = get_state(i2, state_handle)
+         x_i3 = get_state(i3, state_handle)
+         x_i4 = get_state(i4, state_handle)
+
+         geop = minval(( (wrf%dom(id)%phb(i  ,j,k  ) + x_i1) &
+                 +(wrf%dom(id)%phb(i  ,j,k+1) + x_i2) &
+                 +(wrf%dom(id)%phb(off,j,k  ) + x_i3) &
+                 +(wrf%dom(id)%phb(off,j,k+1) + x_i4) )/(4.0_r8*gravity))
          
          lat = ( wrf%dom(id)%latitude(i  ,j)  &
                 +wrf%dom(id)%latitude(i  ,j)  &
                 +wrf%dom(id)%latitude(off,j)  &
                 +wrf%dom(id)%latitude(off,j)) / 4.0_r8
 
-         model_height = compute_geometric_height(geop, lat)
+         model_height_distrib = compute_geometric_height(geop, lat)
 
       else
 
          ! If not periodic, then try extrapolating
-         i1 = wrf%dom(id)%dart_ind(i,j,k  ,wrf%dom(id)%type_gz)
-         i2 = wrf%dom(id)%dart_ind(i,j,k+1,wrf%dom(id)%type_gz)
-         
-         geop = ( 3.0_r8*(wrf%dom(id)%phb(i  ,j,k  )+x(i1))   &
-                 +3.0_r8*(wrf%dom(id)%phb(i  ,j,k+1)+x(i2))   &
-                        -(wrf%dom(id)%phb(i+1,j,k  )+x(i1+1)) &
-                        -(wrf%dom(id)%phb(i+1,j,k+1)+x(i2+1)) )/(4.0_r8*gravity)
+         i1 = get_dart_vector_index(i,j,k  ,domain_id(id),wrf%dom(id)%type_gz)
+         i2 = get_dart_vector_index(i,j,k+1,domain_id(id),wrf%dom(id)%type_gz)
+
+         x_i1 = get_state(i1, state_handle)
+         x_i2 = get_state(i2, state_handle)
+         x_i3 = get_state(i1 +1, state_handle)
+         x_i4 = get_state(i2 +1, state_handle)
+
+
+         geop = minval(( 3.0_r8*(wrf%dom(id)%phb(i  ,j,k  )+x_i1)   &
+                 +3.0_r8*(wrf%dom(id)%phb(i  ,j,k+1)+x_i2)   &
+                        -(wrf%dom(id)%phb(i+1,j,k  )+x_i3) &
+                        -(wrf%dom(id)%phb(i+1,j,k+1)+x_i4) )/(4.0_r8*gravity))
 
          lat = ( 3.0_r8*wrf%dom(id)%latitude(i  ,j)  &
                 +3.0_r8*wrf%dom(id)%latitude(i  ,j)  &
                        -wrf%dom(id)%latitude(i+1,j)  &
                        -wrf%dom(id)%latitude(i+1,j)) / 4.0_r8
 
-         model_height = compute_geometric_height(geop, lat)
+         model_height_distrib = compute_geometric_height(geop, lat)
 
       endif
 
    else
 
-      i1 = wrf%dom(id)%dart_ind(i,j,k  ,wrf%dom(id)%type_gz)
-      i2 = wrf%dom(id)%dart_ind(i,j,k+1,wrf%dom(id)%type_gz)
+      i1 = get_dart_vector_index(i,j,k  ,domain_id(id),wrf%dom(id)%type_gz)
+      i2 = get_dart_vector_index(i,j,k+1,domain_id(id),wrf%dom(id)%type_gz)
 
-      geop = ( (wrf%dom(id)%phb(i  ,j,k  )+x(i1))   &
-              +(wrf%dom(id)%phb(i  ,j,k+1)+x(i2))   &
-              +(wrf%dom(id)%phb(i-1,j,k  )+x(i1-1)) &
-              +(wrf%dom(id)%phb(i-1,j,k+1)+x(i2-1)) )/(4.0_r8*gravity)
+      x_i1 = get_state(i1, state_handle)
+      x_i2 = get_state(i2, state_handle)
+      x_i3 = get_state(i1 -1, state_handle)
+      x_i4 = get_state(i2 -1, state_handle)
+
+
+      geop = minval(( (wrf%dom(id)%phb(i  ,j,k  )+x_i1)   &
+              +(wrf%dom(id)%phb(i  ,j,k+1)+x_i2)   &
+              +(wrf%dom(id)%phb(i-1,j,k  )+x_i3) &
+              +(wrf%dom(id)%phb(i-1,j,k+1)+x_i4) )/(4.0_r8*gravity))
 
       lat = (  wrf%dom(id)%latitude(i  ,j)  &
               +wrf%dom(id)%latitude(i  ,j)  &
               +wrf%dom(id)%latitude(i-1,j)  &
               +wrf%dom(id)%latitude(i-1,j)) / 4.0_r8
 
-      model_height = compute_geometric_height(geop, lat)
+      model_height_distrib = compute_geometric_height(geop, lat)
 
    endif
 
@@ -5650,42 +5509,52 @@ elseif( var_type == wrf%dom(id)%type_v ) then
          off = i + wrf%dom(id)%we/2
          if ( off > wrf%dom(id)%we ) off = off - wrf%dom(id)%we
 
-         i1 = wrf%dom(id)%dart_ind(off,j-1,k  ,wrf%dom(id)%type_gz)
-         i2 = wrf%dom(id)%dart_ind(off,j-1,k+1,wrf%dom(id)%type_gz)
-         i3 = wrf%dom(id)%dart_ind(i  ,j-1,k  ,wrf%dom(id)%type_gz)
-         i4 = wrf%dom(id)%dart_ind(i  ,j-1,k+1,wrf%dom(id)%type_gz)
+         i1 = get_dart_vector_index(off,j-1,k  , domain_id(id),wrf%dom(id)%type_gz)
+         i2 = get_dart_vector_index(off,j-1,k+1, domain_id(id),wrf%dom(id)%type_gz)
+         i3 = get_dart_vector_index(i  ,j-1,k  , domain_id(id),wrf%dom(id)%type_gz)
+         i4 = get_dart_vector_index(i  ,j-1,k+1, domain_id(id),wrf%dom(id)%type_gz)
 
-         geop = ( (wrf%dom(id)%phb(off,j-1,k  )+x(i1)) &
-                 +(wrf%dom(id)%phb(off,j-1,k+1)+x(i2)) &
-                 +(wrf%dom(id)%phb(i  ,j-1,k  )+x(i3)) &
-                 +(wrf%dom(id)%phb(i  ,j-1,k+1)+x(i4)) )/(4.0_r8*gravity)
+         x_i1 = get_state(i1, state_handle)
+         x_i2 = get_state(i2, state_handle)
+         x_i3 = get_state(i3, state_handle)
+         x_i4 = get_state(i4, state_handle)
+
+         geop = minval(( (wrf%dom(id)%phb(off,j-1,k  )+x_i1) &
+                 +(wrf%dom(id)%phb(off,j-1,k+1)+x_i2) &
+                 +(wrf%dom(id)%phb(i  ,j-1,k  )+x_i3) &
+                 +(wrf%dom(id)%phb(i  ,j-1,k+1)+x_i4) )/(4.0_r8*gravity))
          
          lat = ( wrf%dom(id)%latitude(off,j-1)  &
                 +wrf%dom(id)%latitude(off,j-1)  &
                 +wrf%dom(id)%latitude(i  ,j-1)  &
                 +wrf%dom(id)%latitude(i  ,j-1)) / 4.0_r8
 
-         model_height = compute_geometric_height(geop, lat)
+         model_height_distrib = compute_geometric_height(geop, lat)
 
       else
 
          ! If not periodic, then try extrapolating
-         i1 = wrf%dom(id)%dart_ind(i,j-1,k  ,wrf%dom(id)%type_gz)
-         i2 = wrf%dom(id)%dart_ind(i,j-1,k+1,wrf%dom(id)%type_gz)
-         i3 = wrf%dom(id)%dart_ind(i,j-2,k  ,wrf%dom(id)%type_gz)
-         i4 = wrf%dom(id)%dart_ind(i,j-2,k+1,wrf%dom(id)%type_gz)
+         i1 = get_dart_vector_index(i,j-1,k ,  domain_id(id),wrf%dom(id)%type_gz)
+         i2 = get_dart_vector_index(i,j-1,k+1, domain_id(id),wrf%dom(id)%type_gz)
+         i3 = get_dart_vector_index(i,j-2,k  , domain_id(id),wrf%dom(id)%type_gz)
+         i4 = get_dart_vector_index(i,j-2,k+1, domain_id(id),wrf%dom(id)%type_gz)
 
-         geop = ( 3.0_r8*(wrf%dom(id)%phb(i,j-1,k  )+x(i1)) &
-                 +3.0_r8*(wrf%dom(id)%phb(i,j-1,k+1)+x(i2)) &
-                        -(wrf%dom(id)%phb(i,j-2,k  )+x(i3)) &
-                        -(wrf%dom(id)%phb(i,j-2,k+1)+x(i4)) )/(4.0_r8*gravity)
+         x_i1 = get_state(i1, state_handle)
+         x_i2 = get_state(i2, state_handle)
+         x_i3 = get_state(i3, state_handle)
+         x_i4 = get_state(i4, state_handle)
+
+         geop = minval(( 3.0_r8*(wrf%dom(id)%phb(i,j-1,k  )+x_i1) &
+                 +3.0_r8*(wrf%dom(id)%phb(i,j-1,k+1)+x_i2) &
+                        -(wrf%dom(id)%phb(i,j-2,k  )+x_i3) &
+                        -(wrf%dom(id)%phb(i,j-2,k+1)+x_i4) )/(4.0_r8*gravity))
 
          lat = ( 3.0_r8*wrf%dom(id)%latitude(i,j-1)  &
                 +3.0_r8*wrf%dom(id)%latitude(i,j-1)  &
                        -wrf%dom(id)%latitude(i,j-2)  &
                        -wrf%dom(id)%latitude(i,j-2)) / 4.0_r8
 
-         model_height = compute_geometric_height(geop, lat)
+         model_height_distrib = compute_geometric_height(geop, lat)
 
       endif
 
@@ -5698,63 +5567,78 @@ elseif( var_type == wrf%dom(id)%type_v ) then
          off = i + wrf%dom(id)%we/2
          if ( off > wrf%dom(id)%we ) off = off - wrf%dom(id)%we
 
-         i1 = wrf%dom(id)%dart_ind(off,j,k  ,wrf%dom(id)%type_gz)
-         i2 = wrf%dom(id)%dart_ind(off,j,k+1,wrf%dom(id)%type_gz)
-         i3 = wrf%dom(id)%dart_ind(i  ,j,k  ,wrf%dom(id)%type_gz)
-         i4 = wrf%dom(id)%dart_ind(i  ,j,k+1,wrf%dom(id)%type_gz)
+         i1 = get_dart_vector_index(off,j,k  , domain_id(id),wrf%dom(id)%type_gz)
+         i2 = get_dart_vector_index(off,j,k+1, domain_id(id),wrf%dom(id)%type_gz)
+         i3 = get_dart_vector_index(i  ,j,k  , domain_id(id),wrf%dom(id)%type_gz)
+         i4 = get_dart_vector_index(i  ,j,k+1, domain_id(id),wrf%dom(id)%type_gz)
 
-         geop = ( (wrf%dom(id)%phb(off,j,k  )+x(i1)) &
-                 +(wrf%dom(id)%phb(off,j,k+1)+x(i2)) &
-                 +(wrf%dom(id)%phb(i  ,j,k  )+x(i3)) &
-                 +(wrf%dom(id)%phb(i  ,j,k+1)+x(i4)) )/(4.0_r8*gravity)
+         x_i1 = get_state(i1, state_handle)
+         x_i2 = get_state(i2, state_handle)
+         x_i3 = get_state(i3, state_handle)
+         x_i4 = get_state(i4, state_handle)
+
+         geop = minval(( (wrf%dom(id)%phb(off,j,k  )+x_i1) &
+                 +(wrf%dom(id)%phb(off,j,k+1)+x_i2) &
+                 +(wrf%dom(id)%phb(i  ,j,k  )+x_i3) &
+                 +(wrf%dom(id)%phb(i  ,j,k+1)+x_i4) )/(4.0_r8*gravity))
          
          lat = ( wrf%dom(id)%latitude(off,j)  &
                 +wrf%dom(id)%latitude(off,j)  &
                 +wrf%dom(id)%latitude(i  ,j)  &
                 +wrf%dom(id)%latitude(i  ,j)) / 4.0_r8
 
-         model_height = compute_geometric_height(geop, lat)
+         model_height_distrib = compute_geometric_height(geop, lat)
 
       else
 
          ! If not periodic, then try extrapolating
-         i1 = wrf%dom(id)%dart_ind(i,j  ,k  ,wrf%dom(id)%type_gz)
-         i2 = wrf%dom(id)%dart_ind(i,j  ,k+1,wrf%dom(id)%type_gz)
-         i3 = wrf%dom(id)%dart_ind(i,j+1,k  ,wrf%dom(id)%type_gz)
-         i4 = wrf%dom(id)%dart_ind(i,j+1,k+1,wrf%dom(id)%type_gz)
+         i1 = get_dart_vector_index(i,j  ,k  , domain_id(id),wrf%dom(id)%type_gz)
+         i2 = get_dart_vector_index(i,j  ,k+1, domain_id(id),wrf%dom(id)%type_gz)
+         i3 = get_dart_vector_index(i,j+1,k  , domain_id(id),wrf%dom(id)%type_gz)
+         i4 = get_dart_vector_index(i,j+1,k+1, domain_id(id),wrf%dom(id)%type_gz)
 
-         geop = ( 3.0_r8*(wrf%dom(id)%phb(i,j  ,k  )+x(i1)) &
-                 +3.0_r8*(wrf%dom(id)%phb(i,j  ,k+1)+x(i2)) &
-                        -(wrf%dom(id)%phb(i,j+1,k  )+x(i3)) &
-                        -(wrf%dom(id)%phb(i,j+1,k+1)+x(i4)) )/(4.0_r8*gravity)
+         x_i1 = get_state(i1, state_handle)
+         x_i2 = get_state(i2, state_handle)
+         x_i3 = get_state(i3, state_handle)
+         x_i4 = get_state(i4, state_handle)
+
+         geop = minval(( 3.0_r8*(wrf%dom(id)%phb(i,j  ,k  )+x_i1) &
+                 +3.0_r8*(wrf%dom(id)%phb(i,j  ,k+1)+x_i2) &
+                        -(wrf%dom(id)%phb(i,j+1,k  )+x_i3) &
+                        -(wrf%dom(id)%phb(i,j+1,k+1)+x_i4) )/(4.0_r8*gravity))
 
          lat = ( 3.0_r8*wrf%dom(id)%latitude(i,j  )  &
                 +3.0_r8*wrf%dom(id)%latitude(i,j  )  &
                        -wrf%dom(id)%latitude(i,j+1)  &
                        -wrf%dom(id)%latitude(i,j+1)) / 4.0_r8
 
-         model_height = compute_geometric_height(geop, lat)
+         model_height_distrib = compute_geometric_height(geop, lat)
 
       endif
 
    else
 
-      i1 = wrf%dom(id)%dart_ind(i,j  ,k  ,wrf%dom(id)%type_gz)
-      i2 = wrf%dom(id)%dart_ind(i,j  ,k+1,wrf%dom(id)%type_gz)
-      i3 = wrf%dom(id)%dart_ind(i,j-1,k  ,wrf%dom(id)%type_gz)
-      i4 = wrf%dom(id)%dart_ind(i,j-1,k+1,wrf%dom(id)%type_gz)
+      i1 = get_dart_vector_index(i,j  ,k  , domain_id(id),wrf%dom(id)%type_gz)
+      i2 = get_dart_vector_index(i,j  ,k+1, domain_id(id),wrf%dom(id)%type_gz)
+      i3 = get_dart_vector_index(i,j-1,k  , domain_id(id),wrf%dom(id)%type_gz)
+      i4 = get_dart_vector_index(i,j-1,k+1, domain_id(id),wrf%dom(id)%type_gz)
 
-      geop = ( (wrf%dom(id)%phb(i,j  ,k  )+x(i1)) &
-              +(wrf%dom(id)%phb(i,j  ,k+1)+x(i2)) &
-              +(wrf%dom(id)%phb(i,j-1,k  )+x(i3)) &
-              +(wrf%dom(id)%phb(i,j-1,k+1)+x(i4)) )/(4.0_r8*gravity)
+      x_i1 = get_state(i1, state_handle)
+      x_i2 = get_state(i2, state_handle)
+      x_i3 = get_state(i3, state_handle)
+      x_i4 = get_state(i4, state_handle)
+
+      geop = minval(( (wrf%dom(id)%phb(i,j  ,k  )+x_i1) &
+              +(wrf%dom(id)%phb(i,j  ,k+1)+x_i2) &
+              +(wrf%dom(id)%phb(i,j-1,k  )+x_i3) &
+              +(wrf%dom(id)%phb(i,j-1,k+1)+x_i4) )/(4.0_r8*gravity))
 
       lat = ( wrf%dom(id)%latitude(i,j  )  &
              +wrf%dom(id)%latitude(i,j  )  &
              +wrf%dom(id)%latitude(i,j-1)  &
              +wrf%dom(id)%latitude(i,j-1)) / 4.0_r8
 
-      model_height = compute_geometric_height(geop, lat)
+      model_height_distrib = compute_geometric_height(geop, lat)
 
    endif
 
@@ -5762,54 +5646,61 @@ elseif( var_type == wrf%dom(id)%type_mu .or. &
         var_type == wrf%dom(id)%type_ps .or. &
         var_type == wrf%dom(id)%type_tsk) then
 
-   model_height = wrf%dom(id)%hgt(i,j)
+   model_height_distrib = wrf%dom(id)%hgt(i,j)
 
 elseif( var_type == wrf%dom(id)%type_tslb  .or. &
         var_type == wrf%dom(id)%type_smois .or. &
         var_type == wrf%dom(id)%type_sh2o ) then
 
-   model_height = wrf%dom(id)%hgt(i,j) - wrf%dom(id)%zs(k)
+   model_height_distrib = wrf%dom(id)%hgt(i,j) - wrf%dom(id)%zs(k)
 
 elseif( var_type == wrf%dom(id)%type_u10 .or. &
         var_type == wrf%dom(id)%type_v10 ) then
 
-   model_height = wrf%dom(id)%hgt(i,j) + 10.0_r8
+   model_height_distrib = wrf%dom(id)%hgt(i,j) + 10.0_r8
 
 elseif( var_type == wrf%dom(id)%type_t2  .or. &
         var_type == wrf%dom(id)%type_th2 .or. &
         var_type == wrf%dom(id)%type_q2 ) then
 
-   model_height = wrf%dom(id)%hgt(i,j) + 2.0_r8
+   model_height_distrib = wrf%dom(id)%hgt(i,j) + 2.0_r8
 
 else
 
-   i1 = wrf%dom(id)%dart_ind(i,j,k  ,wrf%dom(id)%type_gz)
-   i2 = wrf%dom(id)%dart_ind(i,j,k+1,wrf%dom(id)%type_gz)
+   i1 = get_dart_vector_index(i,j,k  , domain_id(id),wrf%dom(id)%type_gz)
+   i2 = get_dart_vector_index(i,j,k+1, domain_id(id),wrf%dom(id)%type_gz)
 
-   geop = ( (wrf%dom(id)%phb(i,j,k  )+x(i1)) &
-           +(wrf%dom(id)%phb(i,j,k+1)+x(i2)) )/(2.0_r8*gravity)
+   x_i1 = get_state(i1, state_handle)
+   x_i2 = get_state(i2, state_handle)
+
+   geop = minval(( (wrf%dom(id)%phb(i,j,k  )+x_i1) &
+           +(wrf%dom(id)%phb(i,j,k+1)+x_i2) )/(2.0_r8*gravity))
 
    lat = wrf%dom(id)%latitude(i,j)
 
-   model_height = compute_geometric_height(geop, lat)
+   model_height_distrib = compute_geometric_height(geop, lat)
 
 endif
 
-end function model_height
+end function model_height_distrib
 
 !#######################################################
 
-function model_height_w(i,j,k,id,x)
+!> Distributed version of model_height_w
+!> Only one value, the mean, is used because model_height_w_distrib
+!> is only used in the vertical conversion
+function model_height_w_distrib(i, j, k, id, state_handle)
 
 ! return total height at staggered vertical coordinate
 ! and horizontal mass coordinates
 
-integer,  intent(in)  :: i,j,k,id
-real(r8), intent(in)  :: x(:)
-real(r8)              :: model_height_w
+type(ensemble_type), intent(in) :: state_handle
+integer,             intent(in) :: i,j,k,id
+real(r8)                        :: x_i1
+real(r8)                        :: model_height_w_distrib
 
-integer   :: i1
-real(r8)  :: geop
+integer(i8) :: i1
+real(r8)    :: geop
 
 if (wrf%dom(id)%type_gz < 0) then
   call error_handler(E_ERR, 'model_height_w:', &
@@ -5817,28 +5708,36 @@ if (wrf%dom(id)%type_gz < 0) then
        source, revision, revdate)
 endif
 
-i1 = wrf%dom(id)%dart_ind(i,j,k,wrf%dom(id)%type_gz)
+i1 = get_dart_vector_index(i,j,k, domain_id(id),wrf%dom(id)%type_gz)
 
-geop = (wrf%dom(id)%phb(i,j,k) + x(i1))/gravity
-model_height_w = compute_geometric_height(geop, wrf%dom(id)%latitude(i, j))
+x_i1 = minval(get_state(i1, state_handle))
 
-end function model_height_w
+geop = (wrf%dom(id)%phb(i,j,k) + x_i1)/gravity
+model_height_w_distrib = compute_geometric_height(geop, wrf%dom(id)%latitude(i, j))
+
+end function model_height_w_distrib
+
 
 !#######################################################
 
+subroutine pert_model_copies(ens_handle, ens_size,  dummy_pert_amp, interf_provided)
 
-subroutine pert_model_state(state, pert_state, interf_provided)
+type(ensemble_type), intent(inout) :: ens_handle
+integer,             intent(in)    :: ens_size
+real(r8),            intent(in)    :: dummy_pert_amp ! not used
+logical,             intent(out)   :: interf_provided
 
-! Perturbs a single model state for generating initial ensembles.
-! WARNING - this routine is not a substitute for a good set
-! of real initial condition files.  Intended as a last resort,
-! this routine should be used to start a long free-run model 
-! advance to spin-up a set of internally consistent states with 
-! their own structure before assimilating a set of obserations.
+! Perturbs model states for generating initial ensembles.
+! Because this requires some care when using - see the comments in the
+! code below - you must set a namelist variable to enable this functionality.
 
-real(r8), intent(in)  :: state(:)
-real(r8), intent(out) :: pert_state(:)
-logical,  intent(out) :: interf_provided
+! Using this routine is not a substitute for a good set of real initial 
+! condition files.  Intended as a last resort, this routine should be used 
+! to start a period of free-running to allow the model to spin-up a set of 
+! internally consistent states with their own structure before assimilating 
+! a set of observations.  A good ensemble of boundary conditions is important
+! to evolve the ensemble members differently, which is the goal.
+!
 
 real(r8)              :: pert_amount = 0.005   ! 0.5%
 
@@ -5846,145 +5745,144 @@ real(r8)              :: pert_ampl, range
 real(r8)              :: minv, maxv, temp
 type(random_seq_type) :: random_seq
 integer               :: id, i, j, s, e
-integer, save         :: counter = 0
+logical, allocatable  :: within_range(:)
+integer               :: num_variables
+real(r8), allocatable :: min_var(:), max_var(:)
+integer(i8)           :: start_ind, end_ind
+integer(i8), allocatable :: var_list(:)
+integer               :: count, copy
 
-! generally you do not want to perturb a single state
-! to begin an experiment - unless you make minor perturbations
-! and then run the model free for long enough that differences
-! develop which contain actual structure. if you comment
-! out the next 4 lines, the subsequent code is a pert routine which 
-! can be used to add minor perturbations which can be spun up.
-! note that as written, if all values in a field are identical
-! (i.e. 0.0) this routine will not change those values, since
-! it won't make a new value outside the original min/max of that
-! variable in the state vector.
+! generally you do not want to just perturb a single state to begin an
+! experiment, especially for a regional weather model, because the 
+! resulting fields will have spread but they won't have organized features.
+! we have had good luck with some global atmosphere models where there is
+! a lot of model divergence; after a few days of running they evolve into
+! plausible conditions that allow assimilation of real obs.
+!
+! if you really need to start with a single state and proceed, the suggestion
+! is to start with small magnitude perturbations and then get a good ensemble
+! of boundary conditions and run the model for a while (many days) to let it
+! evolve into plausible weather patterns.  then start assimilating real obs.
+!
+! using this routine requires you to set the new namelist item 
+! 'allow_perturbed_ics' to true so you have to read the warnings here or
+! in the html docs.
+!
+! this code will add random noise field by field (T, U, V, etc), and new values
+! will not exceed the original max or min values for each field.  this means
+! it will not generate illegal values (e.g. negatives for percentages or
+! number concentrations) but it also means that if all values in a field are
+! identical (e.g. all 0.0) this routine will not change those values.  the code
+! can easily be modified to set allowed min and max values here instead of
+! using the incoming field min and max values; but you will have to modify
+! the code below to enable that functionality.
 
-call error_handler(E_ERR,'pert_model_state', &
-                  'WRF model cannot be started from a single vector', &
+if (.not. allow_perturbed_ics) then
+call error_handler(E_ERR,'pert_model_copies', &
+                     'starting WRF model from a single vector requires additional steps', &
                   source, revision, revdate, &
-                  text2='see comments in wrf/model_mod.f90::pert_model_state()')
+                  text2='see comments in wrf/model_mod.f90::pert_model_copies()')
+endif
 
-! NOT REACHED unless preceeding 4 lines commented out
+! NOT REACHED unless allow_perturbed_ics is true in the namelist
 
 ! start of pert code
 interf_provided = .true.
 
-! the first time through get the task id (0:N-1) and set a unique seed 
-! per task.  this should reproduce from run to run if you keep the number
-! of MPI tasks the same.  it WILL NOT reproduce if the number of tasks changes.
-! if this routine could at some point get the global ensemble member number
-! as an argument, that would be unique and the right thing to use as a seed.
-!
-! the line below only executes the first time since counter gets incremented 
-! after the first use and the value is saved between calls.  it is trying to 
-! generate a unique base number, and then just increments by 1 each subsequent 
-! time it is called (which only happens if there are multiple ensemble 
-! members/task).  it is assuming there are no more than 1000 ensembles/task,
-! which seems safe given the current sizes of state vecs and hardware memory.
+! Make space for the state vector index numbers that are
+! physically located on my task and get the global numbers.
 
-if (counter == 0) counter = ((my_task_id()+1) * 1000)
+allocate(var_list(get_my_num_vars(ens_handle)))
+call get_my_vars(ens_handle, var_list)
 
-call init_random_seq(random_seq, counter)
-counter = counter + 1
+! count up the total number of variables across all domains.
+num_variables = 0
+do id = 1, num_domains
+  num_variables = num_variables + wrf%dom(id)%number_of_wrf_variables
+enddo
 
-! do the perturbation per domain, per variable type
-do id=1, num_domains
-   do i=1, wrf%dom(id)%number_of_wrf_variables
-      ! starting and ending indices in the linear state vect
-      s = wrf%dom(id)%var_index(1, i)
-      e = wrf%dom(id)%var_index(2, i)
-      ! original min/max data values of each type
-      minv = minval(state(s:e))
-      maxv = maxval(state(s:e))
+! get the global min/max on a variable by variable basis
+allocate(min_var(num_variables), max_var(num_variables))
+allocate(within_range(ens_handle%my_num_vars))
+
+count = 1
+do id = 1, num_domains
+   do i = 1, wrf%dom(id)%number_of_wrf_variables
+  
+      start_ind = get_index_start(domain_id(id), i)
+      end_ind   = get_index_end(domain_id(id), i)
+
+      ! at this point we only have 1 ensemble
+      within_range = (var_list >= start_ind .and. var_list <= end_ind)
+      min_var(count) = minval(ens_handle%copies(1,:), MASK=within_range)
+      max_var(count) = maxval(ens_handle%copies(1,:), MASK=within_range)
+
+      count = count + 1
+   enddo
+enddo
+
+! find the global min/max values across all tasks.
+call all_reduce_min_max(min_var, max_var, num_variables)
+
+deallocate(within_range)
+
+! Now do the perturbing
+
+! using task id as the seed for the random number generator is ok
+! because pert_model_copies() is only called once on any single task.  
+! it perturbs all ensemble members for the items in the state vector 
+! that it owns. because the decomposition will be different with a
+! different task count, you will NOT get the same result if you change
+! the number of tasks.
+
+call init_random_seq(random_seq, my_task_id()+1)
+
+count = 1 ! min and max are numbered 1 to n, where n is the total number of variables (all domains)
+do id = 1, num_domains
+   do i = 1, wrf%dom(id)%number_of_wrf_variables
+
+      start_ind = get_index_start(domain_id(id), i)
+      end_ind = get_index_end(domain_id(id), i)
+
       !! Option 1:
       !! make the perturbation amplitude N% of the total
       !! range of this variable.  values could vary a lot
       !! over some of the types, like pressure
-      !range = maxv - minv
-      !pert_ampl = pert_amount * range
-      do j=s, e
-         ! once you change pert_state, state is changed as well
-         ! since they are the same storage as called from filter.
-         ! you have to save it if you want to use it again.
-         temp = state(j)  ! original value
-         ! Option 2: perturb each value individually
-         !! make the perturbation amplitude N% of this value
-         pert_ampl = pert_amount * temp
-         pert_state(j) = random_gaussian(random_seq, state(j), pert_ampl)
-         ! keep it from exceeding the original range
-         pert_state(j) = max(minv, pert_state(j))
-         pert_state(j) = min(maxv, pert_state(j))
+      range = max_var(count) - min_var(count)
+      pert_ampl = pert_amount * range
+
+      do j=1, ens_handle%my_num_vars
+         ! is this state variable index the current variable type we're perturbing?
+         if (var_list(j) >= start_ind .and. var_list(j) <= end_ind) then
+            do copy = 1, ens_size
+               !! Option 2: perturb each value individually
+               !! make the perturbation amplitude N% of this value
+               !pert_ampl = pert_amount * ens_handle%copies(copy, j)
+               ens_handle%copies(copy, j) = random_gaussian(random_seq, ens_handle%copies(copy, j), pert_ampl)
+            enddo
+
+            ! keep variable from exceeding the original range
+            ens_handle%copies(1:ens_size,j) = max(min_var(count), ens_handle%copies(1:ens_size,j))
+            ens_handle%copies(1:ens_size,j) = min(max_var(count), ens_handle%copies(1:ens_size,j))
+
+         endif
       enddo
+
+      count = count + 1
+
    enddo
 enddo
 
+deallocate(var_list, min_var, max_var)
 
-end subroutine pert_model_state
+end subroutine pert_model_copies
 
-!#######################################################
-! !WARNING:: at the moment, this code is *not* called
-! !so there is no requirement to have a wrf namelist in
-! !the current directory.  the only thing it was extracting
-! !was the dt, and that exists in the wrf input netcdf file
-! !and is now read from there.
-! 
-! subroutine read_dt_from_wrf_nml()
-! 
-! real(r8) :: dt
-! 
-! integer :: time_step, time_step_fract_num, time_step_fract_den
-! integer :: max_dom, feedback, smooth_option
-! integer, dimension(3) :: s_we, e_we, s_sn, e_sn, s_vert, e_vert
-! integer, dimension(3) :: dx, dy, ztop, grid_id, parent_id
-! integer, dimension(3) :: i_parent_start, j_parent_start, parent_grid_ratio
-! integer, dimension(3) :: parent_time_step_ratio
-! integer :: io, iunit, id
-! integer :: num_metgrid_levels, p_top_requested, nproc_x, nproc_y
-! 
-! !nc -- we added "num_metgrid_levels" to the domains nml to make all well with the
-! !        namelist.input file belonging to global WRF,
-! !        also "p_top_requested" in domains nml
-! !        also "nproc_x" & "nproc_y"
-! !nc -- we notice that "ztop" is unused in code -- perhaps get rid of later?
-! namelist /domains/ time_step, time_step_fract_num, time_step_fract_den
-! namelist /domains/ max_dom
-! namelist /domains/ s_we, e_we, s_sn, e_sn, s_vert, e_vert
-! namelist /domains/ dx, dy, ztop, grid_id, parent_id
-! namelist /domains/ i_parent_start, j_parent_start, parent_grid_ratio
-! namelist /domains/ parent_time_step_ratio
-! namelist /domains/ feedback, smooth_option
-! namelist /domains/ num_metgrid_levels, p_top_requested, nproc_x, nproc_y
-! 
-! ! Begin by reading the namelist input
-! call find_namelist_in_file("namelist.input", "domains", iunit)
-! read(iunit, nml = domains, iostat = io)
-! call check_namelist_read(iunit, io, "domains")
-! 
-! ! Record the namelist values used for the run ...
-! if (do_nml_file()) write(nmlfileunit, nml=domains)
-! if (do_nml_term()) write(     *     , nml=domains)
-! 
-! if (max_dom /= num_domains) then
-! 
-!    write(*,*) 'max_dom in namelist.input = ',max_dom
-!    write(*,*) 'num_domains in input.nml  = ',num_domains
-!    call error_handler(E_ERR,'read_dt_from_wrf_nml', &
-!         'Make them consistent.', source, revision,revdate)
-! 
-! endif
-! 
-! if (time_step_fract_den /= 0) then
-!    dt = real(time_step) + real(time_step_fract_num) / real(time_step_fract_den)
-! else
-!    dt = real(time_step)
-! endif
-! 
-! do id=1,num_domains
-!    wrf%dom(id)%dt = dt / real(parent_time_step_ratio(id))
-! enddo
-! 
-! end subroutine read_dt_from_wrf_nml
-
+!-------------------------------------------------------------------------
+!>@todo FIXME:
+! these routines are only called from the vortex interpolation code, 
+! which should be moved to a separate forward operator module.  the forward 
+! operator code should define a grid, call model_interpolate() on each
+! point of that grid, and then do the same computation it is doing now.
 
 
 subroutine compute_seaprs ( nz, z, t, p , q ,          &
@@ -6253,26 +6151,12 @@ END subroutine splint
 
 !#######################################################################
 
+subroutine get_domain_info(obslon,obslat,id,iloc,jloc,domain_id_start)
 
-subroutine ens_mean_for_model(filter_ens_mean)
-
-! Not used in low-order models
-! Stores provided ensemble mean within the module for later use
-
-real(r8), intent(in) :: filter_ens_mean(:)
-
-ens_mean = filter_ens_mean
-
-end subroutine ens_mean_for_model
-
-
-!#######################################################################
-
-subroutine get_domain_info(obslon,obslat,id,iloc,jloc)
-
-real(r8), intent(in)  :: obslon, obslat
-integer, intent(out)  :: id
-real(r8), intent(out) :: iloc, jloc
+real(r8), intent(in)           :: obslon, obslat
+integer,  intent(out)          :: id
+real(r8), intent(out)          :: iloc, jloc
+integer,  intent(in), optional :: domain_id_start
 
 logical               :: dom_found
 
@@ -6281,17 +6165,31 @@ logical               :: dom_found
 
 dom_found = .false.
 
+! the default is to start at the innermost domain and stop when
+! the location is found.  however if you want to start at a particular
+! domain id number, pass it in as the last optional arg.
 id = num_domains
+if (present(domain_id_start)) then
+   if (domain_id_start < 1 .or. domain_id_start > num_domains) then
+      write(errstring,  '(A,I1)') 'bad domain_id_start: ', domain_id_start
+      write(msgstring2, '(A,I1)') 'must be between 1 and ', num_domains
+      call error_handler(E_ERR, 'model_mod', errstring, &
+                         source, revision, revdate, text2=msgstring2)
+   endif
+   id = domain_id_start
+endif
+
 do while (.not. dom_found)
 
    ! Checking for exact equality on real variable types is generally a bad idea.
 
-   if( (wrf%dom(id)%proj%hemi ==  1.0_r8 .and. obslat == -90.0_r8) .or. &
-       (wrf%dom(id)%proj%hemi == -1.0_r8 .and. obslat ==  90.0_r8) .or. &
-       (wrf%dom(id)%proj%code == PROJ_MERC .and. abs(obslat) >= 90.0_r8) ) then
+   if( (wrf%dom(id)%proj%hemi ==  1.0_r8 .and. obslat < -90.0_r8) .or. &
+       (wrf%dom(id)%proj%hemi == -1.0_r8 .and. obslat >  90.0_r8) .or. &
+       (wrf%dom(id)%proj%code == PROJ_MERC .and. abs(obslat) > 90.0_r8) ) then
 
-!nc -- strange that there is nothing in this if-case structure
-print*, 'model_mod.f90 :: subroutine get_domain_info :: in empty if-case'
+      ! catch latitudes that are out of range - ignore them but print out a warning.
+      write(errstring, *) 'obs with latitude out of range: ', obslat
+      call error_handler(E_MSG, 'model_mod', errstring)
 
    else
       call latlon_to_ij(wrf%dom(id)%proj,min(max(obslat,-89.9999999_r8),89.9999999_r8),obslon,iloc,jloc)
@@ -6349,9 +6247,41 @@ end do
 end subroutine get_domain_info
 
 !#######################################################################
+subroutine get_close_state(gc, base_loc, base_type, locs, loc_qtys, loc_indx, &
+                           num_close, close_ind, dist, state_handle)
 
-subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
-                            num_close, close_ind, dist)
+type(get_close_type),          intent(in)     :: gc
+type(location_type),           intent(inout)  :: base_loc, locs(:)
+integer,                       intent(in)     :: base_type, loc_qtys(:)
+integer(i8),                   intent(in)     :: loc_indx(:)
+integer,                       intent(out)    :: num_close, close_ind(:)
+real(r8),            optional, intent(out)    :: dist(:)
+type(ensemble_type), optional, intent(in)     :: state_handle
+
+call get_close(gc, base_loc, base_type, locs, loc_qtys, &
+               num_close, close_ind, dist, state_handle)
+
+end subroutine get_close_state
+
+!#######################################################################
+subroutine get_close_obs(gc, base_loc, base_type, locs, loc_qtys, loc_types, &
+                         num_close, close_ind, dist, state_handle)
+
+type(get_close_type),          intent(in)     :: gc
+type(location_type),           intent(inout)  :: base_loc, locs(:)
+integer,                       intent(in)     :: base_type, loc_qtys(:), loc_types(:)
+integer,                       intent(out)    :: num_close, close_ind(:)
+real(r8),            optional, intent(out)    :: dist(:)
+type(ensemble_type), optional, intent(in)     :: state_handle
+
+call get_close(gc, base_loc, base_type, locs, loc_qtys, &
+               num_close, close_ind, dist, state_handle)
+
+end subroutine get_close_obs
+
+!#######################################################################
+subroutine get_close(gc, base_loc, base_type, locs, loc_qtys, &
+                     num_close, close_ind, dist, state_handle)
 
 ! Given a DART ob (referred to as "base") and a set of obs priors or state variables
 ! (obs_loc, obs_kind), returns the subset of close ones to the "base" ob, their
@@ -6363,40 +6293,43 @@ subroutine get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
 
 ! Vertical conversion is carried out by the subroutine vert_convert.
 
-! Note that both base_obs_loc and obs_loc are intent(inout), meaning that these
+! Note that both base_loc and locs are intent(inout), meaning that these
 ! locations are possibly modified here and returned as such to the calling routine.
 ! The calling routine is always filter_assim and these arrays are local arrays
 ! within filter_assim. In other words, these modifications will only matter within
 ! filter_assim, but will not propagate backwards to filter.
-      
-type(get_close_type), intent(in)     :: gc
-type(location_type),  intent(inout)  :: base_obs_loc, obs_loc(:)
-integer,              intent(in)     :: base_obs_kind, obs_kind(:)
-integer,              intent(out)    :: num_close, close_ind(:)
-real(r8),             intent(out)    :: dist(:)
+
+type(get_close_type),          intent(in)     :: gc
+type(location_type),           intent(inout)  :: base_loc, locs(:)
+integer,                       intent(in)     :: base_type, loc_qtys(:)
+integer,                       intent(out)    :: num_close, close_ind(:)
+real(r8),            optional, intent(out)    :: dist(:)
+type(ensemble_type), optional, intent(in)     :: state_handle
 
 integer                :: t_ind, istatus1, istatus2, k
-integer                :: base_which, local_obs_which
-real(r8), dimension(3) :: base_array, local_obs_array
-type(location_type)    :: local_obs_loc
+integer                :: base_which, local_which
+real(r8), dimension(3) :: base_array, local_array
+type(location_type)    :: local_loc
 
 
 ! Initialize variables to missing status
 num_close = 0
 close_ind = -99
-dist      = 1.0e9
+if (present(dist)) dist      = 1.0e9
 
 istatus1 = 0
 istatus2 = 0
 
-! Convert base_obs vertical coordinate to requested vertical coordinate if necessary
+! Convert base vertical coordinate to requested vertical coordinate if necessary
 
-base_array = get_location(base_obs_loc) 
-base_which = nint(query_location(base_obs_loc))
+base_array = get_location(base_loc) 
+base_which = nint(query_location(base_loc))
 
-if (.not. horiz_dist_only) then
+if (vertical_localization_on()) then
    if (base_which /= wrf%dom(1)%localization_coord) then
-      call vert_convert(ens_mean, base_obs_loc, base_obs_kind, istatus1)
+      !print*, 'base_which ', base_which, 'loc coord ', wrf%dom(1)%localization_coord
+      call vert_convert(state_handle, base_loc, base_type, istatus1)
+      !call error_handler(E_ERR, 'you should not call this ', 'get_close_obs')
    elseif (base_array(3) == missing_r8) then
       istatus1 = 1
    endif
@@ -6408,40 +6341,46 @@ if (istatus1 == 0) then
    ! This way, we are decreasing the number of distance computations that will follow.
    ! This is a horizontal-distance operation and we don't need to have the relevant vertical
    ! coordinate information yet (for obs_loc).
-   call loc_get_close_obs(gc, base_obs_loc, base_obs_kind, obs_loc, obs_kind, &
+   call loc_get_close(gc, base_loc, base_type, locs, loc_qtys, loc_qtys, &
                           num_close, close_ind)
 
    ! Loop over potentially close subset of obs priors or state variables
    do k = 1, num_close
 
       t_ind = close_ind(k)
-      local_obs_loc   = obs_loc(t_ind)
-      local_obs_which = nint(query_location(local_obs_loc))
+      local_loc   = locs(t_ind)
+      local_which = nint(query_location(local_loc))
 
-      ! Convert local_obs vertical coordinate to requested vertical coordinate if necessary.
+      ! Convert local vertical coordinate to requested vertical coordinate if necessary.
       ! This should only be necessary for obs priors, as state location information already
       ! contains the correct vertical coordinate (filter_assim's call to get_state_meta_data).
-      if (.not. horiz_dist_only) then
-         if (local_obs_which /= wrf%dom(1)%localization_coord) then
-            call vert_convert(ens_mean, local_obs_loc, obs_kind(t_ind), istatus2)
+      if (vertical_localization_on()) then
+         if (local_which /= wrf%dom(1)%localization_coord) then
+            call vert_convert(state_handle, local_loc, loc_qtys(t_ind), istatus2)
             ! Store the "new" location into the original full local array
-            obs_loc(t_ind) = local_obs_loc
+            locs(t_ind) = local_loc !HK Overwritting the location
+         else
+            istatus2 = 0
          endif
       endif
 
-      ! Compute distance - set distance to a very large value if vert coordinate is missing
-      ! or vert_convert returned error (istatus2=1)
-      local_obs_array = get_location(local_obs_loc)
-      if (((.not. horiz_dist_only).and.(local_obs_array(3) == missing_r8)).or.(istatus2 == 1)) then
-         dist(k) = 1.0e9        
-      else
-         dist(k) = get_dist(base_obs_loc, local_obs_loc, base_obs_kind, obs_kind(t_ind))
+      if (present(dist)) then
+         ! Compute distance - set distance to a very large value if vert coordinate is missing
+         ! or vert_convert returned error (istatus2=1)
+         local_array = get_location(local_loc)
+         if (((vertical_localization_on()).and.(local_array(3) == missing_r8)).or.(istatus2 == 1)) then
+            dist(k) = 1.0e9
+         else
+            dist(k) = get_dist(base_loc, local_loc, base_type, loc_qtys(t_ind))
+         endif
       endif
+
+      !print*, 'k ', k, 'rank ', my_task_id()
 
    end do
 endif
 
-end subroutine get_close_obs
+end subroutine get_close
 
 !#######################################################################
 !nc -- additional function from Greg Lawson & Nancy Collins
@@ -6712,7 +6651,7 @@ function boundsCheck ( ind, periodic, id, dim, type )
 end function boundsCheck
 
 !#######################################################################
-! getCorners takes in an i and j index, information about domain and grid staggering, 
+! get_orners takes in an i and j index, information about domain and grid staggering,
 !   and then returns the four cornering gridpoints' 2-element integer indices. 
 subroutine getCorners(i, j, id, type, ll, ul, lr, ur, rc)
 
@@ -7376,48 +7315,48 @@ row = 0
 
 ! fill default state variable table here.
 row = row+1
-default_table(:,row) = (/ 'U                    ', &
-                          'KIND_U_WIND_COMPONENT', &
-                          'TYPE_U               ', &
-                          'UPDATE               ', &
-                          '999                  '  /)
+default_table(:,row) = (/ 'U                         ', &
+                          'QTY_U_WIND_COMPONENT      ', &
+                          'TYPE_U                    ', &
+                          'UPDATE                    ', &
+                          '999                       '  /)
 row = row+1
-default_table(:,row) = (/ 'V                    ', &
-                          'KIND_V_WIND_COMPONENT', &
-                          'TYPE_V               ', &
-                          'UPDATE               ', &
-                          '999                  '  /)
+default_table(:,row) = (/ 'V                         ', &
+                          'QTY_V_WIND_COMPONENT      ', &
+                          'TYPE_V                    ', &
+                          'UPDATE                    ', &
+                          '999                       '  /)
 row = row+1
-default_table(:,row) = (/ 'W                     ', &
-                          'KIND_VERTICAL_VELOCITY', &
-                          'TYPE_W                ', &
-                          'UPDATE                ', &
-                          '999                   '  /)
+default_table(:,row) = (/ 'W                         ', &
+                          'QTY_VERTICAL_VELOCITY     ', &
+                          'TYPE_W                    ', &
+                          'UPDATE                    ', &
+                          '999                       '  /)
 row = row+1
-default_table(:,row) = (/ 'PH                      ', &
-                          'KIND_GEOPOTENTIAL_HEIGHT', &
-                          'TYPE_GZ                 ', &
-                          'UPDATE                  ', &
-                          '999                     '  /)
+default_table(:,row) = (/ 'PH                        ', &
+                          'QTY_GEOPOTENTIAL_HEIGHT   ', &
+                          'TYPE_GZ                   ', &
+                          'UPDATE                    ', &
+                          '999                       '  /)
 row = row+1
 default_table(:,row) = (/ 'T                         ', &
-                          'KIND_POTENTIAL_TEMPERATURE', &
+                          'QTY_POTENTIAL_TEMPERATURE ', &
                           'TYPE_T                    ', &
                           'UPDATE                    ', &
                           '999                       '  /)
 row = row+1
-default_table(:,row) = (/ 'MU           ', &
-                          'KIND_PRESSURE', &
-                          'TYPE_MU      ', &
-                          'UPDATE       ', &
-                          '999          '  /)
+default_table(:,row) = (/ 'MU                        ', &
+                          'QTY_PRESSURE              ', &
+                          'TYPE_MU                   ', &
+                          'UPDATE                    ', &
+                          '999                       '  /)
 
 row = row+1
-default_table(:,row) = (/ 'QVAPOR                 ', &
-                          'KIND_VAPOR_MIXING_RATIO', &
-                          'TYPE_QV                ', &
-                          'UPDATE                 ', &
-                          '999                    '  /)
+default_table(:,row) = (/ 'QVAPOR                    ', &
+                          'QTY_VAPOR_MIXING_RATIO    ', &
+                          'TYPE_QV                   ', &
+                          'UPDATE                    ', &
+                          '999                       '  /)
 
 return
 
@@ -7457,22 +7396,22 @@ do i = 1, row
    ! end of the list?
    if (wrf_state_variables(2, i) == 'NULL') exit
 
-   nextkind = get_raw_obs_kind_index(trim(wrf_state_variables(2, i)))
+   nextkind = get_index_for_quantity(trim(wrf_state_variables(2, i)))
    select case(nextkind)
 
    ! wrf stores potential temperature (temperature perturbations around a 
    ! threshold) but we can interpolate sensible temperature from it
-   case (KIND_POTENTIAL_TEMPERATURE)
-      in_state_vector(KIND_TEMPERATURE) = .true.
-      in_state_vector(KIND_POTENTIAL_TEMPERATURE) = .true.
+   case (QTY_POTENTIAL_TEMPERATURE)
+      in_state_vector(QTY_TEMPERATURE) = .true.
+      in_state_vector(QTY_POTENTIAL_TEMPERATURE) = .true.
 
    ! we use vapor mixing ratio to compute specific humidity
-   case (KIND_VAPOR_MIXING_RATIO)
-      in_state_vector(KIND_VAPOR_MIXING_RATIO) = .true.
-      in_state_vector(KIND_SPECIFIC_HUMIDITY) = .true.
+   case (QTY_VAPOR_MIXING_RATIO)
+      in_state_vector(QTY_VAPOR_MIXING_RATIO) = .true.
+      in_state_vector(QTY_SPECIFIC_HUMIDITY) = .true.
 
    ! unrecognized kind string in namelist.
-   ! 0 is actually KIND_RAW_STATE_VARIABLE and not supported here.
+   ! 0 is actually QTY_STATE_VARIABLE and not supported here.
    case (-1, 0) 
       write(errstring, *) 'unrecognized KIND string: ' // trim(wrf_state_variables(2, i))
       call error_handler(E_ERR, 'fill_dart_kinds_table', errstring, &
@@ -7484,15 +7423,15 @@ do i = 1, row
 
    end select
 
-   ! NOTE: PSFC can be labeled either KIND_PRESSURE or KIND_SURFACE_PRESSURE
+   ! NOTE: PSFC can be labeled either QTY_PRESSURE or QTY_SURFACE_PRESSURE
    ! in the namelist, but make sure however it is labeled that for now we 
    ! allow surface pressure interpolation.  this may go away once we work out
-   ! KIND_FOO vs KIND_SURFACE_FOO - are they fundamentally different things
-   ! or should the decision be made based on a KIND_FOO and the vertical
+   ! QTY_FOO vs QTY_SURFACE_FOO - are they fundamentally different things
+   ! or should the decision be made based on a QTY_FOO and the vertical
    ! location type -- if it is VERTISSURFACE, then you do the 2d calc in the
    ! surface field, otherwise you do the full-up 3d interpolation.
    if ( wrf_state_variables(1, i) == 'PSFC' ) then
-      in_state_vector(KIND_SURFACE_PRESSURE) = .true.
+      in_state_vector(QTY_SURFACE_PRESSURE) = .true.
    endif
 
 enddo
@@ -7507,12 +7446,12 @@ do i = 1, size(in_state_vector)
    select case(i)
   
    ! the vortex center computations require wind speeds and phb?
-   case (KIND_VORTEX_LAT, KIND_VORTEX_LON, KIND_VORTEX_PMIN, KIND_VORTEX_WMAX)
-      if ((.not. in_state_vector(KIND_U_WIND_COMPONENT))   .or. &
-          (.not. in_state_vector(KIND_V_WIND_COMPONENT))   .or. &
-          (.not. in_state_vector(KIND_TEMPERATURE))        .or. &
-          (.not. in_state_vector(KIND_VAPOR_MIXING_RATIO)) .or. &
-          (.not. in_state_vector(KIND_PRESSURE))) then
+   case (QTY_VORTEX_LAT, QTY_VORTEX_LON, QTY_VORTEX_PMIN, QTY_VORTEX_WMAX)
+      if ((.not. in_state_vector(QTY_U_WIND_COMPONENT))   .or. &
+          (.not. in_state_vector(QTY_V_WIND_COMPONENT))   .or. &
+          (.not. in_state_vector(QTY_TEMPERATURE))        .or. &
+          (.not. in_state_vector(QTY_VAPOR_MIXING_RATIO)) .or. &
+          (.not. in_state_vector(QTY_PRESSURE))) then
          write(errstring, *) 'VORTEX kinds will require U,V,T,QVAPOR,MU in state vector'
          ! FIXME: not fatal error, just informative at this point.
          call error_handler(E_MSG, 'fill_dart_kinds_table', errstring, &
@@ -7520,8 +7459,8 @@ do i = 1, size(in_state_vector)
       endif
  
    ! if you have one wind component you have to have both
-   case (KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT)
-      if (in_state_vector(KIND_U_WIND_COMPONENT) .neqv. in_state_vector(KIND_V_WIND_COMPONENT)) then
+   case (QTY_U_WIND_COMPONENT, QTY_V_WIND_COMPONENT)
+      if (in_state_vector(QTY_U_WIND_COMPONENT) .neqv. in_state_vector(QTY_V_WIND_COMPONENT)) then
          write(errstring, *) 'WIND kinds will require both U,V in state vector'
          ! FIXME: not fatal error, just informative at this point.
          call error_handler(E_MSG, 'fill_dart_kinds_table', errstring, &
@@ -7536,7 +7475,7 @@ enddo
 
 ! part 3: fields you just have to have, always, and other exceptions
 ! and things that break the rules.
-if (.not. in_state_vector(KIND_GEOPOTENTIAL_HEIGHT)) then
+if (.not. in_state_vector(QTY_GEOPOTENTIAL_HEIGHT)) then
    write(errstring, *) 'PH is always a required field'
    call error_handler(E_ERR, 'fill_dart_kinds_table', errstring, &
                       source, revision, revdate)
@@ -7544,35 +7483,36 @@ endif
 
 ! FIXME: is this true?  or is pressure always required, and surface
 ! pressure required only if you have any of the surface obs?
-if ((.not. in_state_vector(KIND_PRESSURE)) .and. &
-    (.not. in_state_vector(KIND_SURFACE_PRESSURE))) then
+if ((.not. in_state_vector(QTY_PRESSURE)) .and. &
+    (.not. in_state_vector(QTY_SURFACE_PRESSURE))) then
     write(errstring, *) 'One of MU or PSFC is a required field'
     call error_handler(E_ERR, 'fill_dart_kinds_table', errstring, &
                        source, revision, revdate)
 endif
 
-! surface elevation is read in outside the state vector mechanism,
+! surface elevation and land mask are read outside the state vector mechanism,
 ! directly from the wrfinput template file, and does not vary from
 ! one ensemble member to another.
-in_state_vector(KIND_SURFACE_ELEVATION) = .true.
+in_state_vector(QTY_SURFACE_ELEVATION) = .true.
+in_state_vector(QTY_LANDMASK) = .true.
 
 ! there is no field that directly maps to the vortex measurements.
 ! if you have all the fields it needs, allow them.
-if (in_state_vector(KIND_U_WIND_COMPONENT)    .and. &
-    in_state_vector(KIND_V_WIND_COMPONENT)    .and. &
-    in_state_vector(KIND_TEMPERATURE)         .and. &
-    in_state_vector(KIND_VAPOR_MIXING_RATIO)  .and. &
-    in_state_vector(KIND_PRESSURE)) then        ! ok to add vortex types
-   in_state_vector(KIND_VORTEX_LAT)  = .true.
-   in_state_vector(KIND_VORTEX_LON)  = .true.
-   in_state_vector(KIND_VORTEX_PMIN) = .true.
-   in_state_vector(KIND_VORTEX_WMAX) = .true.
+if (in_state_vector(QTY_U_WIND_COMPONENT)    .and. &
+    in_state_vector(QTY_V_WIND_COMPONENT)    .and. &
+    in_state_vector(QTY_TEMPERATURE)         .and. &
+    in_state_vector(QTY_VAPOR_MIXING_RATIO)  .and. &
+    in_state_vector(QTY_PRESSURE)) then        ! ok to add vortex types
+   in_state_vector(QTY_VORTEX_LAT)  = .true.
+   in_state_vector(QTY_VORTEX_LON)  = .true.
+   in_state_vector(QTY_VORTEX_PMIN) = .true.
+   in_state_vector(QTY_VORTEX_WMAX) = .true.
 endif
  
 ! if you have geopotential height and pressure, you can compute
 ! a density value.
-if (in_state_vector(KIND_GEOPOTENTIAL_HEIGHT) .and. &
-    in_state_vector(KIND_PRESSURE) ) in_state_vector(KIND_DENSITY) = .true.
+if (in_state_vector(QTY_GEOPOTENTIAL_HEIGHT) .and. &
+    in_state_vector(QTY_PRESSURE) ) in_state_vector(QTY_DENSITY) = .true.
 
 
 ! allow reflectivity to be asked for, because the obs_def has an alternative
@@ -7580,8 +7520,10 @@ if (in_state_vector(KIND_GEOPOTENTIAL_HEIGHT) .and. &
 ! is not allowed it will error exit instead of returning with an invalid istatus
 ! to indicate to the caller that the interpolation failed.
 ! ditto for power weighted fall speed.
-in_state_vector(KIND_RADAR_REFLECTIVITY) = .true.
-in_state_vector(KIND_POWER_WEIGHTED_FALL_SPEED) = .true.
+in_state_vector(QTY_RADAR_REFLECTIVITY) = .true.
+in_state_vector(QTY_POWER_WEIGHTED_FALL_SPEED) = .true.
+
+
 
 ! FIXME:  i was going to suggest nuking this routine all together because it makes
 ! the default behavior be to exit with an error when requesting to interpolate an
@@ -7595,14 +7537,14 @@ end subroutine fill_dart_kinds_table
 !--------------------------------------------
 !--------------------------------------------
 
-integer function get_number_of_wrf_variables(id, state_table, var_element_list)
+integer function get_number_of_wrf_variables(id, state_table, var_element_list, var_update_list)
 
 integer, intent(in) :: id
 character(len=*), intent(in) :: state_table(num_state_table_columns,max_state_variables) 
 integer, intent(out), optional :: var_element_list(max_state_variables)
+logical, intent(out), optional :: var_update_list(max_state_variables)
+
 integer :: ivar, num_vars
-! was this for debugging?  seems unused.
-!character(len=129) :: my_string
 logical :: debug = .false.
 
 if ( present(var_element_list) ) var_element_list = -1
@@ -7611,11 +7553,18 @@ ivar = 1
 num_vars = 0
 do while ( trim(state_table(5,ivar)) /= 'NULL' ) 
 
-   !my_string = state_table(5,ivar)
-
    if ( variable_is_on_domain(state_table(5,ivar),id) ) then
       num_vars = num_vars + 1
       if ( present(var_element_list) ) var_element_list(num_vars) = ivar
+
+      if (present(var_update_list)) then
+         if (state_table(4,ivar) == 'NO_COPY_BACK') then
+            var_update_list(num_vars) = .false.
+         else
+            var_update_list(num_vars) = .true.
+         endif
+      endif
+
    endif
 
    ivar = ivar + 1
@@ -7847,7 +7796,7 @@ end subroutine get_variable_metadata_from_file
 
 !--------------------------------------------
 !--------------------------------------------
-
+! Note get_dart_vector_index depends on this function
 integer function get_type_ind_from_type_string(id, wrf_varname)
 
 ! simply loop through the state variable table to get the index of the
@@ -7883,145 +7832,11 @@ integer function get_type_ind_from_type_string(id, wrf_varname)
 
 end function get_type_ind_from_type_string
 
-!-------------------------------------------------------------
-
-subroutine trans_2Dto1D( a1d, a2d, nx, ny )
-
-integer,  intent(in)    :: nx,ny
-real(r8), intent(inout) :: a1d(:)
-real(r8), intent(inout) :: a2d(nx,ny)
-
-!---
-
-integer :: i,j,m
-
-i=size(a2d,1)
-j=size(a2d,2)
-m=size(a1d)
-
-if ( i /= nx .or. &
-     j /= ny .or. &
-     m < nx*ny) then
-   write(errstring,*)'nx, ny, not compatible ',i,j,nx,ny
-   call error_handler(E_ERR,'trans_2d',errstring,source,revision,revdate)
-endif
-
-do j=1,ny
-   do i=1,nx
-      a1d(i + nx*(j-1)) = a2d(i,j)
-   enddo
-enddo
-
-end subroutine trans_2Dto1D
-
-!-------------------------------------------------------------
-
-subroutine trans_3Dto1D( a1d, a3d, nx, ny, nz )
-
-integer,  intent(in)    :: nx,ny,nz
-real(r8), intent(inout) :: a1d(:)
-real(r8), intent(inout) :: a3d(:,:,:)
-
-!---
-
-integer :: i,j,k,m
-
-i=size(a3d,1)
-j=size(a3d,2)
-k=size(a3d,3)
-m=size(a1d)
-
-if ( i /= nx .or. &
-     j /= ny .or. &
-     k /= nz .or. &
-     m < nx*ny*nz) then
-   write(errstring,*)'nx, ny, nz, not compatible ',i,j,k,nx,ny,nz,m
-   call error_handler(E_ERR,'trans_3d',errstring,source,revision,revdate)
-endif
-
-do k=1,nz
-   do j=1,ny
-      do i=1,nx
-         a1d(i + nx*(j-1) + nx*ny*(k-1) ) = a3d(i,j,k)
-      enddo
-   enddo
-enddo
-
-end subroutine trans_3Dto1D
-
-!-------------------------------------------------------------
-
-subroutine trans_1Dto2D( a1d, a2d, nx, ny )
-
-integer,  intent(in)    :: nx,ny
-real(r8), intent(inout) :: a1d(:)
-real(r8), intent(inout) :: a2d(nx,ny)
-
-!---
-
-integer :: i,j,m
-
-i=size(a2d,1)
-j=size(a2d,2)
-m=size(a1d)
-
-if ( i /= nx .or. &
-     j /= ny .or. &
-     m < nx*ny) then
-   write(errstring,*)'nx, ny, not compatible ',i,j,nx,ny
-   call error_handler(E_ERR,'trans_2d',errstring,source,revision,revdate)
-endif
-
-do j=1,ny
-   do i=1,nx
-      a2d(i,j) = a1d(i + nx*(j-1))
-   enddo
-enddo
-
-end subroutine trans_1Dto2D
-
-!-------------------------------------------------------------
-
-subroutine trans_1Dto3D( a1d, a3d, nx, ny, nz )
-
-integer,  intent(in)    :: nx,ny,nz
-real(r8), intent(inout) :: a1d(:)
-real(r8), intent(inout) :: a3d(:,:,:)
-
-!---
-
-integer :: i,j,k,m
-
-i=size(a3d,1)
-j=size(a3d,2)
-k=size(a3d,3)
-m=size(a1d)
-
-if ( i /= nx .or. &
-     j /= ny .or. &
-     k /= nz .or. &
-     m < nx*ny*nz) then
-   write(errstring,*)'nx, ny, nz, not compatible ',i,j,k,nx,ny,nz,m
-   call error_handler(E_ERR,'trans_3d',errstring,source,revision,revdate)
-endif
-
-do k=1,nz
-   do j=1,ny
-      do i=1,nx
-         a3d(i,j,k) = a1d(i + nx*(j-1) + nx*ny*(k-1) )
-      enddo
-   enddo
-enddo
-
-end subroutine trans_1Dto3D
-
 !----------------------------------------------------------------------
-
-subroutine get_wrf_date (tstring, year, month, day, hour, minute, second)
-
-!--------------------------------------------------------
 ! Returns integers taken from tstring
 ! It is assumed that the tstring char array is as YYYY-MM-DD_hh:mm:ss
+
+subroutine get_wrf_date (tstring, year, month, day, hour, minute, second)
 
 integer,           intent(out) :: year, month, day, hour, minute, second
 character(len=19), intent(in)  :: tstring
@@ -8038,12 +7853,10 @@ return
 end subroutine get_wrf_date
 
 !----------------------------------------------------------------------
-
-subroutine set_wrf_date (tstring, year, month, day, hour, minute, second)
-
-!--------------------------------------------------------
 ! Returns integers taken from tstring
 ! It is assumed that the tstring char array is as YYYY-MM-DD_hh:mm:ss
+
+subroutine set_wrf_date (tstring, year, month, day, hour, minute, second)
 
 integer,           intent(in) :: year, month, day, hour, minute, second
 character(len=19), intent(out)  :: tstring
@@ -8162,6 +7975,401 @@ function compute_geometric_height(geopot, lat)
 
 end function compute_geometric_height
 
+!--------------------------------------------------------------------------
+!> Perform interpolation across the ensemble
+subroutine simple_interp_distrib(fld, wrf, id, i, j, k, obs_kind, dxm, dx, dy, dym, uniquek, ens_size, state_handle)
 
+integer,             intent(in) :: ens_size
+type(ensemble_type), intent(in) :: state_handle
+type(wrf_dom),       intent(in) :: wrf
+integer,             intent(in) :: id
+integer,             intent(in) :: i,j
+integer,             intent(in) :: uniquek(:)
+integer,             intent(in) :: k(ens_size)
+integer,             intent(in) :: obs_kind
+real(r8),            intent(in) :: dxm, dx, dy, dym
+real(r8),           intent(out) :: fld(2, ens_size)
+
+integer(i8)           :: ill, iul, ilr, iur
+integer               :: rc
+integer, dimension(2) :: ll, ul, lr, ur
+integer               :: uk, e
+logical               :: in_state
+integer               :: wrf_type
+
+real(r8), dimension(ens_size) ::x_ill, x_iul, x_ilr, x_iur
+
+! Confirm that the obs kind is in the DART state vector and return the wrf_type
+!> @todo should boundsCheck always be temperatue type? This is what it is in the original code
+call obs_kind_in_state_vector(in_state, wrf_type, obs_kind, id)
+
+if ( in_state ) then
+
+   ! An observation could be on different levels for each ensemble member. 
+   ! But, you don't want to do ens_size*communication, so just do it for the levels you need.
+   UNIQUEK_LOOP: do uk = 1, size(uniquek)
+
+   ! Check to make sure retrieved integer gridpoints are in valid range
+   if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf_type ) .and.&
+      boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf_type ) .and. &
+      boundsCheck( uniquek(uk), .false.,                id, dim=3, type=wrf_type ) ) then
+         
+         call getCorners(i, j, id, wrf_type, ll, ul, lr, ur, rc )
+         if ( rc .ne. 0 ) &
+         print*, 'model_mod.f90 :: model_interpolate :: getCorners QNSNOW rc = ', rc
+               
+         ! Interpolation for QNSNOW field at level k
+         ill = get_dart_vector_index(ll(1), ll(2), uniquek(uk), domain_id(id), wrf_type)
+         iul = get_dart_vector_index(ul(1), ul(2), uniquek(uk), domain_id(id), wrf_type)
+         ilr = get_dart_vector_index(lr(1), lr(2), uniquek(uk), domain_id(id), wrf_type)
+         iur = get_dart_vector_index(ur(1), ur(2), uniquek(uk), domain_id(id), wrf_type)
+
+         x_ill = get_state(ill, state_handle)
+         x_iul = get_state(iul, state_handle)
+         x_ilr = get_state(ilr, state_handle)
+         x_iur = get_state(iur, state_handle)
+
+         do e = 1, ens_size
+            if ( k(e) == uniquek(uk) ) then
+               fld(1,e) = dym*( dxm*x_ill(e) + dx*x_ilr(e) ) + dy*( dxm*x_iul(e) + dx*x_iur(e) )
+            endif
+         enddo
+
+         ! Interpolation for QNSNOW field at level k+1
+         ill = get_dart_vector_index(ll(1), ll(2), uniquek(uk)+1, domain_id(id), wrf_type)
+         iul = get_dart_vector_index(ul(1), ul(2), uniquek(uk)+1, domain_id(id), wrf_type)
+         ilr = get_dart_vector_index(lr(1), lr(2), uniquek(uk)+1, domain_id(id), wrf_type)
+         iur = get_dart_vector_index(ur(1), ur(2), uniquek(uk)+1, domain_id(id), wrf_type)
+
+         x_ill = get_state(ill, state_handle)
+         x_iul = get_state(iul, state_handle)
+         x_ilr = get_state(ilr, state_handle)
+         x_iur = get_state(iur, state_handle)
+
+         do e = 1, ens_size
+            if ( k(e) == uniquek(uk) ) then
+               fld(2, e) = dym*( dxm*x_ill(e) + dx*x_ilr(e) ) + dy*( dxm*x_iul(e) + dx*x_iur(e) )
+            endif
+         enddo
+
+      endif
+
+   enddo UNIQUEK_LOOP
+
+else ! not in state
+
+   call error_handler(E_MSG, 'simple_interp_distrib', &
+      'obs_kind "'//trim(get_name_for_quantity(obs_kind))//'" is not in state vector', &
+      source, revision, revdate)
+   fld(2, ens_size) = missing_r8
+   return
+
+endif
+
+end subroutine simple_interp_distrib
+
+!------------------------------------------------------------------------
+!> interpolation for surface fields
+subroutine surface_interp_distrib(fld, wrf, id, i, j, obs_kind, wrf_surf_type, dxm, dx, dy, dym, ens_size, state_handle)
+
+integer,             intent(in) :: ens_size
+type(ensemble_type), intent(in) :: state_handle
+type(wrf_dom),       intent(in) :: wrf
+integer,             intent(in) :: id
+integer,             intent(in) :: obs_kind
+integer,             intent(in) :: wrf_surf_type !< this has to be passed in is beccause obs_kind does not give a unique wrf_type ( could check obs_kind then if surf var?)
+integer,             intent(in) :: i,j
+real(r8),            intent(in) :: dxm, dx, dy, dym
+real(r8),           intent(out) :: fld(2, ens_size)
+
+integer(i8)           :: ill, iul, ilr, iur
+integer               :: rc
+integer, dimension(2) :: ll, ul, lr, ur
+
+logical               :: in_state
+integer               :: wrf_type
+
+real(r8), dimension(ens_size) ::x_ill, x_iul, x_ilr, x_iur
+
+fld(:,:) = missing_r8
+
+! Find the wrf_type from the obs kind
+! check for in state is performed before surface_interp_distrib is called
+!> @todo should boundsCheck always be temperatue type? This is what it is in the original code
+call obs_kind_in_state_vector(in_state, wrf_type, obs_kind, id)
+
+! Check to make sure retrieved integer gridpoints are in valid range
+if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf_type ) .and. &
+       boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf_type ) ) &
+       .or. wrf%dom(id)%scm ) then
+
+  call getCorners(i, j, id, wrf_type, ll, ul, lr, ur, rc )
+  if ( rc .ne. 0 ) &
+     print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
+   
+     ! Interpolation for the T2 field
+     ill = get_dart_vector_index(ll(1), ll(2), 1, domain_id(id), wrf_surf_type)
+     iul = get_dart_vector_index(ul(1), ul(2), 1, domain_id(id), wrf_surf_type)
+     ilr = get_dart_vector_index(lr(1), lr(2), 1, domain_id(id), wrf_surf_type)
+     iur = get_dart_vector_index(ur(1), ur(2), 1, domain_id(id), wrf_surf_type)
+
+     x_ill = get_state(ill, state_handle)
+     x_iul = get_state(iul, state_handle)
+     x_iur = get_state(iur, state_handle)
+     x_ilr = get_state(ilr, state_handle)
+
+     fld(1, :) = dym*( dxm*x_ill + dx*x_ilr ) + dy*( dxm*x_iul + dx*x_iur )
+
+endif
+
+end subroutine surface_interp_distrib
+
+!--------------------------------------------------------------------------
+!> test if an obs kind is in the state vector and set wrf_type
+subroutine obs_kind_in_state_vector(part_of_state_vector, wrf_type, obs_kind, id)
+
+logical, intent(out) :: part_of_state_vector
+integer, intent(out) :: wrf_type !< WRF
+integer, intent(in)  :: obs_kind !< DART
+integer, intent(in)  :: id
+
+
+part_of_state_vector = .false. ! assume not in state vector
+
+
+if    ( ( obs_kind == QTY_VERTICAL_VELOCITY)             .and. ( wrf%dom(id)%type_w >= 0 ) )  then
+   part_of_state_vector = .true.
+   wrf_type = wrf%dom(id)%type_w
+else if( ( obs_kind == QTY_RAINWATER_MIXING_RATIO )      .and. ( wrf%dom(id)%type_qr >= 0 ) ) then
+   part_of_state_vector = .true.
+   wrf_type =  wrf%dom(id)%type_qr
+else if( ( obs_kind == QTY_GRAUPEL_MIXING_RATIO )        .and. ( wrf%dom(id)%type_qg >= 0 ) ) then
+   part_of_state_vector = .true.
+   wrf_type =  wrf%dom(id)%type_qg
+else if( ( obs_kind == QTY_HAIL_MIXING_RATIO )           .and. ( wrf%dom(id)%type_qh >= 0 ) ) then
+   part_of_state_vector = .true.
+   wrf_type =  wrf%dom(id)%type_qh
+else if( ( obs_kind == QTY_SNOW_MIXING_RATIO )           .and. ( wrf%dom(id)%type_qs >= 0 ) ) then
+   part_of_state_vector = .true.
+   wrf_type =  wrf%dom(id)%type_qs
+else if( ( obs_kind == QTY_CLOUD_ICE )                   .and. ( wrf%dom(id)%type_qi >= 0 ) ) then
+   part_of_state_vector = .true.
+   wrf_type =  wrf%dom(id)%type_qi
+else if( ( obs_kind == QTY_CLOUD_LIQUID_WATER )          .and. ( wrf%dom(id)%type_qc >= 0 ) ) then
+   part_of_state_vector = .true.
+   wrf_type = wrf%dom(id)%type_qc
+else if( ( obs_kind == QTY_DROPLET_NUMBER_CONCENTR )     .and. ( wrf%dom(id)%type_qndrp >= 0 ) ) then
+   part_of_state_vector = .true.
+   wrf_type =  wrf%dom(id)%type_qndrp
+else if( ( obs_kind == QTY_ICE_NUMBER_CONCENTRATION )    .and. ( wrf%dom(id)%type_qnice >= 0 ) )then
+   part_of_state_vector = .true.
+   wrf_type = wrf%dom(id)%type_qnice
+else if( ( obs_kind == QTY_SNOW_NUMBER_CONCENTR )        .and. ( wrf%dom(id)%type_qnsnow >= 0 ) ) then
+   part_of_state_vector = .true.
+   wrf_type =  wrf%dom(id)%type_qnsnow
+else if( ( obs_kind == QTY_RAIN_NUMBER_CONCENTR )        .and. ( wrf%dom(id)%type_qnrain >= 0 ) ) then
+   part_of_state_vector = .true.
+   wrf_type =  wrf%dom(id)%type_qnrain
+else if( ( obs_kind == QTY_GRAUPEL_NUMBER_CONCENTR )     .and. ( wrf%dom(id)%type_qngraupel >= 0 ) ) then
+   part_of_state_vector = .true.
+   wrf_type =  wrf%dom(id)%type_qngraupel
+else if( ( obs_kind == QTY_HAIL_NUMBER_CONCENTR )        .and. ( wrf%dom(id)%type_qnhail >= 0 ) ) then
+   part_of_state_vector = .true.
+   wrf_type = wrf%dom(id)%type_qnhail
+else if( ( obs_kind == QTY_CONDENSATIONAL_HEATING )      .and. ( wrf%dom(id)%type_hdiab >= 0 ) ) then
+   part_of_state_vector = .true.
+   wrf_type =  wrf%dom(id)%type_hdiab
+else if( ( obs_kind == QTY_POWER_WEIGHTED_FALL_SPEED )   .and. ( wrf%dom(id)%type_fall_spd >= 0 ) ) then
+   part_of_state_vector = .true.
+   wrf_type =  wrf%dom(id)%type_fall_spd
+else if( ( obs_kind == QTY_RADAR_REFLECTIVITY )          .and. ( wrf%dom(id)%type_refl >= 0 ) ) then
+   part_of_state_vector = .true.
+   wrf_type =  wrf%dom(id)%type_refl
+else if( ( obs_kind == QTY_DIFFERENTIAL_REFLECTIVITY )   .and. ( wrf%dom(id)%type_dref >= 0 ) ) then
+   part_of_state_vector = .true.
+   wrf_type =  wrf%dom(id)%type_dref
+else if( ( obs_kind == QTY_SPECIFIC_DIFFERENTIAL_PHASE ) .and. ( wrf%dom(id)%type_spdp >= 0 ) ) then
+   part_of_state_vector = .true.
+   wrf_type = wrf%dom(id)%type_spdp
+else if ( ( obs_kind == QTY_VAPOR_MIXING_RATIO )         .and. ( wrf%dom(id)%type_qv >= 0 ) ) then
+   part_of_state_vector = .true.
+   wrf_type = wrf%dom(id)%type_qv
+else if ( ( obs_kind == QTY_TEMPERATURE )                  .and. ( wrf%dom(id)%type_t >= 0 ) ) then
+   part_of_state_vector = .true.
+   wrf_type = wrf%dom(id)%type_t
+else if ( ( obs_kind == QTY_POTENTIAL_TEMPERATURE )        .and. ( wrf%dom(id)%type_t >= 0 ) ) then
+   part_of_state_vector = .true.
+   wrf_type = wrf%dom(id)%type_t
+else if ( ( obs_kind == QTY_SKIN_TEMPERATURE )              .and. ( wrf%dom(id)%type_tsk >= 0 ) )then
+   part_of_state_vector = .true.
+   wrf_type = wrf%dom(id)%type_tsk
+else if ( ( obs_kind == QTY_GEOPOTENTIAL_HEIGHT )        .and. ( wrf%dom(id)%type_gz >= 0 ) )then
+   part_of_state_vector = .true.
+   wrf_type = wrf%dom(id)%type_gz
+else
+   call error_handler(E_MSG, 'obs_kind_in_state_vector', &
+      'obs_kind "'//trim(get_name_for_quantity(obs_kind))//'" is not in state vector', &
+       source, revision, revdate)
+   part_of_state_vector = .false.
+   wrf_type = -1
+endif
+
+end subroutine obs_kind_in_state_vector
+
+!--------------------------------------------------------------------
+!> pass the vertical localization coordinate to assim_tools_mod
+function query_vert_localization_coord()
+
+integer :: query_vert_localization_coord
+
+query_vert_localization_coord = vert_localization_coord
+
+end function query_vert_localization_coord
+
+!--------------------------------------------------------------------
+!> read the time from the input file
+function read_model_time(filename)
+
+character(len=*),  intent(in) :: filename
+type(time_type)               :: read_model_time
+
+integer           :: year, month, day, hour, minute, second
+integer           :: ret ! netcdf return code
+integer           :: ndims, dimids(2), ivtype, ncid, var_id
+character(len=80) :: varname
+character(len=19) :: timestring
+integer           :: i,  idims(2)
+
+call nc_check( nf90_open(filename, NF90_NOWRITE, ncid), &
+                  'opening', filename )
+
+call nc_check( nf90_inq_varid(ncid, "Times", var_id), 'read_model_time', &
+               'inq_varid Times' )
+call nc_check( nf90_inquire_variable(ncid, var_id, varname, xtype=ivtype, &
+               ndims=ndims, dimids=dimids), 'read_model_time', &
+               'inquire_variable Times' )
+
+do i=1,ndims ! isnt this just 1?
+   call nc_check( nf90_inquire_dimension(ncid, dimids(i), &
+                   len=idims(i)),'read_model_time','inquire_dimensions Times' )
+enddo
+
+call nc_check( nf90_get_var(ncid, var_id, timestring, &
+               start = (/ 1, idims(2) /)), 'read_model_time','get_var Times' )
+
+call get_wrf_date(timestring, year, month, day, hour, minute, second)
+read_model_time = set_date(year, month, day, hour, minute, second)
+
+
+call nc_check( nf90_close(ncid) , 'closing', filename)
+
+end function read_model_time
+
+!--------------------------------------------------------------------
+!> write the time from the input file
+subroutine write_model_time(ncid, dart_time)
+
+use typeSizes
+use netcdf
+
+integer,         intent(in) :: ncid
+type(time_type), intent(in) :: dart_time
+
+integer :: dim_ids(2), var_id, ret
+integer :: year, month, day, hour, minute, second
+character(len=19) :: timestring
+
+call get_date(dart_time, year, month, day, hour, minute, second)
+call set_wrf_date(timestring, year, month, day, hour, minute, second)
+
+call nc_begin_define_mode(ncid)
+
+! Define Times variable if it does not exist
+ret = nf90_inq_varid(ncid, "Times", var_id)
+if (ret /= NF90_NOERR) then
+
+   ! check to see if there is a time and date_str_length
+   ret = nf90_inq_dimid(ncid, "Time", dim_ids(2))
+   ! if Time dimension does not exist create it
+   if (ret /= NF90_NOERR) then
+      call nc_check(nf90_def_dim(ncid, "Time", nf90_unlimited, dim_ids(2)), &
+        "write_model_time def_var dimension Time")
+   endif
+
+   ret = nf90_inq_dimid(ncid, "DateStrLen", dim_ids(1))
+   if (ret /= NF90_NOERR) then
+      ! if DateStrLen dimension does not exist create it.
+      call nc_check(nf90_def_dim(ncid, "DateStrLen", len(timestring), dim_ids(1)), &
+        "write_model_time def_var dimension dateStrLength")
+   endif
+
+   ! use id's to set Times(Time, DateStrLen)
+   call nc_check(nf90_def_var(ncid, name="Times", xtype=nf90_char, &
+      dimids=dim_ids, varid=var_id), "write_model_time def_var Times")
+endif
+
+call nc_end_define_mode(ncid)
+
+call nc_check( nf90_put_var(ncid, var_id, timestring), &
+               'write_model_time', 'put_var Times' )
+
+end subroutine write_model_time
+
+!--------------------------------------------------------------------
+
+subroutine static_data_sizes(domain)
+integer, intent(in) :: domain
+
+print*
+print*, '******** wrf_static_data_for_dart domain ',domain
+print*, 'znu, dn, dnw, zs, znw ', size(wrf%dom(domain)%znu), &
+                                  size(wrf%dom(domain)%dn ), &
+                                  size(wrf%dom(domain)%dnw), &
+                                  size(wrf%dom(domain)%zs ), &
+                                  size(wrf%dom(domain)%znw)
+
+print*, 'mub, hgt ', size(wrf%dom(domain)%mub), size(wrf%dom(domain)%hgt)
+
+print*, 'latitude, latitude_u, latitude_v ', size(wrf%dom(domain)%latitude), &
+                                             size(wrf%dom(domain)%latitude_u), &
+                                             size(wrf%dom(domain)%latitude_v)
+
+print*, 'longitude, longitude_u, longitude_v ', size(wrf%dom(domain)%longitude), &
+                                                size(wrf%dom(domain)%longitude_u), &
+                                                size(wrf%dom(domain)%longitude_v)
+
+print*, 'phb             ', size(wrf%dom(domain)%phb)
+print*, 'var_index       ', size(wrf%dom(domain)%var_index)
+print*, 'var_size        ', size(wrf%dom(domain)%var_size)
+print*, 'var_type        ', size(wrf%dom(domain)%var_type)
+print*, 'var_index_list  ', size(wrf%dom(domain)%var_index_list)
+print*, 'var_update_list ', size(wrf%dom(domain)%var_update_list)
+print*, 'dart_kind       ', size(wrf%dom(domain)%dart_kind)
+print*, 'land            ', size(wrf%dom(domain)%land)
+
+print*, 'lower_bound,upper_bound ', size(wrf%dom(domain)%lower_bound), &
+                                    size(wrf%dom(domain)%upper_bound)
+
+print*, 'clamp_or_fail   ', size(wrf%dom(domain)%clamp_or_fail)
+
+print*, 'description, units, stagger, coordinates ', size(wrf%dom(domain)%description), &
+                                                     size(wrf%dom(domain)%units), &
+                                                     size(wrf%dom(domain)%stagger), &
+                                                     size(wrf%dom(domain)%coordinates)
+
+print*, 'dart_ind ', size(wrf%dom(domain)%dart_ind)
+print*
+
+end subroutine static_data_sizes
+
+!--------------------------------------------------------------------
 
 end module model_mod
+
+!> @}
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

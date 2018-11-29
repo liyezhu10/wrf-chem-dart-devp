@@ -1,14 +1,9 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
-! http://www.image.ucar.edu/DAReS/DART/DART_download
+! This code may (or may not) be part of the COAMPS distribution,
+! So it is not protected by the DART copyright agreement.
+!
+! DART $Id$
 
 module coamps_interp_mod
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 !------------------------------
 ! MODULE:       coamps_interp_mod
@@ -172,10 +167,10 @@ module coamps_interp_mod
   !------------------------------
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source = "$URL$", &
-   revision = "$Revision$", &
-   revdate = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
   ! Module-level aliases - allow us to access these items passed
   ! in to the driver function throughout the module
@@ -784,7 +779,7 @@ contains
 
     call get_next_availability_index(AVAILABLE_INDEX_TARGET)
 
-    if (obs_type .eq. KIND_GEOPOTENTIAL_HEIGHT) then
+    if (obs_type .eq. QTY_GEOPOTENTIAL_HEIGHT) then
       ! If we're observing geopotential height, there's no need to
       ! go looking around in the state vector - we have all the 
       ! data we need contained in the grid, so just calculate these
@@ -945,7 +940,7 @@ contains
     ! to destagger anything - can just read the points straight out
     ! of the long state vector
     do cur_level = 1, num_model_levels 
-      call get_restart_index_by_properties(KIND_EXNER_FUNCTION, &
+      call get_restart_index_by_properties(QTY_EXNER_FUNCTION, &
                                            IS_MEAN, IS_M_LEVEL, &
                                            cur_level,           &
                                            mean_exner_index     )
@@ -985,7 +980,7 @@ contains
     ! to destagger anything - can just read the points straight out
     ! of the long state vector
     do cur_level = 1, num_model_levels 
-      call get_restart_index_by_properties(KIND_EXNER_FUNCTION, &
+      call get_restart_index_by_properties(QTY_EXNER_FUNCTION, &
                                            IS_MEAN, IS_M_LEVEL, &
                                            cur_level,           &
                                            pert_exner_index     )
@@ -1171,9 +1166,9 @@ contains
 
     ! Only need to worry about u/v winds - everything else is
     ! returned as is
-    if (field_type .eq. KIND_U_WIND_COMPONENT) then
+    if (field_type .eq. QTY_U_WIND_COMPONENT) then
       call utom(field, grid_i, grid_j, NUM_VERT_LEVELS)
-    else if (field_type .eq. KIND_V_WIND_COMPONENT) then
+    else if (field_type .eq. QTY_V_WIND_COMPONENT) then
       call vtom(field, grid_i, grid_j, NUM_VERT_LEVELS)
     end if
   end subroutine destagger_field
@@ -1500,3 +1495,8 @@ contains
 
 end module coamps_interp_mod
 
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

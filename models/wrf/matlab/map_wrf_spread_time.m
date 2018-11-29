@@ -1,14 +1,10 @@
 %% map_wrf_spread_time
 
-%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% <next few lines under version control, do not edit>
-% $URL$
-% $Id$
-% $Revision$
-% $Date$
+% DART $Id$
 
 %% Select field to plot (U, V, W, GZ, T, MU, QV, QC, QR)
 
@@ -24,11 +20,11 @@ if (exist(pofname,'file') ~= 2)
    error('%s does not exist.',pofname)
 end
 
-tlon  = nc_varget(prfname,  'XLON_d01'); we = size( tlon, 2);
-tlat  = nc_varget(prfname,  'XLAT_d01'); sn = size( tlat, 1);
-level = nc_varget(prfname, 'level_d01'); bt = size(level, 1);
+tlon  = ncread(prfname,  'XLON_d01'); we = size( tlon, 2);
+tlat  = ncread(prfname,  'XLAT_d01'); sn = size( tlat, 1);
+level = ncread(prfname, 'level_d01'); bt = size(level, 1);
 
-ens_size = get_ens_size(prfname);
+[ens_size,~] = nc_dim_info(prfname,'member');
 sprd_ind = get_copy_index(prfname,'ensemble spread');
 
 stime = input('Initial time (index): ');
@@ -140,3 +136,8 @@ end
 
 % Loop for another try
 %map_wrf_diff_time;
+
+% <next few lines under version control, do not edit>
+% $URL$
+% $Revision$
+% $Date$

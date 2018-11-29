@@ -1,17 +1,17 @@
 #!/bin/tcsh
 #
-# DART software - Copyright 2004 - 2011 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# $Id$
+# DART $Id$
 #
 # This script has 4 logical 'blocks':
 # 1) creates a clean, temporary directory in which to run a model instance 
 #    and copies the necessary files into the temporary directory
-# 2) converts the DART output to input expected by the ocean model
-# 3) runs the ocean model
-# 4) converts the ocean model output to input expected by DART
+# 2) converts the DART output to input expected by NCOMMAS
+# 3) runs NCOMMAS
+# 4) converts NCOMMAS output to input expected by DART
 #
 # The error code from the script reflects which block it failed.
 #
@@ -87,17 +87,17 @@ while($state_copy <= $num_states)
    set output_file     = `head -$output_file_line     ../$control_file | tail -1`
 
    #----------------------------------------------------------------------
-   # Block 2: Convert the DART output file to form needed by ocean model.
+   # Block 2: Convert the DART output file to form needed by NCOMMAS.
    # We are going to take a NCOMMAS netCDF restart file and simply overwrite the
    # appropriate variables. The DART output file also has the 'advance_to'
    # time - which must be communicated to the model ...
    #----------------------------------------------------------------------
 
-   # The EXPECTED input DART 'initial conditions' file name is 'dart.ic'
+   # The EXPECTED input DART 'initial conditions' file name is 'dart_restart'
    # The dart_to_ncommas_nml:advance_time_present = .TRUE. must be set
 
    # why is this a link and not a move?
-   ln -sfv ../$input_file dart.ic || exit 2
+   ln -sfv ../$input_file dart_restart || exit 2
 
    # CENTRALDIR should contain the restart files for all the ensemble members.
 
@@ -167,9 +167,9 @@ while($state_copy <= $num_states)
    ../ncommas_to_dart || exit 4
 
 
-   # The (new,updated) DART restart file name is called 'dart.ud'
+   # The (new,updated) DART restart file name is called 'dart_ics'
    # Move the updated files back to 'centraldir'
-   mv -v dart.ud ../$output_file || exit 4
+   mv -v dart_ics ../$output_file || exit 4
    rm restart.nc
 
    # the restart name was a link, so the central version should

@@ -1,14 +1,10 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 module model_mod
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 ! Assimilation interface for Held-Suarez Bgrid
 
@@ -60,45 +56,80 @@ use        hs_forcing_mod, only: hs_forcing_init, hs_forcing
 
 ! DART routines 
 use          location_mod, only: location_type, get_location, set_location, &
-                                 vert_is_level, query_location, &
-                                 LocationDims, LocationName, LocationLName, &
-                                 vert_is_pressure, vert_is_surface, &
-                                 get_close_maxdist_init, get_close_obs_init, get_close_obs
+                                 is_vertical, query_location, VERTISLEVEL,  &
+                                 VERTISSURFACE
 
 
 use        random_seq_mod, only: random_seq_type, init_random_seq, random_gaussian
-use             types_mod, only: r8, pi, MISSING_R8
-! combined duplicate use lines for utilities_mod; the intel 8.x compiler
-! was unhappy about the repetition.  nsc 11apr06
+use             types_mod, only: r8, i4, i8, pi, MISSING_R8
 use        utilities_mod, only : open_file, error_handler, E_ERR, E_MSG, &
                                  nmlfileunit, register_module, &
                                  find_namelist_in_file, check_namelist_read, &
-                                 do_nml_file, do_nml_term
+                                 do_nml_file, do_nml_term, do_output
 
-use          obs_kind_mod, only: KIND_U_WIND_COMPONENT, KIND_V_WIND_COMPONENT, &
-                                 KIND_SURFACE_PRESSURE, KIND_TEMPERATURE
+use          obs_kind_mod, only: QTY_U_WIND_COMPONENT, QTY_V_WIND_COMPONENT, &
+                                 QTY_SURFACE_PRESSURE, QTY_TEMPERATURE, &
+                                 QTY_PRESSURE, QTY_SPECIFIC_HUMIDITY, &
+                                 get_index_for_quantity
 
-!-----------------------------------------------------------------------
+
+
+! routines used by rma
+use mpi_utilities_mod,     only : my_task_id, task_count
+
+use ensemble_manager_mod,    only : ensemble_type
+
+use distributed_state_mod, only : get_state, get_state_array
+
+use state_structure_mod,  only : add_domain, add_dimension_to_variable, &
+                                 finished_adding_domain, get_variable_size, &
+                                 get_num_variables, get_model_variable_indices, &
+                                 get_dart_vector_index, get_index_start, get_index_end
+
+use default_model_mod,     only : get_close_obs, get_close_state, convert_vertical_obs, &
+                                  convert_vertical_state, nc_write_model_vars  
+
+use netcdf_utilities_mod,  only : nc_begin_define_mode, nc_add_global_creation_time, &
+                                  nc_add_global_attribute, nc_end_define_mode, & 
+                                  nc_synchronize_file, nc_check
+
+use dart_time_io_mod,      only : read_model_time, write_model_time
 
 implicit none
 private
 
-public  get_model_size, adv_1step, get_state_meta_data, model_interpolate, &
-        get_model_time_step, end_model, static_init_model, init_time, &
-        init_conditions, TYPE_PS, TYPE_T, TYPE_U, TYPE_V, TYPE_TRACER, &
-        nc_write_model_atts, nc_write_model_vars, &
-        pert_model_state, &
-        get_close_maxdist_init, get_close_obs_init, get_close_obs, ens_mean_for_model
+! required interfaces (will be called by dart code, cannot
+! change any of the arguments to these routines).  the first
+! list are routines with code in this file
+public :: get_model_size,                      &
+          adv_1step,                           &
+          get_state_meta_data,                 &
+          shortest_time_between_assimilations, &
+          end_model,                           &
+          static_init_model,                   &
+          init_time,                           &
+          init_conditions,                     &
+          pert_model_copies,                   &
+          nc_write_model_atts
 
+! public routines where the code is in other modules
+public :: nc_write_model_vars,     &
+          model_interpolate,       &
+          get_close_obs,           &
+          get_close_state,         &
+          convert_vertical_obs,    &
+          convert_vertical_state,  &
+          read_model_time,         &
+          write_model_time
 
 !-----------------------------------------------------------------------
 ! version controlled file description for error handling, do not edit
-character(len=128) :: version = "$Revision$"
-character(len=128) :: tag = "$Id$"
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
+character(len=32 ), parameter :: version = "$Revision$"
+character(len=128), parameter :: tag = "$Id$"
 
 logical, save :: module_initialized = .false.
 
@@ -132,20 +163,32 @@ logical, save :: module_initialized = .false.
    namelist /atmosphere_nml/ physics_window
 
 !-----------------------------------------------------------------------
-! Additional stuff currently in main_nml moved down from atmos_solo_driver
+! Additional stuff currently in model_nml moved down from atmos_solo_driver
 ! This time stuff may not really belong here???
 
    integer, dimension(4) :: current_time = (/ 0, 0, 0, 0 /)
    logical  :: override = .false.  ! override restart values for date
    integer  :: days=10, hours=0, minutes=0, seconds=0
    integer  :: dt_atmos = 3600
-   real(r8) :: noise_sd = 0.0_r8
+   real(r8) :: noise_sd = -1.0_r8
    integer  :: dt_bias  = -1
-   logical  :: output_state_vector = .false.  ! output prognostic variables
+   character(len=256) :: template_file = 'null'   ! optional; sets sizes of arrays
+
+   ! dimensions for the namelist state variable table 
+
+   integer, parameter :: max_state_variables = 100
+   integer, parameter :: num_state_table_columns = 2
+
+   integer, allocatable :: state_kinds_list(:)
+
+   ! this defines what variables are in the state, and in what order.
+   character(len=129) :: state_variables(num_state_table_columns,max_state_variables) = 'NULL'
+
 
    namelist /model_nml/ current_time, override, dt_atmos, &
                        days, hours, minutes, seconds, noise_sd, &
-                       dt_bias, output_state_vector 
+                       dt_bias, state_variables, &
+                       template_file
 
 !-----------------------------------------------------------------------
 ! More stuff from atmos_solo driver
@@ -158,10 +201,6 @@ logical, save :: module_initialized = .false.
    integer :: date_init(6)
 
 !-----------------------------------------------------------------------
-! Public definition of variable types
-integer, parameter :: TYPE_PS = 0, TYPE_T = 1, TYPE_U = 2, TYPE_V = 3, TYPE_TRACER = 4
-
-!-----------------------------------------------------------------------
 !---- private data ----
 
 type (bgrid_dynam_type) :: Dynam
@@ -171,7 +210,7 @@ type (bgrid_dynam_type) :: Dynam
 ! (Var_dt was already here as a module global variable.)  nsc 31mar06
 type    (prog_var_type) :: global_Var, Var_dt
 
-integer                            :: model_size
+integer(i8)                            :: model_size
 !real                               :: dt_atmos
 real(r8),    dimension(:,:,:), pointer :: omega
 integer, dimension(4)              :: atmos_axes
@@ -192,9 +231,13 @@ integer, parameter :: timing_level = 1
 !-----------------------------------------------------------------------
 
 ! Stuff to allow addition of random 'sub-grid scale' noise
-!!!!!!type(random_seq_type) :: randseed
+type(random_seq_type) :: randtype, randnoise
 logical :: first_call = .true.
 
+! domain id for the state structure
+integer :: dom_id
+
+character(len=256) :: errstring
 
 contains
 
@@ -243,17 +286,10 @@ subroutine adv_1step(x, mTime)
 
 
 real(r8), intent(inout) :: x(:)
-! Time is needed for more general models like this; need to add in to 
-! low-order models
 type(time_type), intent(in) :: mTime
-! removed local instance of Var (since it contains pointers which are
-! then left hanging if Var goes out of scope), and replaced all references
-! to Var with global_Var below.    nsc 31mar06
-!type(prog_var_type), intent(inout) :: Var
 
 type(time_type) :: Time_next
-
-!!!integer :: i, j, k
+integer :: i,j,k
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -272,31 +308,26 @@ call bgrid_core_driver(Time_next, global_Var, Var_dt, Dynam, omega)
 call bgrid_physics(physics_window, 1.0_r8 * dt_atmos, Time_next, &
    Dynam%Hgrid, Dynam%Vgrid, Dynam, global_Var, Var_dt)
 
-!!!write(*, *) 'max tendency ', maxval(abs(Var_dt%t))
-!!!write(*, *) 'mean tendency ' , sum(abs(Var_dt%t)) / (size(Var_dt%t))
-
-! First pass at creating some random 'sub-grid' noise 
+! Generating 'sub-grid' noise 
 ! Need to initialize random sequence on first call
 if(first_call) then
-   !write(*, *) 'NOISE_SD is ', noise_sd
-   !!!!!!call init_random_seq(randseed)
+   if(noise_sd > 0.0_r8) then
+      call init_random_seq(randnoise)
+   endif
    first_call = .false.
 endif
 
-!write(*, *) 'in model mod temp_t loop ', size(Var_dt%t, 1), size(Var_dt%t, 2),size(Var_dt%t, 3)
+if(noise_sd > 0.0_r8) then
 ! Just modify T for now by multiplying by 1 + r(0.0, noise_sd) * dt
-!do i = 1, size(Var_dt%t, 1)
-!   do j = 1, size(Var_dt%t, 2)
-!      do k = 1, size(Var_dt%t, 3)
-!         temp_t = Var_dt%t(i, j, k)
-         !!!!!!Var_dt%t(i, j, k) = &
-            !!!!!!(1.0_r8 + random_gaussian(randseed, 0.0_r8, dble(noise_sd))) * Var_dt%t(i, j, k)
-!      end do
-!   end do
-!end do
-
-!!!write(*, *) 'max tendency with noise ', maxval(abs(Var_dt%t))
-!!!write(*, *) 'mean tendency with noise ' , sum(abs(Var_dt%t)) / (size(Var_dt%t))
+   do i = lbound(Var_dt%t, 1), ubound(Var_dt%t, 1)
+      do j = lbound(Var_dt%t, 2), ubound(Var_dt%t, 2)
+         do k = lbound(Var_dt%t, 3), ubound(Var_dt%t, 3)
+            Var_dt%t(i, j, k) = &
+               (1.0_r8 + random_gaussian(randnoise, 0.0_r8, noise_sd)) * Var_dt%t(i, j, k)
+         end do
+      end do
+   end do
+endif
 
 ! Time differencing and diagnostics
 call bgrid_core_time_diff(omega, Time_next, Dynam, global_Var, Var_dt)
@@ -319,6 +350,7 @@ module_initialized = .true.
 
 call fms_init()
 call atmos_model_init()
+call fill_domain_structure()
 
 end subroutine static_init_model
 
@@ -418,6 +450,9 @@ end subroutine init_conditions
    endif
 
    !----- read restart file -----
+   ! this is a bgrid/fms style restart.  for dart style,
+   ! if a template file is given, set the sizes of things from that.
+   ! otherwise construct the domain from scratch.
 
    if (file_exist('INPUT/atmos_model.res')) then
        iunit = open_restart_file ('INPUT/atmos_model.res', 'read')
@@ -538,8 +573,8 @@ call check_namelist_read(iunit, io, "atmosphere_nml")
 !----- write version and namelist to log file -----
 
    call write_version_number ( version, tag )
-   write (stdlog(),    nml=atmosphere_nml)
-   write (nmlfileunit, nml=atmosphere_nml)
+   if (do_nml_file()) write (nmlfileunit, nml=atmosphere_nml)
+   if (do_nml_term()) write (stdlog(),    nml=atmosphere_nml)
 
 !---- compute physics/atmos time step in seconds ----
 
@@ -582,7 +617,7 @@ model_size = 2 * num_levels * v_horiz_size
 model_size = model_size + (1 + num_levels) * t_horiz_size
 ! Tracers for size
 model_size = model_size + global_Var%ntrace * num_levels * t_horiz_size
-write(*, *) 'model_size ', model_size
+if (do_output()) write(*, *) 'model_size ', model_size
 
 ! Also static store the number of levels, ntracers, and prognostic tracers
 ntracers = global_Var%ntrace
@@ -850,7 +885,7 @@ end subroutine bgrid_physics
 
 function get_model_size()
 
-integer :: get_model_size
+integer(i8) :: get_model_size
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -862,60 +897,46 @@ end function get_model_size
 
 subroutine prog_var_to_vector(vars, x, isize)
 
-
-integer, intent(in) :: isize
+integer(i8), intent(in) :: isize
 type(prog_var_type), intent(in) :: vars
 real(r8), intent(out) :: x(isize)
 
-integer :: i, j, k, nt, indx
-integer :: num_levs
+integer :: indx, ntracer, varnum
+integer :: sindx, eindx, vsize
 integer :: tis, tie, tjs, tje, vis, vie, vjs, vje
-character(len=129) :: errstring
 
-! Get the bounds for storage on Temp and Velocity grids
+! order of variables in state vector set by the namelist;
+! order of variables in 'vars' prog_var_type set by bgrid model
+
 tis = Dynam%Hgrid%Tmp%is; tie = Dynam%Hgrid%Tmp%ie
 tjs = Dynam%Hgrid%Tmp%js; tje = Dynam%Hgrid%Tmp%je
 vis = Dynam%Hgrid%Vel%is; vie = Dynam%Hgrid%Vel%ie
 vjs = Dynam%Hgrid%Vel%js; vje = Dynam%Hgrid%Vel%je
-num_levs = vars%kub - vars%klb + 1
 
-! Start copying fields to straight vector
-! Do everything on the T grid first
-indx = 0
-do i = tis, tie
-   do j = tjs, tje
-! Surface pressure is first
-      indx = indx + 1
-      x(indx) = vars%ps(i, j)
-! Now do t and tracers at successive levels
-      do k = vars%klb, vars%kub
-         indx = indx + 1
-         x(indx) = vars%t(i, j, k)
-         do nt = 1, vars%ntrace
-            indx = indx + 1
-            x(indx) = vars%r(i, j, k, nt)
-         end do
-      end do
-   end do
-end do
+sindx = 1
+ntracer = 1
+do varnum = 1, get_num_variables(dom_id)
+   vsize = get_variable_size(dom_id, varnum) 
+   eindx = sindx + vsize - 1
 
-! Now do the velocity grid, u and v
-do i = vis, vie
-   do j = vjs, vje
-      do k = vars%klb, vars%kub
-         indx = indx + 1
-         x(indx) = vars%u(i, j, k)
-         indx = indx + 1
-         x(indx) = vars%v(i, j, k)
-      end do
-   end do
-end do
+   if (state_variables(1, varnum) == 't') then
+      x(sindx:eindx) = reshape(vars%t(tis:tie, tjs:tje,vars%klb:vars%kub), (/vsize/) )
    
-! Temporary check
-if(indx /= isize) then
-   write(errstring, *) 'indx (',indx,') should be equal to (',isize,') isize'
-   call error_handler(E_ERR,'prog_var_to_vector', errstring, source, revision, revdate)
-endif
+   else if (state_variables(1, varnum) == 'u') then
+      x(sindx:eindx) = reshape(vars%u(vis:vie, vjs:vje,vars%klb:vars%kub), (/ vsize /) )
+
+   else if (state_variables(1, varnum) == 'v') then
+      x(sindx:eindx) = reshape(vars%v(vis:vie, vjs:vje,vars%klb:vars%kub), (/ vsize /) )
+
+   else if (state_variables(1, varnum) == 'ps') then
+      x(sindx:eindx) = reshape(vars%ps(tis:tie, tjs:tje), (/ vsize /) )
+
+   else ! must be tracer
+      x(sindx:eindx) = reshape(vars%r(tis:tie,tjs:tje,vars%klb:vars%kub,ntracer), (/ vsize /))
+      ntracer = ntracer + 1
+   endif
+   sindx = eindx + 1
+enddo
 
 end subroutine prog_var_to_vector
 
@@ -923,69 +944,50 @@ end subroutine prog_var_to_vector
 
 subroutine vector_to_prog_var(x, isize, vars)
 
-
-integer, intent(in) :: isize
-! Following line fouls up the ibm/mac compiler; doesn't like to get
-! A fixed size argument from an assumed shape.
-!real(r8), intent(in) :: x(isize)
+integer(i8), intent(in) :: isize
 real(r8), intent(in) :: x(:)
 type(prog_var_type), intent(inout) :: vars
 
-integer :: i, j, k, nt, indx
-integer :: num_levs
+integer :: indx, ntracer, varnum
+integer :: sindx, eindx, vsize
 integer :: tis, tie, tjs, tje, vis, vie, vjs, vje
 
-character(len=129) :: errstring
+! order of variables in state vector set by the namelist;
+! order of variables in 'vars' prog_var_type set by bgrid model
 
-! Initialize the static parts of the prog var type
-! Don't want to initialize prog_var_type vars if already done (memory)
-! Modified on 11 Dec. 2002 to slow B-grid memory leak
-if(.not. associated(vars%ps)) &
-   call prog_var_init(Dynam%Hgrid, num_levels, ntracers, vars)
-
-! Havana no longer distinguishes prognostic tracers
-!!!call prog_var_init(Dynam%Hgrid, num_levels, ntracers, nprognostic, vars)
-
-! Get the bounds for storage on Temp and Velocity grids
 tis = Dynam%Hgrid%Tmp%is; tie = Dynam%Hgrid%Tmp%ie
 tjs = Dynam%Hgrid%Tmp%js; tje = Dynam%Hgrid%Tmp%je
 vis = Dynam%Hgrid%Vel%is; vie = Dynam%Hgrid%Vel%ie
 vjs = Dynam%Hgrid%Vel%js; vje = Dynam%Hgrid%Vel%je
-num_levs = vars%kub - vars%klb + 1
 
-! Start copying fields from straight vector
-! Everything on T grid first
-indx = 0
-do i = tis, tie
-   do j = tjs, tje
-! Surface pressure is first
-      indx = indx + 1
-      vars%ps(i, j) = x(indx)
-! For non-eta models, pssl is same as ps??? Need to change?
-      vars%pssl(i, j) = vars%ps(i, j)
-! Now do t and tracers at successive levels
-      do k = vars%klb, vars%kub
-         indx = indx + 1
-         vars%t(i, j, k) = x(indx)
-         do nt = 1, vars%ntrace
-            indx = indx + 1
-            vars%r(i, j, k, nt) = x(indx)
-         end do
-      end do
-   end do
+
+if(.not. associated(vars%ps)) then
+   print *, 'ERROR - vars array not initalized, can this happen???'
+   call prog_var_init(Dynam%Hgrid, num_levels, ntracers, vars)
+endif
+
+sindx = 1
+ntracer = 1
+do varnum = 1, get_num_variables(dom_id)
+   vsize = get_variable_size(dom_id, varnum) 
+   eindx = sindx + vsize - 1
+   if (state_variables(1, varnum) == 't') then
+      vars%t(tis:tie, tjs:tje,vars%klb:vars%kub) = reshape(x(sindx:eindx), (/ tie-tis+1, tje-tjs+1, vars%kub-vars%klb+1 /) )
+   else if (state_variables(1, varnum) == 'u') then
+      vars%u(vis:vie, vjs:vje,vars%klb:vars%kub) = reshape(x(sindx:eindx), (/ vie-vis+1, vje-vjs+1, vars%kub-vars%klb+1 /) )
+   else if (state_variables(1, varnum) == 'v') then
+      vars%v(vis:vie, vjs:vje,vars%klb:vars%kub) = reshape(x(sindx:eindx), (/ vie-vis+1, vje-vjs+1, vars%kub-vars%klb+1 /) )
+   else if (state_variables(1, varnum) == 'ps') then
+      vars%ps(tis:tie, tjs:tje) = reshape(x(sindx:eindx), (/ tie-tis+1, tje-tjs+1 /) )
+      vars%pssl = vars%ps   !> @TODO why is this here?  original comment was:
+   ! For non-eta models, pssl is same as ps??? Need to change?
+   else ! must be tracer
+      vars%r(tis:tie,tjs:tje,vars%klb:vars%kub,ntracer) = reshape(x(sindx:eindx), (/ tie-tis+1, tje-tjs+1, vars%kub-vars%klb+1 /) )
+      ntracer = ntracer + 1
+   endif
+   sindx = eindx + 1
 end do
 
-! Now do the velocity grid, u and v
-do i = vis, vie
-   do j = vjs, vje
-      do k = vars%klb, vars%kub
-         indx = indx + 1
-         vars%u(i, j, k) = x(indx)
-         indx = indx + 1
-         vars%v(i, j, k) = x(indx)
-      end do
-   end do
-end do
 
 ! Need to do halo updates to fill in the rest
 !!!call halo_update()
@@ -996,32 +998,21 @@ call update_halo (Dynam%Hgrid, TEMP, vars%r)
 call update_halo (Dynam%Hgrid, TEMP, vars%ps)
 call update_halo (Dynam%Hgrid, TEMP, vars%pssl)
 
-
-! Temporary check
-if(indx /= isize) then
-   write(errstring, *) 'indx (',indx,') should be equal to (',isize,') isize'
-   call error_handler(E_ERR,'vector_to_prog_var', errstring, source, revision, revdate)
-endif
-
-
 end subroutine vector_to_prog_var
 
 !#######################################################################
 
-function get_model_time_step()
+function shortest_time_between_assimilations()
 !------------------------------------------------------------------------
-! function get_model_time_step()
-!
-! Returns the the time step of the model. In the long run should be repalced
-! by a more general routine that returns details of a general time-stepping
-! capability.
+! the shortest time you are willing to run the model between assimilation
+! windows
 
-type(time_type) :: get_model_time_step
+type(time_type) :: shortest_time_between_assimilations
 
 if ( .not. module_initialized ) call static_init_model
 
 ! Time_step_atmos is global static storage
-get_model_time_step =  Time_step_atmos
+shortest_time_between_assimilations =  Time_step_atmos
 
 
 ! CODE ADDED TO SIMULATE MODEL ERROR BY MAKING MODEL THINK IT IS
@@ -1029,147 +1020,88 @@ get_model_time_step =  Time_step_atmos
 ! THIS auxiliary timestep is only used if namelist parameter
 ! dt_bias is set to a non-zero value 
 
-if(dt_bias > 0) get_model_time_step = set_time(dt_bias, 0)
+if(dt_bias > 0) shortest_time_between_assimilations = set_time(dt_bias, 0)
 
-end function get_model_time_step
+end function shortest_time_between_assimilations
 
+!#######################################################################
 
-
-  subroutine get_state_meta_data(index_in, location, var_type)
 !---------------------------------------------------------------------
 ! subroutine get_state_meta_data(index_in, location, var_type)
 !
 ! Given an integer index into the state vector structure, returns the
-! associated location. This is not a function because the more general
-! form of the call has a second intent(out) optional argument kind.
-! Maybe a functional form should be added?
-! Types for this bgrid model are, TYPE_PS, TYPE_T, TYPE_U, TYPE_V, TYPE_TRACER
+! associated location and optionally the generic kind.
+!---------------------------------------------------------------------
+subroutine get_state_meta_data(index_in, location, var_type)
 
-integer,             intent(in)  :: index_in
+integer(i8),         intent(in)  :: index_in
 type(location_type), intent(out) :: location
 integer, optional,   intent(out) :: var_type
 
-integer :: indx, local_var_type, var_type_temp
-integer :: tis, tie, tjs, tje, vis, vie, vjs, vje
-integer :: t_size, v_size, t_grid_size, v_grid_size, t_per_col, v_per_col
-integer :: num_t_lons, num_t_lats, num_v_lons, num_v_lats
-integer :: col_num, col_elem, v_index
-integer :: lat_index, lon_index
 real(r8) :: lon, lat, lev
+integer :: i, j, k, var_id, thiskind, vtype, state_index
 
 if ( .not. module_initialized ) call static_init_model
 
-! Get the bounds for storage on Temp and Velocity grids
-tis = Dynam%Hgrid%Tmp%is; tie = Dynam%Hgrid%Tmp%ie
-num_t_lons = tie - tis + 1
-tjs = Dynam%Hgrid%Tmp%js; tje = Dynam%Hgrid%Tmp%je
-num_t_lats = tje - tjs + 1
-t_size = num_t_lons *num_t_lats
-vis = Dynam%Hgrid%Vel%is; vie = Dynam%Hgrid%Vel%ie
-num_v_lons = vie - vis + 1
-vjs = Dynam%Hgrid%Vel%js; vje = Dynam%Hgrid%Vel%je
-num_v_lats = vje - vjs + 1
-v_size = num_v_lons * num_v_lats
+! from dart index_in calculate local variable indicies i,j,k and variable id
+call get_model_variable_indices(index_in, i, j, k, var_id=var_id)
 
+thiskind = state_kinds_list(var_id)
 
-! Compute size of t_grid storage
-t_per_col = 1 + (1 + ntracers) * num_levels
-t_grid_size = t_per_col * t_size
-v_per_col = 2 * num_levels
-v_grid_size = v_per_col * v_size
-
-! Easier to compute with a 0 to size - 1 index
-indx = index_in - 1
-
-! Is this point in the t_grid
-if(indx < t_grid_size) then
-   col_num = indx / t_per_col
-   col_elem = indx - col_num * t_per_col
-   !   write(*, *) 't_grid col and element ', col_num, col_elem
-   lon_index = col_num / num_t_lats
-   lat_index = col_num - lon_index * num_t_lats
-   !   write(*, *) 'lon and lat index ', lon_index, lat_index
-
-   ! Note, array runs from 1, index runs from 0
-   lon = t_lons(lon_index + 1)
-   lat = t_lats(lat_index + 1)
-
-   if(col_elem == 0) then ! First variable on mass grid is PS
-      lev = -1
-      local_var_type = TYPE_PS 
-   else ! Rest of variables are temperature and tracers
-
-      lev = int((col_elem  + 1)/ (1 + ntracers))
-      var_type_temp = mod(col_elem - 1, 1 + ntracers)
-
-      ! First element on each level is T, 
-      ! remainder are tracers from 1 to ntracers
-      if(var_type_temp == 0) then
-         local_var_type = TYPE_T
-      else
-         local_var_type = TYPE_TRACER + var_type_temp - 1
-      endif
-   endif
-
-else
-
-   ! It's in the v_grid
-   v_index = indx - t_grid_size
-   col_num = v_index / v_per_col
-   col_elem = v_index - col_num * v_per_col
-
-   !   write(*, *) 'v_grid col and element ', col_num, col_elem
-   lon_index = col_num / num_v_lats
-   lat_index = col_num - lon_index * num_v_lats
-
-   !   write(*, *) 'lon and lat index ', lon_index, lat_index
-
-   ! Note, array runs from 1, index runs from 0
-   lon = v_lons(lon_index + 1)
-
-   ! Problems with round-off over 360.0
-   if(abs(lon - 360.0_r8) < 0.00001_r8) lon = 360.0_r8
-
-   lat = v_lats(lat_index + 1)
-   lev = int((col_elem + 2) / 2)
-
-   ! Compute u or v, u is even, v is odd
-   if(col_elem / 2 * 2 == col_elem) then
-      local_var_type = TYPE_U
-   else
-      local_var_type = TYPE_V
-   endif
+if (thiskind == QTY_TEMPERATURE) then
+   lon = t_lons(i)
+   lat = t_lats(j)
+   lev = k
+   vtype = VERTISLEVEL
+else if (thiskind == QTY_U_WIND_COMPONENT .or. thiskind == QTY_V_WIND_COMPONENT) then
+   lon = v_lons(i)
+   lat = v_lats(j)
+   lev = k
+   vtype = VERTISLEVEL
+else if (thiskind == QTY_SURFACE_PRESSURE) then
+   lon = t_lons(i)
+   lat = t_lats(j)
+   lev = 1
+   vtype = VERTISLEVEL
+   !vtype = VERTISSURFACE
+else  ! must be a tracer
+   lon = t_lons(i)
+   lat = t_lats(j)
+   lev = k
+   vtype = VERTISLEVEL
 endif
 
-!write(*, *) 'lon, lat, and lev ', lon, lat, lev
-
-location = set_location(lon, lat, lev, 1) ! 1 == level (indexical)
+location = set_location(lon, lat, lev, vtype)
 
 ! If the type is wanted, return it
-if(present(var_type)) var_type = local_var_type
-
+if(present(var_type)) var_type = thiskind
 
 end subroutine get_state_meta_data
 
+!#######################################################################
 
+recursive subroutine model_interpolate(state_handle, ens_size, location, obs_type, expected_obs, istatus)
 
-recursive subroutine model_interpolate(x, location, itype, obs_val, istatus)
-
-real(r8),            intent(in) :: x(:)
+type(ensemble_type), intent(in) :: state_handle
+integer,             intent(in) :: ens_size
 type(location_type), intent(in) :: location
-integer,             intent(in) :: itype
-real(r8),            intent(out):: obs_val
-integer,             intent(out):: istatus
+integer,             intent(in) :: obs_type
+integer,            intent(out) :: istatus(ens_size)
+real(r8),           intent(out) :: expected_obs(ens_size) !< array of interpolated values
 
 integer :: num_lons, num_lats, lon_below, lon_above, lat_below, lat_above, i
 real(r8) :: bot_lon, top_lon, delta_lon, bot_lat, top_lat, delta_lat
-real(r8) :: lon_fract, lat_fract, val(2, 2), temp_lon, a(2)
+real(r8) :: lon_fract, lat_fract, temp_lon
 real(r8) :: lon, lat, level, lon_lat_lev(3), pressure
+
+integer :: tmp_status(ens_size,4), e
+real(r8) :: val(2,2, ens_size), a(2, ens_size)
 
 if ( .not. module_initialized ) call static_init_model
 
-! All interps okay for now
-istatus = 0
+! Need to check that status of all four temp vals.
+! Start out assuming that all pass.
+tmp_status = 0
 
 ! Would it be better to pass state as prog_var_type (model state type) to here?
 ! As opposed to the stripped state vector. YES. This would give time interp.
@@ -1178,11 +1110,11 @@ istatus = 0
 ! Get the position, determine if it is model level or pressure in vertical
 lon_lat_lev = get_location(location)
 lon = lon_lat_lev(1); lat = lon_lat_lev(2); 
-if(vert_is_level(location)) then 
+if(is_vertical(location, "LEVEL")) then 
    level = lon_lat_lev(3)
-else if(vert_is_pressure(location)) then
+else if(is_vertical(location, "PRESSURE")) then
    pressure = lon_lat_lev(3)
-else if(vert_is_surface(location)) then
+else if(is_vertical(location, "SURFACE")) then
    ! level is not used for surface pressure observations
    level = -1
 else
@@ -1191,9 +1123,8 @@ else
       source, revision, revdate)
 endif
    
-! Depending on itype, get appropriate lon and lat grid specs
-! Types temporarily defined as 1=u, 2=v, 3=ps, 4=t, n=tracer number n-4
-if(itype == KIND_U_WIND_COMPONENT .or. itype == KIND_V_WIND_COMPONENT) then
+! Depending on obs_type, get appropriate lon and lat grid specs
+if(obs_type == QTY_U_WIND_COMPONENT .or. obs_type == QTY_V_WIND_COMPONENT) then
    num_lons = size(v_lons)
    num_lats = size(v_lats)
    bot_lon = v_lons(1)
@@ -1252,48 +1183,58 @@ else
 endif
 
 ! Case 1: model level specified in vertical
-if(vert_is_level(location) .or. vert_is_surface(location)) then
+if(is_vertical(location, "LEVEL") .or. is_vertical(location, "SURFACE")) then
 ! Now, need to find the values for the four corners
-   val(1, 1) =  get_val(x, lon_below, lat_below, nint(level), itype)
-   val(1, 2) =  get_val(x, lon_below, lat_above, nint(level), itype)
-   val(2, 1) =  get_val(x, lon_above, lat_below, nint(level), itype)
-   val(2, 2) =  get_val(x, lon_above, lat_above, nint(level), itype)
-
+   val(1, 1,:) =  get_val(state_handle, ens_size, &
+                     lon_below, lat_below, nint(level), obs_type)
+   val(1, 2,:) =  get_val(state_handle, ens_size, &
+                     lon_below, lat_above, nint(level), obs_type)
+   val(2, 1,:) =  get_val(state_handle, ens_size, &
+                     lon_above, lat_below, nint(level), obs_type)
+   val(2, 2,:) =  get_val(state_handle, ens_size, &
+                     lon_above, lat_above, nint(level), obs_type)
 else
 ! Case of pressure specified in vertical
-   val(1, 1) =  get_val_pressure(x, lon_below, lat_below, pressure, itype, istatus)
-   val(1, 2) =  get_val_pressure(x, lon_below, lat_above, pressure, itype, istatus)
-   val(2, 1) =  get_val_pressure(x, lon_above, lat_below, pressure, itype, istatus)
-   val(2, 2) =  get_val_pressure(x, lon_above, lat_above, pressure, itype, istatus)
+   val(1, 1,:) =  get_val_pressure(state_handle, ens_size, &
+                     lon_below, lat_below, pressure, obs_type, tmp_status(:,1))
+   val(1, 2,:) =  get_val_pressure(state_handle, ens_size, &
+                     lon_below, lat_above, pressure, obs_type, tmp_status(:,2))
+   val(2, 1,:) =  get_val_pressure(state_handle, ens_size, &
+                     lon_above, lat_below, pressure, obs_type, tmp_status(:,3))
+   val(2, 2,:) =  get_val_pressure(state_handle, ens_size, &
+                     lon_above, lat_above, pressure, obs_type, tmp_status(:,4))
 endif
 
 ! Do the weighted average for interpolation
-!write(*, *) 'fracts ', lon_fract, lat_fract
 do i = 1, 2
-   a(i) = lon_fract * val(2, i) + (1.0 - lon_fract) * val(1, i)
+   a(i,:) = lon_fract * val(2, i,:) + (1.0 - lon_fract) * val(1, i,:)
 end do
 
-obs_val = lat_fract * a(2) + (1.0 - lat_fract) * a(1)
+expected_obs = lat_fract * a(2,:) + (1.0 - lat_fract) * a(1,:)
 
-! Since there is no possibility of having obs_val == missing_r ...
-! the return codes are always "good" i.e. zero
-!
-! normally set istatus here 
+istatus = maxval(tmp_status, 2)
+
+! if the forward operater failed set the value to missing_r8
+do e = 1, ens_size
+   if (istatus(e) /= 0) then
+      expected_obs(e) = MISSING_R8
+   endif
+enddo
 
 end subroutine model_interpolate
 
 !#######################################################################
 
-function get_val(x, lon_index, lat_index, level, itype)
+function get_val(state_handle, ens_size, lon_index, lat_index, level, itype)
 
-
-real(r8) :: get_val
-real(r8), intent(in) :: x(:)
+type(ensemble_type), intent(in) :: state_handle
 integer, intent(in) :: lon_index, lat_index, level, itype
+integer, intent(in) :: ens_size
+real(r8) :: get_val(ens_size)
 
 character(len = 129) :: msg_string
 integer :: model_type
-
+integer(i8) :: state_index
 ! Need to change the obs kind defined itype to the appropriate model type
 ! The itype_in variable uses types defined in the kinds module. The whole bgrid 
 ! model_mod should be modified to use this correctly. However, as a fast patch
@@ -1301,52 +1242,48 @@ integer :: model_type
 ! default expectations of the bgrid which are hard coded as u=1, v=2, ps =3,
 ! t = 4, and tracers for numbers larger than 4. For now, the tracer observations
 ! are not implemented.
-if(itype == KIND_U_WIND_COMPONENT) then
-   model_type = 1
-else if(itype == KIND_V_WIND_COMPONENT) then
-   model_type = 2
-else if(itype == KIND_SURFACE_PRESSURE) then
-   model_type = 3
-else if(itype == KIND_TEMPERATURE) then
-   model_type = 4
-else
-   ! Error for higher or lower for now
-   write(msg_string, *) 'Only know how to do u, v, ps, t observations'
-   call error_handler(E_ERR, 'get_val', msg_string, &
-      source, revision, revdate)
-endif 
+model_type = get_varid_from_kind(itype)
 
 ! Find the index into state array and return this value
-get_val = x(get_state_index(lon_index, lat_index, level, model_type))
+state_index = get_dart_vector_index(lon_index, lat_index, level, dom_id, model_type)
+get_val     = get_state(state_index, state_handle)
 
 end function get_val
 
-
-
-  recursive function get_val_pressure(x, lon_index, lat_index, pressure, itype, istatus)
 !================================================================================
 ! function get_val_pressure(x, lon_index, lat_index, pressure, itype, istatus)
 !
 ! Gets the vertically interpolated value on pressure for variable type
 ! at lon_index, lat_index horizontal grid point
 
-real(r8) :: get_val_pressure
-real(r8), intent(in) :: x(:), pressure
-integer,  intent(in) :: lon_index, lat_index, itype
-integer, intent(out) :: istatus
+recursive function get_val_pressure(state_handle, ens_size, lon_index, lat_index, pressure, itype, istatus) result(val_pressure)
+
+type(ensemble_type), intent(in) :: state_handle
+integer,             intent(in) :: ens_size
+real(r8),            intent(in) :: pressure
+integer,             intent(in) :: lon_index
+integer,             intent(in) :: lat_index
+integer,             intent(in) :: itype
+integer,            intent(out) :: istatus(:)
+
+real(r8) :: val_pressure(ens_size)
 
 type(location_type) :: ps_location
-real(r8) :: ps(1, 1), pfull(1, 1, Dynam%Vgrid%nlev), rfrac
-integer  :: top_lev, bot_lev, i
-real(r8) :: bot_val, top_val, ps_lon
+real(r8) :: ps(1, 1,ens_size), pfull(1, 1, Dynam%Vgrid%nlev), rfrac(ens_size)
+integer :: top_lev(ens_size), bot_lev(ens_size), i, e, model_type
+integer(i8) :: state_index_bottom(ens_size), state_index_top(ens_size)
+real(r8) :: bot_val(ens_size), top_val(ens_size), ps_lon
+
+! set all istatus to successful
+istatus(:) = 0
 
 ! Need to get the surface pressure at this point.
 ! For t or tracers (on mass grid with ps) this is trivial
 ! For u or v (on velocity grid)
 
-if(itype == KIND_TEMPERATURE .or. itype == KIND_SURFACE_PRESSURE) then
+if(itype == QTY_TEMPERATURE .or. itype == QTY_SURFACE_PRESSURE) then
 
-   ps = get_val(x, lon_index, lat_index, -1, KIND_SURFACE_PRESSURE)
+   ps(1,1,:) = get_val(state_handle, ens_size, lon_index, lat_index, -1, QTY_SURFACE_PRESSURE)
 
 else
 
@@ -1355,116 +1292,65 @@ else
    ps_lon = v_lons(lon_index)
    if(ps_lon > 360.00_r8 .and. ps_lon < 360.00001_r8) ps_lon = 360.0_r8
 
-   ! The vertical is not important for this interpolation -- still --
-   ! mark it as missing (-1.0) but give it some type information (2==pressure)
-   ps_location = set_location(ps_lon, v_lats(lat_index), -1.0_r8, 2 )
-   call model_interpolate(x, ps_location, KIND_SURFACE_PRESSURE, ps(1,1), istatus)
+   ps_location = set_location(ps_lon, v_lats(lat_index), -1.0_r8, VERTISSURFACE )
+   call model_interpolate(state_handle, ens_size, ps_location, QTY_SURFACE_PRESSURE, ps(1,1,:), istatus)
 
 endif
 
-! Next, get the values on the levels for this ps
-call compute_pres_full(Dynam%Vgrid, ps, pfull)
+do e = 1, ens_size
+   ! Next, get the values on the levels for this ps,
+   call compute_pres_full(Dynam%Vgrid, ps(:,:,e), pfull)
 
-! Interpolate in vertical to get two bounding levels
+   ! Interpolate in vertical to get two bounding levels
 
-!write(*, *) 'itype is ', itype
-!write(*, *) 'pfull values for ps = ', ps(1, 1)
-!write(*, *) pfull(1, 1, :)
-
-! What to do about pressures above top??? Just use the top for now.
-! Could extrapolate, but that would be very tricky. Might need to
-! reject somehow.
-!write(*, *) 'pressure , ps ', pressure, ps(1, 1)
-if(pressure < pfull(1, 1, 1)) then
-   top_lev = 1
-   bot_lev = 2
-   rfrac = 1.0_r8
+   ! What to do about pressures above top??? Just use the top for now.
+   ! Could extrapolate, but that would be very tricky. Might need to
+   ! reject somehow.
+   if(pressure < pfull(1, 1, 1)) then
+      top_lev(e) = 1
+      bot_lev(e) = 2
+      rfrac(e) = 1.0_r8
    ! Actually, just fail using istatus
-   istatus = 1
-else if(pressure > pfull(1, 1, Dynam%Vgrid%nlev)) then
-! Same for bottom
-   bot_lev = Dynam%Vgrid%nlev
-   top_lev = bot_lev - 1
-   rfrac = 0.0_r8
+      istatus(e) = 1
+   else if(pressure > pfull(1, 1, Dynam%Vgrid%nlev)) then
+   ! Same for bottom
+      bot_lev(e) = Dynam%Vgrid%nlev
+      top_lev(e) = bot_lev(e) - 1
+      rfrac(e) = 0.0_r8
    ! Actually, just fail using istatus
-   istatus = 1
-else
+      istatus(e) = 1
+   else
 
-! Search down through pressures
-   do i = 2, Dynam%Vgrid%nlev
-      if(pressure < pfull(1, 1, i)) then
-         top_lev = i -1
-         bot_lev = i
-         rfrac = (pfull(1, 1, i) - pressure) / &
-            (pfull(1, 1, i) - pfull(1, 1, i - 1))
-         goto 21
-      endif
-   end do
-end if
+      ! Search down through pressures
+      do i = 2, Dynam%Vgrid%nlev
+         if(pressure < pfull(1, 1, i)) then
+               top_lev(e) = i -1
+               bot_lev(e) = i
+               rfrac(e) = (pfull(1, 1, i) - pressure) / &
+               (pfull(1, 1, i) - pfull(1, 1, i - 1))
+            goto 21
+         endif
+      end do
+   end if
+   21 continue
+enddo
 
-! Get the value at these two points
-21 bot_val = get_val(x, lon_index, lat_index, bot_lev, itype)
-top_val = get_val(x, lon_index, lat_index, top_lev, itype)
-!write(*, *) 'bot_lev, top_lev, fraction', bot_lev, top_lev, rfrac
-   
-get_val_pressure = (1.0_r8 - rfrac) * bot_val + rfrac * top_val
-!write(*, *) 'bot_val, top_val, val', bot_val, top_val, get_val_pressure
+model_type = get_varid_from_kind(itype)
+
+do e = 1, ens_size
+   ! Find the index into state array and return this value
+   state_index_bottom(e) = get_dart_vector_index(lon_index, lat_index, bot_lev(e), dom_id, model_type)
+   state_index_top(e)    = get_dart_vector_index(lon_index, lat_index, top_lev(e), dom_id, model_type)
+enddo
+
+call get_state_array(bot_val, state_index_bottom, state_handle)
+call get_state_array(top_val, state_index_top,    state_handle)
+
+do e = 1, ens_size
+   val_pressure(e) = (1.0_r8 - rfrac(e)) * bot_val(e) + rfrac(e) * top_val(e)
+enddo 
 
 end function get_val_pressure
-
-!#######################################################################
-
-function get_state_index(lon_index, lat_index, level, itype)
-
-
-integer :: get_state_index
-integer, intent(in) :: lon_index, lat_index, level, itype
-
-! Returns the index in the state vector for variable of itype at
-! the lon_index, lat_index, level position on the grid
-! Types are currently hard-coded as u=1, v=2, ps=3, t=4, tracers = n-4
-integer :: tis, tie, num_t_lons, tjs, tje, num_t_lats, t_size
-integer :: vis, vie, num_v_lons, vjs, vje, num_v_lats, v_size
-integer :: t_per_col, t_grid_size, v_per_col, v_grid_size
-
-! Get the bounds for storage on Temp and Velocity grids
-tis = Dynam%Hgrid%Tmp%is; tie = Dynam%Hgrid%Tmp%ie
-num_t_lons = tie - tis + 1
-tjs = Dynam%Hgrid%Tmp%js; tje = Dynam%Hgrid%Tmp%je
-num_t_lats = tje - tjs + 1
-t_size = num_t_lons *num_t_lats
-vis = Dynam%Hgrid%Vel%is; vie = Dynam%Hgrid%Vel%ie
-num_v_lons = vie - vis + 1
-vjs = Dynam%Hgrid%Vel%js; vje = Dynam%Hgrid%Vel%je
-num_v_lats = vje - vjs + 1
-v_size = num_v_lons * num_v_lats
-
-
-! Compute size of t_grid storage
-t_per_col = 1 + (1 + ntracers) * num_levels
-t_grid_size = t_per_col * t_size
-v_per_col = 2 * num_levels
-v_grid_size = v_per_col * v_size
-
-! Is this point in the t_grid; ps, t or tracer
-if(itype > 2) then
-   get_state_index = t_per_col * (lat_index - 1 + (lon_index - 1) * num_t_lats)
-   if(itype == 3) then
-      get_state_index = get_state_index + 1
-   else 
-      get_state_index = get_state_index + &
-         1 + (level - 1) * (1 + ntracers) + (itype - 3)
-   endif
-
-! Type 1 or 2 is u or v
-else
-! It's in the v_grid
-   get_state_index = t_grid_size + &
-      v_per_col * (lat_index - 1 + (lon_index - 1) * num_v_lats)
-   get_state_index = get_state_index + (level - 1) * 2 + itype
-endif
-
-end function get_state_index
 
 !#######################################################################
 
@@ -1473,6 +1359,8 @@ subroutine end_model()
 
 ! At some point, this stub should coordinate with atmosphere_end but
 ! that requires an instance variable.
+
+if (allocated(state_kinds_list)) deallocate(state_kinds_list)
 
 end subroutine end_model
 
@@ -1527,18 +1415,9 @@ end subroutine init_time
 
 
 
-function nc_write_model_atts( ncFileID ) result (ierr)
+subroutine nc_write_model_atts( ncFileID, domain_id ) 
 !-----------------------------------------------------------------------------------------
-! Writes the model-specific attributes to a netCDF file
-! TJH Dec 5 2002
-!
-! TJH 29 July 2003 -- for the moment, all errors are fatal, so the
-! return code is always '0 == normal', since the fatal errors stop execution.
-!                                                                                
 ! There are two different (staggered) 3D grids being used simultaneously here. 
-! The routine "prog_var_to_vector" packs the prognostic variables into
-! the requisite array for the data assimilation routines. That routine
-! is the basis for the information stored in the netCDF files.
 !
 ! TemperatureGrid : surface pressure  vars%ps(tis:tie, tjs:tje) 
 !                 : temperature       vars%t (tis:tie, tjs:tje, klb:kup)
@@ -1549,40 +1428,30 @@ function nc_write_model_atts( ncFileID ) result (ierr)
 ! So there are six different dimensions and five different variables as long as
 ! simply lump "tracers" into one. 
 !
-! TJH 22 May 2003 -- It is now possible to output the prognostic variables 
-! _or_ the state vector. If a "state" variable exists, we do nothing. 
-! If it does not exist, we can assume we need to define the prognostic variables.
 
 use typeSizes
 use netcdf
 
-integer, intent(in)  :: ncFileID        ! netCDF file identifier
-integer              :: ierr            ! return value of function
+integer, intent(in) :: ncFileID        ! netCDF file identifier
+integer, intent(in) :: domain_id
 
 !-----------------------------------------------------------------------------------------
 
 integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
-integer :: TmpIDimID, TmpJDimID, levDimID, tracerDimID, VelIDimID, VelJDimID, MemberDimID
+integer :: TmpIDimID, TmpJDimID, levDimID, tracerDimID, VelIDimID, VelJDimID
 integer :: TmpIVarID, TmpJVarID, levVarID, tracerVarID, VelIVarID, VelJVarID, StateVarID
-integer :: StateVarDimID, StateVarVarID, TimeDimID
+integer :: StateVarVarID
 integer :: psVarID, tVarID, rVarID, uVarID, vVarID
 integer :: tis, tie, tjs, tje       ! temperature grid start/stop
 integer :: vis, vie, vjs, vje       ! velocity    grid start/stop
 integer :: klb, kub
 integer :: nTmpI, nTmpJ, nVelI, nVelJ, nlev, ntracer, i
 
-character(len=129) :: errstring
-
-character(len=8)      :: crdate      ! needed by F90 DATE_AND_TIME intrinsic
-character(len=10)     :: crtime      ! needed by F90 DATE_AND_TIME intrinsic
-character(len=5)      :: crzone      ! needed by F90 DATE_AND_TIME intrinsic
-integer, dimension(8) :: values      ! needed by F90 DATE_AND_TIME intrinsic
-character(len=NF90_MAX_NAME) :: str1
+integer(i4)        :: model_size_i4 ! this is for checking model_size
+character(len=256) :: msgstring
 !-----------------------------------------------------------------------------------------
 
 if ( .not. module_initialized ) call static_init_model
-
-ierr = 0     ! assume normal termination
 
 !-------------------------------------------------------------------------------
 ! Get the bounds for storage on Temp and Velocity grids
@@ -1608,66 +1477,41 @@ nVelJ   = vje - vjs + 1
 ! and then put into define mode.
 !-------------------------------------------------------------------------------
 
-call check(nf90_Inquire(ncFileID, nDimensions, nVariables, nAttributes, unlimitedDimID), &
-           "inquire")
-call check(nf90_Redef(ncFileID),"redef")
-
-!-------------------------------------------------------------------------------
-! We need the dimension ID for the number of copies 
-!-------------------------------------------------------------------------------
-
-call check(nf90_inq_dimid(ncid=ncFileID, name="copy", dimid=MemberDimID),"copy dimid")
-call check(nf90_inq_dimid(ncid=ncFileID, name="time", dimid=  TimeDimID),"time dimid")
-
-if ( TimeDimID /= unlimitedDimId ) then
-   write(errstring,*)"Time Dimension ID ",TimeDimID, &
-                     " should equal Unlimited Dimension ID",unlimitedDimID
-   call error_handler(E_ERR,"nc_write_model_atts", errstring, source, revision, revdate)
-endif
-
-!-------------------------------------------------------------------------------
-! Define the model size, state variable dimension ... whatever ...
-!-------------------------------------------------------------------------------
-call check(nf90_def_dim(ncid=ncFileID, name="StateVariable", &
-                        len=model_size, dimid = StateVarDimID),"state def_dim")
+call nc_begin_define_mode(ncFileID)
 
 !-------------------------------------------------------------------------------
 ! Write Global Attributes 
 !-------------------------------------------------------------------------------
 
-call DATE_AND_TIME(crdate,crtime,crzone,values)
-write(str1,'(''YYYY MM DD HH MM SS = '',i4,5(1x,i2.2))') &
-                  values(1), values(2), values(3), values(5), values(6), values(7)
+call nc_add_global_creation_time(ncFileID)
 
-call check(nf90_put_att(ncFileID, NF90_GLOBAL, "creation_date" ,str1    ),"creation put")
-call check(nf90_put_att(ncFileID, NF90_GLOBAL, "model_source"  ,source  ),"source put")
-call check(nf90_put_att(ncFileID, NF90_GLOBAL, "model_revision",revision),"revision put")
-call check(nf90_put_att(ncFileID, NF90_GLOBAL, "model_revdate" ,revdate ),"revdate put")
-call check(nf90_put_att(ncFileID, NF90_GLOBAL, "model","FMS_Bgrid"      ),"model put")
+call nc_add_global_attribute(ncFileID, "model_source", source)
+call nc_add_global_attribute(ncFileID, "model_revision", revision)
+call nc_add_global_attribute(ncFileID, "model_revdate", revdate)
 
-! how about namelist input? might be nice to save ...
+call nc_add_global_attribute(ncFileID, "model", "FMS_Bgrid")
 
 !-------------------------------------------------------------------------------
 ! Define the new dimensions IDs
 !-------------------------------------------------------------------------------
 
-call check(nf90_def_dim(ncid=ncFileID, name="TmpI", &
+call nc_check(nf90_def_dim(ncid=ncFileID, name="TmpI", &
                                       len = nTmpI, dimid = TmpIDimID),"TmpI def_dim") 
-call check(nf90_def_dim(ncid=ncFileID, name="TmpJ", &
+call nc_check(nf90_def_dim(ncid=ncFileID, name="TmpJ", &
                                       len = nTmpJ, dimid = TmpJDimID),"TmpJ def_dim") 
-call check(nf90_def_dim(ncid=ncFileID, name="lev",  &
+call nc_check(nf90_def_dim(ncid=ncFileID, name="lev",  &
                                       len = nlev,  dimid = levDimID), "lev  def_dim") 
-call check(nf90_def_dim(ncid=ncFileID, name="VelI", &
+call nc_check(nf90_def_dim(ncid=ncFileID, name="VelI", &
                                       len = nVelI, dimid = VelIDimID),"VelI def_dim") 
-call check(nf90_def_dim(ncid=ncFileID, name="VelJ", &
+call nc_check(nf90_def_dim(ncid=ncFileID, name="VelJ", &
                                       len = nVelJ, dimid = VelJDimID),"VelJ def_dim") 
 if ( ntracer > 0 ) then
-   call check(nf90_def_dim(ncid=ncFileID, name="tracers", &
+   call nc_check(nf90_def_dim(ncid=ncFileID, name="tracers", &
                                          len = ntracer, dimid = tracerDimID),"tracer def_dim") 
 endif
 
 ! should implement "trajectory-like" coordinate defn ... a'la section 5.4, 5.5 of CF standard
-! call check(nf90_def_dim(ncid=ncFileID, name="locationrank", &
+! call nc_check(nf90_def_dim(ncid=ncFileID, name="locationrank", &
 !   len = LocationDims, dimid = LocationDimID))
 
 !-------------------------------------------------------------------------------
@@ -1675,417 +1519,308 @@ endif
 !-------------------------------------------------------------------------------
 
 ! Temperature Grid Longitudes
-call check(nf90_def_var(ncFileID, name="TmpI", &
+call nc_check(nf90_def_var(ncFileID, name="TmpI", &
               xtype=nf90_double, dimids=TmpIDimID, varid=TmpIVarID),   "TmpI def_var")
-call check(nf90_put_att(ncFileID, TmpIVarID, "long_name", "longitude"),"TmpI long_name")
-call check(nf90_put_att(ncFileID, TmpIVarID, "cartesian_axis", "X"),   "TmpI cartesian_axis")
-call check(nf90_put_att(ncFileID, TmpIVarID, "units", "degrees_east"), "TmpI units")
-call check(nf90_put_att(ncFileID, TmpIVarID, "valid_range", (/ 0.0_r8, 360.0_r8 /)), &
+call nc_check(nf90_put_att(ncFileID, TmpIVarID, "long_name", "longitude"),"TmpI long_name")
+call nc_check(nf90_put_att(ncFileID, TmpIVarID, "cartesian_axis", "X"),   "TmpI cartesian_axis")
+call nc_check(nf90_put_att(ncFileID, TmpIVarID, "units", "degrees_east"), "TmpI units")
+call nc_check(nf90_put_att(ncFileID, TmpIVarID, "valid_range", (/ 0.0_r8, 360.0_r8 /)), &
                                  "TmpI valid_range")
 
 ! Temperature Grid Latitudes
-call check(nf90_def_var(ncFileID, name="TmpJ", &
+call nc_check(nf90_def_var(ncFileID, name="TmpJ", &
               xtype=nf90_double, dimids=TmpJDimID, varid=TmpJVarID),   "TmpJ def_var" )
-call check(nf90_put_att(ncFileID, TmpJVarID, "long_name", "latitude"), "TmpJ long_name")
-call check(nf90_put_att(ncFileID, TmpJVarID, "cartesian_axis", "Y"),   "TmpJ cartesian_axis")
-call check(nf90_put_att(ncFileID, TmpJVarID, "units", "degrees_north"),"TmpJ units")
-call check(nf90_put_att(ncFileID, TmpJVarID, "valid_range", (/ -90.0_r8, 90.0_r8 /)), &
+call nc_check(nf90_put_att(ncFileID, TmpJVarID, "long_name", "latitude"), "TmpJ long_name")
+call nc_check(nf90_put_att(ncFileID, TmpJVarID, "cartesian_axis", "Y"),   "TmpJ cartesian_axis")
+call nc_check(nf90_put_att(ncFileID, TmpJVarID, "units", "degrees_north"),"TmpJ units")
+call nc_check(nf90_put_att(ncFileID, TmpJVarID, "valid_range", (/ -90.0_r8, 90.0_r8 /)), &
                                  "TmpJ valid_range")
 
 ! (Common) grid levels
-call check(nf90_def_var(ncFileID, name="lev", &
+call nc_check(nf90_def_var(ncFileID, name="lev", &
               xtype=nf90_int, dimids=levDimID, varid=levVarID) ,    "lev def_var")
-call check(nf90_put_att(ncFileID, levVarID, "long_name", "level"),  "lev long_name")
-call check(nf90_put_att(ncFileID, levVarID, "cartesian_axis", "Z"), "lev cartesian_axis")
-call check(nf90_put_att(ncFileID, levVarID, "units", "hPa"),        "lev units")
-call check(nf90_put_att(ncFileID, levVarID, "positive", "down"),    "lev positive")
+call nc_check(nf90_put_att(ncFileID, levVarID, "long_name", "level"),  "lev long_name")
+call nc_check(nf90_put_att(ncFileID, levVarID, "cartesian_axis", "Z"), "lev cartesian_axis")
+call nc_check(nf90_put_att(ncFileID, levVarID, "units", "hPa"),        "lev units")
+call nc_check(nf90_put_att(ncFileID, levVarID, "positive", "down"),    "lev positive")
 
 ! Velocity Grid Longitudes
-call check(nf90_def_var(ncFileID, name="VelI", &
+call nc_check(nf90_def_var(ncFileID, name="VelI", &
               xtype=nf90_double, dimids=VelIDimID, varid=VelIVarID) ,  "VelI def_var")
-call check(nf90_put_att(ncFileID, VelIVarID, "long_name", "longitude"),"VelI long_name")
-call check(nf90_put_att(ncFileID, VelIVarID, "cartesian_axis", "X"),   "VelI cartesian_axis")
-call check(nf90_put_att(ncFileID, VelIVarID, "units", "degrees_east"), "VelI units")
-call check(nf90_put_att(ncFileID, VelIVarID, "valid_range", (/ 0.0_r8, 360.1_r8 /)), &
+call nc_check(nf90_put_att(ncFileID, VelIVarID, "long_name", "longitude"),"VelI long_name")
+call nc_check(nf90_put_att(ncFileID, VelIVarID, "cartesian_axis", "X"),   "VelI cartesian_axis")
+call nc_check(nf90_put_att(ncFileID, VelIVarID, "units", "degrees_east"), "VelI units")
+call nc_check(nf90_put_att(ncFileID, VelIVarID, "valid_range", (/ 0.0_r8, 360.1_r8 /)), &
                                  "VelI valid_range")
 
 ! Velocity Grid Latitudes
-call check(nf90_def_var(ncFileID, name="VelJ", &
+call nc_check(nf90_def_var(ncFileID, name="VelJ", &
               xtype=nf90_double, dimids=VelJDimID, varid=VelJVarID) ,   "VelJ def_var")
-call check(nf90_put_att(ncFileID, VelJVarID, "long_name", "latitude"),  "VelJ long_name")
-call check(nf90_put_att(ncFileID, VelJVarID, "cartesian_axis", "Y"),    "VelJ cartesian_axis")
-call check(nf90_put_att(ncFileID, VelJVarID, "units", "degrees_north"), "VelJ units")
-call check(nf90_put_att(ncFileID, VelJVarID, "valid_range", (/ -90.0_r8, 90.0_r8 /)), &
+call nc_check(nf90_put_att(ncFileID, VelJVarID, "long_name", "latitude"),  "VelJ long_name")
+call nc_check(nf90_put_att(ncFileID, VelJVarID, "cartesian_axis", "Y"),    "VelJ cartesian_axis")
+call nc_check(nf90_put_att(ncFileID, VelJVarID, "units", "degrees_north"), "VelJ units")
+call nc_check(nf90_put_att(ncFileID, VelJVarID, "valid_range", (/ -90.0_r8, 90.0_r8 /)), &
                                  "VelJ valid_range")
 
 ! Number of Tracers
 if ( ntracer > 0 ) then
-   call check(nf90_def_var(ncFileID, name="tracers", &
+   call nc_check(nf90_def_var(ncFileID, name="tracers", &
                  xtype=nf90_int, dimids=tracerDimID, varid=tracerVarID) , "tracers def_var")
-   call check(nf90_put_att(ncFileID, tracerVarID, "long_name", "tracer identifier"), &
+   call nc_check(nf90_put_att(ncFileID, tracerVarID, "long_name", "tracer identifier"), &
                                     "tracers long_name")
 endif
 
-if ( output_state_vector ) then
-
-   !----------------------------------------------------------------------------
-   ! Create attributes for the state vector 
-   !----------------------------------------------------------------------------
-
-  ! Define the state vector coordinate variable
-   call check(nf90_def_var(ncid=ncFileID,name="StateVariable", xtype=nf90_int, &
-              dimids=StateVarDimID, varid=StateVarVarID), "statevariable def_var")
-   call check(nf90_put_att(ncFileID, StateVarVarID, "long_name", "State Variable ID"), &
-                                    "statevariable long_name")
-   call check(nf90_put_att(ncFileID, StateVarVarID, "units",     "indexical"), &
-                                    "statevariable units")
-   call check(nf90_put_att(ncFileID, StateVarVarID, "valid_range", (/ 1, model_size /)), &
-                                    "statevariable valid_range")
-
-   ! Define the actual state vector
-   call check(nf90_def_var(ncid=ncFileID, name="state", xtype=nf90_real, &
-              dimids = (/ StateVarDimID, MemberDimID, unlimitedDimID /), &
-              varid=StateVarID), "state def_var")
-   call check(nf90_put_att(ncFileID, StateVarID, "long_name", "model state or fcopy"), &
-                                           "state long_name")
-   call check(nf90_put_att(ncFileID, StateVarId, "vector_to_prog_var","FMS-Bgrid"), &
-                                           "state vector_to_prog_var")
-   call check(nf90_put_att(ncFileID, StateVarId, "temperature_units","degrees Kelvin"), &
-                                           "state temperature_units")
-   call check(nf90_put_att(ncFileID, StateVarId, "pressure_units","Pa"), &
-                                           "state pressure_units")
-   call check(nf90_put_att(ncFileID, StateVarId, "U_units","m/s"),"state U_units")
-   call check(nf90_put_att(ncFileID, StateVarId, "V_units","m/s"),"state V_units")
-
-   ! Leave define mode so we can fill
-   call check(nf90_enddef(ncfileID),"state enddef")
-
-   ! Fill the state variable coordinate variable
-   call check(nf90_put_var(ncFileID, StateVarVarID, (/ (i,i=1,model_size) /) ), &
-                                    "state put_var")
-
-else
-
-   !----------------------------------------------------------------------------
-   ! We need to process the prognostic variables.
-   !----------------------------------------------------------------------------
-   ! TemperatureGrid : surface pressure  vars%ps(tis:tie, tjs:tje) 
-   !                 : temperature       vars%t (tis:tie, tjs:tje, klb:kub)
-   !                 : tracers           vars%r (tis:tie, tjs:tje, klb:kub, 1:vars%ntrace)
-   ! VelocityGrid    : u                 vars%u (vis:vie, vjs:vje, klb:kub) 
-   !                 : v                 vars%v (vis:vie, vjs:tje, klb:kub)
-   !----------------------------------------------------------------------------
-   ! Create the (empty) Variables and the Attributes
-   !----------------------------------------------------------------------------
- 
-   call check(nf90_def_var(ncid=ncFileID, name="ps", xtype=nf90_real, &
-         dimids = (/ TmpIDimID, TmpJDimID, MemberDimID, unlimitedDimID /), &
-         varid  = psVarID), "ps def_var")
-   call check(nf90_put_att(ncFileID, psVarID, "long_name", "surface pressure"), &
-                                           "ps long_name")
-   call check(nf90_put_att(ncFileID, psVarID, "units", "Pa"), &
-                                           "ps units")
-   call check(nf90_put_att(ncFileID, psVarID, "units_long_name", "pascals"), &
-                                           "ps units_long_name")
-
-
-   call check(nf90_def_var(ncid=ncFileID, name="t", xtype=nf90_real, &
-         dimids = (/ TmpIDimID, TmpJDimID, levDimID, MemberDimID, unlimitedDimID /), &
-         varid  = tVarID), "t def_var")
-   call check(nf90_put_att(ncFileID, tVarID, "long_name", "temperature"), "t long_name")
-   call check(nf90_put_att(ncFileID, tVarID, "units", "degrees Kelvin"), "t units")
-
-
-   call check(nf90_def_var(ncid=ncFileID, name="u", xtype=nf90_real, &
-         dimids = (/ VelIDimID, VelJDimID, levDimID, MemberDimID, unlimitedDimID /), &
-         varid  = uVarID), "u def_var")
-   call check(nf90_put_att(ncFileID, uVarID, "long_name", "zonal wind component"), &
-                                           "u long_name")
-   call check(nf90_put_att(ncFileID, uVarID, "units", "m/s"), "u units")
-
-
-   call check(nf90_def_var(ncid=ncFileID, name="v", xtype=nf90_real, &
-         dimids = (/ VelIDimID, VelJDimID, levDimID, MemberDimID, unlimitedDimID /), &
-         varid  = vVarID), "v def_var")
-   call check(nf90_put_att(ncFileID, vVarID, "long_name", "meridional wind component"), &
-                                           "v long_name")
-   call check(nf90_put_att(ncFileID, vVarID, "units", "m/s"), "v units")
-
-   if ( ntracer > 0 ) then
-      call check(nf90_def_var(ncid=ncFileID, name="r", xtype=nf90_real, &
-      dimids = (/TmpIDimID, TmpJDimID, levDimID, tracerDimID, MemberDimID, unlimitedDimID/),&
-         varid  = rVarID), "r def_var")
-      call check(nf90_put_att(ncFileID, rVarID, "long_name", "various tracers"), "r long_name")
-   endif
-
-   call check(nf90_enddef(ncfileID), "prognostic enddef")
-
-endif
+call nc_end_define_mode(ncFileID)
 
 !-------------------------------------------------------------------------------
 ! Fill the variables
 !-------------------------------------------------------------------------------
 
-call check(nf90_put_var(ncFileID,   TmpIVarID, t_lons(tis:tie) ), "TmpI put_var")
-call check(nf90_put_var(ncFileID,   TmpJVarID, t_lats(tjs:tje) ), "TmpJ put_var")
-call check(nf90_put_var(ncFileID,   VelIVarID, v_lons(vis:vie) ), "VelI put_var")
-call check(nf90_put_var(ncFileID,   VelJVarID, v_lats(vjs:vje) ), "VelJ put_var")
-call check(nf90_put_var(ncFileID,    levVarID, (/ (i,i=1,   nlev) /) ), "lev put_var")
+call nc_check(nf90_put_var(ncFileID,   TmpIVarID, t_lons(tis:tie) ), "TmpI put_var")
+call nc_check(nf90_put_var(ncFileID,   TmpJVarID, t_lats(tjs:tje) ), "TmpJ put_var")
+call nc_check(nf90_put_var(ncFileID,   VelIVarID, v_lons(vis:vie) ), "VelI put_var")
+call nc_check(nf90_put_var(ncFileID,   VelJVarID, v_lats(vjs:vje) ), "VelJ put_var")
+call nc_check(nf90_put_var(ncFileID,    levVarID, (/ (i,i=1,   nlev) /) ), "lev put_var")
 if ( ntracer > 0 ) then
-   call check(nf90_put_var(ncFileID, tracerVarID, (/ (i,i=1,ntracer) /) ), "tracer put_var")
+   call nc_check(nf90_put_var(ncFileID, tracerVarID, (/ (i,i=1,ntracer) /) ), "tracer put_var")
 endif
 
 !-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
 !-------------------------------------------------------------------------------
-call check(nf90_sync(ncFileID),"atts sync")
+call nc_synchronize_file(ncFileID)
 
-write (*,*)'nc_write_model_atts: netCDF file ',ncFileID,' is synched ...'
-
-contains
-
-  ! Internal subroutine - checks error status after each netcdf, prints 
-  !                       text message each time an error code is returned. 
-  subroutine check(istatus, string1)
-    integer, intent ( in) :: istatus
-    character(len=*), intent(in), optional :: string1
-
-    character(len=20)  :: myname = 'nc_write_model_atts '
-    character(len=129) :: mystring
-    integer            :: indexN
-
-    if( istatus /= nf90_noerr) then
-
-       if (present(string1) ) then
-          if ((len_trim(string1)+len(myname)) <= len(mystring) ) then
-             mystring = myname // trim(adjustl(string1))
-          else
-             indexN = len(mystring) - len(myname)
-             mystring = myname // string1(1:indexN)
-          endif 
-       else
-          mystring = myname
-       endif
-
-       call error_mesg(mystring, trim(nf90_strerror(istatus)), FATAL)
-
-    endif
-
-  end subroutine check
-
-end function nc_write_model_atts
+end subroutine nc_write_model_atts
 
 
+!--------------------------------------------------------------------
+subroutine pert_model_copies(ens_handle, ens_size, pert_amp, interf_provided)
 
-function nc_write_model_vars( ncFileID, statevec, copyindex, timeindex ) result (ierr)
-!-----------------------------------------------------------------------------------------
-! Writes the model-specific variables to a netCDF file
-! TJH 25 June 2003
-!
-! TJH 29 July 2003 -- for the moment, all errors are fatal, so the
-! return code is always '0 == normal', since the fatal errors stop execution.
-!                                                                                
-! There are two different (staggered) 3D grids being used simultaneously here. 
-! The routines "prog_var_to_vector" and "vector_to_prog_var", 
-! packs the prognostic variables into
-! the requisite array for the data assimilation routines. That routine
-! is the basis for the information stored in the netCDF files.
-!
-! TemperatureGrid : surface pressure  vars%ps(tis:tie, tjs:tje) 
-!                 : temperature       vars%t (tis:tie, tjs:tje, klb:kup)
-!                 : tracers           vars%r (tis:tie, tjs:tje, klb:kub, 1:vars%ntrace)
-! VelocityGrid    : u                 vars%u (vis:vie, vjs:vje, klb:kub) 
-!                 : v                 vars%v (vis:vie, vjs:tje, klb:kup)
-!
-! So there are six different dimensions and five different variables as long as
-! simply lump "tracers" into one. 
+type(ensemble_type), intent(inout) :: ens_handle
+integer,             intent(in)    :: ens_size
+real(r8),            intent(in)    :: pert_amp
+logical,             intent(out)   :: interf_provided
 
-use typeSizes
-use netcdf
+! Perturbs a model state copies for generating initial ensembles.
+! The perturbed state is returned in pert_state.
+! A model may choose to provide a NULL INTERFACE by returning
+! .false. for the interf_provided argument. This indicates to
+! the filter that if it needs to generate perturbed states, it
+! may do so by adding a perturbation to each model state 
+! variable independently. The interf_provided argument
+! should be returned as .true. if the model wants to do its own
+! perturbing of states.
 
-integer,                intent(in) :: ncFileID      ! netCDF file identifier
-real(r8), dimension(:), intent(in) :: statevec
-integer,                intent(in) :: copyindex
-integer,                intent(in) :: timeindex
-integer                            :: ierr          ! return value of function
+integer :: j, i
+integer :: temp_id ! temperature variable id
+integer(i8) :: temp_start, temp_end  ! first/last indices in state vector
+type(random_seq_type) :: r
 
-!-------------------------------------------------------------------------------
-real(r8), dimension(SIZE(statevec)) :: x
-! removed local instance of Var (since it contains pointers which are
-! then left hanging if Var goes out of scope), and replaced all references
-! to Var with global_Var below.    nsc 31mar06
-!type(prog_var_type) :: Var
-
-integer :: nDimensions, nVariables, nAttributes, unlimitedDimID
-integer :: StateVarID, psVarID, tVarID, rVarID, uVarID, vVarID
-integer :: tis, tie, tjs, tje       ! temperature grid start/stop
-integer :: vis, vie, vjs, vje       ! velocity    grid start/stop
-integer :: kub, klb
-integer :: nTmpI, nTmpJ, nVelI, nVelJ, nlev, ntracer
+!>@todo why aren't we using pert_amp here?
+! change the amount of perturbation here and recompile
+real(r8), parameter :: model_pert_amp = 0.01 ! This is hard coded in the trunk
 
 if ( .not. module_initialized ) call static_init_model
 
-ierr = 0     ! assume normal termination
+! Option 1: let filter do the perturbs
+! (comment this out to select other options below)
+!interf_provided = .false.
+!return
 
-!-------------------------------------------------------------------------------
-! Get the bounds for storage on Temp and Velocity grids
-! ?JEFF why can't I use the components of the prog_var_type?  
-! More precisely, why doesn't prog_var_type drag around the necessary
-! indices instead of just the extents?
-!-------------------------------------------------------------------------------
+! (debug) Option 2: tell filter we are going to perturb, but don't.
+! interf_provided = .true.
+! pert_state = state
+! return
 
-tis = Dynam%Hgrid%Tmp%is; tie = Dynam%Hgrid%Tmp%ie
-tjs = Dynam%Hgrid%Tmp%js; tje = Dynam%Hgrid%Tmp%je
-vis = Dynam%Hgrid%Vel%is; vie = Dynam%Hgrid%Vel%ie
-vjs = Dynam%Hgrid%Vel%js; vje = Dynam%Hgrid%Vel%je
-kub = Var_dt%kub
-klb = Var_dt%klb
+! Option 3: perturb T only
+interf_provided = .true.
 
-nTmpI   = tie - tis + 1
-nTmpJ   = tje - tjs + 1
-nlev    = Var_dt%kub - Var_dt%klb + 1
-ntracer = Var_dt%ntrace 
-nVelI   = vie - vis + 1
-nVelJ   = vje - vjs + 1
+! Find temperature in kinds list, and then the first
+! first and last index into the state vector for this variable
+temp_id = get_varid_from_kind(QTY_TEMPERATURE)
 
-!-------------------------------------------------------------------------------
-! make sure ncFileID refers to an open netCDF file, 
-! then get all the Variable ID's we need.
-!-------------------------------------------------------------------------------
+temp_start = get_index_start(dom_id, temp_id)
+temp_end = get_index_end(dom_id, temp_id)
 
-call check(nf90_Inquire(ncFileID, nDimensions, nVariables, nAttributes, unlimitedDimID), &
-        "inquire")
+call init_random_seq(r, my_task_id()+1)
 
-if ( output_state_vector ) then
+! for any parts of the state on my task which are part of the
+! temperature field, perturb all the ensemble members.
+do i = 1, ens_handle%my_num_vars
+   if (ens_handle%my_vars(i) >= temp_start .and. ens_handle%my_vars(i) <= temp_end) then
+      do j = 1, ens_size
+         ens_handle%copies(j,i) = random_gaussian(r, ens_handle%copies(j,i), model_pert_amp)
+      enddo
+   endif
+enddo
 
-   call check(NF90_inq_varid(ncFileID, "state", StateVarID), "state inq_varid" )
-   call check(NF90_put_var(ncFileID, StateVarID, statevec,  &
-                start=(/ 1, copyindex, timeindex /)), "state put_var")                               
+end subroutine pert_model_copies
 
-else
-   
+!--------------------------------------------------------------------
+
+!> for a cold start we need to be able to fill the dart state structure
+!> without having any information from an existing netcdf file.
+!>
+!> @TODO first we are going to require the namelist matches what the
+!> coldstart code assumes.  then once that's working, we figure out
+!> how to set the assumptions for the cold start, or find where in the
+!> bgrid namelists it reads that in and intercept it.
+
+subroutine fill_domain_structure()
+
+integer :: maxrows, i, numrows, rows, thiskind
+integer :: vis, vjs, vie, vje, nVelI, nVelJ, nlev, kub, klb
+integer :: tis, tjs, tie, tje, nTmpI, nTmpJ 
+
+
    !----------------------------------------------------------------------------
-   ! Fill the variables
+   ! Anything that is not explicitly listed is considered a tracer.
    ! TemperatureGrid : surface pressure  Var%ps(tis:tie, tjs:tje) 
    !                 : temperature       Var%t (tis:tie, tjs:tje, klb:kub)
    !                 : tracers           Var%r (tis:tie, tjs:tje, klb:kub, 1:vars%ntrace)
    ! VelocityGrid    : u                 Var%u (vis:vie, vjs:vje, klb:kub) 
-   !                 : v                 Var%v (vis:vie, vjs:tje, klb:kub)
+   !                 : v                 Var%v (vis:vie, vjs:vje, klb:kub)
    !----------------------------------------------------------------------------
 
-   x = statevec ! Unfortunately, have to explicity cast it ...
-                ! the filter uses a type=double,
-                ! the vector_to_prog_var function expects a single.
-   call vector_to_prog_var(x, get_model_size(), global_Var)
-   
-   
-   call check(NF90_inq_varid(ncFileID, "ps", psVarID), "ps inq_varid")
-   call check(nf90_put_var( ncFileID, psVarID, global_Var%ps(tis:tie, tjs:tje), &
-                            start=(/ 1, 1, copyindex, timeindex /) ), "ps put_var")
+! loop around the variables - the number of rows is the number of
+! fields in the state vector.
 
-   call check(NF90_inq_varid(ncFileID,  "t",  tVarID), "t inq_varid")
-   call check(nf90_put_var( ncFileID,  tVarID, global_Var%t( tis:tie, tjs:tje, klb:kub ), &
-                            start=(/ 1, 1, 1, copyindex, timeindex /) ), "t put_var")
+maxrows = size(state_variables, 2)
 
-   call check(NF90_inq_varid(ncFileID,  "u",  uVarID), "u inq_varid")
-   call check(nf90_put_var( ncFileID,  uVarId, global_Var%u( vis:vie, vjs:vje, klb:kub ), &
-                            start=(/ 1, 1, 1, copyindex, timeindex /) ), "u put_var")
+numrows = 0
+COUNTROWS: do i=1, maxrows
 
-   call check(NF90_inq_varid(ncFileID,  "v",  vVarID), "v inq_varid")
-   call check(nf90_put_var( ncFileID,  vVarId, global_Var%v( vis:vie, vjs:vje, klb:kub ), &
-                            start=(/ 1, 1, 1, copyindex, timeindex /) ), "v put_var")
+   !> @TODO leave a comment here about what 2 is for, once we figure it out
+   !> shouldn't it be either 1, or both 1 and 2?
+   if (state_variables(2, i) == 'NULL') exit COUNTROWS
 
-   if ( ntracer > 0 ) then
-      call check(NF90_inq_varid(ncFileID,  "r",  rVarID), "r inq_varid")
-      call check(nf90_put_var( ncFileID,  rVarID, &
-                    global_Var%r( tis:tie, tjs:tje, klb:kub, 1:ntracer ), & 
-                   start=(/  1,   1,   1,   1, copyindex, timeindex /) ), "r put_var")
-   endif
+   numrows = i
+enddo COUNTROWS
+
+if (numrows == 0) then
+   call error_handler(E_ERR,'fill_domain_structure', "bad namelist: no variables found in namelist item 'state_variables'", &
+                      source, revision, revdate)
 endif
 
-!-------------------------------------------------------------------------------
-! Flush the buffer and leave netCDF file open
-!-------------------------------------------------------------------------------
+allocate(state_kinds_list(numrows))
+do i = 1, numrows
+   state_kinds_list(i) = get_index_for_quantity(state_variables(2,i))
+   if (state_kinds_list(i) < 0) then
+      call error_handler(E_ERR,'fill_domain_structure', "bad namelist: unknown kind: "//trim(state_variables(2,i)), &
+                         source, revision, revdate)
+   endif
+end do
 
-! write (*,*)'Finished filling variables ...'
-call check(nf90_sync(ncFileID), "sync")
-! write (*,*)'netCDF file is synched ...'
+! if the user gives us a template file, use that to set the sizes of everything.
+! otherwise, like if using 'start_from_restart = .false', set things by hand.
 
-contains
+if (template_file /= 'null') then
 
-  ! Internal subroutine - checks error status after each netcdf, prints 
-  !                       text message each time an error code is returned. 
-  subroutine check(istatus, string1)
-    integer, intent ( in) :: istatus
-    character(len=*), intent(in), optional :: string1
+   dom_id = add_domain(template_file, numrows, state_variables(1,1:numrows), state_kinds_list(:))
 
-    character(len=20)  :: myname = 'nc_write_model_vars '
-    character(len=129) :: mystring
-    integer            :: indexN
-
-    if( istatus /= nf90_noerr) then
-
-       if (present(string1) ) then
-          if ((len_trim(string1)+len(myname)) <= len(mystring) ) then
-             mystring = myname // trim(adjustl(string1))
-          else
-             indexN = len(mystring) - len(myname)
-             mystring = myname // string1(1:indexN)
-          endif 
-       else
-          mystring = myname
-       endif
-
-       call error_mesg(mystring, trim(nf90_strerror(istatus)), FATAL)
-
-    endif
-
-  end subroutine check
-
-end function nc_write_model_vars
-
-
-
-
-subroutine pert_model_state(state, pert_state, interf_provided)
-
-
-! Perturbs a model state for generating initial ensembles
-! Returning interf_provided means go ahead and do this with uniform
-! small independent perturbations.
-
-real(r8), intent(in)  :: state(:)
-real(r8), intent(out) :: pert_state(:)
-logical,  intent(out) :: interf_provided
-
-if ( .not. module_initialized ) call static_init_model
-
-interf_provided = .false.
-
-! you *cannot* set this to junk. in at least one
-! location the caller is passing the same
-! array into the first arg as the second.  doing this
-! corrupts the state vector completely. set it to the
-! incoming state if you must do something.
-pert_state = state ! Just to satisfy INTENT(OUT)
-
-end subroutine pert_model_state
-
-
-
-
-
-subroutine ens_mean_for_model(ens_mean)
-!------------------------------------------------------------------
-! Not used in this model.
-
-real(r8), intent(in) :: ens_mean(:)
-
-if ( .not. module_initialized ) call static_init_model
-
-end subroutine ens_mean_for_model
+else
+   
+   dom_id = add_domain(numrows, state_variables(1,1:numrows), state_kinds_list(:))
+   
+   kub = Var_dt%kub
+   klb = Var_dt%klb
+   
+   do i = 1, numrows
+   
+      ! add each variable to the domain structure, with fixed
+      ! dimension names because we know what they should be.
+   
+      thiskind = state_kinds_list(i)
+     
+      if (thiskind == QTY_U_WIND_COMPONENT .or. thiskind == QTY_V_WIND_COMPONENT) then
+         ! the velocity grid is staggered compared to the temperature grid
+         vis = Dynam%Hgrid%Vel%is; vie = Dynam%Hgrid%Vel%ie
+         vjs = Dynam%Hgrid%Vel%js; vje = Dynam%Hgrid%Vel%je
+         nVelI   = vie - vis + 1
+         nVelJ   = vje - vjs + 1
+         nlev    = Var_dt%kub - Var_dt%klb + 1
+   
+         call add_dimension_to_variable(dom_id, i, "VelI", nVelI)
+         call add_dimension_to_variable(dom_id, i, "VelJ", nVelJ)
+         call add_dimension_to_variable(dom_id, i, "lev", nlev)
+   
+      else if (thiskind == QTY_TEMPERATURE .or. thiskind == QTY_PRESSURE) then
+         tis = Dynam%Hgrid%Tmp%is; tie = Dynam%Hgrid%Tmp%ie
+         tjs = Dynam%Hgrid%Tmp%js; tje = Dynam%Hgrid%Tmp%je
+         nTmpI   = tie - tis + 1
+         nTmpJ   = tje - tjs + 1
+         nlev    = Var_dt%kub - Var_dt%klb + 1
+   
+         call add_dimension_to_variable(dom_id, i, "TmpI", nTmpI)
+         call add_dimension_to_variable(dom_id, i, "TmpJ", nTmpJ)
+         call add_dimension_to_variable(dom_id, i, "lev", nlev)
+   
+      else if (thiskind == QTY_SURFACE_PRESSURE) then
+         tis = Dynam%Hgrid%Tmp%is; tie = Dynam%Hgrid%Tmp%ie
+         tjs = Dynam%Hgrid%Tmp%js; tje = Dynam%Hgrid%Tmp%je
+         nTmpI   = tie - tis + 1
+         nTmpJ   = tje - tjs + 1
+         nlev    = 1
+   
+         call add_dimension_to_variable(dom_id, i, "TmpI", nTmpI)
+         call add_dimension_to_variable(dom_id, i, "TmpJ", nTmpJ)
+   
+      else ! is tracer, Q, CO, etc
+         tis = Dynam%Hgrid%Tmp%is; tie = Dynam%Hgrid%Tmp%ie
+         tjs = Dynam%Hgrid%Tmp%js; tje = Dynam%Hgrid%Tmp%je
+         nTmpI   = tie - tis + 1
+         nTmpJ   = tje - tjs + 1
+         !ntracer = Var_dt%ntrace 
+         nlev    = Var_dt%kub - Var_dt%klb + 1
+   
+         call add_dimension_to_variable(dom_id, i, "TmpI", nTmpI)
+         call add_dimension_to_variable(dom_id, i, "TmpJ", nTmpJ)
+         call add_dimension_to_variable(dom_id, i, "lev", nlev)
+   
+      endif
+       
+   end do
+   
+   call finished_adding_domain(dom_id)
+endif
 
 
+!> @TODO we will have to fill in the lon, lat, and lev arrays
+!> with actual grid values somewhere so they get written to
+!> the restart file
+!> 
+
+end subroutine fill_domain_structure
+
+!--------------------------------------------------------------------
+!> given a kind, return what variable number it is
+!--------------------------------------------------------------------
+function get_varid_from_kind(dart_kind)
+
+integer, intent(in) :: dart_kind
+integer             :: get_varid_from_kind
+
+integer :: i
+
+do i = 1, get_num_variables(dom_id)
+   if (dart_kind == state_kinds_list(i)) then
+      get_varid_from_kind = i
+      return
+   endif
+end do
+
+write(errstring, *) 'Kind ', dart_kind, ' not found in state vector'
+call error_handler(E_ERR,'get_varid_from_kind', errstring, &
+                   source, revision, revdate)
+
+end function get_varid_from_kind
 
 !#######################################################################
+
 end module model_mod
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

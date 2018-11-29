@@ -1,11 +1,11 @@
 #!/bin/tcsh
 #
-# DART software - Copyright 2004 - 2011 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# $Id$
-#
+# DART $Id$
+
 # This script has 4 logical 'blocks':
 # 1) creates a clean, temporary directory in which to run a model instance 
 #    and copies the necessary files into the temporary directory
@@ -96,9 +96,9 @@ set input_file_line = 2
 set output_file_line = 3
 while($state_copy <= $num_states)
    
-   set ensemble_member = `head -$ensemble_member_line ../$control_file | tail -1`
-   set input_file      = `head -$input_file_line      ../$control_file | tail -1`
-   set output_file     = `head -$output_file_line     ../$control_file | tail -1`
+   set ensemble_member = `head -n $ensemble_member_line ../$control_file | tail -n 1`
+   set input_file      = `head -n $input_file_line      ../$control_file | tail -n 1`
+   set output_file     = `head -n $output_file_line     ../$control_file | tail -n 1`
 
    #----------------------------------------------------------------------
    # Block 2: Convert the DART output file to form needed by ocean model

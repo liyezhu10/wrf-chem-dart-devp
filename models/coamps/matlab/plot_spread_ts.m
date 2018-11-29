@@ -1,16 +1,12 @@
 %% plot_spread_ts   plot the spread field specified for the number of times specified.
 %
-% Uses a DART-generated NetCDF file: True_State.nc, Prior_Diag.nc, Posterior_Diag.nc
+% Uses a DART-generated NetCDF file: true_state.nc, preassim.nc, analysis.nc
 
-%% DART software - Copyright 2004 - 2011 UCAR. This open source software is
-% provided by UCAR, "as is", without charge, subject to all terms of use at
+%% DART software - Copyright UCAR. This open source software is provided
+% by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% <next few lines under version control, do not edit>
-% $URL$
-% $Id$
-% $Revision$
-% $Date$
+% DART $Id$
 
 clear all;
 close all;
@@ -23,7 +19,7 @@ xdim = 100;
 ydim = 100;
 
 % Open up the NetCDF file
-filename='Posterior_Diag.nc';
+filename='analysis.nc';
 diag_nc = netcdf(sprintf('%s/%s',path,filename));
 
 % Grab the entire set of times
@@ -53,3 +49,7 @@ ylabel('Ensemble Spread');
 title([var_name ',\sigma=' sprintf('%d',sigma_level)]);
 saveas(diag_ncfig,'spread','png');
 
+% <next few lines under version control, do not edit>
+% $URL$
+% $Revision$
+% $Date$

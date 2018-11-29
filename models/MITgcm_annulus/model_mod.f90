@@ -1,14 +1,10 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 module model_mod
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 use netcdf
 use        types_mod, only : r8
@@ -21,11 +17,11 @@ use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG, do_ou
                              nmlfileunit, find_namelist_in_file, check_namelist_read, &
                              do_nml_file, do_nml_term
 
-use     obs_kind_mod, only : KIND_U_WIND_COMPONENT, &
-                             KIND_V_WIND_COMPONENT, &
-                             KIND_TEMPERATURE, &
-                             KIND_SURFACE_PRESSURE, &
-                             KIND_VERTICAL_VELOCITY
+use     obs_kind_mod, only : QTY_U_WIND_COMPONENT, &
+                             QTY_V_WIND_COMPONENT, &
+                             QTY_TEMPERATURE, &
+                             QTY_SURFACE_PRESSURE, &
+                             QTY_VERTICAL_VELOCITY
 use   random_seq_mod, only : random_seq_type, init_random_seq, random_gaussian
 
 implicit none
@@ -47,10 +43,10 @@ public :: get_model_size,         &
 
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 ! Define the random number sequence variable
 type(random_seq_type)   :: random_seq
@@ -253,7 +249,7 @@ do iaz = 1, naz
          zed = - (ized - 1)*dzed - dzed/2.00_r8
          icount = icount + 1
          state_loc(icount)  = set_location(az,rad,zed,3)
-         state_kind(icount) = KIND_U_WIND_COMPONENT 
+         state_kind(icount) = QTY_U_WIND_COMPONENT 
       end do
    end do
 end do
@@ -267,7 +263,7 @@ do iaz = 1, naz
          zed = - (ized - 1)*dzed - dzed/2.00_r8
          icount = icount + 1
          state_loc(icount)  = set_location(az,rad,zed,3)
-         state_kind(icount) = KIND_V_WIND_COMPONENT
+         state_kind(icount) = QTY_V_WIND_COMPONENT
       end do
    end do
 end do
@@ -281,7 +277,7 @@ do iaz = 1, naz
          zed = - (ized - 1)*dzed 
          icount = icount + 1
          state_loc(icount)  = set_location(az,rad,zed,3)
-         state_kind(icount) = KIND_VERTICAL_VELOCITY
+         state_kind(icount) = QTY_VERTICAL_VELOCITY
       end do
    end do
 end do
@@ -295,7 +291,7 @@ do iaz = 1, naz
          zed = - (ized - 1)*dzed - dzed/2.00_r8
          icount = icount + 1
          state_loc(icount)  = set_location(az,rad,zed,3)
-         state_kind(icount) = KIND_TEMPERATURE
+         state_kind(icount) = QTY_TEMPERATURE
       end do
    end do
 end do
@@ -307,7 +303,7 @@ do iaz = 1, naz
          zed = - (ized - 1)*dzed - dzed/2.00_r8
          icount = icount + 1
          state_loc(icount)  = set_location(az,rad,zed,3)
-         state_kind(icount) = KIND_SURFACE_PRESSURE
+         state_kind(icount) = QTY_SURFACE_PRESSURE
       end do
    end do
 end do
@@ -1156,3 +1152,9 @@ end subroutine ens_mean_for_model
 ! End of model_mod
 !===================================================================
 end module model_mod
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

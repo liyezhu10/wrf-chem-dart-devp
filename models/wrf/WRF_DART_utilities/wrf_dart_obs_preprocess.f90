@@ -1,15 +1,11 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 program wrf_dart_obs_preprocess
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
-!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
 !   wrf_dart_obs_preprocess - WRF-DART utility program that at a
@@ -32,7 +28,7 @@ program wrf_dart_obs_preprocess
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-use        types_mod, only : r8
+use        types_mod, only : r8, i8
 use obs_sequence_mod, only : obs_sequence_type, static_init_obs_sequence, &
                              read_obs_seq_header, destroy_obs_sequence, &
                              get_num_obs, write_obs_seq 
@@ -40,8 +36,9 @@ use    utilities_mod, only : find_namelist_in_file, check_namelist_read, nc_chec
 use     obs_kind_mod, only : RADIOSONDE_U_WIND_COMPONENT, ACARS_U_WIND_COMPONENT, &
                              MARINE_SFC_U_WIND_COMPONENT, LAND_SFC_U_WIND_COMPONENT, &
                              METAR_U_10_METER_WIND, GPSRO_REFRACTIVITY, &
-                             SAT_U_WIND_COMPONENT, VORTEX_LAT
+                             SAT_U_WIND_COMPONENT, PROFILER_U_WIND_COMPONENT, VORTEX_LAT
 use time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, set_time
+use ensemble_manager_mod, only : ensemble_type, init_ensemble_manager, end_ensemble_manager
 use        model_mod, only : static_init_model
 use           netcdf
 
@@ -60,6 +57,7 @@ character(len=129) :: file_name_input    = 'obs_seq.old',        &
                       metar_extra        = 'obs_seq.metar',      &
                       marine_sfc_extra   = 'obs_seq.marine',     &
                       sat_wind_extra     = 'obs_seq.satwnd',     &
+                      profiler_extra     = 'obs_seq.profiler',   &
                       gpsro_extra        = 'obs_seq.gpsro',      &
                       trop_cyclone_extra = 'obs_seq.tc'
 integer            :: max_num_obs              = 100000   ! Largest number of obs in one sequence
@@ -100,7 +98,7 @@ namelist /wrf_obs_preproc_nml/file_name_input, file_name_output,      &
          sfc_elevation_check, overwrite_ncep_sfc_qc, overwrite_ncep_satwnd_qc, &
          aircraft_pres_int, sat_wind_pres_int, sfc_elevation_tol,   & 
          obs_pressure_top, obs_height_top, obs_boundary, sonde_extra, metar_extra,   &
-         acars_extra, land_sfc_extra, marine_sfc_extra, sat_wind_extra, &
+         acars_extra, land_sfc_extra, marine_sfc_extra, sat_wind_extra, profiler_extra, &
          trop_cyclone_extra, gpsro_extra, tc_sonde_radii, increase_bdy_error,      &
          maxobsfac, obsdistbdy, sat_wind_horiz_int, aircraft_horiz_int, &
          overwrite_obs_time
@@ -120,9 +118,11 @@ real(r8)                :: real_nx, real_ny
 logical                 :: file_exist, pre_I_format
 
 type(obs_sequence_type) :: seq_all, seq_rawin, seq_sfc, seq_acars, seq_satwnd, &
-                           seq_tc, seq_gpsro, seq_other
+                           seq_prof, seq_tc, seq_gpsro, seq_other
 
 type(time_type)         :: anal_time
+
+type(ensemble_type)     :: dummy_ens
 
 print*,'Enter target assimilation time (gregorian day, second): '
 read*,gday,gsec
@@ -131,6 +131,7 @@ anal_time = set_time(gsec, gday)
 
 call static_init_obs_sequence()
 call static_init_model()
+call init_ensemble_manager(dummy_ens, 1, 1_i8)
 
 call find_namelist_in_file("input.nml", "wrf_obs_preproc_nml", iunit)
 read(iunit, nml = wrf_obs_preproc_nml, iostat = io)
@@ -173,13 +174,14 @@ else
 end if
 
 !  create obs sequences for different obs types
-call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_rawin)
-call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_sfc)
-call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_acars)
-call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_satwnd)
-call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_gpsro)
+call create_new_obs_seq(num_copies, num_qc, max_obs_seq, seq_rawin)
+call create_new_obs_seq(num_copies, num_qc, max_obs_seq, seq_sfc)
+call create_new_obs_seq(num_copies, num_qc, max_obs_seq, seq_acars)
+call create_new_obs_seq(num_copies, num_qc, max_obs_seq, seq_satwnd)
+call create_new_obs_seq(num_copies, num_qc, max_obs_seq, seq_prof)
+call create_new_obs_seq(num_copies, num_qc, max_obs_seq, seq_gpsro)
 call create_new_obs_seq(num_copies, num_qc, 100,         seq_tc)
-call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_other)
+call create_new_obs_seq(num_copies, num_qc, max_obs_seq, seq_other)
 
 !  read input obs_seq file, divide into platforms
 call read_and_parse_input_seq(file_name_input, real_nx, real_ny, obs_boundary, &
@@ -224,6 +226,12 @@ SAT_U_WIND_COMPONENT, nx, ny, obs_boundary, include_sig_data, &
 obs_pressure_top, obs_height_top, sfc_elevation_check, sfc_elevation_tol, &
 overwrite_obs_time, anal_time)
 
+!  add supplimental profiler observations from file
+call add_supplimental_obs(profiler_extra, seq_prof, max_obs_seq, &
+PROFILER_U_WIND_COMPONENT, nx, ny, obs_boundary, include_sig_data, &
+obs_pressure_top, obs_height_top, sfc_elevation_check, sfc_elevation_tol, &
+overwrite_obs_time, anal_time)
+
 !  add supplimental GPSRO observations from file
 call add_supplimental_obs(gpsro_extra, seq_gpsro, max_obs_seq, &
 GPSRO_REFRACTIVITY, nx, ny, obs_boundary, include_sig_data, &
@@ -250,8 +258,8 @@ if ( superob_sat_winds ) call superob_sat_wind_data(seq_satwnd, anal_time, &
 
 max_obs_seq = get_num_obs(seq_tc)     + get_num_obs(seq_rawin) + &
               get_num_obs(seq_sfc)    + get_num_obs(seq_acars) + &
-              get_num_obs(seq_satwnd) + get_num_obs(seq_gpsro) + &
-              get_num_obs(seq_other)
+              get_num_obs(seq_satwnd) + get_num_obs(seq_prof)  + &
+              get_num_obs(seq_gpsro)  +  get_num_obs(seq_other)
 
 call create_new_obs_seq(num_copies, num_qc, max_obs_seq, seq_all)
 
@@ -273,6 +281,9 @@ call destroy_obs_sequence(seq_gpsro)
 call build_master_sequence(seq_satwnd, seq_all)
 call destroy_obs_sequence(seq_satwnd)
 
+call build_master_sequence(seq_prof, seq_all)
+call destroy_obs_sequence(seq_prof)
+
 call build_master_sequence(seq_other, seq_all)
 call destroy_obs_sequence(seq_other)
 
@@ -286,8 +297,7 @@ if ( increase_bdy_error ) call increase_obs_err_bdy(seq_all, &
 call write_obs_seq(seq_all, file_name_output)
 call destroy_obs_sequence(seq_all)
 
-stop
-end
+contains
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
@@ -336,13 +346,12 @@ subroutine add_supplimental_obs(filename, obs_seq, max_obs_seq, plat_kind, &
 
 use         types_mod, only : r8
 use  time_manager_mod, only : time_type, operator(>=)
-use      location_mod, only : location_type, get_location, vert_is_pressure, &
-                              vert_is_height
+use      location_mod, only : location_type, get_location, is_vertical
 use  obs_sequence_mod, only : obs_sequence_type, obs_type, init_obs, set_obs_def, &
                               get_num_copies, get_num_qc, read_obs_seq, copy_obs, &
                               get_first_obs, get_obs_def, get_next_obs, &
                               get_last_obs, insert_obs_in_seq, destroy_obs_sequence
-use       obs_def_mod, only : obs_def_type, get_obs_kind, set_obs_def_time, &
+use       obs_def_mod, only : obs_def_type, get_obs_def_type_of_obs, set_obs_def_time, &
                               get_obs_def_location, get_obs_def_time
 use      obs_kind_mod, only : RADIOSONDE_U_WIND_COMPONENT, ACARS_U_WIND_COMPONENT, &
                               LAND_SFC_U_WIND_COMPONENT, MARINE_SFC_U_WIND_COMPONENT, &
@@ -360,9 +369,7 @@ logical, intent(in)                    :: siglevel, sfcelev, overwrite_time
 real(r8), intent(in)                   :: obs_bdy, ptop, htop, elev_max
 
 integer  :: nloc, okind, dom_id
-logical  :: file_exist, last_obs, pass_checks, original_observation, &
-            rawinsonde_obs_check, aircraft_obs_check, surface_obs_check, &
-            sat_wind_obs_check, first_obs
+logical  :: file_exist, last_obs, pass_checks, first_obs
 real(r8) :: xyz_loc(3), xloc, yloc
 real(r8) :: real_nx, real_ny
 
@@ -430,7 +437,7 @@ ObsLoop:  do while ( .not. last_obs ) ! loop over all observations in a sequence
 
   !  read data from observation
   call get_obs_def(obs_in, obs_def)
-  okind   = get_obs_kind(obs_def)
+  okind   = get_obs_def_type_of_obs(obs_def)
   obs_loc = get_obs_def_location(obs_def)
   xyz_loc = get_location(obs_loc)
   call get_domain_info(xyz_loc(1),xyz_loc(2),dom_id,xloc,yloc)
@@ -447,8 +454,8 @@ ObsLoop:  do while ( .not. last_obs ) ! loop over all observations in a sequence
   end if
 
   !  check if the observation is within vertical bounds of domain
-  if ( (vert_is_pressure(obs_loc) .and. xyz_loc(3) < ptop) .or. &
-       (vert_is_height(obs_loc)   .and. xyz_loc(3) > htop) ) then
+  if ( (is_vertical(obs_loc, "PRESSURE") .and. xyz_loc(3) < ptop) .or. &
+       (is_vertical(obs_loc, "HEIGHT")   .and. xyz_loc(3) > htop) ) then
 
     prev_obsi = obs_in
     call get_next_obs(supp_obs_seq, prev_obsi, obs_in, last_obs)
@@ -648,7 +655,7 @@ type(obs_sequence_type), intent(in) :: seq
 integer, intent(out)                :: nloc 
 type(location_type), intent(out)    :: obs_loc_list(maxobs)
 
-logical             :: last_obs, original_observation
+logical             :: last_obs
 type(obs_type)      :: obs, prev_obs
 type(obs_def_type)  :: obs_def
 type(location_type) :: obs_loc
@@ -701,7 +708,7 @@ subroutine create_obs_type(lat, lon, vloc, vcord, obsv, okind, oerr, qc, otime, 
 
 use types_mod,        only : r8
 use obs_sequence_mod, only : obs_type, set_obs_values, set_qc, set_obs_def
-use obs_def_mod,      only : obs_def_type, set_obs_def_time, set_obs_def_kind, &
+use obs_def_mod,      only : obs_def_type, set_obs_def_time, set_obs_def_type_of_obs, &
                              set_obs_def_error_variance, set_obs_def_location
 use     location_mod, only : location_type, set_location
 use time_manager_mod, only : time_type
@@ -717,7 +724,7 @@ real(r8)              :: obs_val(1), qc_val(1)
 type(obs_def_type)    :: obs_def
 
 call set_obs_def_location(obs_def, set_location(lon, lat, vloc, vcord))
-call set_obs_def_kind(obs_def, okind)
+call set_obs_def_type_of_obs(obs_def, okind)
 call set_obs_def_time(obs_def, otime)
 call set_obs_def_error_variance(obs_def, oerr)
 call set_obs_def(obs, obs_def)
@@ -781,10 +788,10 @@ if ( .not. get_first_obs(seq, obs) ) last_obs = .true.
 
 do while ( .not. last_obs )
 
-  !  get location information
+  !  get location information relative to domain 1 (skip nests)
   call get_obs_def(obs, obs_def)
   xyz_loc = get_location(get_obs_def_location(obs_def))
-  call get_domain_info(xyz_loc(1),xyz_loc(2),dom_id,xloc,yloc)
+  call get_domain_info(xyz_loc(1),xyz_loc(2),dom_id,xloc,yloc,1)
 
   !  compute distance to boundary, increase based on this distance
   bdydist = min(xloc-1.0_r8, yloc-1.0_r8, nx-xloc, ny-yloc)
@@ -893,10 +900,9 @@ function rawinsonde_obs_check(obs_loc, obs_kind, siglevel, &
                                 elev_check, elev_max)
 
 use     types_mod, only : r8
-use  obs_kind_mod, only : RADIOSONDE_SURFACE_ALTIMETER, KIND_SURFACE_ELEVATION
+use  obs_kind_mod, only : RADIOSONDE_SURFACE_ALTIMETER, QTY_SURFACE_ELEVATION
 use     model_mod, only : model_interpolate
-use  location_mod, only : location_type, set_location, get_location, &
-                          vert_is_pressure
+use  location_mod, only : location_type, set_location, get_location
 
 implicit none
 
@@ -905,9 +911,9 @@ integer, intent(in)             :: obs_kind
 logical, intent(in)             :: siglevel, elev_check
 real(r8), intent(in)            :: elev_max
 
-integer  :: istatus
-logical  :: rawinsonde_obs_check, isManLevel
-real(r8) :: xyz_loc(3), xmod(1), hsfc
+integer  :: istatus(1)
+logical  :: rawinsonde_obs_check
+real(r8) :: xyz_loc(3), xmod(1), hsfc(1)
 
 rawinsonde_obs_check = .true.
 xyz_loc = get_location(obs_loc)
@@ -925,8 +931,8 @@ else
   !  perform elevation check for altimeter
   if ( elev_check ) then
 
-    call model_interpolate(xmod, obs_loc, KIND_SURFACE_ELEVATION, hsfc, istatus)
-    if ( abs(hsfc - xyz_loc(3)) > elev_max ) rawinsonde_obs_check = .false.
+    call model_interpolate(dummy_ens, 1, obs_loc, QTY_SURFACE_ELEVATION, hsfc, istatus)
+    if ( abs(hsfc(1) - xyz_loc(3)) > elev_max ) rawinsonde_obs_check = .false.
 
   end if
 
@@ -969,14 +975,13 @@ subroutine read_and_parse_input_seq(filename, nx, ny, obs_bdy, siglevel, ptop, &
 use         types_mod, only : r8
 use     utilities_mod, only : nc_check
 use  time_manager_mod, only : time_type 
-use      location_mod, only : location_type, get_location, vert_is_pressure, &
-                              vert_is_height
+use      location_mod, only : location_type, get_location, is_vertical
 use  obs_sequence_mod, only : obs_sequence_type, obs_type, init_obs, &
                               get_num_copies, get_num_qc, get_qc_meta_data, &
                               get_first_obs, get_obs_def, copy_obs, get_num_qc, &
                               append_obs_to_seq, get_next_obs, get_qc, set_qc, &
                               destroy_obs_sequence, read_obs_seq, set_obs_def
-use       obs_def_mod, only : obs_def_type, get_obs_kind, get_obs_def_location, &
+use       obs_def_mod, only : obs_def_type, get_obs_def_type_of_obs, get_obs_def_location, &
                               set_obs_def_time
 use      obs_kind_mod, only : RADIOSONDE_U_WIND_COMPONENT, RADIOSONDE_V_WIND_COMPONENT, &
                               RADIOSONDE_SURFACE_ALTIMETER, RADIOSONDE_TEMPERATURE, &
@@ -1019,8 +1024,7 @@ type(obs_sequence_type), intent(inout) :: rawin_seq, sfc_seq, acars_seq, &
 
 character(len=129)    :: qcmeta
 integer               :: fid, var_id, okind, dom_id, i, j
-logical               :: file_exist, last_obs, input_ncep_qc, rawinsonde_obs_check, &
-                         surface_obs_check, aircraft_obs_check, sat_wind_obs_check
+logical               :: file_exist, last_obs, input_ncep_qc
 real(r8), allocatable :: xland(:,:), qc(:)
 real(r8)              :: xyz_loc(3), xloc, yloc
 
@@ -1060,7 +1064,7 @@ InputObsLoop:  do while ( .not. last_obs ) ! loop over all observations in a seq
 
   !  Get the observation information, check if it is in the domain
   call get_obs_def(obs_in, obs_def)
-  okind   = get_obs_kind(obs_def)
+  okind   = get_obs_def_type_of_obs(obs_def)
   obs_loc = get_obs_def_location(obs_def)
   xyz_loc = get_location(obs_loc)
   call get_domain_info(xyz_loc(1),xyz_loc(2),dom_id,xloc,yloc)
@@ -1078,8 +1082,8 @@ InputObsLoop:  do while ( .not. last_obs ) ! loop over all observations in a seq
   end if
 
   !  check vertical location
-  if ( (vert_is_pressure(obs_loc) .and. xyz_loc(3) < ptop) .or. &
-       (vert_is_height(obs_loc)   .and. xyz_loc(3) > htop) ) then
+  if ( (is_vertical(obs_loc, "PRESSURE") .and. xyz_loc(3) < ptop) .or. &
+       (is_vertical(obs_loc, "HEIGHT")   .and. xyz_loc(3) > htop) ) then
 
     prev_obs = obs_in
     call get_next_obs(seq, prev_obs, obs_in, last_obs)
@@ -1337,7 +1341,7 @@ use  obs_sequence_mod, only : obs_sequence_type, obs_type, init_obs, &
                               get_num_obs, get_obs_values, get_obs_def, &
                               append_obs_to_seq
 use       obs_def_mod, only : obs_def_type, get_obs_def_location, &
-                              get_obs_kind, get_obs_def_error_variance, &
+                              get_obs_def_type_of_obs, get_obs_def_error_variance, &
                               get_obs_def_time
 use      obs_kind_mod, only : AIRCRAFT_U_WIND_COMPONENT, ACARS_U_WIND_COMPONENT, &
                               AIRCRAFT_V_WIND_COMPONENT, ACARS_V_WIND_COMPONENT, &
@@ -1352,14 +1356,14 @@ type(time_type),         intent(in)    :: atime
 real(r8), intent(in)                   :: hdist, vdist
 
 integer             :: num_copies, num_qc, nloc, k, locdex, obs_kind, n, &
-                       num_obs
-logical             :: last_obs
+                       num_obs, poleward_obs
+logical             :: last_obs, close_to_greenwich
 real(r8)            :: nuwnd, latu, lonu, preu, uwnd, erru, qcu, nvwnd, latv, &
                        lonv, prev, vwnd, errv, qcv, ntmpk, latt, lont, pret, &
                        tmpk, errt, qct, nqvap, latq, lonq, preq, qvap, errq, &
                        dwpt, errd, qcd, ndwpt, latd, lond, pred, relh, errr, &
-                       qcr, nrelh, latr, lonr, prer, qcq, obs_dist,  &
-                       xyz_loc(3), obs_val(1), qc_val(1)
+                       qcr, nrelh, latr, lonr, prer, qcq, obs_dist, &
+                       xyz_loc(3), obs_val(1), qc_val(1), lon_degree_limit
 type(location_type) :: obs_loc
 type(obs_def_type)  :: obs_def
 type(obs_type)      :: obs, prev_obs
@@ -1387,7 +1391,7 @@ allocate(airobs(num_obs))
 call init_obs(obs,      num_copies, num_qc)
 call init_obs(prev_obs, num_copies, num_qc)
 
-last_obs = .false.  ;  nloc = 0
+last_obs = .false.  ;  nloc = 0   ;   poleward_obs = 0
 if ( .not. get_first_obs(seq, obs) )  last_obs = .true.
 
 !  loop over all observations in sequence, add to ACARS observation type
@@ -1398,7 +1402,7 @@ do while ( .not. last_obs )
 
   call get_obs_def(obs, obs_def)
   obs_loc  = get_obs_def_location(obs_def)
-  obs_kind = get_obs_kind(obs_def)
+  obs_kind = get_obs_def_type_of_obs(obs_def)
   xyz_loc  = get_location(obs_loc)
 
   locdex = -1
@@ -1413,10 +1417,19 @@ do while ( .not. last_obs )
 
   if ( locdex < 1 ) then  !  create new observation location type
 
+    ! test if we are within hdist of either pole, and punt for now on those 
+    ! obs because we can't accurately average points that wrap the poles.
+    ! (count up obs here and print later)
+    if (pole_check(xyz_loc(1), xyz_loc(2), hdist)) then
+        poleward_obs = poleward_obs + 1
+        goto 200
+    endif
+     
     nloc = nloc + 1
     locdex = nloc
+
+    
     airobs(locdex)%lon = xyz_loc(1)
-    if ( airobs(locdex)%lon < 5.0_r8 ) airobs(locdex)%lon = airobs(locdex)%lon + 360.0_r8
     airobs(locdex)%lat = xyz_loc(2)
     airobs(locdex)%pressure = xyz_loc(3)
     airobs(locdex)%obs_loc  = obs_loc
@@ -1470,10 +1483,17 @@ do while ( .not. last_obs )
 
   end if
 
+200 continue   ! come here to skip this obs
+
   prev_obs = obs
   call get_next_obs(seq, prev_obs, obs, last_obs)
 
 end do
+
+if (poleward_obs > 0) then
+   write(6, *) 'WARNING: skipped ', poleward_obs, ' of ', poleward_obs+nloc, ' aircraft obs because'
+   write(6, *) 'they were within ', hdist, ' KM of the poles (the superobs distance).'
+endif
 
 call destroy_obs_sequence(seq)
 call create_new_obs_seq(num_copies, num_qc, num_obs, seq)
@@ -1496,6 +1516,11 @@ do k = 1, nloc  !  loop over all observation locations
 
 
   if ( airobs(k)%lat /= missing_r8 ) then  !  create initial superob
+
+    call superob_location_check(airobs(k)%lon, airobs(k)%lat, hdist, &
+                                close_to_greenwich, lon_degree_limit)
+    if (close_to_greenwich) call wrap_lon(airobs(k)%lon, airobs(k)%lon - lon_degree_limit, &
+                                                         airobs(k)%lon + lon_degree_limit)
 
     if ( airobs(k)%uwnd /= missing_r8 ) then
       nuwnd = nuwnd + 1.0_r8
@@ -1564,6 +1589,9 @@ do k = 1, nloc  !  loop over all observation locations
         !  add observation to superob if within the horizontal and vertical bounds
         obs_dist = get_dist(airobs(k)%obs_loc, airobs(n)%obs_loc, 2, 2, .true.) * earth_radius
         if ( obs_dist <= hdist .and. abs(airobs(k)%pressure-airobs(n)%pressure) <= vdist ) then
+
+          if (close_to_greenwich) call wrap_lon(airobs(n)%lon, airobs(k)%lon - lon_degree_limit, &
+                                                               airobs(k)%lon + lon_degree_limit)
 
           if ( airobs(n)%uwnd /= missing_r8 ) then
             nuwnd = nuwnd + 1.0_r8
@@ -1648,7 +1676,7 @@ do k = 1, nloc  !  loop over all observation locations
 
     end if
 
-    if ( nvwnd > 0.0_r8 ) then  !  write mieridional wind superob
+    if ( nvwnd > 0.0_r8 ) then  !  write meridional wind superob
 
       latv = latv / nvwnd
       lonv = lonv / nvwnd
@@ -1753,7 +1781,7 @@ use  obs_sequence_mod, only : obs_sequence_type, obs_type, init_obs, &
                               get_num_obs, get_obs_values, get_obs_def, &
                               append_obs_to_seq
 use       obs_def_mod, only : obs_def_type, get_obs_def_location, &
-                              get_obs_kind, get_obs_def_error_variance, &
+                              get_obs_def_type_of_obs, get_obs_def_error_variance, &
                               get_obs_def_time
 use      obs_kind_mod, only : SAT_U_WIND_COMPONENT, SAT_V_WIND_COMPONENT
 
@@ -1764,10 +1792,11 @@ type(time_type),         intent(in)    :: atime
 real(r8), intent(in)                   :: hdist, vdist
 
 integer             :: num_copies, num_qc, nloc, k, locdex, obs_kind, n, &
-                       num_obs
-logical             :: last_obs
+                       num_obs, poleward_obs
+logical             :: last_obs, close_to_greenwich
 real(r8)            :: nwnd, lat, lon, pres, uwnd, erru, qcu, vwnd, &
-                       errv, qcv, obs_dist, xyz_loc(3), obs_val(1), qc_val(1)
+                       errv, qcv, obs_dist, xyz_loc(3), obs_val(1), qc_val(1), &
+                       lon_degree_limit
 
 type(location_type) :: obs_loc
 type(obs_def_type)  :: obs_def
@@ -1794,7 +1823,7 @@ allocate(satobs(num_obs/2))
 call init_obs(obs,      num_copies, num_qc)
 call init_obs(prev_obs, num_copies, num_qc)
 
-last_obs = .false.  ;  nloc = 0
+last_obs = .false.  ;  nloc = 0  ;  poleward_obs = 0
 if ( .not. get_first_obs(seq, obs) )  last_obs = .true.
 
 !  loop over satellite winds, create list
@@ -1805,7 +1834,7 @@ do while ( .not. last_obs )
 
   call get_obs_def(obs, obs_def)
   obs_loc  = get_obs_def_location(obs_def)
-  obs_kind = get_obs_kind(obs_def)
+  obs_kind = get_obs_def_type_of_obs(obs_def)
   xyz_loc  = get_location(obs_loc)
 
   !  determine if observation exists
@@ -1821,10 +1850,19 @@ do while ( .not. last_obs )
 
   if ( locdex < 1 ) then  !  create new observation type
 
+    ! test if we are within hdist of either pole, and punt for now on those 
+    ! obs because we can't accurately average points that wrap the poles.
+    ! (hdist is radius, in KM, of region of interest.)
+    if (pole_check(xyz_loc(1), xyz_loc(2), hdist)) then
+        ! count up obs here and print later
+        poleward_obs = poleward_obs + 1
+        goto 200
+    endif
+     
     nloc = nloc + 1
     locdex = nloc
+
     satobs(locdex)%lon = xyz_loc(1)
-    if ( satobs(locdex)%lon < 5.0_r8 ) satobs(locdex)%lon = satobs(locdex)%lon + 360.0_r8
     satobs(locdex)%lat = xyz_loc(2)
     satobs(locdex)%pressure = xyz_loc(3)
     satobs(locdex)%obs_loc  = obs_loc
@@ -1849,10 +1887,17 @@ do while ( .not. last_obs )
 
   end if
 
+200 continue   ! come here to skip this obs
+
   prev_obs = obs
   call get_next_obs(seq, prev_obs, obs, last_obs)
 
 end do
+
+if (poleward_obs > 0) then
+   write(6, *) 'WARNING: skipped ', poleward_obs, ' of ', poleward_obs+nloc, ' satwind obs because'
+   write(6, *) 'they were within ', hdist, ' KM of the poles (the superobs distance).'
+endif
 
 !  create new sequence
 call destroy_obs_sequence(seq)
@@ -1862,6 +1907,11 @@ call init_obs(obs, num_copies, num_qc)
 do k = 1, nloc  ! loop over all locations
 
   if ( satobs(k)%uwnd /= missing_r8 .and. satobs(k)%vwnd /= missing_r8 ) then
+
+    call superob_location_check(satobs(k)%lon, satobs(k)%lat, hdist, &
+                                close_to_greenwich, lon_degree_limit)
+    if (close_to_greenwich) call wrap_lon(satobs(k)%lon, satobs(k)%lon - lon_degree_limit, &
+                                                         satobs(k)%lon + lon_degree_limit)
 
     nwnd = 1.0_r8
     lat  = satobs(k)%lat 
@@ -1881,6 +1931,9 @@ do k = 1, nloc  ! loop over all locations
         !  if observation is within horizontal and vertical interval, add it to obs.
         obs_dist = get_dist(satobs(k)%obs_loc, satobs(n)%obs_loc, 2, 2, .true.) * earth_radius
         if ( obs_dist <= hdist .and. abs(satobs(k)%pressure-satobs(n)%pressure) <= vdist ) then
+
+          if (close_to_greenwich) call wrap_lon(satobs(n)%lon, satobs(k)%lon - lon_degree_limit, &
+                                                               satobs(k)%lon + lon_degree_limit)
 
           nwnd = nwnd + 1.0_r8
           lat  = lat  + satobs(n)%lat
@@ -1941,7 +1994,7 @@ end subroutine superob_sat_wind_data
 function surface_obs_check(elev_check, elev_max, xyz_loc)
 
 use     types_mod, only : r8
-use  obs_kind_mod, only : KIND_SURFACE_ELEVATION
+use  obs_kind_mod, only : QTY_SURFACE_ELEVATION
 use     model_mod, only : model_interpolate
 use  location_mod, only : set_location, VERTISSURFACE
 
@@ -1950,20 +2003,194 @@ implicit none
 logical, intent(in)  :: elev_check
 real(r8), intent(in) :: xyz_loc(3), elev_max
 
-integer              :: istatus
+integer              :: istatus(1)
 logical              :: surface_obs_check
-real(r8)             :: xmod(1), hsfc
+real(r8)             :: xmod(1), hsfc(1)
 
 surface_obs_check = .true.
 
 if ( elev_check ) then
 
-  call model_interpolate(xmod, set_location(xyz_loc(1), xyz_loc(2), &
-      xyz_loc(3), VERTISSURFACE), KIND_SURFACE_ELEVATION, hsfc, istatus)
-  if ( abs(hsfc - xyz_loc(3)) > elev_max ) surface_obs_check = .false.
+  call model_interpolate(dummy_ens, 1, set_location(xyz_loc(1), xyz_loc(2), &
+      xyz_loc(3), VERTISSURFACE), QTY_SURFACE_ELEVATION, hsfc, istatus)
+  if ( abs(hsfc(1) - xyz_loc(3)) > elev_max ) surface_obs_check = .false.
 
 end if
 
 return
 end function surface_obs_check
 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!   pole_check - determine if we are within km_dist of either pole.
+!                function returns true if so, false if not.
+!
+!    lon       - longitude in degrees 
+!    lat       - latitude in degrees
+!    km_dist   - horizontal superob radius in kilometers
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+function pole_check(lon, lat, km_dist)
+
+use     types_mod, only : r8, earth_radius
+use  location_mod, only : location_type, get_dist, set_location, VERTISUNDEF
+
+implicit none
+
+real(r8), intent(in) :: lon, lat, km_dist
+logical              :: pole_check
+
+type(location_type) :: thisloc, pole
+
+
+! create a point at this lon/lat, and at the nearest pole
+thisloc = set_location(lon, lat, 0.0_r8, VERTISUNDEF)
+if (lat >= 0) then
+   pole = set_location(0.0_r8, 90.0_r8, 0.0_r8, VERTISUNDEF)
+else
+   pole = set_location(0.0_r8, -90.0_r8, 0.0_r8, VERTISUNDEF)
+endif
+
+! are we within km_distance of that pole?
+if ( get_dist(thisloc, pole, 1, 1, .true.) * earth_radius <= km_dist ) then
+   pole_check = .true.
+else
+   pole_check = .false.
+endif
+
+return
+end function pole_check
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!   superob_location_check - determine if a point is close to the greenwich
+!                            longitude based on the given latitude and distance.
+!                            if this location is close enough to longitude=0
+!                            we have to take action in order not to average points 
+!                            at 0 and 360 and end up with 180 by mistake.  as long
+!                            as we treat all points consistently when doing an average
+!                            the exact determination of 'close enough' isn't critical.
+!                            (the minimum and maximum extents in longitude for a given
+!                            point and radius is left as an exercise for the reader.  
+!                            hint, they are not along the same latitude circle.)
+!
+!    lon              - longitude in degrees (input)
+!    lat              - latitude in degrees (input)
+!    km_dist          - horizontal superob radius in kilometers (input)
+!    near_greenwich   - returns true if the given lon/lat is potentially within 
+!                       km_dist of longitude 0 (output)
+!    lon_degree_limit - number of degrees along a latitude circle that the
+!                       km_dist equates to, plus a tolerance (output)
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+subroutine superob_location_check(lon, lat, km_dist, near_greenwich, lon_degree_limit)
+
+use     types_mod, only : r8, PI, earth_radius, RAD2DEG, DEG2RAD
+use  location_mod, only : location_type, get_dist, set_location, VERTISUNDEF
+
+implicit none
+
+real(r8), intent(in)  :: lon, lat, km_dist
+logical,  intent(out) :: near_greenwich
+real(r8), intent(out) :: lon_degree_limit
+
+real(r8)            :: lat_radius
+real(r8), parameter :: fudge_factor = 1.2_r8   ! add a flat 20% 
+
+
+! the problem with trying to superob in a circle that's specified as a 
+! radius of kilometers is that it isn't parallel with longitude lines as 
+! you approach the poles.  also when averaging lon values near the prime 
+! meridian some values are < 360 and some are > 0 but are close in space.
+! simple suggestion for all but the highest latitudes:
+!  if dist between lat/lon and lat/0 is < hdist, add 360 to any values >= 0.
+!  if the final averaged point >= 360 subtract 360 before setting the location.
+! this still isn't good enough as you get closer to the poles; there
+! lat/lon averages are a huge pain. hdist could be shorter across the 
+! pole and therefore a lon that is 180 degrees away could still be 
+! 'close enough' to average in the same superob box.  probably the
+! best suggestion for this case is to convert lat/lon into 3d cartesian
+! coords, average the x/y/z's separately, and then convert back.
+! (no code like this has been implemented here.)
+!
+! obs_dist_in_km = earth_radius_in_km * dist_in_radians
+!  (which is what get_dist(loc1, loc2, 0, 0, .true.) returns)
+!
+! dist_in_radians = obs_dist_in_km / earth_radius_in_km
+!
+
+! figure out how far in degrees km_dist is at this latitude 
+! if we traveled along the latitude line.  and since on a sphere
+! the actual closest point to a longitude line isn't found by following 
+! a latitude circle, add a percentage.  as long as all points are
+! treated consistently it doesn't matter if the degree value is exact.
+
+lat_radius = earth_radius * cos(lat*DEG2RAD)
+lon_degree_limit = ((km_dist / lat_radius) * RAD2DEG) * fudge_factor
+
+! are we within 'lon_degree_limit' of the greenwich line?
+if (lon <= lon_degree_limit .or. (360.0_r8 - lon) <= lon_degree_limit) then
+   near_greenwich = .true.
+else
+   near_greenwich = .false.
+endif
+
+return
+end subroutine superob_location_check
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!   wrap_lon  - update the incoming longitude possibly + 360 degrees if
+!               the given limits define a region that crosses long=0.
+!               all values should be in units of degrees. 'lon' value
+!               should be between westlon and eastlon.
+!
+!    lon         - longitude to update, returns either unchanged or + 360
+!    westlon     - westernmost longitude of region in degrees
+!    eastlon     - easternmost longitude of region in degrees
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+subroutine wrap_lon(lon, westlon, eastlon)
+
+use     types_mod, only : r8
+
+!  uniform way to treat longitude ranges, in degrees, on a globe.
+!  adds 360 to the incoming lon if region crosses longitude 0 and
+!  given point is east of lon=0.
+
+real(r8), intent(inout) :: lon
+real(r8), intent(in)    :: westlon, eastlon
+
+real(r8) :: westl, eastl
+real(r8), parameter :: circumf = 360.0_r8
+
+! ensure the region boundaries and target point are between 0 and 360.
+! the modulo() function handles negative values ok; mod() does not.
+westl = modulo(westlon, circumf)
+eastl = modulo(eastlon, circumf)
+lon   = modulo(lon,     circumf)
+
+! if the 'region' is the entire globe you can return now.
+if (westl == eastl) return
+
+! here's where the magic happens:
+! normally the western boundary longitude (westl) has a smaller magnitude than
+! the eastern one (eastl).  but westl will be larger than eastl if the region
+! of interest crosses the prime meridian. e.g. westl=100, eastl=120 doesn't 
+! cross it, westl=340, eastl=10 does.  for regions crossing lon=0, a target lon 
+! west of lon=0 should not be changed; a target lon east of lon=0 needs +360 degrees.
+! e.g. lon=350 stays unchanged; lon=5 becomes lon=365.
+
+if (westl > eastl .and. lon <= eastl) lon = lon + circumf
+
+return
+end subroutine wrap_lon
+
+end program
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

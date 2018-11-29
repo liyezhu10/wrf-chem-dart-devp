@@ -1,14 +1,10 @@
-! DART software - Copyright 2004 - 2011 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
+!
+! $Id$
 
 PROGRAM grid_refl_obs
-
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
 
 ! Extract reflectivity obs from a DART obs_seq.out file and compute the coordinates of
 ! these observations on a WRF grid (mass grid points).
@@ -36,18 +32,14 @@ use obs_sequence_mod, only : read_obs_seq, obs_type, obs_sequence_type, get_firs
                              get_qc, destroy_obs_sequence, read_obs_seq_header, & 
                              get_last_obs, destroy_obs, get_num_qc, get_qc_meta_data
 use      obs_def_mod, only : obs_def_type, get_obs_def_error_variance, get_obs_def_time, &
-                             get_obs_def_location,  get_obs_kind, get_obs_name
+                             get_obs_def_location,  get_obs_def_type_of_obs
 use     obs_kind_mod, only : RADAR_REFLECTIVITY
 use        map_utils, only : proj_info, map_init, map_set, latlon_to_ij, &
                              PROJ_LATLON, PROJ_MERC, PROJ_LC, PROJ_PS, &
                              ij_to_latlon, gridwind_to_truewind
 use     location_mod, only : location_type, get_location, set_location_missing, &
                              write_location, operator(/=),     &
-                             vert_is_undef,    VERTISUNDEF,    &
-                             vert_is_surface,  VERTISSURFACE,  &
-                             vert_is_level,    VERTISLEVEL,    &
-                             vert_is_pressure, VERTISPRESSURE, &
-                             vert_is_height,   VERTISHEIGHT
+                             is_vertical
 use time_manager_mod, only : time_type, set_date, set_time, get_time, print_time, &
                              set_calendar_type, print_date, GREGORIAN, &
                              operator(*), operator(+), operator(-), &
@@ -60,10 +52,10 @@ use    f2kcli
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+character(len=256), parameter :: source   = &
+   "$URL$"
+character(len=32 ), parameter :: revision = "$Revision$"
+character(len=128), parameter :: revdate  = "$Date$"
 
 ! command-line parameters
 character(len=129) :: obs_seq_file
@@ -329,9 +321,9 @@ do o = 1, num_obs_in_time_period
   call get_obs_from_key(seq, keys(o), ob)
   call get_obs_def(ob, obs_def)
   ob_loc = get_obs_def_location(obs_def)
-  obs_kind_ind = get_obs_kind(obs_def)
+  obs_kind_ind = get_obs_def_type_of_obs(obs_def)
 
-  if ( (obs_kind_ind == RADAR_REFLECTIVITY) .and. (vert_is_height(ob_loc)) ) then
+  if ( (obs_kind_ind == RADAR_REFLECTIVITY) .and. (is_vertical(ob_loc, "HEIGHT")) ) then
   
     num_refl_obs = num_refl_obs + 1
 
@@ -407,3 +399,9 @@ contains
   end subroutine check
 
 END PROGRAM grid_refl_obs
+
+! <next few lines under version control, do not edit>
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
