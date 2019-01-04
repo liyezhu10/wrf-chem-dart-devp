@@ -4,7 +4,7 @@
 # by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id: assimilate.csh.template 12675 2018-06-18 17:12:21Z raeder@ucar.edu $
+# DART $Id$
 
 # This script is designed to interface cesm2_0_beta05 or later
 # and $dart/rma_trunk v11###.
@@ -867,8 +867,7 @@ wait
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/recam/models/cam-fv/shell_scripts/cesm2_0/assimilate.csh.template $
-# $Revision: 12675 $
-# $Date: 2018-06-18 11:12:21 -0600 (Mon, 18 Jun 2018) $
-
+# $URL$
+# $Revision$
+# $Date$
 

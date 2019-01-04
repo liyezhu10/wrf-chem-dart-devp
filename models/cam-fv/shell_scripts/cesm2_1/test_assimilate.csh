@@ -6,12 +6,6 @@
 #
 # DART $Id$
 
-# This script is designed to interface cesm2_0_beta05 or later
-# and $dart/rma_trunk v11###.
-
-# See 'RMA' for places where there are questions about RMA,
-# especially file naming.
-
 #=========================================================================
 # Block 0: Set command environment
 #=========================================================================
@@ -633,5 +627,4 @@ exit 0
 # $URL$
 # $Revision$
 # $Date$
-
 

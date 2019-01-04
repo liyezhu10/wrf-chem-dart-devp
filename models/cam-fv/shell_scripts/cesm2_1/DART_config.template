@@ -4,7 +4,7 @@
 # by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id: DART_config.template 12675 2018-06-18 17:12:21Z raeder@ucar.edu $
+# DART $Id$
 
 # ---------------------
 # Purpose
@@ -67,7 +67,6 @@ setenv DARTROOT               your_dart_path
 setenv DART_SCRIPTS_DIR       $DARTROOT/models/cam-fv/shell_scripts/your_setup_script_dir
 echo "DART_SCRIPTS_DIR = $DART_SCRIPTS_DIR"
 
-# /glade/p/image/Observations/NCEP+ACARS
 setenv BASEOBSDIR             your_observation_path
 
 setenv SAVE_EVERY_MTH_RESTART days_between_archiving_restarts
@@ -370,6 +369,7 @@ cat DART_instructions.txt
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/recam/models/cam-fv/shell_scripts/cesm2_0/DART_config.template $
-# $Revision: 12675 $
-# $Date: 2018-06-18 11:12:21 -0600 (Mon, 18 Jun 2018) $
+# $URL$
+# $Revision$
+# $Date$
+
