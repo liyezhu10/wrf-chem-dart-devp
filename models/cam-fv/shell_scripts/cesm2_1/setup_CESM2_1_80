@@ -4,7 +4,7 @@
 # by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id: setup_advanced 12673 2018-06-18 16:54:01Z thoar@ucar.edu $
+# DART $Id$
 #
 # This script can be run interactively, but on some systems (e.g. cheyenne)
 # it takes longer than is allowed for an interactive job.
@@ -1228,6 +1228,7 @@ cat DART_instructions.txt
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/recam/models/cam-fv/shell_scripts/cesm2_0/setup_advanced $
-# $Revision: 12673 $
-# $Date: 2018-06-18 10:54:01 -0600 (Mon, 18 Jun 2018) $
+# $URL$
+# $Revision$
+# $Date$
+
