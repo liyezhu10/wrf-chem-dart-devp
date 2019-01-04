@@ -10,16 +10,17 @@
 # it takes longer than is allowed for an interactive job.
 # In that case, it can be run as a batch job using the directives below,
 # or using a command like qcmd.
-
+#
 #--------------------------------------------
+#
 # The job name should be the name of this script(file), 
 # or this file may not be archived in $caseroot causing DART_config to fail.
 # Resources I want:
 #    select=#nodes
 #    ncpus=#CPUs/node
 #    mpiprocs=#MPI_tasks/node
-
-#PBS  -N setup_netcdf
+#
+#PBS  -N setup_netcdf_test
 #PBS  -A P86850054
 #PBS  -q share
 #PBS  -l select=1:ncpus=4:mpiprocs=4
@@ -28,8 +29,6 @@
 #PBS  -M thoar@ucar.edu
 #PBS  -o CESM2_1_80_netcdf.bld0
 #PBS  -j oe 
-
-#*******************************************************************************
 #
 # ---------------------
 # Purpose
@@ -643,7 +642,8 @@ echo 'Setting up the case ...'
 echo 'Ignore "WARNING:: mosart.buildnml . . .".  Those files will be provided later'
 
 echo 'Before case.setup, modules are'
-/glade/u/apps/ch/opt/lmod/7.5.3/lmod/lmod/libexec/lmod list
+source /etc/profile.d/modules.csh
+module list
 
 ./case.setup
 
@@ -659,17 +659,18 @@ endif
 # Preserve a copy of this script as it was run.
 if ($?LSB_JOBNAME) then
    # This only works if the job name in the BSUB or PBS directives 
-   # is the name of this script.
+   # is the name of this script. Cannot figure out another way to do this.
    setenv setup_file_name $LSB_JOBNAME
 else if ($?PBS_JOBNAME) then
    setenv setup_file_name $PBS_JOBNAME
 else
    setenv setup_file_name $0:t
 endif
-
-if ($COPYV == "FALSE") \
-   echo "Copying ${DART_CESM_scripts}/$setup_file_name ${setup_file_name}.original"
 ${COPY} -f       ${DART_CESM_scripts}/$setup_file_name ${setup_file_name}.original
+
+#TJH question: does this not work all the time
+#set ThisFileName = $0:t
+#${COPY} $ThisFileName       ${caseroot}/${ThisFileName}.original
 
 # Define how often sets of restart files will be archived,
 # in order to conserve disk space during a multi-cycle job.
@@ -714,7 +715,7 @@ if ($?LSB_JOBNAME) then
        -e '/ptile/c/#BSUB  -R "span[ptile=1]"'             \
        case.st_archive >! temp.$$  || exit 55
    ${MOVE} temp.$$ case.st_archive
-   ./xmlchange --file env_batch.xml --subgroup case.st_archive --id JOB_QUEUE --val caldera
+   ./xmlchange --subgroup case.st_archive --id JOB_QUEUE --val caldera
    
 else if ($?PBS_JOBNAME) then
    # It would be nice to put the $PBS_JOBID value into the job name and st err/out file names,
@@ -725,12 +726,12 @@ else if ($?PBS_JOBNAME) then
        -e "/\-N /a\#PBS  -o ./${case}.st_arch.stdouterr"                       \
        case.st_archive >! temp.$$  || exit 55
    ${MOVE} temp.$$ case.st_archive
-   ./xmlchange --file env_batch.xml --subgroup case.st_archive --id JOB_QUEUE --val share
+   ./xmlchange --subgroup case.st_archive --id JOB_QUEUE --val share
    
 endif
 chmod 755 case.st_archive
 
-./xmlchange --file env_batch.xml --subgroup case.st_archive --id JOB_WALLCLOCK_TIME --val 1:00
+./xmlchange --subgroup case.st_archive --id JOB_WALLCLOCK_TIME --val 1:00
 
 # ==============================================================================
 # Modify namelist templates for each instance.
@@ -893,7 +894,7 @@ while ($inst <= $num_instances)
    #    echo " solar_data_file = '${cesmdata}/atm/cam/solar/spectral_irradiance_Lean_1610-2140_ann_c100408.nc'" >> ${fname}
    # endif
 
-# ===========================================================================
+   # ===========================================================================
    set fname = "user_nl_clm${inst_string}"
    # ===========================================================================
    # LAND Namelist
@@ -973,7 +974,9 @@ echo " histaux_r2x     = .true."   >> ${fname}
 ./preview_namelists || exit 75
 
 # ==============================================================================
-# Stage the restarts now that the run directory exists
+# Stage the restarts now that the run directory exists.
+# Create a script to do this since it may be needed to recover or restart. 
+# Create the script and then run it here.
 # ==============================================================================
 
 set init_time = ${reftimestamp}
@@ -998,8 +1001,8 @@ set restart_time = $init_time
 # Get the settings for this case from the CESM environment
 # ---------------------------------------------------------
 cd ${caseroot}
-setenv RUNDIR       \`./xmlquery --value RUNDIR\`
-setenv CONTINUE_RUN \`./xmlquery --value CONTINUE_RUN\`
+setenv RUNDIR       \`./xmlquery RUNDIR       --value\`
+setenv CONTINUE_RUN \`./xmlquery CONTINUE_RUN --value\`
 
 ls \$RUNDIR/*.i.\${restart_time}.nc
 if (\$status == 0) then
@@ -1012,8 +1015,8 @@ else
       setenv DOUT_S FALSE
       mv \$hide_loc:h/* \${RUNDIR}
    else
-      setenv DOUT_S       \`./xmlquery --value DOUT_S\`
-      setenv DOUT_S_ROOT  \`./xmlquery --value DOUT_S_ROOT\`
+      setenv DOUT_S       \`./xmlquery DOUT_S       --value\`
+      setenv DOUT_S_ROOT  \`./xmlquery DOUT_S_ROOT  --value\`
    endif
 endif
 
@@ -1115,12 +1118,13 @@ else     # CONTINUE_RUN == FALSE
    # After running this script resubmit the job to rerun.
    #----------------------------------------------------------------------
 
+   echo ' '
+
    @ inst=1
    while (\$inst <= $num_instances)
 
       set inst_string = \`printf _%04d \$inst\`
 
-      echo ' '
       echo "Staging initial files for instance \$inst of $num_instances"
 
       ${LINK} ${stagedir}/${refcase}.clm2\${inst_string}.r.${init_time}.nc  .
@@ -1158,6 +1162,7 @@ echo ''
 # of CLM.  It wanted authentication(?) to access a private repository.
 # A better solution would be to find out why(whether) it thinks CLM is 
 # a private repository.
+
 ./case.build --skip-provenance-check
 
 if ( $status != 0 ) then
@@ -1166,15 +1171,15 @@ if ( $status != 0 ) then
 endif
 
 # ==============================================================================
-# Check variables that should have been set by this script.
+# Check some XML settings which should have been set by this script.
 # ==============================================================================
+
 echo ' '
-echo "ENV_RUN: variables from env_run.xml, which may be of interest:"
+echo 'CESM settings which are of special interest:'
 echo ' '
-foreach var = ( 'CONTINUE_RUN' 'RESUBMIT' 'RUN_REF' 'RUN_STARTDATE' \
-                'STOP_OPTION' 'STOP_N' 'SSTICE_' 'DOUT_S_' 'DOUT_L_' \
-                'RUNDIR' 'MPI_RUN_COMMAND' 'AVGHIST')
-    ./xmlquery --partial  $var
+foreach var ( CONTINUE_RUN RESUBMIT RUN_REF RUN_STARTDATE STOP_OPTION \
+             STOP_N SSTICE DOUT RUNDIR MPI_RUN_COMMAND AVGHIST ASSIM)
+   ./xmlquery --partial $var  | grep -v 'Results in' | grep -v '^$'
 end
 echo ' '
 
@@ -1182,47 +1187,51 @@ echo ' '
 # What to do next
 # ==============================================================================
 
-echo ""
-echo "Time to check the case."
-echo ""
-echo "1)  Peruse the output from this setup script for non-fatal errors and warnings:"
-echo "       ERROR, WARNING, 'No such file' (except for MOSART)" 
-echo "       'File status unknown' can be ignored."
-echo "       'ERROR: cice.buildlib failed' can be ignored, unless you've changed the CICE code"
-echo ""
-echo "2)  cd ${rundir}"
-echo "    Check the files that were staged; follow the links to confirm the data sources. "
-echo "    Check the compatibility between them and the namelists and pointer files."
-echo ""
-echo "3)  cd ${caseroot}"
-echo "    Verify the contents of env_run.xml, as printed from this build process (see ENV_RUN)"
-echo "    and any other variables of interest in env_run.xml"
-echo ""
-echo "4)  The default initial configuration is to do assimilation."
-echo "    Verify the ${caseroot}/input.nml contents."
-echo "    Assimilation can be turned off in ${caseroot}/env_run.xml. "
-echo ""
-echo "5)  Check that env_run.xml has the assimilation and archiving characteristics you want."
-echo ""
-echo "6)  Check that env_batch.xml has the job, and st_archive characteristics you want."
-echo ""
-echo "7)  Run ./case.submit"
-echo ""
-echo "8)  After the job has run, check to make sure it worked."
-echo ""
-echo "9)  If the first cycle generated an ensemble by perturbing a single state, "
-echo "       change input.nml as described in the instructions in it, "
-echo "       to make cycles 2,...,N use the latest ensemble, unperturbed."
+cat << EndOfText >! CESM_instructions.txt
 
-echo "10) To extend the run in $stop_n '"$stop_option"' steps,"
-echo "    change the env_run.xml variables:"
-echo "      DATA_ASSIMILATION_CYCLES = the value you want."
-echo "      CONTINUE_RUN   = TRUE "
-echo "      RESUBMIT       = the number of jobs to run (each of which has DATA_ASSIMILATION_CYCLES cycles in it"
-echo "    Change values in env_batch.xml to accommodate longer runs."
-echo ""
+-------------------------------------------------------------------------
+Time to check the case.
 
-cat ${caseroot}/DART_instructions.txt
+1)  Scan the output from this setup script for errors and warnings:
+    ERROR, WARNING, 'No such file' (except for MOSART) 
+    'File status unknown' can be ignored.
+    'ERROR: cice.buildlib failed' can be ignored, unless you've changed the CICE code
+
+2)  cd ${RUNDIR}
+    Check the files that were staged; follow the links to confirm the data sources. 
+    Check the compatibility between them and the namelists and pointer files.
+
+3)  cd ${caseroot}
+    Verify the CESM settings.
+    ./xmlquery --partial <parial_string_of_interest> (is particularly useful)
+
+4)  The default initial configuration is to assimilate.
+    Verify the ${caseroot}/input.nml contents.
+    Assimilation can be turned off by
+    ./xmlchange DATA_ASSIMILATION=FALSE
+    -or-
+    ./xmlchange DATA_ASSIMILATION_SCRIPT=${caseroot}/no_assimilate.csh
+
+5)  Submit the job (and get mail when it starts and stops):
+    ./case.submit -M begin,end
+
+6)  After the job has run, check to make sure it worked.
+
+7)  If the first cycle generated an ensemble by perturbing a single state, 
+    change input.nml as described in the instructions in it, 
+    to make cycles 2,...,N use the latest ensemble, unperturbed.
+
+8)  To extend the run in $stop_n '$stop_option' steps, use xmlchange to 
+    change the CESM runtime variables:
+
+    ./xmlchange DATA_ASSIMILATION_CYCLES= the value you want.
+    ./xmlchange CONTINUE_RUN=TRUE 
+    ./xmlchange RESUBMIT= the number of JOBS to run (each JOB performs DATA_ASSIMILATION_CYCLES cycles)
+
+EndOfText
+
+cat CESM_instructions.txt
+cat DART_instructions.txt
 
 exit 0
 
