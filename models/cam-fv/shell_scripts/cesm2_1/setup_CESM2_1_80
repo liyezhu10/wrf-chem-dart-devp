@@ -21,14 +21,14 @@
 #    ncpus=#CPUs/node
 #    mpiprocs=#MPI_tasks/node
 #
-#PBS  -N setup_80_36
+#PBS  -N setup_CESM2_1_80
 #PBS  -A P86850054
 #PBS  -q share
 #PBS  -l select=1:ncpus=4:mpiprocs=4
 #PBS  -l walltime=00:20:00
 #PBS  -m ae
 #PBS  -M thoar@ucar.edu
-#PBS  -o setup_80.bld0
+#PBS  -o setup_80_36.bld0
 #PBS  -j oe
 #
 # ---------------------
@@ -112,30 +112,31 @@
 # case          The value of "case" will be used many ways; directory and file
 #               names both locally and on HPSS, and script names; so consider
 #               its length and information content.
-# compset       Selects the CESM model components, vertical resolution, and physics packages.
-#               Must be a CAM-FV "F" compset, either supported, or use the
-#               --run-unsupported option.
+# compset       Selects the CESM model components, vertical resolution, and
+#               physics packages.  Must be a CAM-FV "F" compset, either
+#               supported, or use the --run-unsupported option.
 #               Don't expect all CESM-supported compsets to work with DART.
-#               For example, an active land ice model requires the NOLEAP calendar
-#               (as of 2018-6), while DART requires GREGORIAN. But there's no need
-#               for active land ice in atmospheric assimilations.
+#               For example, an active land ice model requires the NOLEAP
+#               calendar (as of 2018-6), while DART requires GREGORIAN.
+#               Fortunately, there's no need for active land ice in CAM assimilations.
 #               A compset defined specifically for CAM assimilations is
 #               FHIST_DARTC6 = HIST_CAM60_CLM50%SP_CICE%PRES_DOCN%DOM_SROF_SGLC_SWAV
 #               For a list of the pre-defined component sets:
 #               > $CIMEROOT/scripts/create_newcase -list
 #               To create a variant compset, see the CESM documentation
-#               https://ncar.github.io/CAM/doc/build/html/users_guide/atmospheric-configurations.html
+#               ncar.github.io/CAM/doc/build/html/users_guide/atmospheric-configurations.html
 #               and carefully incorporate any needed changes into this script.
 # resolution    Defines the horizontal resolution and dynamical core;
-#               see http://esmci.github.io/cime/users_guide/grids.html.
+#               see esmci.github.io/cime/users_guide/grids.html.
 #               f19_f19  ... FV core at ~ 2 degree (19 means 1.9 degrees of latitude).
 #               f09_f09  ... FV core at ~ 1 degree (the 2nd f09 means CLM uses a .9 degree latitude grid)
 #               To use the high resolution SST data ocean, use resolution "f09_d025" or "f19_d025"
-#               and the user_grid variable.
+#               and the user_grid variable. The 'd025' resolution requires a
+#               sourcemod to the CLM namelist-generating resource.
 #               > set user_grid = "${user_grid} --gridfile /glade/work/raeder/Models/CAM_init/SST"
 #               > set user_grid = "${user_grid}/config_grids+fv1+2deg_oi0.25_gland20.xml"
-# cesmtag       The version of the CESM source code to use when building the code.
-#               The assimilate.csh in this directory will handle only cesm2_0 and later.
+# cesmtag       The version of the CESM source code to use when building.
+#               The assimilate.csh in this directory works with CESM V2.1
 # num_instances The number of ensemble members.
 #
 # ==============================================================================
@@ -149,8 +150,8 @@ setenv resolution      f09_d025
 setenv cesmtag         cesm2.1.0
 setenv num_instances   80
 
-# If cemstag >= cesm2_0_alpha10f and compset = FHIST_DARTC6 (or another non-supported):
-# and resolution is non-standard (e.g. d025)
+# If cemstag >= cesm2_0_alpha10f and compset = FHIST_DARTC6 (or another 
+# non-supported): and resolution is non-standard (e.g. d025)
 setenv compset_args     "--compset $compset"
 setenv compset_args "${compset_args} --run-unsupported"
 
@@ -160,29 +161,34 @@ setenv compset_args "${compset_args} --run-unsupported"
 # mach          Computer name
 # cesmdata      Location of some supporting CESM data files.
 # cesmroot      Location of the CESM code base.  This version of the script
-#               only supports version cesm2_0 or later, which is available from
+#               only supports version cesm2_1 or later, which is available from
 #               https://github.com/ESCOMP/cesm.
-# sourcemods    DART no longer requires a SourceMods directory in order to work with CESM.
-#               If you have modifications to CESM, they should be provided in a
-#               CESM-structured SourceMods directory, which this script expects to be in
-#               $user/$cesmtag/SourceMods.
 # caseroot      The CESM $CASEROOT directory, where the CESM+DART configuration files
 #               will be stored and the build commands will be executed.
 #               This should probably not be in scratch.
-#               This script will delete an existing caseroot with the same name,
-#               so this script and other things you want to preserve should be kept elsewhere.
-# rundir        The CESM run directory.  Will need large amounts of disk space,
-#               generally on a scratch partition.
-# exeroot       The CESM executable directory, where the CESM executables will be built.
-#               Medium amount of space needed, generally on a scratch partition.
-# archdir       The CESM short-term archive directory.
-#               Large amount of space needed, generally on a scratch partition.
-#               Files will remain here until you move them to permanent storage
-#               (or are purged).
+#               This script will terminate given an existing caseroot.
+# sourcemods    DART-CAM no longer requires SourceMods to work with CESM.
+#               If you have modifications to CESM, they should be provided in a
+#               CESM-structured SourceMods directory, which this script
+#               expects to be in $user/$cesmtag/SourceMods.
+# cime_output_root    The output directory for CESM. Used as the basis for
+#                     RUNDIR, EXEROOT, and DOUT_S_ROOT
+#
+#               RUNDIR:  The CESM run directory.  Needs large amounts of disk
+#               EXEROOT: The CESM executable directory.
+#               DOUT_S_ROOT: The CESM short-term archive directory. LARGE amount
+#                            of disk. Files remain here until you move them
+#                            or they are purged.
+#               RUNDIR      Defaults to $CIME_OUTPUT_ROOT/$CASE/run
+#               EXEROOT     Defaults to $CIME_OUTPUT_ROOT/$CASE/bld
+#               DOUT_S_ROOT Defaults to $CIME_OUTPUT_ROOT/archive/$CASE   If you
+#                           change DOUT_S_ROOT, be aware that this may interfere
+#                           with the ability to clone your case.
+#
 # dartroot      Location of the root of _your_ DART installation.
-# baseobsdir    Part of the directory name containing the obs_seq.out files to be used by the
-#               assimilation.  Assimilate.csh looks for a directory with the year and month:
-#               $baseobsdir/YYYYMM_6H_CESM.
+# baseobsdir    Part of the directory name containing the obs_seq.out files
+#               to be used by the assimilation.  assimilate.csh looks for a
+#               directory with the year and month: $baseobsdir/YYYYMM_6H_CESM.
 #               Will be inserted into DART_config and assimilate.csh.
 # ==============================================================================
 
@@ -421,9 +427,6 @@ ${COPY} $setup_file_name ${caseroot}/${setup_file_name}.original
 
 echo "setup_file_name is $setup_file_name"
 
-echo "TJH early exit"
-exit
-
 # ==============================================================================
 # Configure the case.
 # ==============================================================================
@@ -461,7 +464,7 @@ echo "From create_newcase, MAX_MPITASKS_PER_NODE = $max_mpitasks_per_node"
 echo "From create_newcase, settings related to TASKS = ..."
 ./xmlquery --partial TASK
 
-#TJH ... the tasks 
+#TJH ... the tasks
 # ./xmlchange MAX_MPITASKS_PER_NODE=$use_tasks_per_node
 
 # Make sure the case is configured with a data ocean.
