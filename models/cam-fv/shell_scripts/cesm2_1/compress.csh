@@ -33,11 +33,9 @@
 # ? In which directory will assimilate.csh be when this executes?
 # ? Where will it find compres.csh?
 
-set comp_cmd = 'gzip -k'
-# set comp_cmd = 'gunzip -k'
-
 if ($#argv == 5) then
    # Called from assimilate.csh (or other script).
+   set comp_cmd = 'gzip -k'
    set case_name     = $1
    set ymds          = $2
    set ensemble_size = $3
@@ -53,10 +51,9 @@ else if ($#argv == 0) then
    set ensemble_size = 80
    set sets          = (clm2 cpl cam cice)
    set stages        = (preassim output)
-   set data_dir      = /gpfs/fs1/scratch/raeder/${case_name}/run/Compressed2
-   # set data_dir      = /gpfs/fs1/scratch/raeder/${case_name}/archive/rest/2010-07-15-00000
+   set data_dir      = /glade/scratch/${USER}/${case_name}/run/Compressed2
 
-else if ($#argv == 0) then
+else 
    echo "Usage: Cannot run interactively."
    echo "       > vi compress.csh {set it up}; qsub compress.csh"
    echo '   OR, in a calling script'
@@ -82,6 +79,13 @@ echo "   date          = $ymds"
 echo "   ensemble_size = $ensemble_size"
 echo "   sets          = $sets"
 echo "   stages        = $stages"
+echo "   data dir      = $data_dir"
+
+echo "TJH SKIPPING COMPRESSION ..."
+echo "TJH SKIPPING COMPRESSION ..."
+echo "TJH SKIPPING COMPRESSION ..."
+echo "TJH SKIPPING COMPRESSION ..."
+exit 0
 
 cd $data_dir
 

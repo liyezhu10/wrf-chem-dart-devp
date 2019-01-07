@@ -6,6 +6,68 @@
 #
 # DART $Id$
 
+# ---------------------
+# Purpose
+# ---------------------
+# This template is lightly modified by the setup scripts to be appropriate
+# for specific hardware and other configurations. The modified result is
+# then given execute permission and is appropriate to use for an assimilation.
+# All of this is automatically performed by the DART-supplied setup scripts.
+# 
+# Tag DART's state output with names using CESM's convention:  
+#    ${case}.${scomp}[_$inst].${filetype}[.$dart_file].${date}.nc 
+#    These should all be named with $scomp = "cam" to distinguish
+#    them from the same output from other components in multi-component assims.
+
+# machine-specific dereferencing
+if ($?SLURM_JOB_ID) then
+
+   # SLURM environment variables:
+   # env | grep SLURM | sort
+
+   setenv ORIGINALDIR $SLURM_SUBMIT_DIR
+   setenv     JOBNAME $SLURM_JOB_NAME
+   setenv       JOBID $SLURM_JOBID
+   setenv     MYQUEUE $SLURM_JOB_PARTITION
+   setenv   NODENAMES $SLURM_NODELIST
+   setenv   LAUNCHCMD "mpirun -np $SLURM_NTASKS -bind-to core"
+
+else if ($?PBS_NODEFILE) then
+
+   # PBS environment variables:
+   # env | grep PBS | sort
+
+   setenv ORIGINALDIR $PBS_O_WORKDIR
+   setenv     JOBNAME $PBS_JOBNAME
+   setenv       JOBID $PBS_JOBID
+   setenv     MYQUEUE $PBS_O_QUEUE
+   setenv     NUMCPUS $NCPUS
+   setenv    NUMTASKS `cat  $PBS_NODEFILE | wc -l`
+   setenv    NUMNODES `uniq $PBS_NODEFILE | wc -l`
+   setenv MPIEXEC_MPT_DEBUG 0
+   setenv MP_DEBUG_NOTIMEOUT yes
+   setenv   LAUNCHCMD mpiexec_mpt
+
+   echo "jobname  is $JOBNAME"
+   echo "numcpus  is $NUMCPUS"
+   echo "numtasks is $NUMTASKS"
+   echo "numnodes is $NUMNODES"
+
+else if ($?LSB_HOSTS) then
+
+   # LSF environment variables:
+   # env | grep LS | grep -v LS_COLORS | sort
+
+   setenv ORIGINALDIR $LS_SUBCWD
+   setenv     JOBNAME $LSB_OUTPUTFILE:ar
+   setenv       JOBID $LSB_JOBID
+   setenv     MYQUEUE $LSB_QUEUE
+   setenv   NODENAMES ${LSB_HOSTS}
+   setenv MP_DEBUG_NOTIMEOUT yes
+   setenv  LAUNCHCMD   mpirun.lsf
+
+endif
+
 #=========================================================================
 # Block 0: Set command environment
 #=========================================================================
@@ -23,23 +85,20 @@ setenv CASEROOT $1
 # "Fix" that here, so the rest of the script isn't confusing.
 @ cycle = $2 + 1
 
-# Tag DART's state output with names using CESM's convention:  
-#    ${case}.${scomp}[_$inst].${filetype}[.$dart_file].${date}.nc 
-#    These should all be named with $scomp = "cam" to distinguish
-#    them from the same output from other components in multi-component assims.
-set scomp = "cam"
-
-# In CESM1_4 xmlquery must be executed in $CASEROOT.
 cd ${CASEROOT}
-setenv CASE           $CASEROOT:t
-setenv ensemble_size  `./xmlquery NINST_ATM     --value`
-setenv CAM_DYCORE     `./xmlquery CAM_DYCORE    --value`
-setenv EXEROOT        `./xmlquery EXEROOT       --value`
-setenv RUNDIR         `./xmlquery RUNDIR        --value`
-setenv archive        `./xmlquery DOUT_S_ROOT   --value`
-setenv TOTALPES       `./xmlquery TOTALPES      --value`
-setenv CONT_RUN       `./xmlquery CONTINUE_RUN  --value`
-setenv DATA_ASSIMILATION_CYCLES        `./xmlquery DATA_ASSIMILATION_CYCLES --value`
+
+setenv scomp                     `./xmlquery COMP_ATM      --value`
+setenv CASE                      `./xmlquery CASE          --value`
+setenv ensemble_size             `./xmlquery NINST_ATM     --value`
+setenv CAM_DYCORE                `./xmlquery CAM_DYCORE    --value`
+setenv EXEROOT                   `./xmlquery EXEROOT       --value`
+setenv RUNDIR                    `./xmlquery RUNDIR        --value`
+setenv archive                   `./xmlquery DOUT_S_ROOT   --value`
+setenv TOTALPES                  `./xmlquery TOTALPES      --value`
+setenv CONT_RUN                  `./xmlquery CONTINUE_RUN  --value`
+setenv TASKS_PER_NODE            `./xmlquery NTASKS_ESP   --value`
+setenv DATA_ASSIMILATION_CYCLES  `./xmlquery DATA_ASSIMILATION_CYCLES --value`
+
 cd $RUNDIR
 
 # A switch to save all the inflation files
@@ -62,7 +121,6 @@ set BASEOBSDIR = /glade/p/cisl/dares/Observations/NCEP+ACARS+GPS
 # The FORCE options listed are required.
 # The VERBOSE options are useful for debugging, but are optional because
 # some systems don't like the -v option to any of the following.
-# E.g. NCAR's "cheyenne".
 # ==============================================================================
 
 set nonomatch       # suppress "rm" warnings if wildcard does not match anything
@@ -70,39 +128,7 @@ set   MOVE = '/usr/bin/mv -f'
 set   COPY = '/usr/bin/cp -f --preserve=timestamps'
 set   LINK = '/usr/bin/ln -fs'
 set   LIST = '/usr/bin/ls '
-set REMOVE = '/usr/bin/rm -fr'
-
-# If your shell commands don't like the -v option and you want copies to be echoed,
-# set this to be TRUE.  Otherwise, it should be FALSE.
-set MOVEV   = FALSE
-set COPYV   = FALSE
-set LINKV   = FALSE
-set REMOVEV = FALSE
-
-switch ($HOSTNAME)
-   case ys*:
-      # NCAR "yellowstone"
-      set TASKS_PER_NODE = `echo $LSB_SUB_RES_REQ | sed -ne '/ptile/s#.*\[ptile=\([0-9][0-9]*\)]#\1#p'`
-      setenv MP_DEBUG_NOTIMEOUT yes
-      set  LAUNCHCMD = mpirun.lsf
-      breaksw
-
-   case ch*:
-
-      module list
-
-      set TASKS_PER_NODE = 36
-      setenv MPIEXEC_MPT_DEBUG 0
-      setenv MP_DEBUG_NOTIMEOUT yes
-      set  LAUNCHCMD = mpiexec_mpt
-      breaksw
-
-   default:
-      # NERSC "hopper"
-      set LAUNCHCMD  = "aprun -n $TOTALPES"
-      breaksw
-
-endsw
+set REMOVE = '/usr/bin/rm -fvr'
 
 #=========================================================================
 # Block 1: Populate a run-time directory with the input needed to run DART.
@@ -110,9 +136,12 @@ endsw
 
 echo "`date` -- BEGIN COPY BLOCK"
 
+# Put a pared down copy (no comments) of input.nml in this assimilate_cam directory.
+# The contents may change from one cycle to the next, so always start from 
+# the known configuration in the CASEROOT directory.
+
 if (  -e   ${CASEROOT}/input.nml ) then
-   # ${COPY} ${CASEROOT}/input.nml .
-   # Put a pared down copy (no comments) of input.nml in this assimilate_cam directory.
+   
    sed -e "/#/d;/^\!/d;/^[ ]*\!/d" \
        -e '1,1i\WARNING: Changes to this file will be ignored. \n Edit \$CASEROOT/input.nml instead.\n\n\n' \
        ${CASEROOT}/input.nml >! input.nml  || exit 20
@@ -125,6 +154,7 @@ endif
 echo "`date` -- END COPY BLOCK"
 
 # If possible, use the round-robin approach to deal out the tasks.
+# This facilitates using multiple nodes for the simultaneous I/O operations. 
 
 if ($?TASKS_PER_NODE) then
    if ($#TASKS_PER_NODE > 0) then
@@ -132,14 +162,14 @@ if ($?TASKS_PER_NODE) then
       sed -e "s#layout.*#layout = 2#" \
           -e "s#tasks_per_node.*#tasks_per_node = $TASKS_PER_NODE#" \
           input.nml.$$ >! input.nml || exit 30
-      $REMOVE input.nml.$$
+      ${REMOVE} input.nml.$$
    endif
 endif
 
 #=========================================================================
 # Block 2: Identify requested output stages, to warn about redundant output.
 #=========================================================================
-# 
+
 set MYSTRING = `grep stages_to_write input.nml`
 set MYSTRING = (`echo $MYSTRING | sed -e "s#[=,'\.]# #g"`)
 set STAGE_input     = FALSE
@@ -148,7 +178,9 @@ set STAGE_preassim  = FALSE
 set STAGE_postassim = FALSE
 set STAGE_analysis  = FALSE
 set STAGE_output    = FALSE
+
 # Assemble lists of stages to write out, which are not the 'output' stage.
+
 set stages_except_output = "{"
 @ stage = 2
 while ($stage <= $#MYSTRING) 
@@ -186,9 +218,11 @@ while ($stage <= $#MYSTRING)
    endif
    @ stage++
 end
+
 # Add the closing }
 set stages_all = "${stages_all}}"
 set stages_except_output = "${stages_except_output}}"
+
 # Checking
 echo "stages_except_output = $stages_except_output"
 echo "stages_all = $stages_all"
@@ -242,23 +276,16 @@ set OBSFNAME = `printf obs_seq.%04d-%02d-%02d-%05d ${ATM_YEAR} ${ATM_MONTH} ${AT
 set OBS_FILE = ${BASEOBSDIR}/${YYYYMM}_6H_CESM/${OBSFNAME}
 echo "OBS_FILE = $OBS_FILE"
 
-\rm -f obs_seq.out
-
-if (  -e   ${OBS_FILE} ) then
-   if ($LINKV == FALSE ) \
-      echo "Linking $OBS_FILE obs_seq.out"
-   $LINK            $OBS_FILE obs_seq.out
+if (  -e ${OBS_FILE} ) then
+   ${LINK} ${OBS_FILE} obs_seq.out
 else
-   echo "ERROR ... no observation file $OBS_FILE"
-   echo "ERROR ... no observation file $OBS_FILE"
+   echo "ERROR ... no observation file ${OBS_FILE}"
+   echo "ERROR ... no observation file ${OBS_FILE}"
    exit 70
 endif
 
 #=========================================================================
-# Block 5: Stage the files needed for SAMPLING ERROR CORRECTION
-
-#=========================================================================
-# Block 6: DART INFLATION
+# Block 5: DART INFLATION
 # This block is only relevant if 'inflation' is turned on AND 
 # inflation values change through time:
 # filter_nml
@@ -282,15 +309,52 @@ endif
 # CESM's st_archive should archive the inflation restart files
 # like any other "restart history" (.rh.) files; copying the latest files
 # to the archive directory, and moving all of the older ones.
-
 #=========================================================================
+
+# If we need to run fill_inflation_restart, CAM:static_init_model() 
+# always needs a caminput.nc and a cam_phis.nc for geometry information, etc.
+
+set MYSTRING = `grep cam_template_filename input.nml`
+set MYSTRING = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+set CAMINPUT = $MYSTRING[2]
+${LINK} ${CASE}.cam_0001.i.${ATM_DATE_EXT}.nc $CAMINPUT
+
+# All of the .h0. files contain the same PHIS field, so we can link to any of them.
+
+set hists = `${LIST} ${CASE}.cam_0001.h0.*.nc`
+set MYSTRING = `grep cam_phis_filename input.nml`
+set MYSTRING = `echo $MYSTRING | sed -e "s#[=,']# #g"`
+${LINK} $hists[1] $MYSTRING[2]
+
+# Now, actually check the inflation settings
+
+set  MYSTRING = `grep inf_flavor input.nml`
+set  MYSTRING = `echo $MYSTRING | sed -e "s#[=,'\.]# #g"`
+set  PRIOR_INF = $MYSTRING[2]
+set  POSTE_INF = $MYSTRING[3]
 
 set  MYSTRING = `grep inf_initial_from_restart input.nml`
 set  MYSTRING = `echo $MYSTRING | sed -e "s#[=,'\.]# #g"`
-set  PRIOR_TF = `echo $MYSTRING[2] | tr '[:lower:]' '[:upper:]'`
-set  POSTE_TF = `echo $MYSTRING[3] | tr '[:lower:]' '[:upper:]'`
 
-if ($PRIOR_TF == FALSE ) then
+# If no inflation is requested, the inflation restart source is ignored
+
+if ( $PRIOR_INF == 0 ) then
+   set  PRIOR_INFLATION_FROM_RESTART = ignored
+   set  USING_PRIOR_INFLATION = false
+else
+   set  PRIOR_INFLATION_FROM_RESTART = `echo $MYSTRING[2] | tr '[:upper:]' '[:lower:]'`
+   set  USING_PRIOR_INFLATION = true
+endif
+
+if ( $POSTE_INF == 0 ) then
+   set  POSTE_INFLATION_FROM_RESTART = ignored
+   set  USING_POSTE_INFLATION = false
+else
+   set  POSTE_INFLATION_FROM_RESTART = `echo $MYSTRING[3] | tr '[:upper:]' '[:lower:]'`
+   set  USING_POSTE_INFLATION = true
+endif
+
+if ($USING_PRIOR_INFLATION == false ) then
    set stages_requested = 0
    if ( $STAGE_input    == TRUE ) @ stages_requested++
    if ( $STAGE_forecast == TRUE ) @ stages_requested++ 
@@ -304,7 +368,8 @@ if ($PRIOR_TF == FALSE ) then
       echo " "
    endif
 endif
-if ($POSTE_TF == FALSE ) then
+
+if ($USING_POSTE_INFLATION == false ) then
    set stages_requested = 0
    if ( $STAGE_postassim == TRUE ) @ stages_requested++
    if ( $STAGE_analysis  == TRUE ) @ stages_requested++ 
@@ -319,50 +384,45 @@ if ($POSTE_TF == FALSE ) then
    endif
 endif
 
-# CAM:static_init_model() always needs a caminput.nc and a cam_phis.nc
-# for geometry information, etc.
-
-set MYSTRING = `grep cam_template_filename input.nml`
-set MYSTRING = `echo $MYSTRING | sed -e "s#[=,']# #g"`
-set CAMINPUT = $MYSTRING[2]
-$LINK ${CASE}.cam_0001.i.${ATM_DATE_EXT}.nc $CAMINPUT
-
-# All of the .h0. files contain the same PHIS field, so we can link to any of them.
-
-set hists = `$LIST ${CASE}.cam_0001.h0.*.nc`
-set MYSTRING = `grep cam_phis_filename input.nml`
-set MYSTRING = `echo $MYSTRING | sed -e "s#[=,']# #g"`
-$LINK $hists[1] $MYSTRING[2]
-
 # IFF we want PRIOR inflation:
 
-   if ($PRIOR_TF == TRUE) then
+if ($USING_PRIOR_INFLATION == true) then
+   if ($PRIOR_INFLATION_FROM_RESTART == false) then
+      
+      echo "inf_flavor(1) = $PRIOR_INF, using namelist values."
+
+   else
       # Look for the output from the previous assimilation (or fill_inflation_restart)
       # If inflation files exists, use them as input for this assimilation
-      ($LIST -rt1 *.dart.rh.${scomp}_output_priorinf_mean* | tail -n 1 >! latestfile) > & /dev/null
-      ($LIST -rt1 *.dart.rh.${scomp}_output_priorinf_sd*   | tail -n 1 >> latestfile) > & /dev/null
+      (${LIST} -rt1 *.dart.rh.${scomp}_output_priorinf_mean* | tail -n 1 >! latestfile) > & /dev/null
+      (${LIST} -rt1 *.dart.rh.${scomp}_output_priorinf_sd*   | tail -n 1 >> latestfile) > & /dev/null
       set nfiles = `cat latestfile | wc -l`
+
       if ( $nfiles > 0 ) then
+
          set latest_mean = `head -n 1 latestfile`
          set latest_sd   = `tail -n 1 latestfile`
          # Need to COPY instead of link because of short-term archiver and disk management.
          ${COPY} $latest_mean input_priorinf_mean.nc
          ${COPY} $latest_sd   input_priorinf_sd.nc
+
       else if ($CONT_RUN == FALSE) then
+
          # It's the first assimilation; try to find some inflation restart files
          # or make them using fill_inflation_restart.
          # Fill_inflation_restart needs caminput.nc and cam_phis.nc for static_model_init,
          # so this staging is done in assimilate.csh (after a forecast) instead of stage_cesm_files.
    
          if (-x ${EXEROOT}/fill_inflation_restart) then
-            # Create the inflation restart files.
+
             ${EXEROOT}/fill_inflation_restart
             ${MOVE} prior_inflation_mean.nc input_priorinf_mean.nc
             ${MOVE} prior_inflation_sd.nc   input_priorinf_sd.nc
+
          else
-            echo "ERROR: Requested PRIOR inflation restart for the first cycle, "
-            echo "       but there are no files available "
-            echo "       and fill_inflation_restart is missing from cam-fv/work."
+            echo "ERROR: Requested PRIOR inflation restart for the first cycle."
+            echo "       There are no existing inflation files available "
+            echo "       and ${EXEROOT}/fill_inflation_restart is missing."
             echo "EXITING"
             exit 85
          endif
@@ -373,27 +433,38 @@ $LINK $hists[1] $MYSTRING[2]
          echo '       If you are changing from cam_no_assimilate.csh to assimilate.csh,'
          echo '       you might be able to continue by changing CONTINUE_RUN = FALSE for this cycle,'
          echo '       and restaging the initial ensemble.'
-         $LIST -l *inf*
+         ${LIST} -l *inf*
          echo "EXITING"
          exit 90
       endif
    endif
+else
+   echo "Prior Inflation not requested for this assimilation."
+endif
 
 # POSTERIOR: We look for the 'newest' and use it - IFF we need it.
 
-   if ($POSTE_TF == TRUE) then
+if ($USING_POSTE_INFLATION == true) then
+   if ($POSTE_INFLATION_FROM_RESTART == false) then
+
+      # we are not using an existing inflation file.
+      echo "inf_flavor(2) = $POSTE_INF, using namelist values."
+
+   else
       # Look for the output from the previous assimilation (or fill_inflation_restart).
       # (The only stage after posterior inflation.)
-      ($LIST -rt1 *.dart.rh.${scomp}_output_postinf_mean* | tail -n 1 >! latestfile) > & /dev/null
-      ($LIST -rt1 *.dart.rh.${scomp}_output_postinf_sd*   | tail -n 1 >> latestfile) > & /dev/null
+      (${LIST} -rt1 *.dart.rh.${scomp}_output_postinf_mean* | tail -n 1 >! latestfile) > & /dev/null
+      (${LIST} -rt1 *.dart.rh.${scomp}_output_postinf_sd*   | tail -n 1 >> latestfile) > & /dev/null
       set nfiles = `cat latestfile | wc -l`
 
       # If one exists, use it as input for this assimilation
       if ( $nfiles > 0 ) then
+
          set latest_mean = `head -n 1 latestfile`
          set latest_sd   = `tail -n 1 latestfile`
-         $LINK $latest_mean input_postinf_mean.nc
-         $LINK $latest_sd   input_postinf_sd.nc
+         ${LINK} $latest_mean input_postinf_mean.nc
+         ${LINK} $latest_sd   input_postinf_sd.nc
+
       else if ($CONT_RUN == FALSE) then
          # It's the first assimilation; try to find some inflation restart files
          # or make them using fill_inflation_restart.
@@ -401,14 +472,14 @@ $LINK $hists[1] $MYSTRING[2]
          # so this staging is done in assimilate.csh (after a forecast) instead of stage_cesm_files.
    
          if (-x ${EXEROOT}/fill_inflation_restart) then
-            # Create the inflation restart files.
             ${EXEROOT}/fill_inflation_restart
             ${MOVE} prior_inflation_mean.nc input_postinf_mean.nc
             ${MOVE} prior_inflation_sd.nc   input_postinf_sd.nc
+
          else
-            echo "ERROR: Requested POSTERIOR inflation restart for the first cycle, "
-            echo "       but there are no files available "
-            echo "       and fill_inflation_restart is missing from cam-fv/work."
+            echo "ERROR: Requested POSTERIOR inflation restart for the first cycle."
+            echo "       There are no existing inflation files available "
+            echo "       and ${EXEROOT}/fill_inflation_restart is missing."
             echo "EXITING"
             exit 95
          endif
@@ -416,14 +487,17 @@ $LINK $hists[1] $MYSTRING[2]
       else
          echo "ERROR: Requested POSTERIOR inflation restart, " 
          echo '       but files *.dart.rh.${scomp}_output_postinf_* do not exist in the $rundir.'
-         $LIST -l *inf*
+         ${LIST} -l *inf*
          echo "EXITING"
          exit 100
       endif
    endif
+else
+   echo "Posterior Inflation not requested for this assimilation."
+endif
 
 #=========================================================================
-# Block 7: Actually run the assimilation. 
+# Block 6: Actually run the assimilation. 
 
 # DART namelist settings required:
 # &filter_nml           
@@ -437,7 +511,7 @@ $LINK $hists[1] $MYSTRING[2]
 #    output_state_file_list  = 'cam_init_files',
 
 # WARNING: the default mode of this script assumes that 
-#             input_state_file_list = output_state_file_list,
+#          input_state_file_list = output_state_file_list,
 #          so the CAM initial files used as input to filter will be overwritten.
 #          The input model states can be preserved by requesting that stage 'forecast'
 #          be output.
@@ -468,11 +542,11 @@ set line = `grep input_state_file_list input.nml | sed -e "s#[=,'\.]# #g"`
 echo "$line"
 set input_file_list = $line[2]
 
-$LIST -1 ${CASE}.cam_[0-9][0-9][0-9][0-9].i.${ATM_DATE_EXT}.nc >! $input_file_list
+${LIST} -1 ${CASE}.cam_[0-9][0-9][0-9][0-9].i.${ATM_DATE_EXT}.nc >! $input_file_list
 
 # If the file names in $output_state_file_list = names in $input_state_file_list,
 # then the restart file contents will be overwritten with the states updated by DART.
-# This is the behavior from DART1.0.
+
 set line = `grep output_state_file_list input.nml | sed -e "s#[=,'\.]# #g"` 
 set output_file_list = $line[2]
 
@@ -490,7 +564,7 @@ ${LAUNCHCMD} ${EXEROOT}/filter || exit 110
 echo "`date` -- END FILTER"
 
 #========================================================================
-# Block 8: Rename the output using the CESM file-naming convention.
+# Block 7: Rename the output using the CESM file-naming convention.
 #=========================================================================
 
 # If output_state_file_list is filled with custom (CESM) filenames,
@@ -530,27 +604,20 @@ end
 # ".dart_file" part of the file name.  Somewhat awkward and inconsistent, but effective.
 
 # Means and standard deviation files (except for inflation).
-foreach FILE (`$LIST ${stages_all}_{mean,sd}*.nc`)
+foreach FILE (`${LIST} ${stages_all}_{mean,sd}*.nc`)
    set parts = `echo $FILE | sed -e "s#\.# #g"`
 
    set type = "e"
    echo $FILE | grep "put"
    if ($status == 0) set type = "i"
 
-   if ($MOVEV == FALSE ) \
-      echo "moving $FILE ${CASE}.dart.${type}.${scomp}_$parts[1].${ATM_DATE_EXT}.nc"
-   $MOVE           $FILE ${CASE}.dart.${type}.${scomp}_$parts[1].${ATM_DATE_EXT}.nc
+   ${MOVE}  $FILE ${CASE}.dart.${type}.${scomp}_$parts[1].${ATM_DATE_EXT}.nc
 end
 
 # Rename the observation file and run-time output
 
-if ($MOVEV == FALSE ) \
-   echo "Renaming obs_seq.final ${CASE}.dart.e.${scomp}_obs_seq_final.${ATM_DATE_EXT}"
-${MOVE}           obs_seq.final ${CASE}.dart.e.${scomp}_obs_seq_final.${ATM_DATE_EXT}
-
-if ($MOVEV == FALSE ) \
-   echo "Renaming dart_log.out  ${scomp}_dart_log.${ATM_DATE_EXT}.out"
-${MOVE}           dart_log.out  ${scomp}_dart_log.${ATM_DATE_EXT}.out
+${MOVE} obs_seq.final ${CASE}.dart.e.${scomp}_obs_seq_final.${ATM_DATE_EXT}
+${MOVE} dart_log.out                 ${scomp}_dart_log.${ATM_DATE_EXT}.out
 
 # Rename the inflation files
 
@@ -572,9 +639,7 @@ set MYSTRING = `echo $MYSTRING | sed -e "s#[=,']# #g"`
 set MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
 set loc_diag = $MYSTRING[2]
 if (-f $loc_diag) then
-   if ($MOVEV == FALSE ) \
-      echo "Moving $loc_diag  ${scomp}_${loc_diag}.dart.e.${ATM_DATE_EXT}"
-   $MOVE           $loc_diag  ${scomp}_${loc_diag}.dart.e.${ATM_DATE_EXT}
+   ${MOVE}           $loc_diag  ${scomp}_${loc_diag}.dart.e.${ATM_DATE_EXT}
 endif
 
 # Handle regression diagnostics
@@ -583,9 +648,7 @@ set MYSTRING = `echo $MYSTRING | sed -e "s#[=,']# #g"`
 set MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
 set reg_diag = $MYSTRING[2]
 if (-f $reg_diag) then
-   if ($MOVEV == FALSE ) \
-      echo "Moving $reg_diag  ${scomp}_${reg_diag}.dart.e.${ATM_DATE_EXT}"
-   $MOVE           $reg_diag  ${scomp}_${reg_diag}.dart.e.${ATM_DATE_EXT}
+   ${MOVE}           $reg_diag  ${scomp}_${reg_diag}.dart.e.${ATM_DATE_EXT}
 endif
 
 # RMA
@@ -609,7 +672,9 @@ while ( ${member} <= ${ensemble_size} )
    set inst_string = `printf _%04d $member`
    set ATM_INITIAL_FILENAME = ${CASE}.${scomp}${inst_string}.${file_type}.${ATM_DATE_EXT}.nc
 
-   $LINK $ATM_INITIAL_FILENAME ${scomp}_initial${inst_string}.nc || exit 120
+   # TJH I dont think link -f can fail ... this may never exit as intended
+
+   ${LINK} $ATM_INITIAL_FILENAME ${scomp}_initial${inst_string}.nc || exit 120
 
    @ member++
 
