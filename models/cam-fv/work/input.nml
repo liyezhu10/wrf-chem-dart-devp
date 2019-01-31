@@ -56,6 +56,7 @@
    num_output_state_members     = 3
    single_file_out              = .false.,
    write_all_stages_at_end      = .false.
+   compute_posterior            = .false.
    
    ens_size                     = 3
    num_groups                   = 1
@@ -284,6 +285,7 @@
   input_files              = '../../../observations/forward_operators/obs_def_reanalysis_bufr_mod.f90',
                              '../../../observations/forward_operators/obs_def_altimeter_mod.f90',
                              '../../../observations/forward_operators/obs_def_gps_mod.f90',
+                             '../../../observations/forward_operators/obs_def_dew_point_mod.f90',
    /
                              '../../../observations/forward_operators/obs_def_upper_atm_mod.f90',
 
@@ -504,12 +506,13 @@
 #  4 = normalized rmse difference
 
 &closest_member_tool_nml  
-   input_file_name        = 'filter_restart',
+   input_restart_file_list = 'cam_in.txt',
    output_file_name       = 'closest_restart',
    ens_size               = 3
-   single_restart_file_in = .true.,
+   single_restart_file_in = .false.,
    difference_method      = 4,
-   /
+   use_only_qtys          = ''
+ /
 
 &quad_interpolate_nml
    debug = 0
