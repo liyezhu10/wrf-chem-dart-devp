@@ -1394,7 +1394,7 @@ endif
 ! check to be sure we either find an existing dart qc field and
 ! reuse it, or we add a new one. only on task 0.
 DART_qc_index = get_obs_dartqc_index(seq)
-if (DART_qc_index < 0 .and. my_task_id() == 0) then
+if (DART_qc_index < 0 .and. my_task == io_task) then
    DART_qc_index = get_blank_qc_index(seq)
    if (DART_qc_index < 0) then
       ! Need 1 new qc field for the DART quality control
