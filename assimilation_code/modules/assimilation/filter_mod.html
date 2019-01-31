@@ -98,6 +98,7 @@ prematurely terminating the namelist.
    output_mean                  = .true.,
    output_sd                    = .true.,
    write_all_stages_at_end      = .false.,
+   compute_posterior            = .true.
 
    ens_size                     = 20,
    num_groups                   = 1,
@@ -290,6 +291,14 @@ and the second controls the posterior inflation.
         setting this to .true. will store the data and it can all be written in parallel
         at the end of the execution.  This will require slightly more memory at
         runtime, but can lower the cost of the job significantly in some cases.
+ </TD></TR>
+
+<TR><TD>compute_posterior</TD>
+    <TD>logical</TD>
+    <TD>If .false., skip computing posterior forward operators and do not write
+        posterior values in the obs_seq.final file.  Saves time and memory.
+        Cannot enable posterior inflation and skip computing the posteriors.
+        For backwards compatibility the default for this is .true.
  </TD></TR>
 
 <TR><TD>ens_size</TD>
