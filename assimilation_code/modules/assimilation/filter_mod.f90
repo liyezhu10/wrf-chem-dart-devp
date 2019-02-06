@@ -499,14 +499,16 @@ model_size = get_model_size()
 
 if(distributed_state) then
    call init_ensemble_manager(state_ens_handle, num_state_ens_copies, model_size)
+   msgstring = 'running with distributed state; model states stay distributed across all tasks for the entire run'
 else
    call init_ensemble_manager(state_ens_handle, num_state_ens_copies, model_size, transpose_type_in = 2)
+   msgstring = 'running without distributed state; model states are gathered by ensemble for forward operators'
 endif
+! don't print if running single task.  transposes don't matter in this case.
+if (task_count() > 1) &
+   call error_handler(E_MSG,'filter_main:', msgstring, source, revision, revdate)
 
 call set_num_extra_copies(state_ens_handle, num_extras)
-
-!>@todo FIXME add a call here to the log to say if we're transposing
-!> or running fully distributed based on 'distributed_state' setting.
 
 call trace_message('After  setting up space for ensembles')
 
@@ -516,6 +518,11 @@ if(task_count() > model_size) then
    call error_handler(E_ERR,'filter_main', &
       'Cannot have number of processes > model size' ,source,revision,revdate, &
        text2=msgstring)
+endif
+
+if(.not. compute_posterior) then
+   msgstring = 'skipping computation of posterior forward operators'
+   call error_handler(E_MSG,'filter_main:', msgstring, source, revision, revdate)
 endif
 
 ! Set a time type for initial time if namelist inputs are not negative
