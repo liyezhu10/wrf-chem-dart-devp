@@ -124,11 +124,11 @@ plotdat.fname         = fname;
 plotdat.copystring    = copy;
 plotdat.bincenters    = ncread(fname,'time');
 plotdat.binedges      = ncread(fname,'time_bounds');
-plotdat.mlevel        = local_nc_varget(fname,'mlevel');
-plotdat.plevel        = local_nc_varget(fname,'plevel');
-plotdat.plevel_edges  = local_nc_varget(fname,'plevel_edges');
-plotdat.hlevel        = local_nc_varget(fname,'hlevel');
-plotdat.hlevel_edges  = local_nc_varget(fname,'hlevel_edges');
+plotdat.mlevel        = local_ncread(fname,'mlevel');
+plotdat.plevel        = local_ncread(fname,'plevel');
+plotdat.plevel_edges  = local_ncread(fname,'plevel_edges');
+plotdat.hlevel        = local_ncread(fname,'hlevel');
+plotdat.hlevel_edges  = local_ncread(fname,'hlevel_edges');
 [plotdat.ncopies,~]   = nc_dim_info(fname,'copy');
 [plotdat.nregions,~]  = nc_dim_info(fname,'region');
 plotdat.region_names  = strtrim(ncread(fname,'region_names')');
@@ -178,12 +178,24 @@ plotdat.copyindex   = get_copy_index(fname,copy);
 plotdat.rmseindex   = get_copy_index(fname,'rmse');
 plotdat.Npossindex  = get_copy_index(fname,'Nposs');
 plotdat.Nusedindex  = get_copy_index(fname,'Nused');
+plotdat.NQC0index   = get_copy_index(fname,'N_DARTqc_0');
+plotdat.NQC1index   = get_copy_index(fname,'N_DARTqc_1');
+plotdat.NQC2index   = get_copy_index(fname,'N_DARTqc_2');
+plotdat.NQC3index   = get_copy_index(fname,'N_DARTqc_3');
 plotdat.NQC4index   = get_copy_index(fname,'N_DARTqc_4');
 plotdat.NQC5index   = get_copy_index(fname,'N_DARTqc_5');
 plotdat.NQC6index   = get_copy_index(fname,'N_DARTqc_6');
 plotdat.NQC7index   = get_copy_index(fname,'N_DARTqc_7');
 
 figuredata = setfigure();
+
+prior_green = [  0/255 128/255   0/255];
+poste_blue  = [  0/255   0/255 255/255];
+obs_red     = [215/255  10/255  83/255];
+
+plotdat.ges_color = prior_green;
+plotdat.anl_color = poste_blue;
+plotdat.obs_color = obs_red;
 
 %%---------------------------------------------------------------------
 % Loop around (time-copy-level-region) observation types
@@ -246,10 +258,17 @@ for ivar = 1:plotdat.nvars
     guess = reshape(guess_raw, plotdat.Nbins,   plotdat.ncopies, ...
         plotdat.nlevels, plotdat.nregions);
     
-    analy_raw = ncread(fname, plotdat.analyvar);
-    analy_raw = permute(analy_raw,length(size(analy_raw)):-1:1);
-    analy = reshape(analy_raw, plotdat.Nbins,   plotdat.ncopies, ...
-        plotdat.nlevels, plotdat.nregions);
+    analy_raw = local_ncread(fname, plotdat.analyvar);
+    if ( isempty(analy_raw) )
+        % force analysis to be the same shape as the guess,
+        % and full of NaNs instead of 0s.
+        analy = guess;
+        analy(:) = NaN;
+    else
+        analy_raw = permute(analy_raw,length(size(analy_raw)):-1:1);
+        analy = reshape(analy_raw, plotdat.Nbins,   plotdat.ncopies, ...
+            plotdat.nlevels, plotdat.nregions);
+    end
     
     % check to see if there is anything to plot
     % The number possible is decreased by the number of observations
@@ -281,6 +300,26 @@ for ivar = 1:plotdat.nvars
     for ilevel = wantedlevels
         
         fprintf(logfid,'\nlevel %d %f %s\n',ilevel,plotdat.level(ilevel),plotdat.level_units);
+        plotdat.ges_Nqc0  = guess(:,plotdat.NQC0index  ,ilevel,:);
+        plotdat.anl_Nqc0  = analy(:,plotdat.NQC0index  ,ilevel,:);
+        fprintf(logfid,'DART QC == 0, prior/post %d %d\n',sum(plotdat.ges_Nqc0(:)), ...
+            sum(plotdat.anl_Nqc0(:)));
+
+        plotdat.ges_Nqc1  = guess(:,plotdat.NQC1index  ,ilevel,:);
+        plotdat.anl_Nqc1  = analy(:,plotdat.NQC1index  ,ilevel,:);
+        fprintf(logfid,'DART QC == 1, prior/post %d %d\n',sum(plotdat.ges_Nqc1(:)), ...
+            sum(plotdat.anl_Nqc1(:)));
+
+        plotdat.ges_Nqc2  = guess(:,plotdat.NQC2index  ,ilevel,:);
+        plotdat.anl_Nqc2  = analy(:,plotdat.NQC2index  ,ilevel,:);
+        fprintf(logfid,'DART QC == 2, prior/post %d %d\n',sum(plotdat.ges_Nqc2(:)), ...
+            sum(plotdat.anl_Nqc2(:)));
+
+        plotdat.ges_Nqc3  = guess(:,plotdat.NQC3index  ,ilevel,:);
+        plotdat.anl_Nqc3  = analy(:,plotdat.NQC3index  ,ilevel,:);
+        fprintf(logfid,'DART QC == 3, prior/post %d %d\n',sum(plotdat.ges_Nqc3(:)), ...
+            sum(plotdat.anl_Nqc3(:)));
+
         plotdat.ges_Nqc4  = guess(:,plotdat.NQC4index  ,ilevel,:);
         plotdat.anl_Nqc4  = analy(:,plotdat.NQC4index  ,ilevel,:);
         fprintf(logfid,'DART QC == 4, prior/post %d %d\n',sum(plotdat.ges_Nqc4(:)), ...
@@ -360,46 +399,50 @@ end
 
 function myplot(plotdat,figdata)
 
-% Interlace the [ges,anl] to make a sawtooth plot.
-% By this point, the middle two dimensions are singletons.
-cg = plotdat.ges_copy(:,:,:,plotdat.region);
-ca = plotdat.anl_copy(:,:,:,plotdat.region);
-other = reshape([cg ca]',2*plotdat.Nbins,1);
+ges_copy = plotdat.ges_copy(:,:,:,plotdat.region);
+anl_copy = plotdat.anl_copy(:,:,:,plotdat.region);
 
-mg = plotdat.ges_rmse(:,:,:,plotdat.region);
-ma = plotdat.anl_rmse(:,:,:,plotdat.region);
-rmse = reshape([mg ma]',2*plotdat.Nbins,1);
+ges_rmse = plotdat.ges_rmse(:,:,:,plotdat.region);
+anl_rmse = plotdat.anl_rmse(:,:,:,plotdat.region);
 
-g = plotdat.ges_Nposs(:,:,:,plotdat.region);
-a = plotdat.anl_Nposs(:,:,:,plotdat.region);
-nobs_poss = reshape([g a]',2*plotdat.Nbins,1);
+ges_Nposs = plotdat.ges_Nposs(:,:,:,plotdat.region);
+anl_Nposs = plotdat.anl_Nposs(:,:,:,plotdat.region);
 
-g = plotdat.ges_Nused(:,:,:,plotdat.region);
-a = plotdat.anl_Nused(:,:,:,plotdat.region);
-nobs_used = reshape([g a]',2*plotdat.Nbins,1);
+ges_Nused = plotdat.ges_Nused(:,:,:,plotdat.region);
+anl_Nused = plotdat.anl_Nused(:,:,:,plotdat.region);
 
 tg = plotdat.bincenters;
 ta = plotdat.bincenters;
-t = reshape([tg ta]',2*plotdat.Nbins,1);
 
-% Determine some quantities for the legend
-nobs = sum(nobs_used);
-if ( nobs > 1 )
-    mean_pr_rmse  = mean(mg(isfinite(mg)));
-    mean_po_rmse  = mean(ma(isfinite(ma)));
-    mean_pr_other = mean(cg(isfinite(cg)));
-    mean_po_other = mean(ca(isfinite(ca)));
+mean_pr_rmse  = mean(ges_rmse(isfinite(ges_rmse)));
+mean_pr_other = mean(ges_copy(isfinite(ges_copy)));
+
+% If the posterior is available, 
+% interlace the [ges,anl] to make a sawtooth plot.
+% By this point, the middle two dimensions are singletons.
+
+if (isfinite(sum(anl_Nused)))
+   other     = reshape([ges_copy  anl_copy ]',2*plotdat.Nbins,1);
+   rmse      = reshape([ges_rmse  anl_rmse ]',2*plotdat.Nbins,1);
+   nobs_poss = reshape([ges_Nposs anl_Nposs]',2*plotdat.Nbins,1);
+   t         = reshape([tg        ta       ]',2*plotdat.Nbins,1);
+   mean_po_rmse  = mean(anl_rmse(isfinite(anl_rmse)));
+   mean_po_other = mean(anl_copy(isfinite(anl_copy)));
+   string_rmse   = sprintf('%s pr=%.5g, po=%.5g','rmse', mean_pr_rmse, mean_po_rmse);
+   string_other  = sprintf('%s pr=%.5g, po=%.5g', plotdat.copystring, ...
+                                           mean_pr_other, mean_po_other);
+   plotdat.subtitle = sprintf('%s     %s',string_rmse, string_other);
+   legstr = '\diamondsuit,x';
 else
-    mean_pr_rmse  = NaN;
-    mean_po_rmse  = NaN;
-    mean_pr_other = NaN;
-    mean_po_other = NaN;
+   other     = ges_copy;
+   rmse      = ges_rmse;
+   nobs_poss = ges_Nposs;
+   t         = tg;
+   string_rmse  = sprintf('%s pr=%.5g','rmse', mean_pr_rmse);
+   string_other = sprintf('%s pr=%.5g', plotdat.copystring, mean_pr_other);
+   plotdat.subtitle = sprintf('%s     %s',string_rmse, string_other);
+   legstr = '\diamondsuit';
 end
-
-string_rmse  = sprintf('%s pr=%.5g, po=%.5g','rmse', mean_pr_rmse, mean_po_rmse);
-string_other = sprintf('%s pr=%.5g, po=%.5g', plotdat.copystring, ...
-    mean_pr_other, mean_po_other);
-plotdat.subtitle = sprintf('%s     %s',string_rmse, string_other);
 
 % Plot the requested quantity on the left axis. This is the first
 % thing plotted to get the proper legend symbols in the easiest manner.
@@ -410,9 +453,15 @@ plotdat.subtitle = sprintf('%s     %s',string_rmse, string_other);
 % don't need to be set.
 
 ax1 = subplot('position',figdata.position);
-h1 = plot(t,rmse,'k+-',t,other,'ro-','LineWidth',figdata.linewidth);
+h1 = plot(t,rmse,'ko-');
+h2 = line(t,other);
+
+set(h1,'LineWidth',figdata.linewidth,'MarkerSize',figdata.markersize,'MarkerFaceColor','k')
+set(h2,'LineWidth',figdata.linewidth,'MarkerSize',figdata.markersize)
+set(h2,'Marker','x','Color','r')
+
 set(ax1,'YAxisLocation','left','FontSize',figdata.fontsize)
-h  = legend(h1,'rmse', plotdat.copystring);
+h  = legend([h1,h2],'rmse', plotdat.copystring);
 set(h,'Interpreter','none','Box','off')
 
 % Attempt to make plotting robust in the face of 'empty' bins.
@@ -435,7 +484,7 @@ axis(axlims)
 switch lower(plotdat.copystring)
     case 'bias'
         % plot a zero-bias line
-        zeroline = line(axlims(1:2),[0 0], 'Color',[0 100 0]/255,'Parent',ax1);
+        zeroline = line(axlims(1:2),[0 0], 'Color',[200 200 200]/255,'Parent',ax1);
         set(zeroline,'LineWidth',2.5,'LineStyle','-')
         plotdat.ylabel = sprintf('rmse and %s (%s)',plotdat.copystring,plotdat.biasconv);
     otherwise
@@ -476,10 +525,15 @@ ax2 = axes( ...
     'XAxisLocation','top', ...
     'YAxisLocation','right');
 
-h2 = line(t,nobs_poss,'Color','b','Parent',ax2);
-h3 = line(t,nobs_used,'Color','b','Parent',ax2);
-set(h2,'LineStyle','none','Marker','o');
-set(h3,'LineStyle','none','Marker','*');
+h2 = line(t ,nobs_poss,'Color','b','Parent',ax2);
+h3 = line(tg,ges_Nused,'Color',prior_green,'Parent',ax2);
+set(h2,'LineStyle','none','Marker','o','MarkerSize',figdata.markersize+1,'LineWidth',2.0);
+set(h3,'LineStyle','none','Marker','d','MarkerSize',figdata.markersize+1,'LineWidth',2.0);
+
+if (sum(anl_Nused) > 0)
+    h4 = line(tg,anl_Nused,'Color',poste_blue,'Parent',ax2);
+    set(h4,'LineStyle','none','Marker','x','MarkerSize',figdata.markersize+1,'LineWidth',2.0);
+end
 
 % turn off topside X tick labels (clashes with title)
 % use the same Y ticks, but find the right label values
@@ -488,8 +542,20 @@ matchingYticks(ax1,ax2);
 
 set(get(ax1,'Ylabel'), 'String', plotdat.ylabel, ...
     'Interpreter','none','FontSize',figdata.fontsize)
-set(get(ax2,'Ylabel'),'String','# of obs : o=possible, \ast=assimilated', ...
-    'FontSize',figdata.fontsize)
+
+% determine if the observation type was flagged as 'evaluate' or 'assimilate'
+% since we don't have the ability to specify this level-by-level or by
+% regions, we can use an 'all-or-nothing' approach.
+
+nevaluated = sum(plotdat.ges_Nqc1(:) + plotdat.ges_Nqc3(:));
+
+if (nevaluated > 0)
+   string1 = sprintf('# of obs : o=possible, %s =evaluated',legstr);
+else
+   string1 = sprintf('# of obs : o=possible, %s =assimilated',legstr);
+end
+set(get(ax2,'Ylabel'), 'String', string1, 'FontSize', figdata.fontsize)
+
 
 %=====================================================================
 
@@ -632,18 +698,19 @@ orientation = 'landscape';
 fontsize    = 16;
 position    = [0.10 0.15 0.8 0.7];
 linewidth   = 2.0;
+markersize  = 8.0;
 
 figdata = struct('expcolors',  {{'k','r','b','m','g','c','y'}}, ...
     'expsymbols', {{'o','s','d','p','h','s','*'}}, ...
     'prpolines',  {{'-','--'}}, 'position', position, ...
     'fontsize',fontsize, 'orientation',orientation, ...
-    'linewidth',linewidth);
+    'linewidth',linewidth,'markersize',markersize);
 
 
 %=====================================================================
 
 
-function value = local_nc_varget(fname,varname)
+function value = local_ncread(fname,varname)
 %% If the variable exists in the file, return the contents of the variable.
 % if the variable does not exist, return empty value instead of error-ing
 % out.

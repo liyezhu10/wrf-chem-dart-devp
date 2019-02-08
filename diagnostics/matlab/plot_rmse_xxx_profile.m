@@ -139,10 +139,24 @@ plotdat.copyindex     = get_copy_index(fname,copy);
 plotdat.rmseindex     = get_copy_index(fname,'rmse');
 plotdat.Npossindex    = get_copy_index(fname,'Nposs');
 plotdat.Nusedindex    = get_copy_index(fname,'Nused');
+plotdat.NQC0index     = get_copy_index(fname,'N_DARTqc_0');
+plotdat.NQC1index     = get_copy_index(fname,'N_DARTqc_1');
+plotdat.NQC2index     = get_copy_index(fname,'N_DARTqc_2');
+plotdat.NQC3index     = get_copy_index(fname,'N_DARTqc_3');
+plotdat.NQC4index     = get_copy_index(fname,'N_DARTqc_4');
 plotdat.NQC5index     = get_copy_index(fname,'N_DARTqc_5');
 plotdat.NQC6index     = get_copy_index(fname,'N_DARTqc_6');
+plotdat.NQC7index     = get_copy_index(fname,'N_DARTqc_7');
 
 figuredata = setfigure();
+
+prior_green = [  0/255 128/255   0/255];
+poste_blue  = [  0/255   0/255 255/255];
+obs_red     = [215/255  10/255  83/255];
+
+plotdat.ges_color = prior_green;
+plotdat.anl_color = poste_blue;
+plotdat.obs_color = obs_red;
 
 %%---------------------------------------------------------------------
 % Loop around (copy-level-region) observation types
@@ -222,7 +236,14 @@ for ivar = varlist
     % permute them back to the expected storage order.
     
     guess = ncread(fname, plotdat.guessvar);
-    analy = ncread(fname, plotdat.analyvar);
+    analy = local_ncread(fname, plotdat.analyvar);
+    if (isempty(analy))
+        plotdat.has_analysis = 0;
+        analy = guess;
+        analy(:) = NaN;
+    else
+        plotdat.has_analysis = 1;
+    end
     rank  = length(size(guess));
     guess = permute(guess,rank:-1:1);
     analy = permute(analy,rank:-1:1);
@@ -247,30 +268,44 @@ for ivar = varlist
         sum(sum(guess(plotdat.NQC6index, :,:))),plotdat.myvarname)
     
     nposs = sum(guess(plotdat.Npossindex,:,:)) - ...
-        sum(guess(plotdat.NQC5index ,:,:)) - ...
-        sum(guess(plotdat.NQC6index ,:,:));
+            sum(guess(plotdat.NQC5index ,:,:)) - ...
+            sum(guess(plotdat.NQC6index ,:,:));
     
     if ( sum(nposs(:)) < 1 )
         fprintf('No obs for %s...  skipping\n', plotdat.varnames{ivar})
         continue
     end
-    
+
     plotdat.ges_copy   = guess(plotdat.copyindex,  :, :);
-    plotdat.anl_copy   = analy(plotdat.copyindex,  :, :);
     plotdat.ges_rmse   = guess(plotdat.rmseindex,  :, :);
-    plotdat.anl_rmse   = analy(plotdat.rmseindex,  :, :);
+    plotdat.ges_Nqc0   = guess(plotdat.NQC0index,  :, :);
+    plotdat.ges_Nqc1   = guess(plotdat.NQC1index,  :, :);
+    plotdat.ges_Nqc2   = guess(plotdat.NQC2index,  :, :);
+    plotdat.ges_Nqc3   = guess(plotdat.NQC3index,  :, :);
+    plotdat.ges_Nqc4   = guess(plotdat.NQC4index,  :, :);
     plotdat.ges_Nqc5   = guess(plotdat.NQC5index,  :, :);
-    plotdat.anl_Nqc5   = analy(plotdat.NQC5index,  :, :);
     plotdat.ges_Nqc6   = guess(plotdat.NQC6index,  :, :);
-    plotdat.anl_Nqc6   = analy(plotdat.NQC6index,  :, :);
+    plotdat.ges_Nqc7   = guess(plotdat.NQC7index,  :, :);
     plotdat.ges_Nused  = guess(plotdat.Nusedindex, :, :);
-    plotdat.anl_Nused  = guess(plotdat.Nusedindex, :, :);
     plotdat.ges_Nposs  = guess(plotdat.Npossindex, :, :) - ...
         plotdat.ges_Nqc5 - plotdat.ges_Nqc6;
+    
+    plotdat.anl_copy   = analy(plotdat.copyindex,  :, :);
+    plotdat.anl_rmse   = analy(plotdat.rmseindex,  :, :);
+    plotdat.anl_Nqc0   = analy(plotdat.NQC0index,  :, :);
+    plotdat.anl_Nqc1   = analy(plotdat.NQC1index,  :, :);
+    plotdat.anl_Nqc2   = analy(plotdat.NQC2index,  :, :);
+    plotdat.anl_Nqc3   = analy(plotdat.NQC3index,  :, :);
+    plotdat.anl_Nqc4   = analy(plotdat.NQC4index,  :, :);
+    plotdat.anl_Nqc5   = analy(plotdat.NQC5index,  :, :);
+    plotdat.anl_Nqc6   = analy(plotdat.NQC6index,  :, :);
+    plotdat.anl_Nqc7   = analy(plotdat.NQC7index,  :, :);
+    plotdat.anl_Nused  = analy(plotdat.Nusedindex, :, :);
     plotdat.anl_Nposs  = analy(plotdat.Npossindex, :, :) - ...
         plotdat.anl_Nqc5 - plotdat.anl_Nqc6;
+
     plotdat.Xrange     = FindRange(plotdat);
-    
+
     % plot by region - each in its own figure.
     
     for iregion = 1:plotdat.nregions
@@ -284,7 +319,7 @@ for ivar = varlist
             plotdat.varnames{ivar}, plotdat.copystring, iregion);
         print(gcf,'-dpdf',psfname);
     end
-    
+
 end
 
 
@@ -295,44 +330,36 @@ end
 
 function myplot(plotdat,figdata)
 
-%% Interlace the [ges,anl] to make a sawtooth plot.
-% By this point, the middle two dimensions are singletons.
-% The data must be sorted to match the order of the levels.
-cg = plotdat.ges_copy(:,:,plotdat.region); CG = cg(plotdat.indices);
-ca = plotdat.anl_copy(:,:,plotdat.region); CA = ca(plotdat.indices);
+ges_copy = plotdat.ges_copy(:,plotdat.indices,plotdat.region);
+anl_copy = plotdat.anl_copy(:,plotdat.indices,plotdat.region);
 
-mg = plotdat.ges_rmse(:,:,plotdat.region); MG = mg(plotdat.indices);
-ma = plotdat.anl_rmse(:,:,plotdat.region); MA = ma(plotdat.indices);
+ges_rmse = plotdat.ges_rmse(:,plotdat.indices,plotdat.region);
+anl_rmse = plotdat.anl_rmse(:,plotdat.indices,plotdat.region);
 
-g = plotdat.ges_Nposs(:,:,plotdat.region); G = g(plotdat.indices);
-a = plotdat.anl_Nposs(:,:,plotdat.region); A = a(plotdat.indices);
+ges_Nposs = plotdat.ges_Nposs(:,plotdat.indices,plotdat.region);
+anl_Nposs = plotdat.anl_Nposs(:,plotdat.indices,plotdat.region);
 
-nobs_poss   = G;
-nposs_delta = G - A;
+ges_Nused = plotdat.ges_Nused(:,plotdat.indices,plotdat.region);
+anl_Nused = plotdat.anl_Nused(:,plotdat.indices,plotdat.region);
 
-g = plotdat.ges_Nused(:,:,plotdat.region); G = g(plotdat.indices);
-a = plotdat.anl_Nused(:,:,plotdat.region); A = a(plotdat.indices);
-nobs_used   = G;
-nused_delta = G - A;
+mean_pr_rmse  = mean(ges_rmse(isfinite(ges_rmse)));
+mean_pr_other = mean(ges_copy(isfinite(ges_copy)));
+str_pr_rmse   = sprintf('%s pr=%.5g','rmse',mean_pr_rmse);
+str_pr_other  = sprintf('%s pr=%.5g',plotdat.copystring,mean_pr_other);
 
-% Determine some quantities for the legend
-nobs = sum(nobs_used);
-if ( nobs > 1 )
-    rmse_guess  = mean(MG(isfinite(MG)));
-    rmse_analy  = mean(MA(isfinite(MA)));
-    other_guess = mean(CG(isfinite(CG)));
-    other_analy = mean(CA(isfinite(CA)));
+% If the posterior is available or not 
+
+if ( isfinite(sum(anl_Nused)))
+    mean_po_rmse  = mean(anl_rmse(isfinite(anl_rmse)));
+    mean_po_other = mean(anl_copy(isfinite(anl_copy)));
+    str_po_rmse   = sprintf('%s po=%.5g','rmse',mean_po_rmse);
+    str_po_other  = sprintf('%s po=%.5g',plotdat.copystring,mean_po_other);
 else
-    rmse_guess  = NaN;
-    rmse_analy  = NaN;
-    other_guess = NaN;
-    other_analy = NaN;
+    mean_pr_rmse  = NaN;
+    mean_po_rmse  = NaN;
+    mean_pr_other = NaN;
+    mean_po_other = NaN;
 end
-
-str_rmse_pr  = sprintf('%s pr=%.5g','rmse',rmse_guess);
-str_rmse_po  = sprintf('%s po=%.5g','rmse',rmse_analy);
-str_other_pr = sprintf('%s pr=%.5g',plotdat.copystring,other_guess);
-str_other_po = sprintf('%s po=%.5g',plotdat.copystring,other_analy);
 
 % Plot the rmse and 'xxx' on the same (bottom) axis.
 % The observation count will use the axis on the top.
@@ -351,16 +378,46 @@ set(ax1,'YAxisLocation','left','FontSize',figdata.fontsize)
 % draw the result of the experiment
 
 hold on;
-h1 = plot(MG,plotdat.level,'k+-',MA,plotdat.level,'k+--', ...
-    CG,plotdat.level,'ro-',CA,plotdat.level,'ro--');
-set(h1,'LineWidth',figdata.linewidth);
+h1 = line(ges_rmse,plotdat.level);
+h2 = line(ges_copy,plotdat.level);
+
+set(h1,'Color','k','Marker','o','LineStyle','-', ...
+       'LineWidth',figdata.linewidth, ...
+       'MarkerSize',figdata.markersize, ...
+       'MarkerFaceColor','k')
+
+set(h2,'Color','r','Marker','x','LineStyle','-', ...
+       'LineWidth',figdata.linewidth, ...
+       'MarkerSize',figdata.markersize, ...
+       'MarkerFaceColor','r')
+
+if (isfinite(sum(anl_Nposs))) 
+   h3 = line(anl_rmse,plotdat.level);
+   h4 = line(anl_copy,plotdat.level);
+   
+   set(h3,'Color','k','Marker','o','LineStyle','--', ...
+          'LineWidth',figdata.linewidth, ...
+          'MarkerSize',figdata.markersize, ...
+          'MarkerFaceColor','k')
+   
+   set(h4,'Color','r','Marker','x','LineStyle','--', ...
+          'LineWidth',figdata.linewidth, ...
+          'MarkerSize',figdata.markersize, ...
+          'MarkerFaceColor','r')
+
+   h = legend([h1,h3,h2,h4], str_pr_rmse, str_po_rmse, ...
+                             str_pr_other, str_po_other, 'Location', 'NorthWest');
+else
+
+   h = legend([h1,h2], str_pr_rmse, str_pr_other, 'Location', 'NorthWest');
+end
+
+set(h,'Interpreter','none','Box','off')
+
 hold off;
 
 zeroline = line([0 0],plotdat.Yrange,'Color',[0 100 0]/255,'Parent',ax1);
 set(zeroline,'LineWidth',2.5,'LineStyle','-')
-
-h = legend(h1, str_rmse_pr, str_rmse_po, str_other_pr, str_other_po, 'Location', 'NorthWest');
-set(h,'Interpreter','none','Box','off')
 
 % If the observation is trusted, reference that somehow
 switch lower(plotdat.trusted)
@@ -389,10 +446,12 @@ ax2 = axes('position',get(ax1,'Position'), ...
     'YDir',get(ax1,'YDir'), ...
     'FontSize',get(ax1,'FontSize'));
 
-h2 = line(nobs_poss,plotdat.level,'Color','b','Parent',ax2);
-h3 = line(nobs_used,plotdat.level,'Color','b','Parent',ax2);
+h2 = line(ges_Nposs,plotdat.level,'Color','b','Parent',ax2);
+h3 = line(ges_Nused,plotdat.level,'Color','b','Parent',ax2);
+h4 = line(anl_Nused,plotdat.level,'Color','g','Parent',ax2);
 set(h2,'LineStyle','none','Marker','o');
 set(h3,'LineStyle','none','Marker','*');
+set(h4,'LineStyle','none','Marker','*');
 
 % use same Y ticks - but no labels.
 set(ax2,'YTick',get(ax1,'YTick'), 'YTicklabel',[]);
@@ -404,8 +463,19 @@ set(get(ax1,'Ylabel'),'String',plotdat.level_units, ...
     'Interpreter','none','FontSize',figdata.fontsize)
 set(get(ax1,'Xlabel'),'String',{plotdat.xlabel, plotdat.timespan}, ...
     'Interpreter','none','FontSize',figdata.fontsize)
-set(get(ax2,'Xlabel'),'String', ...
-    ['# of obs (o=possible, \ast=assimilated) x' int2str(uint32(xscale))],'FontSize',figdata.fontsize)
+
+% determine if the observation was flagged as 'evaluate' or 'assimilate'
+
+nevaluated = sum(plotdat.ges_Nqc1(:) + plotdat.ges_Nqc3(:));
+
+if (nevaluated > 0)
+    string1 = sprintf('# of obs (o=possible, %s=evaluated) x %d', '\ast', uint32(xscale));
+else
+    string1 = sprintf('# of obs (o=possible, %s=assimilated) x %d', '\ast', uint32(xscale));
+end
+
+set(get(ax2,'Xlabel'), 'String', string1, 'FontSize', figdata.fontsize)
+
 
 title({plotdat.myregion, plotdat.myvarname},  ...
     'Interpreter', 'none', 'FontSize', figdata.fontsize, 'FontWeight', 'bold')
@@ -635,12 +705,13 @@ orientation = 'tall';
 fontsize    = 16;
 position    = [0.15 0.12 0.7 0.75];
 linewidth   = 2.0;
+markersize  = 8.0;
 
 figdata = struct('expcolors',  {{'k','r','b','m','g','c','y'}}, ...
     'expsymbols', {{'o','s','d','p','h','s','*'}}, ...
     'prpolines',  {{'-','--'}}, 'position', position, ...
     'fontsize',fontsize, 'orientation',orientation, ...
-    'linewidth',linewidth);
+    'linewidth',linewidth,'markersize',markersize);
 
 
 %=====================================================================
