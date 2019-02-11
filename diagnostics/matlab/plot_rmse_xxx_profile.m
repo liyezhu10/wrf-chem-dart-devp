@@ -150,13 +150,11 @@ plotdat.NQC7index     = get_copy_index(fname,'N_DARTqc_7');
 
 figuredata = setfigure();
 
+global prior_green poste_blue obs_red
+
 prior_green = [  0/255 128/255   0/255];
 poste_blue  = [  0/255   0/255 255/255];
 obs_red     = [215/255  10/255  83/255];
-
-plotdat.ges_color = prior_green;
-plotdat.anl_color = poste_blue;
-plotdat.obs_color = obs_red;
 
 %%---------------------------------------------------------------------
 % Loop around (copy-level-region) observation types
@@ -174,24 +172,24 @@ else
 end
 
 for ivar = varlist
-    
+
     % create the variable names of interest.
-    
+
     plotdat.myvarname = plotdat.varnames{ivar};
     plotdat.guessvar  = sprintf('%s_VPguess',plotdat.varnames{ivar});
     plotdat.analyvar  = sprintf('%s_VPanaly',plotdat.varnames{ivar});
-    
+
     plotdat.trusted   = nc_read_att(fname, plotdat.guessvar, 'TRUSTED');
     if (isempty(plotdat.trusted)), plotdat.trusted = 'NO'; end
-    
+
     % get appropriate vertical coordinate variable
-    
+
     [dimnames,~] = nc_var_dims(fname, plotdat.guessvar);
-    
+
     % this is a superfluous check ... FindVerticalVars already weeds out
     % variables only present on surface or undef because obs_diag
     % does not time-average statistics for these.
-    
+
     if (~ isempty(strfind(dimnames{2},'surface')))
         fprintf('%s is a surface field.\n',plotdat.guessvar)
         fprintf('Cannot display a surface field this way.\n')
@@ -201,40 +199,40 @@ for ivar = varlist
         fprintf('Cannot display this field this way.\n')
         continue
     end
-    
+
     [level_org, level_units, nlevels, level_edges, Yrange] = FindVerticalInfo(fname, plotdat.guessvar);
     plotdat.level_org   = level_org;
     plotdat.level_units = level_units;
     plotdat.nlevels     = nlevels;
     plotdat.level_edges = level_edges;
     plotdat.Yrange      = Yrange;
-    
+
     % Matlab likes strictly ASCENDING order for things to be plotted,
     % then you can impose the direction. The data is stored in the original
     % order, so the sort indices are saved to reorder the data.
-    
+
     if (plotdat.level_org(1) > plotdat.level_org(plotdat.nlevels))
         plotdat.YDir = 'reverse';
     else
         plotdat.YDir = 'normal';
     end
-    
+
     % Add error-checking for output from older versions of obs_diag.
-    
+
     [levels, indices]   = sort(plotdat.level_org);
     plotdat.level       = unique(levels);
     if (length(plotdat.level) ~= length(levels))
         error('There is a duplicated value in the array specifying the levels - must change your input.nml and rerun obs_diag')
     end
-    
+
     plotdat.indices     = indices;
     level_edges         = sort(plotdat.level_edges);
     plotdat.level_edges = level_edges;
-    
+
     % The rest of this script was written for the third-party netcdf
     % support. Matlab's native ncread transposes the variables, so I have to
     % permute them back to the expected storage order.
-    
+
     guess = ncread(fname, plotdat.guessvar);
     analy = local_ncread(fname, plotdat.analyvar);
     if (isempty(analy))
@@ -247,30 +245,30 @@ for ivar = varlist
     rank  = length(size(guess));
     guess = permute(guess,rank:-1:1);
     analy = permute(analy,rank:-1:1);
-    
+
     % singleton dimensions are auto-squeezed - which is unfortunate.
     % We want these things to be 3D. [copy-level-region]
-    
+
     if ( plotdat.nlevels == 1 )
         bob(:,1,:) = guess;
         ted(:,1,:) = analy;
         guess = bob; clear bob
         analy = ted; clear ted
     end
-    
+
     % check to see if there is anything to plot
     % The number possible is decreased by the number of observations
     % rejected by namelist control.
-    
+
     fprintf('%d %s observations had DART QC of 5 (all regions).\n', ...
         sum(sum(guess(plotdat.NQC5index, :,:))),plotdat.myvarname)
     fprintf('%d %s observations had DART QC of 6 (all regions).\n', ...
         sum(sum(guess(plotdat.NQC6index, :,:))),plotdat.myvarname)
-    
+
     nposs = sum(guess(plotdat.Npossindex,:,:)) - ...
             sum(guess(plotdat.NQC5index ,:,:)) - ...
             sum(guess(plotdat.NQC6index ,:,:));
-    
+
     if ( sum(nposs(:)) < 1 )
         fprintf('No obs for %s...  skipping\n', plotdat.varnames{ivar})
         continue
@@ -289,7 +287,7 @@ for ivar = varlist
     plotdat.ges_Nused  = guess(plotdat.Nusedindex, :, :);
     plotdat.ges_Nposs  = guess(plotdat.Npossindex, :, :) - ...
         plotdat.ges_Nqc5 - plotdat.ges_Nqc6;
-    
+
     plotdat.anl_copy   = analy(plotdat.copyindex,  :, :);
     plotdat.anl_rmse   = analy(plotdat.rmseindex,  :, :);
     plotdat.anl_Nqc0   = analy(plotdat.NQC0index,  :, :);
@@ -307,14 +305,14 @@ for ivar = varlist
     plotdat.Xrange     = FindRange(plotdat);
 
     % plot by region - each in its own figure.
-    
+
     for iregion = 1:plotdat.nregions
         figure(iregion); clf(iregion); orient(figuredata.orientation); wysiwyg
         plotdat.region   = iregion;
         plotdat.myregion = deblank(plotdat.region_names(iregion,:));
         myplot(plotdat, figuredata);
         BottomAnnotation(fname)
-        
+
         psfname = sprintf('%s_rmse_%s_profile_region%d', ...
             plotdat.varnames{ivar}, plotdat.copystring, iregion);
         print(gcf,'-dpdf',psfname);
@@ -329,6 +327,8 @@ end
 
 
 function myplot(plotdat,figdata)
+
+global prior_green poste_blue obs_red
 
 ges_copy = plotdat.ges_copy(:,plotdat.indices,plotdat.region);
 anl_copy = plotdat.anl_copy(:,plotdat.indices,plotdat.region);
@@ -347,17 +347,15 @@ mean_pr_other = mean(ges_copy(isfinite(ges_copy)));
 str_pr_rmse   = sprintf('%s pr=%.5g','rmse',mean_pr_rmse);
 str_pr_other  = sprintf('%s pr=%.5g',plotdat.copystring,mean_pr_other);
 
-% If the posterior is available or not 
+% If the posterior is available or not
 
-if ( isfinite(sum(anl_Nused)))
+if (isfinite(sum(anl_Nused)))
     mean_po_rmse  = mean(anl_rmse(isfinite(anl_rmse)));
     mean_po_other = mean(anl_copy(isfinite(anl_copy)));
     str_po_rmse   = sprintf('%s po=%.5g','rmse',mean_po_rmse);
     str_po_other  = sprintf('%s po=%.5g',plotdat.copystring,mean_po_other);
 else
-    mean_pr_rmse  = NaN;
     mean_po_rmse  = NaN;
-    mean_pr_other = NaN;
     mean_po_other = NaN;
 end
 
@@ -391,15 +389,15 @@ set(h2,'Color','r','Marker','x','LineStyle','-', ...
        'MarkerSize',figdata.markersize, ...
        'MarkerFaceColor','r')
 
-if (isfinite(sum(anl_Nposs))) 
+if (isfinite(sum(anl_Nposs)))
    h3 = line(anl_rmse,plotdat.level);
    h4 = line(anl_copy,plotdat.level);
-   
+
    set(h3,'Color','k','Marker','o','LineStyle','--', ...
           'LineWidth',figdata.linewidth, ...
           'MarkerSize',figdata.markersize, ...
           'MarkerFaceColor','k')
-   
+
    set(h4,'Color','r','Marker','x','LineStyle','--', ...
           'LineWidth',figdata.linewidth, ...
           'MarkerSize',figdata.markersize, ...
@@ -446,12 +444,15 @@ ax2 = axes('position',get(ax1,'Position'), ...
     'YDir',get(ax1,'YDir'), ...
     'FontSize',get(ax1,'FontSize'));
 
-h2 = line(ges_Nposs,plotdat.level,'Color','b','Parent',ax2);
-h3 = line(ges_Nused,plotdat.level,'Color','b','Parent',ax2);
-h4 = line(anl_Nused,plotdat.level,'Color','g','Parent',ax2);
-set(h2,'LineStyle','none','Marker','o');
-set(h3,'LineStyle','none','Marker','*');
-set(h4,'LineStyle','none','Marker','*');
+ax2h1 = line(ges_Nposs,plotdat.level,'Color',poste_blue,'Parent',ax2);
+ax2h2 = line(ges_Nused,plotdat.level,'Color',prior_green,'Parent',ax2);
+set(ax2h1,'LineStyle','none','Marker','o');
+set(ax2h2,'LineStyle','none','Marker','*');
+
+if (isfinite(sum(anl_Nposs)))
+   ax2h3 = line(anl_Nused,plotdat.level,'Color',poste_blue,'Parent',ax2);
+   set(ax2h3,'LineStyle','none','Marker','*');
+end
 
 % use same Y ticks - but no labels.
 set(ax2,'YTick',get(ax1,'YTick'), 'YTicklabel',[]);
@@ -475,7 +476,6 @@ else
 end
 
 set(get(ax2,'Xlabel'), 'String', string1, 'FontSize', figdata.fontsize)
-
 
 title({plotdat.myregion, plotdat.myvarname},  ...
     'Interpreter', 'none', 'FontSize', figdata.fontsize, 'FontWeight', 'bold')
@@ -619,23 +619,23 @@ else
     glommed = bob(inds);
     ymin    = min(glommed);
     ymax    = max(glommed);
-    
+
     if ( ymax > 1.0 )
         ymin = floor(min(glommed));
         ymax =  ceil(max(glommed));
     end
-    
+
     if (ymin == 0 && ymax == 0)
         ymax = 1;
     end
-    
+
     if (ymin == ymax)
         ymin = ymin - 0.1*ymin;
         ymax = ymax + 0.1*ymax;
     end
-    
+
     Yrange = [ymin ymax];
-    
+
     x = sort([min([Yrange(1) 0.0]) Yrange(2)] ,'ascend');
 end
 
