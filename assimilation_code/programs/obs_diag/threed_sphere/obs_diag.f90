@@ -1535,19 +1535,19 @@ integer :: seconds
 
 ! do some error-checking first
 
-if ( (bin_separation(1) /= 0) .or. (bin_separation(2) /= 0) ) then
-   write(string1,*)'bin_separation:year,month must both be zero, they are ', &
-   bin_separation(1),bin_separation(2)
-   call error_handler(E_WARN,'Namelist2Times',string1,source,revision,revdate)
-   error_out = .true.
-endif
-
-if ( (bin_width(1) /= 0) .or. (bin_width(2) /= 0) ) then
-   write(string1,*)'bin_width:year,month must both be zero, they are ', &
-   bin_width(1),bin_width(2)
-   call error_handler(E_WARN,'Namelist2Times',string1,source,revision,revdate)
-   error_out = .true.
-endif
+!if ( (bin_separation(1) /= 0) .or. (bin_separation(2) /= 0) ) then
+!   write(string1,*)'bin_separation:year,month must both be zero, they are ', &
+!   bin_separation(1),bin_separation(2)
+!   call error_handler(E_WARN,'Namelist2Times',string1,source,revision,revdate)
+!   error_out = .true.
+!endif
+!
+!if ( (bin_width(1) /= 0) .or. (bin_width(2) /= 0) ) then
+!   write(string1,*)'bin_width:year,month must both be zero, they are ', &
+!   bin_width(1),bin_width(2)
+!   call error_handler(E_WARN,'Namelist2Times',string1,source,revision,revdate)
+!   error_out = .true.
+!endif
 
 if ( (time_to_skip(1) /= 0) .or. (time_to_skip(2) /= 0) ) then
    write(string1,*)'time_to_skip:year,month must both be zero, they are ', &
