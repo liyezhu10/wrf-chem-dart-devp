@@ -41,8 +41,10 @@ use     location_mod, only : location_type, get_location, set_location_missing, 
                              is_vertical, VERTISUNDEF, VERTISSURFACE,  &
                              VERTISLEVEL, VERTISPRESSURE, VERTISHEIGHT,   &
                              VERTISSCALEHEIGHT
-use time_manager_mod, only : time_type, set_date, set_time, get_time, print_time, &
-                             set_calendar_type, print_date, GREGORIAN, &
+use time_manager_mod, only : time_type, set_calendar_type, get_calendar_units, &
+                             increment_date, decrement_date, &
+                             set_date, get_date, print_date, &
+                             set_time, get_time, print_time, &
                              operator(*),  operator(+),  operator(-), &
                              operator(>),  operator(<),  operator(/), &
                              operator(/=), operator(<=), operator(>=)
@@ -183,6 +185,7 @@ real(r8):: input_qc_threshold    = 3.0_r8    ! maximum NCEP QC factor
 !
 character(len=256) :: obs_sequence_name(max_num_input_files) = ''
 character(len=256) :: obs_sequence_list = ''
+character(len=256) :: calendar = 'gregorian'
 integer, dimension(6) :: first_bin_center = (/ 2003, 1, 1, 0, 0, 0 /)
 integer, dimension(6) :: last_bin_center  = (/ 2003, 1, 2, 0, 0, 0 /)
 integer, dimension(6) :: bin_separation   = (/    0, 0, 0, 6, 0, 0 /)
@@ -220,7 +223,7 @@ namelist /obs_diag_nml/ obs_sequence_name, obs_sequence_list,                 &
                        reg_names, print_mismatched_locs, print_obs_locations, &
                        create_rank_histogram, outliers_in_histogram,          &
                        plevel_edges, hlevel_edges, mlevel_edges,              &
-                       verbose, trusted_obs, use_zero_error_obs
+                       verbose, trusted_obs, use_zero_error_obs, calendar
 
 !-----------------------------------------------------------------------
 ! Variables used to accumulate the statistics.
@@ -384,7 +387,7 @@ endif
 
 ! Now that we have input, do some checking and setup
 
-call set_calendar_type(GREGORIAN)
+call set_calendar_type(calendar)
 call Namelist2Times()    ! convert namelist times to DART times
 call DefineTimeBins()    ! Set the temporal binning variables
 call SetPressureLevels(plevel, plevel_edges, Nplevels)
@@ -1527,37 +1530,7 @@ subroutine Namelist2Times( )
 ! type(time_type), intent(out) :: binwidth     ! period of interest around center
 ! type(time_type), intent(out) :: halfbinwidth ! half that period
 
-! We are using bin_separation and bin_width as offsets relative to the
-! first time. to ensure this, the year and month must be zero.
-
-logical :: error_out = .false.
-integer :: seconds
-
-! do some error-checking first
-
-!if ( (bin_separation(1) /= 0) .or. (bin_separation(2) /= 0) ) then
-!   write(string1,*)'bin_separation:year,month must both be zero, they are ', &
-!   bin_separation(1),bin_separation(2)
-!   call error_handler(E_WARN,'Namelist2Times',string1,source,revision,revdate)
-!   error_out = .true.
-!endif
-!
-!if ( (bin_width(1) /= 0) .or. (bin_width(2) /= 0) ) then
-!   write(string1,*)'bin_width:year,month must both be zero, they are ', &
-!   bin_width(1),bin_width(2)
-!   call error_handler(E_WARN,'Namelist2Times',string1,source,revision,revdate)
-!   error_out = .true.
-!endif
-
-if ( (time_to_skip(1) /= 0) .or. (time_to_skip(2) /= 0) ) then
-   write(string1,*)'time_to_skip:year,month must both be zero, they are ', &
-   time_to_skip(1),time_to_skip(2)
-   call error_handler(E_WARN,'Namelist2Times',string1,source,revision,revdate)
-   error_out = .true.
-endif
-
-if ( error_out ) call error_handler(E_ERR,'Namelist2Times', &
-    'namelist parameter out-of-bounds. Fix and try again.',source,revision,revdate)
+integer :: iyear, imonth, iday, ihour, iminute, isecond
 
 ! Set time of first bin center
 beg_time   = set_date(first_bin_center(1), first_bin_center(2), &
@@ -1569,22 +1542,35 @@ end_time   = set_date( last_bin_center(1),  last_bin_center(2), &
                        last_bin_center(3),  last_bin_center(4), &
                        last_bin_center(5),  last_bin_center(6) )
 
-seconds  = bin_separation(4)*3600 + bin_separation(5)*60 + bin_separation(6)
-binsep   = set_time(seconds, bin_separation(3))
-
-seconds  = bin_width(     4)*3600 + bin_width(     5)*60 + bin_width(     6)
-binwidth = set_time(seconds, bin_width(     3))
+! Set the bin width - as an offset to the first bin center.
+iyear     =  bin_width(1)
+imonth    =  bin_width(2)
+iday      =  bin_width(3)
+ihour     =  bin_width(4)
+iminute   =  bin_width(5)
+isecond   =  bin_width(6)
+binwidth  = increment_date(beg_time, iyear, imonth, iday, ihour, iminute, isecond) - &
+                     beg_time
 
 halfbinwidth = binwidth / 2
 
 ! Set time that defines the end of the burn-in period.
 ! Anything at or after this time will be used to accumulate time-averaged quantities.
-seconds   = time_to_skip(4)*3600 + time_to_skip(5)*60 + time_to_skip(6)
 
-if ( (beg_time + set_time(seconds,time_to_skip(3))) <= halfbinwidth) then
+iyear     = time_to_skip(1)
+imonth    = time_to_skip(2)
+iday      = time_to_skip(3)
+ihour     = time_to_skip(4)
+iminute   = time_to_skip(5)
+isecond   = time_to_skip(6)
+skip_time = increment_date(beg_time, iyear, imonth, iday, ihour, iminute , isecond)
+
+! adjust skip_time to reflect the width of the bins
+
+if (skip_time <= halfbinwidth ) then
    skip_time = set_time(0,0)
 else
-   skip_time = beg_time - halfbinwidth + set_time(seconds, time_to_skip(3))
+   skip_time = skip_time - halfbinwidth 
 endif
 
 if ( verbose ) then
@@ -1604,12 +1590,12 @@ if ( verbose ) then
    call print_time(   skip_time,'implied   skip-to         time')
    write(logfileunit,*)
    write(*,*)
-   call print_time(      binsep,'requested bin separation',logfileunit)
-   call print_time(      binsep,'requested bin separation')
-   call print_time(    binwidth,'requested bin      width',logfileunit)
-   call print_time(    binwidth,'requested bin      width')
-   call print_time(halfbinwidth,'implied     halfbinwidth',logfileunit)
-   call print_time(halfbinwidth,'implied     halfbinwidth')
+   call print_time(      binsep,'requested (first) bin separation',logfileunit)
+   call print_time(      binsep,'requested (first) bin separation')
+   call print_time(    binwidth,'requested (first) bin      width',logfileunit)
+   call print_time(    binwidth,'requested (first) bin      width')
+   call print_time(halfbinwidth,'implied   (first)   halfbinwidth',logfileunit)
+   call print_time(halfbinwidth,'implied   (first)   halfbinwidth')
 endif
 
 end subroutine Namelist2Times
@@ -1628,7 +1614,6 @@ subroutine DefineTimeBins()
 ! Global variables read in this routine:
 ! integer,         intent(in)  :: max_num_bins
 ! type(time_type), intent(in)  :: beg_time, end_time  ! of the particular bin
-! type(time_type), intent(in)  :: binsep, halfbinwidth
 
 ! Global variables set in this routine:
 ! type(time_type), intent(out) :: TimeMin, TimeMax
@@ -1640,11 +1625,31 @@ subroutine DefineTimeBins()
 ! integer,         intent(out), dimension(  :) :: obs_used_in_epoch
 
 integer :: iepoch, seconds, days
+integer :: bsyear, bsmonth, bsday, bshour, bsminute, bssecond
+integer :: bwyear, bwmonth, bwday, bwhour, bwminute, bwsecond
+
+type(time_type) :: future_bin, past_bin
+
+bsyear    = bin_separation(1)
+bsmonth   = bin_separation(2)
+bsday     = bin_separation(3)
+bshour    = bin_separation(4)
+bsminute  = bin_separation(5)
+bssecond  = bin_separation(6)
+
+bwyear    = bin_width(1)
+bwmonth   = bin_width(2)
+bwday     = bin_width(3)
+bwhour    = bin_width(4)
+bwminute  = bin_width(5)
+bwsecond  = bin_width(6)
 
 TimeMin  = beg_time
+
 NepochLoop : do iepoch = 1,max_num_bins
    Nepochs = iepoch
-   TimeMax = TimeMin + binsep
+   TimeMax = increment_date(TimeMin,bsyear,bsmonth,bsday,bshour,bsminute,bssecond)
+
    if ( TimeMax > end_time ) exit NepochLoop
    TimeMin = TimeMax
 enddo NepochLoop
@@ -1652,7 +1657,7 @@ enddo NepochLoop
 write(string1,*)'Requesting ',Nepochs,' assimilation periods.'
 call error_handler(E_MSG,'DefineTimeBins',string1)
 
-allocate(   bin_center(Nepochs),    bin_edges(2,Nepochs), &
+allocate(  bin_center(Nepochs),   bin_edges(2,Nepochs), &
          epoch_center(Nepochs), epoch_edges(2,Nepochs), &
     obs_used_in_epoch(Nepochs) )
 
@@ -1666,8 +1671,8 @@ obs_used_in_epoch = 0
 ! only to the first bin leading edge.
 
 iepoch = 1
-bin_center( iepoch)    = beg_time
-bin_edges(2,iepoch)    = beg_time + halfbinwidth
+bin_center( iepoch) = beg_time
+bin_edges(2,iepoch) = beg_time + halfbinwidth
 
 if (beg_time <= halfbinwidth ) then
    bin_edges(1,iepoch) = set_time(0,0)
@@ -1686,9 +1691,18 @@ epoch_edges(2,iepoch) = days + seconds/86400.0_digits12
 
 BinLoop : do iepoch = 2,Nepochs
 
-   bin_center( iepoch) = bin_center(iepoch-1) + binsep
-   bin_edges(1,iepoch) = bin_center(iepoch) - halfbinwidth + set_time(1,0)
-   bin_edges(2,iepoch) = bin_center(iepoch) + halfbinwidth
+   bin_center(iepoch) = increment_date(bin_center(iepoch-1), &
+                            bsyear, bsmonth, bsday, bshour, bsminute, bssecond)
+
+   ! now must determine what half the bin width is for this time
+
+   past_bin = decrement_date(bin_center(iepoch), &
+                            bwyear, bwmonth, bwday, bwhour, bwminute, bwsecond)
+   future_bin = increment_date(bin_center(iepoch), &
+                            bwyear, bwmonth, bwday, bwhour, bwminute, bwsecond)
+
+   bin_edges(1,iepoch) = (bin_center(iepoch) + past_bin)/2 + set_time(1,0)
+   bin_edges(2,iepoch) = (bin_center(iepoch) + future_bin)/2
 
    call get_time(bin_center(iepoch),seconds,days)
    epoch_center(iepoch) = days + seconds/86400.0_digits12
@@ -3931,9 +3945,12 @@ call nc_check(nf90_put_att(ncid, TimeVarID, 'standard_name',    'time'), &
           'WriteNetCDF', 'time:standard_name')
 call nc_check(nf90_put_att(ncid, TimeVarID, 'long_name', 'temporal bin midpoints'), &
           'WriteNetCDF', 'time:long_name')
-call nc_check(nf90_put_att(ncid, TimeVarID, 'units',     'days since 1601-1-1'), &
+
+call get_calendar_units(string1)
+call nc_check(nf90_put_att(ncid, TimeVarID, 'units', string1), &
           'WriteNetCDF', 'time:units')
-call nc_check(nf90_put_att(ncid, TimeVarID, 'calendar',    'Gregorian'), &
+
+call nc_check(nf90_put_att(ncid, TimeVarID, 'calendar', trim(calendar)), &
           'WriteNetCDF', 'time:calendar')
 call nc_check(nf90_put_att(ncid, TimeVarID, 'axis',    'T'), &
           'WriteNetCDF', 'time:axis')
@@ -3952,9 +3969,9 @@ call nc_check(nf90_def_var(ncid=ncid, name='time_bounds', xtype=nf90_double, &
             'WriteNetCDF', 'time_bounds:def_var')
 call nc_check(nf90_put_att(ncid, TimeBoundsVarID, 'long_name', 'temporal bin edges'), &
           'WriteNetCDF', 'time_bounds:long_name')
-call nc_check(nf90_put_att(ncid, TimeBoundsVarID, 'units',     'days since 1601-1-1'), &
+call nc_check(nf90_put_att(ncid, TimeBoundsVarID, 'units', string1), &
           'WriteNetCDF', 'time_bounds:units')
-call nc_check(nf90_put_att(ncid, TimeBoundsVarID, 'calendar',  'Gregorian'), &
+call nc_check(nf90_put_att(ncid, TimeBoundsVarID, 'calendar',  trim(calendar)), &
           'WriteNetCDF', 'time_bounds:calendar')
 call nc_check(nf90_put_att(ncid, TimeBoundsVarID, 'valid_range', &
           (/ epoch_edges(1,1), epoch_edges(2,Nepochs) /)), &

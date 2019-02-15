@@ -178,60 +178,78 @@ ncdump -f F -v CopyMetaData obs_diag_output.nc
 </div>
 <br />
 <br />
-<table width="90%">
+<table width="95%">
 <tr><td valign="top"><b>Nposs</b></td>
-    <td>The number of observations available to be assimilated.</td></tr>
+    <td colspan=2>The number of observations available to be assimilated.</td></tr>
 <tr><td valign="top"><b>Nused</b></td>
-    <td>The number of observations that were assimilated.</td></tr>
+    <td colspan=2>The number of observations that were assimilated.</td></tr>
 <tr><td valign="top"><b>NbadUV</b></td>
-    <td>the number of velocity observations that had a matching component
+    <td colspan=2>the number of velocity observations that had a matching component
         that was not assimilated;</td></tr>
 <tr><td valign="top"><b>NbadLV</b></td>
-    <td>the number of observations that were above or below the highest
+    <td colspan=2>the number of observations that were above or below the highest
         or lowest model level, respectively;</td></tr>
 <tr><td valign="top"><b>rmse</b></td>
-    <td>The root-mean-squared error (the horizontal wind components
+    <td colspan=2>The root-mean-squared error (the horizontal wind components
         are also used to calculate the vector wind velocity
         and its RMS error).</td></tr>
 <tr><td valign="top"><b>bias</b></td>
-    <td>The simple sum of forecast - observation. The bias of the
+    <td colspan=2>The simple sum of forecast - observation. The bias of the
         horizontal wind speed (not velocity) is also computed.</td></tr>
 <tr><td valign="top"><b>spread</b></td>
-    <td>The standard deviation of the univariate obs.
+    <td colspan=2>The standard deviation of the univariate obs.
         DART does not exploit the bivariate nature of U,V winds
         and so the spread of the horizontal wind is defined as
         the sum of the spreads of the U and V components.</td></tr>
 <tr><td valign="top"><b>totalspread&nbsp;&nbsp;&nbsp;</b></td>
-    <td>The total standard deviation of the estimate. We pool the
+    <td colspan=2>The total standard deviation of the estimate. We pool the
         ensemble variance of the observation plus the observation error
         variance and take the square root.</td></tr>
 <tr><td valign="top"><b>NbadDARTQC&nbsp;&nbsp;&nbsp;</b></td>
-    <td>the number of observations that had a DART QC value
+    <td colspan=2>the number of observations that had a DART QC value
         (&gt; 1 for a prior, &gt; 3 for a posterior)</td></tr>
 <tr><td valign="top"><b>observation</b></td>
-    <td>the mean of the observation values</td></tr>
+    <td colspan=2>the mean of the observation values</td></tr>
 <tr><td valign="top"><b>ens_mean</b></td>
-    <td>the ensemble mean of the model estimates of the observation values</td></tr>
+    <td colspan=2>the ensemble mean of the model estimates of the observation values</td></tr>
 <tr><td valign="top"><b>N_trusted</b></td>
-    <td>the number of implicitly trusted observations, regardless of DART QC</td></tr>
+    <td colspan=2>the number of implicitly trusted observations, regardless of DART QC</td></tr>
+
 <tr><td valign="top"><b>N_DARTqc_0</b></td>
-    <td>the number of observations that had a DART QC value of 0</td></tr>
+    <td>number of observations that had a DART QC value of 0</td>
+    <td>observation assimilated</td></tr>
+
 <tr><td valign="top"><b>N_DARTqc_1</b></td>
-    <td>the number of observations that had a DART QC value of 1</td></tr>
+    <td>number of observations that had a DART QC value of 1</td>
+    <td>observation evaluated only (because of namelist settings)</td></tr>
+
 <tr><td valign="top"><b>N_DARTqc_2</b></td>
-    <td>the number of observations that had a DART QC value of 2</td></tr>
+    <td>number of observations that had a DART QC value of 2</td>
+    <td>assimilated, but the posterior forward operator failed</td></tr>
+
 <tr><td valign="top"><b>N_DARTqc_3</b></td>
-    <td>the number of observations that had a DART QC value of 3</td></tr>
+    <td>number of observations that had a DART QC value of 3</td>
+    <td>evaluated only, but the posterior forward operator failed</td></tr>
+
 <tr><td valign="top"><b>N_DARTqc_4</b></td>
-    <td>the number of observations that had a DART QC value of 4</td></tr>
+    <td>number of observations that had a DART QC value of 4</td>
+    <td>prior forward operator failed</td></tr>
+
 <tr><td valign="top"><b>N_DARTqc_5</b></td>
-    <td>the number of observations that had a DART QC value of 5</td></tr>
+    <td>number of observations that had a DART QC value of 5</td>
+    <td>not used because observation type not listed in namelist</td></tr>
+
 <tr><td valign="top"><b>N_DARTqc_6</b></td>
-    <td>the number of observations that had a DART QC value of 6</td></tr>
+    <td>number of observations that had a DART QC value of 6</td>
+    <td>rejected because incoming observation QC too large</td></tr>
+
 <tr><td valign="top"><b>N_DARTqc_7</b></td>
-    <td>the number of observations that had a DART QC value of 7</td></tr>
+    <td>number of observations that had a DART QC value of 7</td>
+    <td>rejected because of a failed outlier threshold test</td></tr>
+
 <tr><td valign="top"><b>N_DARTqc_8</b></td>
-    <td>the number of observations that had a DART QC value of 8</td></tr>
+    <td>number of observations that had a DART QC value of 8</td>
+    <td>vertical conversion failed</td></tr>
 </table>
 
 <P>
@@ -282,6 +300,8 @@ ncdump -f F -v CopyMetaData obs_diag_output.nc
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>What is new in the Manhattan Release.</H2>
 <ol>
+    <li>Support for multiple calendar types.</li><br />
+    <li>Support for bins than can be months or years.</li><br />
     <li>Support for DART QC = 8 (failed vertical conversion).</li><br />
     <li>Simplified input file specification.</li><br />
     <li>Removed <em class=code>rat_cri</em> and
@@ -349,6 +369,7 @@ prematurely terminating the namelist.
 &amp;obs_diag_nml
    obs_sequence_name     = ''
    obs_sequence_list     = ''
+   calendar              = 'gregorian'
    first_bin_center      =  2003, 1, 1, 0, 0, 0
    last_bin_center       =  2003, 1, 2, 0, 0, 0
    bin_separation        =     0, 0, 0, 6, 0, 0
@@ -433,6 +454,13 @@ editor, or another program.  If this is set, <em class=code>obs_sequence_name</e
 must be set to '&nbsp;' (empty string).
 </TD></TR>
 
+<TR><TD> calendar </TD>
+    <TD> character(len=256) </TD>
+    <TD> String to specify what calendar to use when reading the observation
+sequence file. Supported calendars are listed in the
+<a href="../../../modules/utilities/time_manager_mod.html">time_manager_mod.html</a>
+</TD></TR>
+
 <TR><TD> first_bin_center </TD>
     <TD> integer, dimension(6) </TD>
     <TD>first timeslot of the first obs_seq.final file to process.  The six
@@ -455,21 +483,25 @@ class=code>last_bin_center</em>.  See also <em class=code>max_num_bins</em>.
 
 <TR><TD> bin_separation </TD>
     <TD> integer, dimension(6) </TD>
-    <TD>Time between bin centers.  The year and month values <em>must</em> be zero.
+    <TD>Time between bin centers.
+<em class=removed>The year and month values <em>must</em> be zero.</em>
+These should be considered offsets.
 </TD></TR>
 
 <TR><TD> bin_width </TD>
     <TD> integer, dimension(6) </TD>
-    <TD>Time span around bin centers in which obs will be compared.  The year and
-month values <em>must</em> be zero.  Frequently, but not required to be, the
-same as the values for bin_separation.
-0</TD></TR>
+    <TD>Time span around bin centers in which obs will be compared.
+<em class=removed>The year and month values <em>must</em> be zero.</em>
+These should be considered offsets.
+Frequently, but not required to be, the same as the values for bin_separation.
+</TD></TR>
 
 <TR><TD> time_to_skip </TD>
     <TD> integer, dimension(6) </TD>
     <TD>Time span at the beginning to skip when calculating vertical profiles of
-rms error and bias. The year and month values <em>must</em> be zero. Useful
-because it takes some time for the assimilation to settle down from the
+rms error and bias. These should be considered offsets.
+<em class=removed>The year and month values <em>must</em> be zero.</em>
+Useful because it takes some time for the assimilation to settle down from the
 climatological spread at the start. <em class=code>time_to_skip</em> is an
 amount of time AFTER the first edge of the first bin.
 </TD></TR>

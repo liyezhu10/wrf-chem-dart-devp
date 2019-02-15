@@ -14,6 +14,7 @@
 &obs_diag_nml
    obs_sequence_name     = ''
    obs_sequence_list     = ''
+   calendar              = 'gregorian'
    first_bin_center      =  2003, 1, 1, 0, 0, 0 
    last_bin_center       =  2003, 1, 2, 0, 0, 0 
    bin_separation        =     0, 0, 0, 6, 0, 0 

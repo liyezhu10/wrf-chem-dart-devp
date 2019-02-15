@@ -83,6 +83,8 @@ public :: month_name
 
 public :: julian_day
 
+public :: get_calendar_units
+
 ! Subroutines and functions for basic I/O
 public :: time_manager_init, print_time, print_date
 public :: write_time, read_time, interactive_time
@@ -137,7 +139,7 @@ end interface
 
 logical, save :: module_initialized = .false.
 
-character(len=129) :: errstring
+character(len=512) :: errstring, string1
 
 !======================================================================
 
@@ -770,6 +772,51 @@ endif
 
 end subroutine set_calendar_type_string
 
+!> returns the calendar units as a string
+
+subroutine get_calendar_units(units_string)
+
+! If you 'call print_date(set_time(0,0))' with each calendar, you get:
+!    thirty_day_months    1 Jan 01 00:00:00
+!    julian               1 Jan 01 00:00:00
+!    noleap               1 Jan 01 00:00:00
+!    gregorian_mars       1 sol 001 00:00:00
+!    solar_mars           1 sol 00001 00:00:00
+!    gregorian         1601 Jan 01 00:00:00
+
+character(len=*), intent(out) :: units_string
+
+integer, parameter :: max_calendar_string_length = len_trim('THIRTY_DAY_MONTHS')
+character(len=*), parameter :: routine = 'get_calendar_units'
+character(len=max_calendar_string_length) :: cstring
+
+if ( .not. module_initialized ) call time_manager_init
+
+call get_calendar_string(cstring)
+
+select case (cstring)
+
+   case ( 'NO_CALENDAR', 'NO CALENDAR', 'NONE' )
+           units_string = 'none'
+   case ( 'THIRTY_DAY_MONTHS' )
+           units_string = 'days since 0001-1-1'
+   case ( 'JULIAN' )
+           units_string = 'days since 0001-1-1'
+   case ( 'NOLEAP' )
+           units_string = 'days since 0001-1-1'
+   case ( 'GREGORIAN_MARS' )
+           units_string = 'sols since 1-001 00:00:00'
+   case ( 'SOLAR_MARS' )
+           units_string = 'sols since 1-00001 00:00:00'
+   case ( 'GREGORIAN' )
+           units_string = 'days since 1601-01-01_00:00:00'
+   case default
+      write(errstring,*)'Unknown calendar "',trim(cstring),'"'
+      call error_handler(E_ERR,routine,errstring,source,revision,revdate)
+
+end select
+
+end subroutine get_calendar_units
 
 
 function get_calendar_type()
@@ -1422,7 +1469,9 @@ if( oseconds > 59 .or. oseconds < 0 .or. &
 
    write(errstring,'(''year,mon,day,hour,min,sec'',6(1x,i4),'' not a valid date.'')') &
               year,month,day,ohours,ominutes,oseconds
-   call error_handler(E_ERR,'set_date_no_leap',errstring,source,revision,revdate)
+   write(string1,*)'first legal date is 1-1-1_00:00:00'
+   call error_handler(E_ERR,'set_date_no_leap',errstring, &
+              source, revision, revdate, text2=string1)
 endif
 
 ndays = 0
@@ -1620,10 +1669,9 @@ type(time_type)                       :: increment_gregorian
 
 integer :: oseconds, ominutes, ohours, odays, omonths, oyears
 integer :: csecond, cminute, chour, cday, cmonth, cyear
+integer :: imonth
 
 if ( .not. module_initialized ) call time_manager_init
-
-call error_handler(E_ERR,'increment_gregorian','not implemented',source,revision,revdate)
 
 ! Missing optionals are set to 0
 
@@ -1634,32 +1682,38 @@ odays    = 0; if(present(days   )) odays    = days
 omonths  = 0; if(present(months )) omonths  = months
 oyears   = 0; if(present(years  )) oyears   = years
 
-! Increment must be positive definite
+! Increment must be positive
 
 if( oseconds < 0 .or. ominutes < 0 .or. &
     ohours   < 0 .or. odays    < 0 .or. &
     omonths  < 0 .or. oyears   < 0) then
    write(errstring,*)'illegal increment s,m,h,d,mn,y', &
                       oseconds,ominutes,ohours,odays,omonths,oyears
-    call error_handler(E_ERR,'increment_gregorian',errstring,source,revision,revdate)
+   call error_handler(E_ERR,'increment_gregorian',errstring,source,revision,revdate)
 endif
-
-! First convert time into date
 
 call get_date_gregorian(time, cyear, cmonth, cday, chour, cminute, csecond)
 
-! Add on the increments
+cyear = cyear + oyears
 
-csecond = csecond + oseconds
-cminute = cminute + ominutes
-chour   = chour   + ohours
-cday    = cday    + odays
-cmonth  = cmonth  + omonths
-cyear   = cyear   + oyears
+do imonth = 1,omonths
+   cmonth = cmonth + imonth
+   if (cmonth > 12) then
+      cyear = cyear + 1
+      cmonth = 1
+   endif
+enddo
 
-! Convert this back into a time
+! Add up all the pieces
+! 1) the first day of new year/month
+! 2) the days and seconds of the input
+! 3) the days and seconds of the increment
+! 4) subtract off a day (to account for day 1 in piece 1)
 
-increment_gregorian = set_date_gregorian(cyear, cmonth, cday, chour, cminute, csecond)
+increment_gregorian = set_date_gregorian(cyear, cmonth, 1, 0, 0, 0) + &
+                      set_time( chour*3600 +  cminute*60 + csecond,  cday) + &
+                      set_time(ohours*3600 + ominutes*60 + oseconds, odays) - &
+                      set_time(0,1)
 
 end function increment_gregorian
 
@@ -1981,15 +2035,14 @@ function decrement_gregorian(time, years, months, days, hours, minutes, seconds)
 ! Given time and some date decrement, computes new time for gregorian calendar.
 
 type(time_type), intent(in)           :: time
-integer,         intent(in), optional :: seconds, minutes, hours, days, months, years
+integer,         intent(in), optional :: years, months, days, hours, minutes, seconds
 type(time_type)                       :: decrement_gregorian
 
 integer :: oseconds, ominutes, ohours, odays, omonths, oyears
-integer :: csecond, cminute, chour, cday, cmonth, cyear
+integer :: csecond,  cminute,  chour,  cday,  cmonth,  cyear
+integer :: imonth, origyear
 
 if ( .not. module_initialized ) call time_manager_init
-
-call error_handler(E_ERR,'decrement_gregorian','not implemented',source,revision,revdate)
 
 ! Missing optionals are set to 0
 
@@ -2000,33 +2053,38 @@ odays    = 0; if(present(days   )) odays    = days
 omonths  = 0; if(present(months )) omonths  = months
 oyears   = 0; if(present(years  )) oyears   = years
 
-! Decrement must be positive definite
-
-! this block needs work ... TJH ....
+! Decrement must be positive
 
 if( oseconds < 0 .or. ominutes < 0 .or. &
     ohours   < 0 .or. odays    < 0 .or. &
     omonths  < 0 .or. oyears < 0) then
-    write(errstring,*)'illegal decrement ',oseconds,ominutes,ohours,odays,omonths,oyears
+    write(errstring,*)'illegal decrement ',oyears,omonths,odays,ohours,ominutes,oseconds
     call error_handler(E_ERR,'decrement_gregorian',errstring,source,revision,revdate)
 endif
 
-! First convert time into date
-
 call get_date_gregorian(time, cyear, cmonth, cday, chour, cminute, csecond)
+origyear = cyear
 
-! Remove the increments
+cyear = cyear - oyears
 
-csecond = csecond - oseconds
-cminute = cminute - ominutes
-chour   = chour   - ohours
-cday    = cday    - odays
-cmonth  = cmonth  - omonths
-cyear  = cyear    - oyears
+do imonth = 1,omonths
+   cmonth = cmonth - imonth
+   if (cmonth < 1) then
+      cyear = cyear - 1
+      if (cyear < 0) then
+         write(errstring,*)'illegal decrement ',oyears,omonths,odays,ohours,ominutes,oseconds
+         write(string1,*)'Results in a negative year, original year is ', origyear
+         call error_handler(E_ERR, 'decrement_gregorian', errstring, &
+                    source, revision, revdate, text2=string1)
+      endif
+      cmonth = 12
+   endif
+enddo
 
-! Convert this back into a time
-
-decrement_gregorian =  set_date_gregorian(cyear, cmonth, cday, chour, cminute, csecond)
+decrement_gregorian = set_date_gregorian(cyear, cmonth, 1, 0, 0, 0) + &
+                      set_time( chour*3600 +  cminute*60 + csecond,  cday) - &
+                      set_time(ohours*3600 + ominutes*60 + oseconds, odays) - &
+                      set_time(0,1)
 
 end function decrement_gregorian
 
