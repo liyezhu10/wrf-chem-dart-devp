@@ -41,8 +41,8 @@ use     location_mod, only : location_type, get_location, set_location_missing, 
                              is_vertical, VERTISUNDEF, VERTISSURFACE,  &
                              VERTISLEVEL, VERTISPRESSURE, VERTISHEIGHT,   &
                              VERTISSCALEHEIGHT
-use time_manager_mod, only : time_type, set_calendar_type, get_calendar_units, &
-                             increment_date, decrement_date, &
+use time_manager_mod, only : time_type, get_calendar_udunits, leap_year, &
+                             set_calendar_type, get_calendar_string, &
                              set_date, get_date, print_date, &
                              set_time, get_time, print_time, &
                              operator(*),  operator(+),  operator(-), &
@@ -332,7 +332,7 @@ type(time_type) :: beg_time, end_time  ! of the particular bin
 type(time_type) :: binsep, binwidth, halfbinwidth
 type(time_type) :: seqT1, seqTN        ! first,last time in entire observation sequence
 type(time_type) :: AllseqT1, AllseqTN  ! first,last time in ALL observation sequences
-type(time_type) :: obs_time, skip_time
+type(time_type) :: obs_time, averaging_start_time
 
 character(len=512) :: string1, string2, string3
 character(len=stringlength) :: obsname
@@ -375,7 +375,6 @@ if (do_nml_term()) write(    *      , nml=obs_diag_nml)
 
 num_input_files = set_filename_list(obs_sequence_name, obs_sequence_list, 'obs_diag')
 
-
 ! Check to see if we are including the outlier observations in the
 ! rank histogram calculation.
 
@@ -388,6 +387,7 @@ endif
 ! Now that we have input, do some checking and setup
 
 call set_calendar_type(calendar)
+if (verbose) call date_increment_test()
 call Namelist2Times()    ! convert namelist times to DART times
 call DefineTimeBins()    ! Set the temporal binning variables
 call SetPressureLevels(plevel, plevel_edges, Nplevels)
@@ -884,7 +884,7 @@ ObsFileLoop : do ifile=1, num_input_files
             ! end of time series statistics
             !===========================================================
 
-            if ( obs_time < skip_time ) cycle Areas
+            if ( obs_time < averaging_start_time ) cycle Areas
 
             !===========================================================
             ! vertical statistics part ... after skipping the burn-in
@@ -1405,13 +1405,14 @@ end subroutine DestroyVariables
 !======================================================================
 
 
+!> ----------------------------------------------------------------------
+!> Define/Append the 'horizontal wind' obs_kinds to supplant the list declared
+!> in obs_kind_mod.f90 i.e. if there is a RADIOSONDE_U_WIND_COMPONENT
+!> and a RADIOSONDE_V_WIND_COMPONENT, there must be a RADIOSONDE_HORIZONTAL_WIND
+!> Replace calls to 'get_name_for_type_of_obs' with variable 'obs_type_strings'
+
 function grok_observation_names(my_names)
-!----------------------------------------------------------------------
-! Define/Append the 'horizontal wind' obs_kinds to supplant the list declared
-! in obs_kind_mod.f90 i.e. if there is a RADIOSONDE_U_WIND_COMPONENT
-! and a RADIOSONDE_V_WIND_COMPONENT, there must be a RADIOSONDE_HORIZONTAL_WIND
-! Replace calls to 'get_name_for_type_of_obs' with variable 'obs_type_strings'
-!----------------------------------------------------------------------
+
 
 character(len=stringlength), pointer :: my_names(:) ! INTENT OUT, btw
 integer :: grok_observation_names
@@ -1525,12 +1526,13 @@ subroutine Namelist2Times( )
 ! Global-scope variables set in this routine:
 ! type(time_type), intent(out) :: beg_time     ! first_bin_center
 ! type(time_type), intent(out) :: end_time     ! last_bin_center
-! type(time_type), intent(out) :: skip_time    ! time AFTER first bin leading edge
+! type(time_type), intent(out) :: averaging_start_time  ! time to start averaging
 ! type(time_type), intent(out) :: binsep       ! time between bin centers
 ! type(time_type), intent(out) :: binwidth     ! period of interest around center
 ! type(time_type), intent(out) :: halfbinwidth ! half that period
 
 integer :: iyear, imonth, iday, ihour, iminute, isecond
+type(time_type) :: offset
 
 ! Set time of first bin center
 beg_time   = set_date(first_bin_center(1), first_bin_center(2), &
@@ -1554,7 +1556,8 @@ binwidth  = increment_date(beg_time, iyear, imonth, iday, ihour, iminute, isecon
 
 halfbinwidth = binwidth / 2
 
-! Set time that defines the end of the burn-in period.
+! Set time that defines the END of the burn-in period 
+! i.e. the START of the time-averaged quantities.
 ! Anything at or after this time will be used to accumulate time-averaged quantities.
 
 iyear     = time_to_skip(1)
@@ -1563,14 +1566,12 @@ iday      = time_to_skip(3)
 ihour     = time_to_skip(4)
 iminute   = time_to_skip(5)
 isecond   = time_to_skip(6)
-skip_time = increment_date(beg_time, iyear, imonth, iday, ihour, iminute , isecond)
+offset    = increment_date(beg_time, iyear, imonth, iday, ihour, iminute , isecond)
 
-! adjust skip_time to reflect the width of the bins
-
-if (skip_time <= halfbinwidth ) then
-   skip_time = set_time(0,0)
+if (offset <= halfbinwidth ) then
+   averaging_start_time = set_time(0,0)
 else
-   skip_time = skip_time - halfbinwidth 
+   averaging_start_time = offset - halfbinwidth 
 endif
 
 if ( verbose ) then
@@ -1578,16 +1579,16 @@ if ( verbose ) then
    call print_date(    beg_time,'requested first bincenter date')
    call print_date(    end_time,'requested last  bincenter date',logfileunit)
    call print_date(    end_time,'requested last  bincenter date')
-   call print_date(   skip_time,'implied   skip-to         date',logfileunit)
-   call print_date(   skip_time,'implied   skip-to         date')
+   call print_date(   averaging_start_time,'first date to start time averaging',logfileunit)
+   call print_date(   averaging_start_time,'first date to start time averaging')
    write(logfileunit,*)
    write(*,*)
    call print_time(    beg_time,'requested first bincenter time',logfileunit)
    call print_time(    beg_time,'requested first bincenter time')
    call print_time(    end_time,'requested last  bincenter time',logfileunit)
    call print_time(    end_time,'requested last  bincenter time')
-   call print_time(   skip_time,'implied   skip-to         time',logfileunit)
-   call print_time(   skip_time,'implied   skip-to         time')
+   call print_time(   averaging_start_time,'first time to start time averaging',logfileunit)
+   call print_time(   averaging_start_time,'first time to start time averaging')
    write(logfileunit,*)
    write(*,*)
    call print_time(      binsep,'requested (first) bin separation',logfileunit)
@@ -3946,7 +3947,7 @@ call nc_check(nf90_put_att(ncid, TimeVarID, 'standard_name',    'time'), &
 call nc_check(nf90_put_att(ncid, TimeVarID, 'long_name', 'temporal bin midpoints'), &
           'WriteNetCDF', 'time:long_name')
 
-call get_calendar_units(string1)
+call get_calendar_udunits(string1)
 call nc_check(nf90_put_att(ncid, TimeVarID, 'units', string1), &
           'WriteNetCDF', 'time:units')
 
@@ -4753,7 +4754,350 @@ IRemoveDuplicates = n
 end function IRemoveDuplicates
 
 
-!======================================================================
+!-------------------------------------------------------------------------------
+!> Given time and some date increment, computes new time.
+!> If incrementing by a 'month', things may become ill-defined.
+!> If the input date is the last day of the month, and you increment by 1 month,
+!> do you want the last day of the next month? If so,
+!> 29 June + 1 month is 29 July
+!> 30 June + 1 month is 31 July  ... no way to go from 30 June to 30 July
+!> 28,29 Feb + 1 mon is 31 March  ... no way to get to March 28,29,30
+!>
+!> When adding 'months' to a input date that is the end of the month, 
+!> this routine increments to the last day of the new month.
+
+function increment_date(time, years, months, days, hours, minutes, seconds)
+
+type(time_type), intent(in)           :: time
+integer,         intent(in), optional :: years, months, days, hours, minutes, seconds
+type(time_type)                       :: increment_date
+
+integer :: tseconds, tminutes, thours, tdays, tmonths, tyears
+integer :: oseconds, ominutes, ohours, odays, omonths, oyears
+integer :: cseconds, cminutes, chours, cdays, cmonths, cyears
+integer :: imonth
+
+type(time_type) :: newtime
+type(time_type) :: day_after
+type(time_type) :: oneday
+logical :: end_of_month
+
+! if ( .not. module_initialized ) call time_manager_init
+
+oneday = set_time(0,1)
+
+! Missing optionals are set to 0
+
+oseconds = 0; if(present(seconds)) oseconds = seconds
+ominutes = 0; if(present(minutes)) ominutes = minutes
+ohours   = 0; if(present(hours  )) ohours   = hours
+odays    = 0; if(present(days   )) odays    = days
+omonths  = 0; if(present(months )) omonths  = months
+oyears   = 0; if(present(years  )) oyears   = years
+
+! Increment must be positive
+
+if( oseconds < 0 .or. ominutes < 0 .or. &
+    ohours   < 0 .or. odays    < 0 .or. &
+    omonths  < 0 .or. oyears   < 0) then
+   write(string1,*)'illegal increment s,m,h,d,mn,y', &
+                      oseconds,ominutes,ohours,odays,omonths,oyears
+   call error_handler(E_ERR,'increment_date',string1,source,revision,revdate)
+endif
+
+call get_date(time, cyears, cmonths, cdays, chours, cminutes, cseconds)
+
+cyears = cyears + oyears
+
+! If you are at the end of a month, adding 1 month means you are at 
+! the end of the next month
+
+end_of_month = .false.
+day_after = time + oneday
+call get_date(day_after, tyears, tmonths, tdays, thours, tminutes, tseconds)
+if (tmonths /= cmonths .and. (omonths > 0 .or. oyears > 0)) end_of_month = .true.
+
+do imonth = 1,omonths
+   cmonths = cmonths + 1
+   if (cmonths > 12) then
+      cyears = cyears + 1
+      cmonths = 1
+   endif
+enddo
+
+if (end_of_month) then
+
+   ! Get the last day of the new month, to do that, we need to
+   ! get the first day of next month and subtract one day.
+
+   tyears  = cyears
+   tmonths = cmonths + 1
+
+   if (tmonths > 12) then
+      tmonths = 1
+      tyears = tyears + 1
+   endif
+
+   newtime        = set_date(tyears, tmonths, 1, chours, cminutes, cseconds)
+   increment_date = newtime - oneday
+
+else
+
+   increment_date = set_date(cyears, cmonths, cdays, chours, cminutes, cseconds) + &
+                    set_time(ohours*3600 + ominutes*60 + oseconds, odays)
+endif
+
+! call print_date(increment_date,'increment_date')
+
+end function increment_date
+
+
+!------------------------------------------------------------------------------- 
+!> Given time and some date decrement, computes new time.
+!> When subtracting 'months' to a input date that is the end of the month, 
+!> this routine decrements to the last day of the new month.
+!>
+!> This algoritm is not perfect.
+!> 30 July - 1 month results in 30 June
+!> 31 July - 1 month results in 30 June (also)
+!> 30 June - 1 month is 31 May   (no way to get to 30 May)
+
+function decrement_date(time, years, months, days, hours, minutes, seconds)
+
+type(time_type), intent(in)           :: time
+integer,         intent(in), optional :: years, months, days, hours, minutes, seconds
+type(time_type)                       :: decrement_date
+
+integer :: tseconds, tminutes, thours, tdays, tmonths, tyears
+integer :: oseconds, ominutes, ohours, odays, omonths, oyears
+integer :: cseconds, cminutes, chours, cdays, cmonths, cyears
+integer :: imonth, origyear
+
+type(time_type) :: newtime
+type(time_type) :: offset_time
+type(time_type) :: day_after
+type(time_type) :: oneday
+logical :: end_of_month
+
+! if ( .not. module_initialized ) call time_manager_init
+
+oneday = set_time(0,1)
+
+! Missing optionals are set to 0
+
+oseconds = 0; if(present(seconds)) oseconds = seconds
+ominutes = 0; if(present(minutes)) ominutes = minutes
+ohours   = 0; if(present(hours  )) ohours   = hours
+odays    = 0; if(present(days   )) odays    = days
+omonths  = 0; if(present(months )) omonths  = months
+oyears   = 0; if(present(years  )) oyears   = years
+
+! Decrement must be positive
+
+if( oseconds < 0 .or. ominutes < 0 .or. &
+    ohours   < 0 .or. odays    < 0 .or. &
+    omonths  < 0 .or. oyears < 0) then
+    write(string1,*)'illegal decrement ',oyears,omonths,odays,ohours,ominutes,oseconds
+    call error_handler(E_ERR,'decrement_date',string1,source,revision,revdate)
+endif
+
+! call print_date(time,'original  time')
+
+call get_date(time, cyears, cmonths, cdays, chours, cminutes, cseconds)
+origyear = cyears
+
+! If you are at the end of the month to start, and you decrement a month,
+! you should return the end of the previous month.
+
+end_of_month = .false.
+day_after = time + oneday
+call get_date(day_after, tyears, tmonths, tdays, thours, tminutes, tseconds)
+if (tmonths /= cmonths .and. (omonths > 0 .or. oyears > 0)) end_of_month = .true.
+
+! March is a special case ... March 29,30,31 
+! can all derefernce to the end of February.
+
+if (leap_year(time) .and. cmonths == 3 .and. cdays >= 29) then
+   end_of_month = .true.
+elseif ( cmonths == 3 .and. cdays >= 28 ) then
+   end_of_month = .true.
+endif
+
+! call print_date(day_after,'day      after')
+
+cyears = cyears - oyears
+
+do imonth = 1,omonths
+   cmonths = cmonths - 1
+   if (cmonths < 1) then
+      cyears = cyears - 1
+      if (cyears < 0) then
+         write(string1,*)'illegal decrement ',oyears,omonths,odays,ohours,ominutes,oseconds
+         write(string1,*)'Results in a negative year, original year is ', origyear
+         call error_handler(E_ERR, 'decrement_date', string1, &
+                    source, revision, revdate, text2=string1)
+      endif
+      cmonths = 12
+   endif
+enddo
+
+if (end_of_month) then
+   ! Get the last day of the new month, to do that, we need to
+   ! get the first day of next month and subtract one day.
+
+   tyears  = cyears
+   tmonths = cmonths + 1
+
+   if (tmonths > 12) then
+      tmonths = 1
+      tyears = tyears + 1
+   endif
+
+   newtime    = set_date(tyears, tmonths, 1, chours, cminutes, cseconds)
+   decrement_date = newtime - oneday
+
+else
+
+   newtime     = set_date(cyears, cmonths, cdays, chours, cminutes, cseconds)
+   offset_time = set_time(ohours*3600 + ominutes*60 + oseconds, odays)
+   decrement_date = newtime - offset_time
+
+endif
+
+end function decrement_date
+
+
+!-------------------------------------------------------------------------------
+!> Routine to show potential problems when incrementing by months or years
+
+subroutine date_increment_test
+
+type(time_type) :: time1, time2, time3
+
+! test to see if it is desired to increment by years or months
+! If not, just return.
+! If so, demonstrate the peculiarities.
+
+if (bin_separation(1) == 0 .and. bin_separation(2) == 0 .and. &
+         bin_width(1) == 0 .and.      bin_width(2) == 0 .and. &
+      time_to_skip(1) == 0 .and.   time_to_skip(2) == 0 ) return
+
+call get_calendar_string(string1)
+
+write(*,*)''
+write(*,*)'date_increment_test() report using the ',trim(string1),' calendar.'
+write(*,*)'Depending on the calendar, these might generate unexpected results.'
+if (trim(string1) == 'GREGORIAN') &
+write(*,*) '2000 Feb 29 is a valid date with the GREGORIAN calendar'
+write(*,*)''
+
+time1 = set_date(2000,1,31)
+time2 = decrement_date(time1,0,1)
+time3 = increment_date(time1,0,1)
+call print_date(time2,'2000 Jan 31 - one month = ')
+call print_date(time3,'2000 Jan 31 + one month = ')
+write(*,*)''
+
+time1 = set_date(2000,2,1)
+time2 = decrement_date(time1,0,1)
+time3 = increment_date(time1,0,1)
+call print_date(time2,'2000 Feb  1 - one month = ')
+call print_date(time3,'2000 Feb  1 + one month = ')
+write(*,*)''
+
+time1 = set_date(2000,2,15)
+time2 = decrement_date(time1,0,1)
+time3 = increment_date(time1,0,1)
+call print_date(time2,'2000 Feb 15 - one month = ')
+call print_date(time3,'2000 Feb 15 + one month = ')
+write(*,*)''
+
+time1 = set_date(2000,2,29)
+time2 = decrement_date(time1,0,1)
+time3 = increment_date(time1,0,1)
+call print_date(time1,'2000 Feb 29 = ')
+call print_date(time2,'2000 Feb 29 - one month = ')
+call print_date(time3,'2000 Feb 29 + one month = ')
+write(*,*)''
+
+time1 = set_date(2001,2,28)
+time2 = decrement_date(time1,0,1)
+time3 = increment_date(time1,0,1)
+call print_date(time2,'2001 Feb 28 - one month = ')
+call print_date(time3,'2001 Feb 28 + one month = ')
+write(*,*)''
+
+time1 = set_date(1999,3,29)
+time2 = decrement_date(time1,0,1)
+time3 = increment_date(time1,0,1)
+call print_date(time2,'1999 Mar 29 - one month = ')
+call print_date(time3,'1999 Mar 29 + one month = ')
+write(*,*)''
+
+time1 = set_date(2000,3,29)
+time2 = decrement_date(time1,0,1)
+time3 = increment_date(time1,0,1)
+call print_date(time2,'2000 Mar 29 - one month = ')
+call print_date(time3,'2000 Mar 29 + one month = ')
+write(*,*)''
+
+time1 = set_date(2000,3,30)
+time2 = decrement_date(time1,0,1)
+time3 = increment_date(time1,0,1)
+call print_date(time2,'2000 Mar 30 - one month = ')
+call print_date(time3,'2000 Mar 30 + one month = ')
+write(*,*)''
+
+time1 = set_date(2000,3,31)
+time2 = decrement_date(time1,0,1)
+time3 = increment_date(time1,0,1)
+call print_date(time2,'2000 Mar 31 - one month = ')
+call print_date(time3,'2000 Mar 31 + one month = ')
+write(*,*)''
+
+time1 = set_date(2000,4,30)
+time2 = decrement_date(time1,0,2)
+time3 = increment_date(time1,0,2)
+call print_date(time2,'2000 Apr 30 - two months = ')
+call print_date(time3,'2000 Apr 30 + two months = ')
+write(*,*)''
+
+time1 = set_date(2000,6,30)
+time2 = decrement_date(time1,0,1)
+time3 = increment_date(time1,0,1)
+call print_date(time2,'2000 Jun 30 - one month = ')
+call print_date(time3,'2000 Jun 30 + one month = ')
+write(*,*)''
+
+time1 = set_date(2000,7,1)
+time2 = decrement_date(time1,0,1)
+time3 = increment_date(time1,0,1)
+call print_date(time2,'2000 Jul  1 - one month = ')
+call print_date(time3,'2000 Jul  1 + one month = ')
+write(*,*)''
+
+time1 = set_date(2000,7,30)
+time2 = decrement_date(time1,0,1)
+time3 = increment_date(time1,0,1)
+call print_date(time2,'2000 Jul 30 - one month = ')
+call print_date(time3,'2000 Jul 30 + one month = ')
+write(*,*)''
+
+time1 = set_date(2000,7,30)
+time2 = decrement_date(time1,0,2)
+time3 = increment_date(time1,0,2)
+call print_date(time2,'2000 Jul 30 - two months = ')
+call print_date(time3,'2000 Jul 30 + two months = ')
+write(*,*)''
+
+time1 = set_date(2000,7,31)
+time2 = decrement_date(time1,0,1)
+time3 = increment_date(time1,0,1)
+call print_date(time2,'2000 Jul 31 - one month = ')
+call print_date(time3,'2000 Jul 31 + one month = ')
+write(*,*)''
+
+end subroutine date_increment_test
 
 
 end program obs_diag
