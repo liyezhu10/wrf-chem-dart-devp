@@ -300,6 +300,7 @@ ncdump -f F -v CopyMetaData obs_diag_output.nc
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>What is new in the Manhattan Release.</H2>
 <ol>
+    <li>Supports observation sequences that do not have posterior values.</li><br />
     <li>Support for multiple calendar types.</li><br />
     <li>Support for bins than can be months or years.</li><br />
     <li>Support for DART QC = 8 (failed vertical conversion).</li><br />
@@ -311,7 +312,7 @@ ncdump -f F -v CopyMetaData obs_diag_output.nc
         easier to distinguish between variances and standard deviations.</li>
 </ol>
 
-<H2>What is new in the Lanai Release.</H2>
+<H2>What was new in the Lanai Release.</H2>
 <P>
    <em class=program>obs_diag</em> has several improvements:
 </P>
@@ -483,22 +484,32 @@ class=code>last_bin_center</em>.  See also <em class=code>max_num_bins</em>.
 
 <TR><TD> bin_separation </TD>
     <TD> integer, dimension(6) </TD>
-    <TD>Time between bin centers.
+    <TD>Time between bin centers. (years, months, days, hours, minutes, seconds)
 <em class=removed>The year and month values <em>must</em> be zero.</em>
 These should be considered offsets.
+<em class=changed>If 'months' is specified, every attempt is made to be 
+consistent and logical despite the fact there is no perfect answer 
+when the length of each month changes.</em> If the reference date is the 
+end of the month, adding 1 month results in the last day of the next month.
+<strong>There is way to specify a monthly average from the first to the 
+last of each month.</strong> The best you can do is have a monthly average 
+centered on the first of each month.
 </TD></TR>
 
 <TR><TD> bin_width </TD>
     <TD> integer, dimension(6) </TD>
     <TD>Time span around bin centers in which obs will be compared.
 <em class=removed>The year and month values <em>must</em> be zero.</em>
-These should be considered offsets.
 Frequently, but not required to be, the same as the values for bin_separation.
+<em class=changed>If 'months' is specified and the bin centers are on the first of
+the month, the bin will start at the middle of the previous month and end at the
+middle of the current month.</em> It is a very good idea to turn on the 
+<em class=code>verbose</em> option to check the definitions of the temporal bins.
 </TD></TR>
 
 <TR><TD> time_to_skip </TD>
     <TD> integer, dimension(6) </TD>
-    <TD>Time span at the beginning to skip when calculating vertical profiles of
+    <TD> The amount of time to skip before averaging the vertical profiles of
 rms error and bias. These should be considered offsets.
 <em class=removed>The year and month values <em>must</em> be zero.</em>
 Useful because it takes some time for the assimilation to settle down from the
@@ -568,10 +579,10 @@ If you'd like to change that see the routine <em class="routine">Rmidpoints2edge
 <TR><TD> lonlim2 </TD>
     <TD> real, dimension(50) </TD>
     <TD>Easternmost longitudes of each of the regions.
-        <em class="new">If any of these values is <b>less than</b> the
+        If any of these values is <b>less than</b> the
 	westernmost values, it defines a region that spans the prime meridian.
-	</em> e.g. a specification of <em class=code>lonlim1 = 330 ,
-	lonlim2 = 50</em> could identify a region like "Africa".
+	e.g. a specification of <em class=code>lonlim1 = 330 , lonlim2 = 50</em> 
+        could identify a region like "Africa".
 </TD></TR>
 
 <TR><TD> latlim1 </TD>
@@ -624,7 +635,8 @@ If you'd like to change that see the routine <em class="routine">Rmidpoints2edge
 
 <TR><TD> verbose </TD>
     <TD> logical </TD>
-    <TD>switch controlling amount of run-time output.
+    <TD>switch controlling amount of run-time output. Really useful for 
+        checking the definition of the time binning.
 </TD></TR>
 
 </TBODY>
