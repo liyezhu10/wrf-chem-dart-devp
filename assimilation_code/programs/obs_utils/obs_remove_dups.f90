@@ -4,16 +4,24 @@
 !
 ! $Id$
 
-!> Utility to try to sort observations at the same time into a
-!> consistent order.  Obs sequence files are guarenteed to be
-!> traversed in time order, so running them through the standard
-!> obs_sequence_tool will physically order them in the file in
-!> the same way a linked-list traversal would.  But for multiple
-!> obs at the same time, there is no way to indicate how to order
-!> them relative to each other.  This tool tries to sort same-time
-!> obs based on location, then kind, then variance.  If there are
-!> duplicate obs in the same file, this might be a way to get them
-!> together, and possibly add code to remove them.
+!> This file contains 1 module and 1 program.  the module code has
+!> to come first, so page down for the main program. 
+!> The module is a custom sort routine needed to compare 2 observations, 
+!> and then the program uses the sort to match duplicate observations 
+!> in an obs_seq file.
+
+
+!> Module:
+!> Routine to sort observations at the same time into a consistent order.  
+!> Obs sequence files are guarenteed to be traversed in time order; 
+!> running them through the standard obs_sequence_tool will physically 
+!> order them in the file in the same way a linked-list traversal would.  
+!>
+!> But for multiple obs at the same time there is no way to indicate or
+!> control how to order them relative to each other.  This tool sorts 
+!> same-time obs based on location, then kind, then variance.  If there 
+!> are duplicate obs in the same file this helps get them together and
+!> pass through only one copy of the observation.
 
 module special_sort
 
@@ -23,7 +31,7 @@ use     location_mod, only : location_type, get_location, set_location,        &
                              LocationName, read_location, operator(/=),        &
                              write_location, LocationDims
 use      obs_def_mod, only : obs_def_type, get_obs_def_time, get_obs_def_type_of_obs,     &
-                             get_obs_def_location, get_obs_def_error_variance
+                             get_obs_def_location, get_obs_def_error_variance, operator(==)
 use time_manager_mod, only : time_type, operator(/=), print_time
 use obs_sequence_mod, only : get_obs_def, obs_type
 
@@ -152,11 +160,12 @@ end module special_sort
 
 !---------------------------------------------------------------------
 
-program obs_remove_dups
+!> Program:
+!> simple program that opens an obs_seq file and loops over the obs
+!> and copies them to a new output file.   this is intended to be a
+!> template for programs that want to alter existing obs in some simple way.
 
-! simple program that opens an obs_seq file and loops over the obs
-! and copies them to a new output file.   this is intended to be a
-! template for programs that want to alter existing obs in some simple way.
+program obs_remove_dups
 
 use        types_mod, only : r8, missing_r8, metadatalength, obstypelength
 use    utilities_mod, only : register_module, initialize_utilities,            &
@@ -168,8 +177,8 @@ use         sort_mod, only : index_sort
 use     location_mod, only : location_type, get_location, set_location,        &
                              LocationName, read_location, operator(/=),        &
                              write_location
-use      obs_def_mod, only : obs_def_type, get_obs_def_time, get_obs_def_type_of_obs
-                             ! print_obs_def
+use      obs_def_mod, only : obs_def_type, get_obs_def_time, get_obs_def_type_of_obs, &
+                             operator(==) !, print_obs_def
 use     obs_kind_mod, only : max_defined_types_of_obs, get_name_for_type_of_obs
 use time_manager_mod, only : time_type, operator(>), print_time, set_time,     &
                              print_date, set_calendar_type, operator(==),      &
@@ -186,8 +195,7 @@ use obs_sequence_mod, only : obs_sequence_type, obs_type, write_obs_seq,       &
                              destroy_obs, destroy_obs_sequence,                &
                              get_num_key_range, get_obs_key, get_qc,           &
                              copy_partial_obs, get_next_obs_from_key,          &
-                             get_obs_def, set_obs_def, operator(==), operator(/=), &
-                             print_obs
+                             get_obs_def, set_obs_def, operator(==), operator(/=)
 
 use special_sort
 
@@ -209,8 +217,6 @@ integer                 :: size_seq_in, size_seq_out
 integer                 :: num_copies_in, num_qc_in
 integer                 :: num_inserted, iunit, io, i, j
 integer                 :: max_num_obs, file_id, sort_count, last_in
-integer                 :: num_rejected_badqc, num_rejected_diffqc
-integer                 :: num_rejected_other
 integer, allocatable    :: index(:)
 character(len = 129)    :: read_format
 logical                 :: pre_I_format, cal
@@ -339,9 +345,6 @@ call print_obs_seq(seq_in, filename_in)
 !       Must pass a copy of incoming obs to insert_obs_in_seq.
 !--------------------------------------------------------------
 num_inserted = 0
-num_rejected_badqc = 0
-num_rejected_diffqc = 0
-num_rejected_other = 0
 
 if ( get_first_obs(seq_in, obs_in) )  then
 
@@ -422,9 +425,9 @@ if ( get_first_obs(seq_in, obs_in) )  then
                endif
             else
                if (debug) print *, 'obs ', index(last_in)
-               if (debug) call print_obs(obs_this_bin(index(last_in)))
+               !if (debug) call print_obs(obs_this_bin(index(last_in)))
                if (debug) print *, 'obs ', index(i)
-               if (debug) call print_obs(obs_this_bin(index(i)))
+               !if (debug) call print_obs(obs_this_bin(index(i)))
                if (obs_this_bin(index(last_in)) == obs_this_bin(index(i))) then
                   if (debug) print *, 'same in obs vals - dup being ignored.'
                   if (debug) print *, ''
