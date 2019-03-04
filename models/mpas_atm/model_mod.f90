@@ -222,6 +222,7 @@ logical            :: log_p_vert_interp = .true.     ! if true, interpolate vert
 character(len=32)  :: calendar = 'Gregorian'
 real(r8)           :: highest_obs_pressure_mb   = 100.0_r8    ! do not assimilate obs higher than this level.
 real(r8)           :: sfc_elev_max_diff = -1.0_r8    ! do not assimilate if |model - station| height is larger than this [m].
+logical            :: always_assim_surf_altimeters = .false.
 integer            :: xyzdebug = 0
 integer            :: debug = 0   ! turn up for more and more debug messages
 
@@ -998,7 +999,7 @@ llv = get_location(location)
 verttype = nint(query_location(location))
 
 if (debug > 10) &
-print *, 'task ', my_task_id(), ' model_interpolate: obs_kind', obs_kind,' at', trim(locstring)
+   print *, 'task ', my_task_id(), ' model_interpolate: obs_kind', obs_kind,' at', trim(locstring)
 
 cellid = find_closest_cell_center(llv(2), llv(1))
 if (debug > 0) print *, ' model_interpolate: cellid', cellid  ! SYHA
@@ -1010,16 +1011,17 @@ if (cellid < 1) then
 endif
 
 ! Reject obs if the station height is far way from the model terrain.
-! HK is this the same across the ensemble?
+! HK is this the same across the ensemble? yes, obs location is.
 if(is_vertical(location, "SURFACE").and. sfc_elev_max_diff >= 0) then
    if(abs(llv(3) - zGridFace(1,cellid)) > sfc_elev_max_diff) then
       !Soyoung: No threshold for surface altimeter 
-      !if(obs_kind == QTY_SURFACE_PRESSURE .or. obs_kind == QTY_SURFACE_ELEVATION) then
-      !   istatus = 0
-      !else
+      if (always_assim_surf_altimeters .and. &
+          (obs_kind == QTY_SURFACE_PRESSURE .or. obs_kind == QTY_SURFACE_ELEVATION)) then
+         istatus = 0
+      else
          istatus = 12
          goto 100
-      !endif
+      endif
    endif
 endif
 
@@ -4933,16 +4935,21 @@ if ((xyzdebug > 5) .and. do_output()) &
 vindex = 1
 nedges = nEdgesOnCell(cellid)
 do i=1, nedges
-print *, 'ft: i: ', i
+!print *, 'ft: i: ', i
    edgeid = edgesOnCell(i, cellid)
-print *, 'ft: edgeid: ', edgeid
+!print *, 'ft: edgeid: ', edgeid
+   if (.not. global_grid .and. &
+      (cellsOnEdge(1, edgeid) == 0 .or. cellsOnEdge(2, edgeid) == 0)) then
+      ier = 14
+      return
+   endif
    if (cellsOnEdge(1, edgeid) /= cellid) then
       neighborcells(i) = cellsOnEdge(1, edgeid)
    else
       neighborcells(i) = cellsOnEdge(2, edgeid)
    endif
    verts(i) = verticesOnCell(i, cellid)
-print *, 'ft: verts: ', verts(i), closest_vert
+!print *, 'ft: verts: ', verts(i), closest_vert
    if (verts(i) == closest_vert) vindex = i
    call latlon_to_xyz(latCell(neighborcells(i)), lonCell(neighborcells(i)), &
       xdata(i), ydata(i), zdata(i))
@@ -4954,7 +4961,7 @@ call latlon_to_xyz(latCell(cellid), lonCell(cellid), t1(1), t1(2), t1(3))
 
 ! and the observation point
 call latlon_to_xyz(lat, lon, r(1), r(2), r(3))
-print *, 'ft: lat/lon: ', lat, lon
+!print *, 'ft: lat/lon: ', lat, lon
 
 if (all(abs(t1-r) < roundoff)) then   ! Located at a grid point (counting roundoff errors)
 
