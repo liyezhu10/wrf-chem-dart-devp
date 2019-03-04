@@ -47,6 +47,17 @@ This program uses the information from the model_mod code to determine
 the variables in the state vector.  It must be compiled with the
 right model's model_mod.
 </P>
+<P>
+Depending on the choices enabled by the namelist,
+creates files with names consistent with the input 
+names expected by filter:
+<pre>
+input_priorinf_mean.nc
+input_priorinf_sd.nc
+input_postinf_mean.nc
+input_postinf_sd.nc
+</pre>
+</P>
 
 
 <!--==================================================================-->
@@ -77,6 +88,7 @@ prematurely terminating the namelist.
  input_state_files = 'null'
  single_file = .false.
  verbose = .false.
+/
 </pre>
 </div>
 
@@ -94,32 +106,32 @@ prematurely terminating the namelist.
 <TBODY valign=top>
 <TR><TD>prior_inf_mean</TD>
     <TD>real(r8)</TD>
-    <TD>Prior inflation mean.
+    <TD>All variables will get this prior inflation mean value.
  </TD></TR>
 
 <TR><TD>prior_inf_sd</TD>
     <TD>real(r8)</TD>
-    <TD>Prior inflation standard deviation.
+    <TD>All variables will get this prior inflation standard deviation value.
  </TD></TR>
 
 <TR><TD>post_inf_mean</TD>
     <TD>real(r8)</TD>
-    <TD>Posterior inflation mean.
+    <TD>All variables will get this posterior inflation mean value.
  </TD></TR>
 
 <TR><TD>post_inf_sd</TD>
     <TD>real(r8)</TD>
-    <TD>Posterior inflation standard deviation.
+    <TD>All variables will get this posterior inflation standard deviation value.
  </TD></TR>
 
 <TR><TD>write_prior_inf</TD>
     <TD>logical</TD>
-    <TD>Set true to write the prior inflation restart files.
+    <TD>Set true to write the prior inflation input files.
  </TD></TR>
 
 <TR><TD>write_post_inf</TD>
     <TD>logical</TD>
-    <TD>Set true to write the posterior inflation restart files.
+    <TD>Set true to write the posterior inflation input files.
  </TD></TR>
 
 <TR><TD>single_file</TD>

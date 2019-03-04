@@ -169,7 +169,9 @@ if(single_file) then
   file_array_output = file_array_input
 endif
 
-! Test the read portion.
+! set up the files to be read - the data will not be used.
+! the variables and shape of them are a template for the
+! inflation values.
 call io_filenames_init(file_info_input,             &
                        ncopies      = num_ens,      &
                        cycling      = single_file,  &
@@ -191,25 +193,12 @@ call set_io_copy_flag(file_info_input,    &
                       cnum    = 1,     &
                       io_flag = READ_COPY)
 
-!#! write(my_base,'(A)') 'sd_template'
-!#! write(my_desc,'(A)') 'sd template'
-!#! call set_file_metadata(file_info_input,                  &
-!#!                        cnum     = 2,                     &
-!#!                        fnames   = file_array_input(2,:), &
-!#!                        basename = my_base,               &
-!#!                        desc     = my_desc)
-!#! 
-!#! call set_io_copy_flag(file_info_input,    &
-!#!                       cnum    = 2,        &
-!#!                       io_flag = READ_COPY)
-
 input_restart_files = get_stage_metadata(file_info_input)
 
 do idom = 1, num_domains
-   ! do imem = 1, num_ens 
-      imem = 1
-      write(*, *) '- Reading File : ', trim(get_restart_filename(input_restart_files, copy=imem, domain=idom))
-   ! enddo
+   imem = 1
+   write(*, *) '- Reading File : ', &
+      trim(get_restart_filename(input_restart_files, copy=imem, domain=idom))
 enddo
 
 call read_state(ens_handle, file_info_input, read_time_from_file, model_time)
@@ -218,21 +207,19 @@ if(single_file) then
    call nc_insert_variable('filter_input.nc', varname='prior_inf_mean', copynum=1)
 else
 
-
-   !#! call write_extra_variables(file_info_input%ncFileID, model_state, copyname, curr_ens_time, timeindex)
-   !#! if (single_file) then 
-   !#!    write(*, *) '- Writting Augmented State : '
-   !#!    call write_augmented_state(ens_handle, file_info_input)
-   !#!    return
-   !#! endif
-   
-   ! Test the write portion.
    call io_filenames_init(file_info_output,           &
                           ncopies      = num_ens,     &
                           cycling      = single_file, &
                           single_file  = single_file, &
                           restart_files = file_array_output)
    
+   ! The inflation file names should match the hardcoded names
+   ! that filter requires.  (We no longer allow the user to specify
+   ! the inflation names, to simplify the number of namelist items.)
+   !
+   ! We will create input_priorinf_mean.nc and input_priorinf_sd.nc
+   ! and/or input_postinf_mean.nc and input_postinf_sd.nc
+
    if(write_prior_inf) then  
       call fill_inflation_files(prior_inf_mean, prior_inf_sd, 'prior')
    endif
@@ -240,6 +227,7 @@ else
    if(write_post_inf) then  
       call fill_inflation_files(post_inf_mean, post_inf_sd, 'post')
    endif
+
 endif
 
 deallocate(file_array_input, file_array_output)
@@ -250,6 +238,7 @@ call exit(0)
 contains
 !======================================================================
 
+!----------------------------------------------------------------------
 !> fill inflation values in a separate file
 
 subroutine fill_inflation_files(inf_mean, inf_sd, stage)
@@ -266,7 +255,7 @@ endif
 ens_handle%copies(ss_inflate_index   , :) = prior_inf_mean
 ens_handle%copies(ss_inflate_sd_index, :) = prior_inf_sd
 
-write(my_stage,'(2A)') stage, '_inflation'
+write(my_stage,'(3A)') 'input_',stage,'inf'
 write(my_base, '(A)')  'mean'
 write(my_desc, '(2A)') stage, ' inflation mean'
 call set_file_metadata(file_info_output,    &
@@ -301,9 +290,14 @@ do idom = 1, num_domains
 enddo
 
 call write_state(ens_handle, file_info_output)
+
 end subroutine fill_inflation_files
 
-!> initialize modules that need it
+!----------------------------------------------------------------------
+!> this is code that was lifted from another module and doesn't
+!> work correctly.  right now if you have all your ensemble members
+!> in single netcdf variables (a "single" or "combined" file)
+!> you can't use this tool.
 
 subroutine nc_insert_variable(filename, varname, copynum)
 character(len=*), intent(in) :: filename
