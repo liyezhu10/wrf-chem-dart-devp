@@ -4,11 +4,10 @@
 !
 ! $Id$
 
-program obs_info
+!> print out information about observation sequence file(s).
+!> summarizes obs types, times, counts.
 
-! simple program that opens an obs_seq file and loops over the obs
-! and copies them to a new output file.   this is intended to be a
-! template for programs that want to alter existing obs in some simple way.
+program obs_info
 
 use        types_mod, only : r8, missing_r8, metadatalength, obstypelength
 use    utilities_mod, only : register_module, initialize_utilities,            &
@@ -16,6 +15,7 @@ use    utilities_mod, only : register_module, initialize_utilities,            &
                              error_handler, E_ERR, E_MSG, nmlfileunit,         &
                              do_nml_file, do_nml_term, get_next_filename,      &
                              open_file, close_file, finalize_utilities
+use   parse_args_mod, only : get_args_from_string
 use     location_mod, only : location_type, get_location, set_location,        &
                              write_location
 use      obs_def_mod, only : obs_def_type, get_obs_def_time,                   &
@@ -88,9 +88,11 @@ integer, parameter :: MAX_IN_FILES = 5000
 character(len=256)   :: filename_in(MAX_IN_FILES) = ''
 character(len=256)   :: filelist_in = ''
 character(len=32)    :: calendar = 'Gregorian'
+logical              :: filenames_from_terminal = .false.
 
 
-namelist /obs_info_nml/ filename_in, filelist_in, calendar
+namelist /obs_info_nml/ filename_in, filelist_in, &
+                        calendar, filenames_from_terminal
 
 !----------------------------------------------------------------
 ! Start of the program:
@@ -118,7 +120,11 @@ call set_calendar_type(calendar)
 cal = (get_calendar_type() /= NO_CALENDAR)
 
 ! after this call, filelist_in() has the names
-call handle_filenames(filename_in, filelist_in, num_input_files)
+if (filenames_from_terminal) then
+   call parse_filenames_from_stdin(num_input_files, filename_in)
+else
+   call handle_filenames(filename_in, filelist_in, num_input_files)
+endif
 
 ! end of namelist processing and setup
 
@@ -231,7 +237,7 @@ subroutine setup()
 
 ! Initialize modules used that require it
 call initialize_utilities('obs_info')
-call register_module(source, revision, revdate)
+call register_module(source,revision,revdate)
 call static_init_obs_sequence()
 
 end subroutine setup
@@ -552,6 +558,22 @@ enddo QCMetaData
 
 end subroutine print_metadata
 
+
+!---------------------------------------------------------------------
+subroutine parse_filenames_from_stdin(num_in, filenames)
+integer,          intent(out) :: num_in
+character(len=*), intent(out) :: filenames(:)
+
+character(len=512) :: inline
+
+! let the user know, if they don't type anything, why we are
+! waiting for input.  comment this out if it gets annoying.
+print *, 'reading input filename(s) from terminal'
+
+read (*, '(A512)'), inline
+call get_args_from_string(inline, num_in, filenames)
+
+end subroutine parse_filenames_from_stdin
 
 !---------------------------------------------------------------------
 subroutine handle_filenames(filename_in, filelist_in, num_input_files)
