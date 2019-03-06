@@ -14,13 +14,15 @@ program filter
 !>
 
 use mpi_utilities_mod, only : initialize_mpi_utilities, finalize_mpi_utilities
-use        filter_mod, only : filter_main
+use        filter_mod, only : filter_main, filter_read_namelist
 
 implicit none
 
 !----------------------------------------------------------------
 
 call initialize_mpi_utilities('Filter')
+
+call filter_read_namelist()
 
 call filter_main()
 

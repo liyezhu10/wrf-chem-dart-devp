@@ -393,8 +393,9 @@ real(r8), allocatable   :: prior_qc_copy(:)
 call filter_initialize_modules_used() ! static_init_model called in here
 
 ! Record the namelist values used for the run ...
-if (do_nml_file()) write(nmlfileunit, nml=filter_nml)
-if (do_nml_term()) write(     *     , nml=filter_nml)
+! we do NOT want to do this each time!
+!if (do_nml_file()) write(nmlfileunit, nml=filter_nml)
+!if (do_nml_term()) write(     *     , nml=filter_nml)
 
 if (task_count() == 1) distributed_state = .true.
 
