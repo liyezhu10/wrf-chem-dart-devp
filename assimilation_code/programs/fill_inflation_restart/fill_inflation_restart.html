@@ -100,17 +100,17 @@ prematurely terminating the namelist.
 <div class=namelist>
 <pre>
 &amp;fill_inflation_restart_nml
-   input_state_files  = ''
 
    write_prior_inf    = .FALSE.
    prior_inf_mean     = -88888.8888
    prior_inf_sd       = -88888.8888
 
    write_post_inf     = .FALSE.
-   prior_inf_mean     = -88888.8888
-   prior_inf_sd       = -88888.8888
+   post_inf_mean      = -88888.8888
+   post_inf_sd        = -88888.8888
 
    single_file        = .FALSE.
+   input_state_files  = ''
    verbose            = .FALSE.
 /
 </pre>
@@ -130,13 +130,6 @@ utility routines behave.
 </THEAD>
 
 <TBODY valign=top>
-
-<TR><TD>input_state_files</TD>
-    <TD>character(:)</TD>
-    <TD>A template file that contains all of the variables in the
-    state vector.  If there is multiple domains you need to provide
-    a file for each domain.
-</TD></TR>
 
 <TR><TD>write_prior_inf</TD>
     <TD>logical</TD>
@@ -177,6 +170,12 @@ utility routines behave.
     all of the ensemble members.
 </TD></TR>
 
+<TR><TD>input_state_files</TD>
+    <TD>character(:)</TD>
+    <TD>The template file comes from the model_mod code,
+    so this is unused in the current code.
+</TD></TR>
+
 <TR><TD>verbose</TD>
     <TD>logical</TD>
     <TD>Setting this to .TRUE. gives more output, and is 
@@ -198,17 +197,16 @@ fill_inflation_restart.
 <div class=namelist>
 <pre>
 &amp;fill_inflation_restart_nml
-   input_state_files  = 'caminput.nc'
-
    write_prior_inf    = .TRUE.
    prior_inf_mean     = 1.0
    prior_inf_sd       = 0.6
 
    write_post_inf     = .FALSE.
-   prior_inf_mean     = -88888.8888
-   prior_inf_sd       = -88888.8888
+   post_inf_mean      = -88888.8888
+   post_inf_sd        = -88888.8888
 
    single_file        = .FALSE.
+   input_state_files  = ''
    verbose            = .FALSE.
 /
 </pre>
