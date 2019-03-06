@@ -26,7 +26,7 @@
 </table>
 
 <A HREF="#Namelist">NAMELIST</A> /
-<A HREF="#Modules">MODULES</A> /
+<!--A HREF="#Modules">MODULES</A-->
 <A HREF="#FilesUsed">FILES</A> /
 <A HREF="#References">REFERENCES</A> /
 <A HREF="#Errors">ERRORS</A> /
@@ -41,24 +41,55 @@ Useful for a multi-step assimilation, so the values
 <em class=code>inf_initial_from_restart</em> and
 <em class=code>inf_sd_initial_from_restart</em> items in the &amp;filter_nml
 namelist can be .TRUE. from the beginning.
-</P>
-<P>
-This program uses the information from the model_mod code to determine
-the variables in the state vector.  It must be compiled with the
-right model's model_mod.
-</P>
-<P>
-Depending on the choices enabled by the namelist,
-creates files with names consistent with the input 
-names expected by filter:
-<pre>
-input_priorinf_mean.nc
-input_priorinf_sd.nc
-input_postinf_mean.nc
-input_postinf_sd.nc
-</pre>
+</P><P>
+This reads inflation values from the &amp;fill_inflation_restart_nml namelist for
+prior_inf_mean, prior_inf_sd and post_inf_mean, post_inf_sd.  It does not use
+the values in the &amp; filter namelist.
 </P>
 
+<P>
+This program uses the information from the model_mod code to determine
+the number of items in the state vector.  It must be compiled with the
+right model's model_mod, and if the items in the state vector are selectable
+by namelist options, the namelist when running this program must match
+exactly the namelist used during the assimilation run.
+</P>
+
+<P>                   
+It creates files with names consistent with the input names expected by filter:
+</P>
+<pre>
+input_priorinf_mean.nc
+input_priorinf_sd.nc   
+input_postinf_mean.nc  
+input_postinf_sd.nc    
+</pre>                 
+
+<P>
+Alternatively you can use one of the standard NCO utilities like 
+"<em class=program>ncap2</em>"
+on a copy of another restart file to set the initial inflation mean, and another
+for the initial inflation standard deviation.  Inflation mean and sd values
+look exactly like restart values, arranged by variable type like T, U, V, etc.
+</P>
+<P>
+Depending on your version of the NCO utilities, you can 
+use <em class=program>ncap2</em> to set the T,U and V inf values using one of two syntaxes:
+</P>
+<div class=unix>
+<pre>
+  ncap2 -s 'T=1.0;U=1.0;V=1.0' wrfinput_d01 input_priorinf_mean.nc
+  ncap2 -s 'T=0.6;U=0.6;V=0.6' wrfinput_d01 input_priorinf_sd.nc
+  -or-
+  ncap2 -s 'T(:,:,:)=1.0;U(:,:,:)=1.0;V(:,:,:)=1.0' wrfinput_d01 input_priorinf_mean.nc
+  ncap2 -s 'T(:,:,:)=0.6;U(:,:,:)=0.6;V(:,:,:)=0.6' wrfinput_d01 input_priorinf_sd.nc
+</pre>
+</div>
+<P>
+Some versions of the NCO utilities change the full 3D arrays into a 
+single scalar.  If that's your result (check your output with <tt>ncdump -h</tt>)
+use the alternate syntax or a more recent version of the NCO tools.
+</P>
 
 <!--==================================================================-->
 <!--=================== DESCRIPTION OF A NAMELIST ====================-->
@@ -72,28 +103,34 @@ This namelist is read from the file <em class=file>input.nml</em>.
 Namelists start with an ampersand
 '&amp;' and terminate with a slash '/'.
 Character strings that contain a '/' must be
-enclosed in quotes to prevent them from
+enclosed in quotes to prevent them from 
 prematurely terminating the namelist.
+
 </P>
 
 <div class=namelist>
 <pre>
 &amp;fill_inflation_restart_nml
- prior_inf_mean = -88888.0
- prior_inf_sd = -88888.0
- post_inf_mean = -88888.0
- post_inf_sd = -88888.0
- write_prior_inf = .false.
- write_post_inf = .false.
- input_state_files = 'null'
- single_file = .false.
- verbose = .false.
+
+   write_prior_inf    = .FALSE.
+   prior_inf_mean     = -88888.8888
+   prior_inf_sd       = -88888.8888
+
+   write_post_inf     = .FALSE.
+   post_inf_mean      = -88888.8888
+   post_inf_sd        = -88888.8888
+
+   single_file        = .FALSE.
+   input_state_files  = ''
+   verbose            = .FALSE.
 /
 </pre>
 </div>
 
-<br />
-<br />
+<P>
+The namelist controls how the logging, namelist, messages, and general
+utility routines behave.
+</P>
 
 <div>
 <TABLE border=0 cellpadding=10 width=100% summary='namelist description'>
@@ -104,68 +141,92 @@ prematurely terminating the namelist.
 </THEAD>
 
 <TBODY valign=top>
-<TR><TD>prior_inf_mean</TD>
-    <TD>real(r8)</TD>
-    <TD>All variables will get this prior inflation mean value.
- </TD></TR>
-
-<TR><TD>prior_inf_sd</TD>
-    <TD>real(r8)</TD>
-    <TD>All variables will get this prior inflation standard deviation value.
- </TD></TR>
-
-<TR><TD>post_inf_mean</TD>
-    <TD>real(r8)</TD>
-    <TD>All variables will get this posterior inflation mean value.
- </TD></TR>
-
-<TR><TD>post_inf_sd</TD>
-    <TD>real(r8)</TD>
-    <TD>All variables will get this posterior inflation standard deviation value.
- </TD></TR>
 
 <TR><TD>write_prior_inf</TD>
     <TD>logical</TD>
-    <TD>Set true to write the prior inflation input files.
- </TD></TR>
+    <TD>Setting this to .TRUE. writes both the prior inflation mean and
+    standard deviation file 'inflation_prior_mean', 'inflation_prior_sd'.
+</TD></TR>
+
+<TR><TD>prior_inf_mean</TD>
+    <TD>real(r8)</TD>
+    <TD> Prior inflation mean value.
+</TD></TR>
+
+<TR><TD>prior_inf_sd</TD>
+    <TD>real(r8)</TD>
+    <TD>Prior inflation standard deviation value.
+</TD></TR>
 
 <TR><TD>write_post_inf</TD>
     <TD>logical</TD>
-    <TD>Set true to write the posterior inflation input files.
- </TD></TR>
+    <TD>Setting this to .TRUE. writes both the posterior inflation mean and
+    standard deviation file 'inflation_post_mean', 'inflation_post_sd'.
+</TD></TR>
+
+<TR><TD>post_inf_mean</TD>
+    <TD>real(r8)</TD>
+    <TD>Posterior inflation mean value.
+</TD></TR>
+
+<TR><TD>post_inf_sd</TD>
+    <TD>real(r8)</TD>
+    <TD>Posterior inflation standard deviation value.
+</TD></TR>
 
 <TR><TD>single_file</TD>
     <TD>logical</TD>
-    <TD>True means all ensemble members are read from variables inside 
-a single NetCDF file.  False means each member is in a separate file.  
-Single file NOT SUPPORTED as of May, 2018; must be .false.
- </TD></TR>
+    <TD>Currently not supported, but would be used in the
+    case where you have a single restart file that contains
+    all of the ensemble members.  Must be .false.
+</TD></TR>
 
 <TR><TD>input_state_files</TD>
-    <TD>character(len=256) (:)</TD>
-    <TD>For the single file case a list of input files, one per domain, 
-to add the inflation values into with the proper netcdf variable names.
-Unused for the multiple file case.
- </TD></TR>
+    <TD>character(:)</TD>
+    <TD>For the single file case a list of input files, one per domain,
+      to add the inflation values into with the proper netcdf variable names.
+      Unused for the multiple file case. 
+</TD></TR>
 
 <TR><TD>verbose</TD>
     <TD>logical</TD>
-    <TD>Set true to get more debugging output.
- </TD></TR>
+    <TD>Setting this to .TRUE. gives more output, and is 
+    generally used for debugging
+</TD></TR>
 
-
-</TBODY>
+</TBODY> 
 </TABLE>
 </div>
 
 <br />
 <br />
 
-<P><!-- make sure the 'top' is aligned correctly --></P>
+<P>
+Here is an example of a typical namelist for fill_inflation_restart.
+</P>
+
+<div class=namelist>
+<pre>
+&amp;fill_inflation_restart_nml
+
+   write_prior_inf    = .TRUE.
+   prior_inf_mean     = 1.0
+   prior_inf_sd       = 0.6
+
+   write_post_inf     = .FALSE.
+   prior_inf_mean     = -88888.8888
+   prior_inf_sd       = -88888.8888
+
+   single_file        = .FALSE.
+   input_state_files  = ''
+   verbose            = .FALSE.
+/
+</pre>
+</div>
 
 <!--==================================================================-->
 
-<A NAME="Modules"></A>
+<!--A NAME="Modules"></A>
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>MODULES USED</H2>
 <PRE>
@@ -175,7 +236,10 @@ ensemble_manager_mod
 assim_model_mod
 model_mod
 mpi_utilities_mod
-</PRE>
+</PRE-->
+
+<!--==================================================================-->
+<P></P> <!-- stupid break to put top at end of page -->
 
 <!--==================================================================-->
 <!-- Describe the Files Used by this module.                          -->
@@ -184,9 +248,19 @@ mpi_utilities_mod
 <A NAME="FilesUsed"></A>
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>FILES</H2>
-<UL><LI>writes <em class=file>prior_inf_mean.nc, prior_inf_sd.nc,
-posterior_inf_mean.nc, posterior_inf_sd.nc</em>
-</UL>
+<P>
+Creates:
+</P>
+<pre>
+input_priorinf_mean.nc
+input_priorinf_sd.nc
+input_postinf_mean.nc
+input_postinf_sd.nc
+</pre>
+<P>
+based on the template file from the specific model
+this code is compiled for.
+</P>
 
 <!--==================================================================-->
 <!-- Cite references, if need be.                                     -->
@@ -196,7 +270,7 @@ posterior_inf_mean.nc, posterior_inf_sd.nc</em>
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>REFERENCES</H2>
 <ul>
-<li> none </li>
+<li>none</li>
 </ul>
 
 <!--==================================================================-->
@@ -206,18 +280,13 @@ posterior_inf_mean.nc, posterior_inf_sd.nc</em>
 <A NAME="Errors"></A>
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>ERROR CODES and CONDITIONS</H2>
-<div class=errors>
-<TABLE border=1 cellspacing=1 cellpadding=10 width=100%>
-<TR><TH>Routine</TH><TH>Message</TH><TH>Comment</TH></TR>
+<P>
+Only works for models which have individual restart files and not the
+'single_file' format, where all the ensemble members are contained in
+one file.
+</P>
 
-<TR><!-- routine --><TD VALIGN=top>write_ensemble_restart</TD>
-<!-- message --><TD VALIGN=top>any</TD>
-<!-- comment --><TD VALIGN=top>reports failure to write the inflation
-                           restart file</TD></TR>
-
-</TABLE>
-</div>
-
+<div class="top">[<a href="#">top</a>]</div><hr />
 <H2>KNOWN BUGS</H2>
 <P>
 none
@@ -231,7 +300,8 @@ none
 <div class="top">[<a href="#">top</a>]</div><hr />
 <H2>FUTURE PLANS</H2>
 <P>
-none
+If requested we can implement the 'single_file' version
+of fill_inflation_restart.
 </P>
 
 <!--==================================================================-->
@@ -252,7 +322,7 @@ http://www.image.ucar.edu/DAReS/DART/DART_download</a>
 <TABLE border=0 cellpadding=0 width=100% summary="">
 <TR><TD valign=top>Contact:       </TD><TD> DART core group   </TD></TR>
 <TR><TD valign=top>Revision:      </TD><TD> $Revision$ </TD></TR>
-<TR><TD valign=top>Source:        </TD><TD> $URL$ </TD></TR>
+<TR><TD valign=top>Source:        </TD><TD> $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/rma_trunk/assimilation_code/programs/fill_inflation_restart/fill_inflation_restart.html$</TD></TR>
 <TR><TD valign=top>Change Date:   </TD><TD> $Date$ </TD></TR>
 <TR><TD valign=top>Change&nbsp;history:&nbsp;</TD><TD> try "svn&nbsp;log" or "svn&nbsp;diff" </TD></TR>
 </TABLE>

@@ -727,6 +727,27 @@ end
 %=====================================================================
 
 
+function figdata = setfigure()
+%%
+%  figure out a page layout
+%  extra space at the bottom for the date/file annotation
+%  extra space at the top because the titles have multiple lines
+
+orientation = 'landscape';
+fontsize    = 16;
+position    = [0.10 0.15 0.8 0.7];
+linewidth   = 2.0;
+
+figdata = struct('expcolors',  {{'k','r','b','m','g','c','y'}}, ...
+    'expsymbols', {{'o','s','d','p','h','s','*'}}, ...
+    'prpolines',  {{'-','--'}}, 'position', position, ...
+    'fontsize',fontsize, 'orientation',orientation, ...
+    'linewidth',linewidth);
+
+
+%=====================================================================
+
+
 function value = local_ncread(fname,varname)
 %% If the variable exists in the file, return the contents of the variable.
 % if the variable does not exist, return empty value instead of error-ing
@@ -734,7 +755,7 @@ function value = local_ncread(fname,varname)
 
 [variable_present, ~] = nc_var_exists(fname,varname);
 if (variable_present)
-    value = ncread(fname, varname);
+    value = ncread(fname,varname);
 else
     value = [];
 end

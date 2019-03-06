@@ -272,7 +272,6 @@ for ivar = varlist
     % todo write a function to print this information given a structure
     % with the indices. Many of these are not needed, but a report is good 
 
-
     if (verbose)
        fprintf('\n')
        fprintf('%10d %s observations had DART QC of 4 (all regions).\n', ...
@@ -283,6 +282,10 @@ for ivar = varlist
            sum(sum(guess(plotdat.NQC6index, :,:))),plotdat.myvarname)
        fprintf('%10d %s observations had DART QC of 7 (all regions).\n', ...
            sum(sum(guess(plotdat.NQC7index, :,:))),plotdat.myvarname)
+       if (plotdat.NQC8index > 0)
+          fprintf('%10d %s observations had DART QC of 8 (all regions).\n', ...
+              sum(sum(guess(plotdat.NQC8index, :,:))),plotdat.myvarname)
+       end
        fprintf('\n')
     end
 
@@ -305,6 +308,10 @@ for ivar = varlist
     plotdat.ges_Nqc5   = guess(plotdat.NQC5index,  :, :);
     plotdat.ges_Nqc6   = guess(plotdat.NQC6index,  :, :);
     plotdat.ges_Nqc7   = guess(plotdat.NQC7index,  :, :);
+    if (plotdat.NQC8index > 0)
+       plotdat.ges_Nqc8   = guess(plotdat.NQC8index,  :, :);
+    end
+
     plotdat.ges_Nused  = guess(plotdat.Nusedindex, :, :);
     plotdat.ges_Nposs  = guess(plotdat.Npossindex, :, :) - ...
         plotdat.ges_Nqc5 - plotdat.ges_Nqc6;
@@ -319,6 +326,10 @@ for ivar = varlist
     plotdat.anl_Nqc5   = analy(plotdat.NQC5index,  :, :);
     plotdat.anl_Nqc6   = analy(plotdat.NQC6index,  :, :);
     plotdat.anl_Nqc7   = analy(plotdat.NQC7index,  :, :);
+    if (plotdat.NQC8index > 0)
+       plotdat.anl_Nqc8   = analy(plotdat.NQC8index,  :, :);
+    end
+
     plotdat.anl_Nused  = analy(plotdat.Nusedindex, :, :);
     plotdat.anl_Nposs  = analy(plotdat.Npossindex, :, :) - ...
         plotdat.anl_Nqc5 - plotdat.anl_Nqc6;

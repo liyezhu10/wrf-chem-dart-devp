@@ -406,7 +406,6 @@ real(r8),                intent(inout) :: expected_obs(num_ens)  !< the array of
 
 type(obs_type)     :: obs
 type(obs_def_type) :: obs_def
-character(len=256) :: msgstring2
 character(len=32)  :: state_size_string, obs_key_string, identity_obs_string
 
 integer :: obs_kind_ind
@@ -509,6 +508,7 @@ end subroutine assim_or_eval
 !>   * Successful istatus but missing_r8 for forward operator
 !>   * Negative istatus
 !> This routine calls the error handler (E_ERR) if either of these happen.
+
 subroutine check_forward_operator_istatus(num_fwd_ops, assimilate_ob, evaluate_ob, istatus, expected_obs, thiskey)
 
 integer,  intent(in) :: num_fwd_ops
@@ -517,7 +517,6 @@ logical,  intent(in) :: evaluate_ob
 integer,  intent(in) :: istatus(num_fwd_ops)
 real(r8), intent(in) :: expected_obs(num_fwd_ops)
 integer,  intent(in) :: thiskey
-
 
 integer :: copy
 
@@ -529,13 +528,15 @@ do copy = 1, num_fwd_ops
       if ((assimilate_ob .or. evaluate_ob) .and. (expected_obs(copy) == missing_r8)) then
          write(msgstring, *) 'istatus was 0 (OK) but forward operator returned missing value.'
          write(msgstring2, *) 'observation number ', thiskey
-         call error_handler(E_ERR,'filter_main', msgstring, source, revision, revdate, text2=msgstring2)
+         call error_handler(E_ERR,'check_forward_operator_istatus', msgstring, &
+                    source, revision, revdate, text2=msgstring2)
       endif
    ! Negative istatus
    else if (istatus(copy) < 0) then
       write(msgstring, *) 'istatus must not be <0 from forward operator. 0=OK, >0 for error'
       write(msgstring2, *) 'observation number ', thiskey
-      call error_handler(E_ERR,'filter_main', msgstring, source, revision, revdate, text2=msgstring2)
+      call error_handler(E_ERR,'check_forward_operator_istatus', msgstring, &
+                    source, revision, revdate, text2=msgstring2)
    endif
 
 enddo

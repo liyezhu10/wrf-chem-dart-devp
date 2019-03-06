@@ -20,8 +20,8 @@ program closest_member_tool
 
 use types_mod,            only : r8, i8, obstypelength, MAX_NUM_DOMS, MAX_FILES
 
-use time_manager_mod,     only : time_type, set_time_missing,               &
-                                 operator(/=), print_time
+use time_manager_mod,     only : time_type, set_time_missing, operator(/=), &
+                                 print_time
  
 use utilities_mod,        only : register_module, find_namelist_in_file,        &
                                  error_handler, nmlfileunit, E_MSG, E_ERR,      &
@@ -66,6 +66,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 integer               :: iunit, io, ens, i, j, total_j, qtyindex
 integer               :: num_qtys, stype
+
 integer(i8)           :: ii, model_size
 integer, allocatable  :: index_list(:)
 integer, parameter    :: max_list_len = 500

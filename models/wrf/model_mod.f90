@@ -93,7 +93,7 @@ use      obs_kind_mod,   only : QTY_U_WIND_COMPONENT, QTY_V_WIND_COMPONENT, &
                                 get_index_for_quantity, get_num_quantities, &
                                 get_name_for_quantity
 
-use ensemble_manager_mod,  only : ensemble_type, get_my_vars
+use ensemble_manager_mod,  only : ensemble_type, get_my_num_vars, get_my_vars
 
 use sort_mod,              only : sort
 
@@ -5457,7 +5457,7 @@ interf_provided = .true.
 ! Make space for the state vector index numbers that are
 ! physically located on my task and get the global numbers.
 
-allocate(var_list(ens_handle%my_num_vars))
+allocate(var_list(get_my_num_vars(ens_handle)))
 call get_my_vars(ens_handle, var_list)
 
 ! count up the total number of variables across all domains.

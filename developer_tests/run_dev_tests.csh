@@ -4,7 +4,7 @@
 # by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id: buildall.csh 12384 2018-02-01 15:59:56Z nancy@ucar.edu $
+# DART $Id$
 #
 # build and test all the models given in the list.
 # usage: [ -mpi | -nompi | -default ]
@@ -160,6 +160,6 @@ echo
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/recam/models/buildall.csh $
-# $Revision: 12384 $
-# $Date: 2018-02-01 08:59:56 -0700 (Thu, 01 Feb 2018) $
+# $URL$
+# $Revision$
+# $Date$
