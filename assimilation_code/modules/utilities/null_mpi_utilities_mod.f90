@@ -87,7 +87,7 @@ public :: initialize_mpi_utilities, finalize_mpi_utilities,                  &
           broadcast_send, broadcast_recv, shell_execute, sleep_seconds,      &
           sum_across_tasks, get_dart_mpi_comm, datasize, send_minmax_to,     &
           get_from_fwd, get_from_mean, broadcast_minmax, broadcast_flag,     &
-          start_mpi_timer, read_mpi_timer, &
+          start_mpi_timer, read_mpi_timer, send_sum_to,                      &
           all_reduce_min_max  ! deprecated, replace by broadcast_minmax
 
 ! version controlled file description for error handling, do not edit
@@ -538,7 +538,6 @@ read_mpi_timer = now - base
 end function read_mpi_timer
 
 !-----------------------------------------------------------------------------
-
 !> Return the communicator number.
 
 function get_dart_mpi_comm()
@@ -549,8 +548,24 @@ get_dart_mpi_comm = my_local_comm
 end function get_dart_mpi_comm
 
 !-----------------------------------------------------------------------------
+!> Collect sum across tasks for a given array.
+
+subroutine send_sum_to(local_val, task, global_val)
+
+real(r8), intent(in)  :: local_val(:) !> min max on each task
+integer,  intent(in)  :: task !> task to collect on
+real(r8), intent(out) :: global_val(:) !> only concerned with this on task collecting result
+
+integer :: errcode
+
+! collect values on a single given task 
+global_val(:) = local_val(:) ! only one task.
+
+end subroutine send_sum_to
+
 !-----------------------------------------------------------------------------
-!> Collect min and max on task.
+!> Collect min and max on task. This is for adaptive_inflate_mod
+
 subroutine send_minmax_to(minmax, task, global_val)
 
 real(r8), intent(in)  :: minmax(2) ! min max on each task
