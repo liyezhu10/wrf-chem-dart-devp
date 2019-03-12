@@ -23,8 +23,6 @@
 ! GPSRO_REFRACTIVITY,      QTY_GPSRO
 ! END DART PREPROCESS KIND LIST
 
-! remove for now - conflicts with obs_def_upper_atm_mod.f90
-!!! COSMIC_ELECTRON_DENSITY, QTY_ELECTRON_DENSITY,   COMMON_CODE
 
 ! BEGIN DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
 !  use obs_def_gps_mod, only : get_expected_gpsro_ref, interactive_gpsro_ref, &

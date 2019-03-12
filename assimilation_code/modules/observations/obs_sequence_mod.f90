@@ -1296,14 +1296,17 @@ file_id = open_file(file_name, form=read_format, action='read')
 ! header string 'obs_sequence'
 
 ios = check_obs_seq_header(file_id, read_format)
-if(ios /= 0) then
+if(ios /= 0) then  ! try reading binary formats
    call close_file(file_id)
 
    read_format = 'unformatted'
    file_id = open_file(file_name, form=read_format, action='read', convert=read_binary_file_format)
+   ios     = check_obs_seq_header(file_id, read_format)
 
-   ios = check_obs_seq_header(file_id, read_format)
-   if(ios /= 0) then
+   if(ios /= 0) then ! try the other flavor
+
+      !>@todo Can we check the other binary file endianness ... can only be native, big or little ... 
+      !>      could remove obs_sequence_nml:read_binary_file_format
 
       ! the file exists but isn't recognizable as one of our obs_seq files.
       ! it could be the wrong byte order, or just not an obs_seq file.

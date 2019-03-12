@@ -11,7 +11,6 @@
 
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS KIND LIST
-! ELECTRON_DENSITY,            QTY_ELECTRON_DENSITY
 ! DENSITY_ION_E,               QTY_DENSITY_ION_E
 ! MOLEC_OXYGEN_MIXING_RATIO,   QTY_MOLEC_OXYGEN_MIXING_RATIO
 ! ATOMIC_OXYGEN_MIXING_RATIO,  QTY_ATOMIC_OXYGEN_MIXING_RATIO
@@ -36,8 +35,7 @@
 
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS READ_OBS_DEF
-!   case(ELECTRON_DENSITY, &
-!        DENSITY_ION_E, &
+!   case(DENSITY_ION_E, &
 !        MOLEC_OXYGEN_MIXING_RATIO, &
 !        ATOMIC_OXYGEN_MIXING_RATIO, &
 !        DENSITY_ION_OP, &
@@ -49,8 +47,7 @@
 
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS WRITE_OBS_DEF
-!   case(ELECTRON_DENSITY, &
-!        DENSITY_ION_E, &
+!   case(DENSITY_ION_E, &
 !        MOLEC_OXYGEN_MIXING_RATIO, &
 !        ATOMIC_OXYGEN_MIXING_RATIO, &
 !        DENSITY_ION_OP, &
@@ -62,8 +59,7 @@
 
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS INTERACTIVE_OBS_DEF
-!   case(ELECTRON_DENSITY, &
-!        DENSITY_ION_E, &
+!   case(DENSITY_ION_E, &
 !        MOLEC_OXYGEN_MIXING_RATIO, &
 !        ATOMIC_OXYGEN_MIXING_RATIO, &
 !        DENSITY_ION_OP, &
@@ -85,8 +81,7 @@ use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG, &
 use     location_mod, only : location_type, write_location, read_location, &
                              interactive_location, get_location
 use  assim_model_mod, only : interpolate
-use     obs_kind_mod, only : QTY_ELECTRON_DENSITY,           & ! Right QTY to use?
-                             QTY_DENSITY_ION_E,              & ! Right QTY to use?
+use     obs_kind_mod, only : QTY_DENSITY_ION_E,              & ! Right QTY to use?
                              QTY_MOLEC_OXYGEN_MIXING_RATIO,  &
                              QTY_ATOMIC_OXYGEN_MIXING_RATIO, &
                              QTY_DENSITY_ION_OP,             &                  
@@ -100,6 +95,8 @@ use obs_def_utilities_mod, only : track_status
 
 implicit none
 private
+
+!>@todo compare get_expected_oxygen_ion_val to obs_def_upper_atm_mod.f90:get_expected_oxygen_ion_density ... identical
 
 public :: get_expected_oxygen_ion_val, oxygen_ion_density
 

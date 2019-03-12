@@ -61,7 +61,7 @@
 !  use obs_def_upper_atm_mod, only : get_expected_gnd_gps_vtec
 !  use obs_def_upper_atm_mod, only : get_expected_vtec
 !  use obs_def_upper_atm_mod, only : get_expected_O_N2_ratio
-!  use obs_def_upper_atm_mod, only : get_expected_oxygen_ion_density
+!  use obs_def_upper_atm_mod, only : get_expected_electron_density
 ! END DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
 
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
@@ -76,7 +76,7 @@
 ! case(SSUSI_O_N2_RATIO)
 !      call get_expected_O_N2_ratio(state_handle, ens_size, location, expected_obs, istatus)
 ! case(COSMIC_ELECTRON_DENSITY)
-!      call get_expected_oxygen_ion_density(state_handle, ens_size, location, expected_obs, istatus)
+!      call get_expected_electron_density(state_handle, ens_size, location, expected_obs, istatus)
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 
 ! BEGIN DART PREPROCESS READ_OBS_DEF
@@ -140,6 +140,7 @@ use     obs_kind_mod, only : QTY_ATOMIC_OXYGEN_MIXING_RATIO, &
                              QTY_PRESSURE, &
                              QTY_DENSITY, &
                              QTY_DENSITY_ION_E, &
+                             QTY_ELECTRON_DENSITY, &
                              QTY_GND_GPS_VTEC, &
                              QTY_GEOPOTENTIAL_HEIGHT, &
                              QTY_GEOMETRIC_HEIGHT, &
@@ -153,7 +154,7 @@ public :: get_expected_upper_atm_density, &
           get_expected_gnd_gps_vtec, &
           get_expected_vtec, &
           get_expected_O_N2_ratio, &
-          get_expected_oxygen_ion_density
+          get_expected_electron_density
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -569,12 +570,34 @@ deallocate(N2_mmr, mbar, total_number_density, O_number_density, N2_number_densi
 
 end subroutine get_expected_O_N2_ratio
 
+
 !-----------------------------------------------------------------------------
-! This function was implemented for WACCM-X. 
-! Check the units for use with other models.
-! Given DART state vector and a location, it computes O+ density [1/cm^3].
-! The istatus variable should be returned as 0 unless there is a problem.
-!
+!> Common interface for electron density forward operators.
+!> If there is a variable in the DART state that is the electron density, just use it.
+!> If it doesn't exist, try the forward operator from WACCM-X, and return that error code.
+!> May be extended to handle other methods of computing electron density.
+
+subroutine get_expected_electron_density(state_handle, ens_size, location, obs_val, istatus)
+type(ensemble_type), intent(in)  :: state_handle
+integer,             intent(in)  :: ens_size
+type(location_type), intent(in)  :: location
+integer,             intent(out) :: istatus(ens_size)
+real(r8),            intent(out) :: obs_val(ens_size)
+
+call interpolate(state_handle, ens_size, location, QTY_ELECTRON_DENSITY, obs_val, istatus)
+if (any(istatus == 0)) return
+
+call get_expected_oxygen_ion_density(state_handle, ens_size, location, obs_val, istatus)
+
+end subroutine get_expected_electron_density
+
+
+!-----------------------------------------------------------------------------
+!> Given DART state vector and a location, it computes O+ density [1/cm^3].
+!> The istatus variable should be returned as 0 unless there is a problem.
+!> This function was implemented for WACCM-X. 
+!> Check the units for use with other models.
+
 subroutine get_expected_oxygen_ion_density(state_handle, ens_size, location, obs_val, istatus)
 type(ensemble_type), intent(in)  :: state_handle
 integer,             intent(in)  :: ens_size
