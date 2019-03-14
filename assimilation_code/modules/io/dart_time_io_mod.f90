@@ -231,6 +231,7 @@ has_unlimited = (unlimitedDimID /= -1)
 ! don't reuse string3 here, please.
 write(string3,*)'You may need to supply a model-specific "write_model_time()" to write the time.'
 
+! see what kind of calendar dart is currently running with.
 call get_calendar_string(dart_calendar)
 
 ios = nf90_inq_varid(ncid, "time", VarID)
@@ -276,7 +277,6 @@ if (ios /= NF90_NOERR) then
    ios = nf90_put_att(ncid, VarID, "long_name", "valid time of the model state")
    call nc_check(ios, routine, "time long_name")
 
-   call get_calendar_string(dart_calendar)
    if (dart_calendar == 'NO_CALENDAR') then
       ios = nf90_put_att(ncid, VarID, "calendar", "none")
       call nc_check(ios, routine, "calendar long_name")
