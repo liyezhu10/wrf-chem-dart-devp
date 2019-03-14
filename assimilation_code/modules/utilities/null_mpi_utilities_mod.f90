@@ -557,16 +557,14 @@ end function get_dart_mpi_comm
 
 !-----------------------------------------------------------------------------
 !-----------------------------------------------------------------------------
-! Collect sum across tasks for a given array.
+! Sum array items across all tasks and send
+! results in an array of same size to one task.
 subroutine send_sum_to(local_val, task, global_val)
 
-real(r8), intent(in)  :: local_val(:) !> min max on each task
-integer,  intent(in)  :: task !> task to collect on
-real(r8), intent(out) :: global_val(:) !> only concerned with this on task collecting result
+real(r8), intent(in)  :: local_val(:)  !> addend vals on each task
+integer,  intent(in)  :: task          !> task to collect on
+real(r8), intent(out) :: global_val(:) !> results returned only on given task
 
-integer :: errcode
-
-! collect values on a single given task 
 global_val(:) = local_val(:) ! only one task.
 
 end subroutine send_sum_to
@@ -574,12 +572,12 @@ end subroutine send_sum_to
 !-----------------------------------------------------------------------------
 
 !-----------------------------------------------------------------------------
-! Collect min and max on task. This is for adaptive_inflate_mod
+! Collect min and max on task.
 subroutine send_minmax_to(minmax, task, global_val)
 
-real(r8), intent(in)  :: minmax(2) ! min max on each task
-integer,  intent(in)  :: task ! task to collect on
-real(r8), intent(out) :: global_val(2) ! only concerned with this on task collecting result
+real(r8), intent(in)  :: minmax(2)     !> min max on each task
+integer,  intent(in)  :: task          !> task to collect on
+real(r8), intent(out) :: global_val(2) !> results returned only on given task
 
 global_val(:) = minmax(:) ! only one task.
 

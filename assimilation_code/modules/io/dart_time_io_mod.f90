@@ -86,15 +86,20 @@ if (numdims > 1) then
               source, revision, revdate, text2=string2, text3=string3)
 endif
 
-! Since the time variable is known to have only 1 dimension, we know it is the first one.
+if (numdims == 0) then
+   ios = nf90_get_var(ncid, VarID, model_time)
+   call nc_check(ios, 'read_model_time','get_var scalar time' )
+else
 
-ios = nf90_inquire_dimension(ncid, dimIDs(1), len=ntimes)
-call nc_check(ios, 'read_model_time', 'inquire_dimension for time dimension from "'//trim(filename) )
+   ! Since the time variable is known to have only 1 dimension, we know it is the first one.
+   ios = nf90_inquire_dimension(ncid, dimIDs(1), len=ntimes)
+   call nc_check(ios, 'read_model_time', 'inquire_dimension for time dimension from "'//trim(filename) )
 
-! read the last one
-ios = nf90_get_var(ncid, VarID, time_array, start=(/ntimes/), count=(/1/))
-call nc_check(ios, 'read_model_time','get_var time' )
-model_time = time_array(1)
+   ! read the last one
+   ios = nf90_get_var(ncid, VarID, time_array, start=(/ntimes/), count=(/1/))
+   call nc_check(ios, 'read_model_time','get_var time' )
+   model_time = time_array(1)
+endif
 
 ! try to handle the calendar in a generic way
 
@@ -225,6 +230,8 @@ has_unlimited = (unlimitedDimID /= -1)
 ! this is used in many error messages below.  set it here, and
 ! don't reuse string3 here, please.
 write(string3,*)'You may need to supply a model-specific "write_model_time()" to write the time.'
+
+call get_calendar_string(dart_calendar)
 
 ios = nf90_inq_varid(ncid, "time", VarID)
 

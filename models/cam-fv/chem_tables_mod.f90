@@ -228,7 +228,7 @@ character(len=*), intent(in) :: netcdf_varname
 real(r8),         intent(in) :: convert_factor
 character(len=*), intent(in) :: quantity_name
 
-integer :: i, qty_index
+integer :: qty_index
 
 ! get qty indx, error if not found
 qty_index = get_index_for_quantity(quantity_name)

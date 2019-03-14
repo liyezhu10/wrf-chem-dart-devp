@@ -410,8 +410,6 @@ end subroutine free_impact_table
 subroutine initialize_module(debug_flag)
 logical, intent(in), optional :: debug_flag
 
-integer :: funit
-
 if (module_initialized) return
 
 module_initialized = .true.

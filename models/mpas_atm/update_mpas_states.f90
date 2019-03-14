@@ -18,14 +18,16 @@ program update_mpas_states
 !         The input list should be matched with output_state_file_list in &filter_nml.
 !         
 ! author: Soyoung Ha 23 Aug 16
-!         Updated in 4 May 2017 for the Manhatten release
+!         Updated in 4 May 2017 for the Manhattan release
 !----------------------------------------------------------------------
 
 use        types_mod, only : r8
 use    utilities_mod, only : initialize_utilities, finalize_utilities, &
                              find_namelist_in_file, check_namelist_read, &
-                             logfileunit, open_file, close_file, nc_check, &
+                             logfileunit, open_file, close_file, &
                              get_next_filename, E_ERR, error_handler
+use  netcdf_utilities_mod, only : nc_open_file_readonly, nc_open_file_readwrite, &
+                                  nc_close_file
 use time_manager_mod, only : time_type, print_time, print_date, operator(-), &
                              get_time, get_date, operator(/=)
 use direct_netcdf_mod,only : read_transpose, read_variables
@@ -34,7 +36,6 @@ use        model_mod, only : static_init_model, statevector_to_analysis_file, &
                              get_num_vars, get_analysis_time,                 &
                              print_variable_ranges
 
-use netcdf
 
 implicit none
 
@@ -103,12 +104,10 @@ fileloop: do        ! until out of files
   next_outfile = get_next_filename(update_output_file_list, filenum)
   if (next_infile == '' .or. next_outfile == '') exit fileloop
 
-  call nc_check(nf90_open(trim(next_infile), NF90_NOWRITE, ncAnlID), &
-             'update_mpas_states','open '//trim(next_infile))
+  ncAnlID = nc_open_file_readonly(next_infile, 'update_mpas_states input')
 
   ! Overwrite this mpas file for state vector later
-  call nc_check(nf90_open(trim(next_outfile), NF90_WRITE, ncBckID), &
-             'update_mpas_states','open '//trim(next_outfile))
+  ncBckID = nc_open_file_readwrite(next_outfile, 'update_mpas_states output')
 
   !----------------------------------------------------------------------
   ! Read the model time
@@ -147,7 +146,7 @@ fileloop: do        ! until out of files
   !----------------------------------------------------------------------
   ! update the current model state vector
   !----------------------------------------------------------------------
-  write(*,*) 'Overwritting states in ',trim(next_outfile)
+  write(*,*) 'Overwriting states in ',trim(next_outfile)
   call statevector_to_analysis_file(statevector, ncBckID, next_outfile, model_time)
 
   !----------------------------------------------------------------------
@@ -159,10 +158,8 @@ fileloop: do        ! until out of files
   call print_date( model_time,'update_mpas_states:model date',logfileunit)
   call print_time( model_time,'update_mpas_states:model time',logfileunit)
 
-  call nc_check(nf90_close(ncAnlID), &
-             'update_mpas_states','close '//trim(next_infile))
-  call nc_check(nf90_close(ncBckID), &
-             'update_mpas_states','close '//trim(next_outfile))
+  call nc_close_file(ncAnlID, 'update_mpas_states input')
+  call nc_close_file(ncBckID, 'update_mpas_states output')
   filenum = filenum + 1
 
 end do fileloop

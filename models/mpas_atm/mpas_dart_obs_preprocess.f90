@@ -34,7 +34,7 @@ program mpas_dart_obs_preprocess
 
 use        types_mod, only : r8, missing_r8, earth_radius, RAD2DEG, DEG2RAD, i8
 use    utilities_mod, only : error_handler, E_MSG, find_namelist_in_file, &
-                             check_namelist_read, nc_check
+                             check_namelist_read
 use time_manager_mod, only : time_type, operator(>=), operator(<), operator(>), operator(<=), &
                              increment_time, decrement_time, operator(-), operator(+), &
                              set_calendar_type, GREGORIAN, set_time, get_time

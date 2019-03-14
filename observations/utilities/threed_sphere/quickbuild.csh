@@ -52,7 +52,6 @@ foreach TARGET ( mkmf_* )
       \rm -f ${PROG}
       csh $TARGET || exit $n
       make        || exit $n
-      make clean
       breaksw
    endsw
 end

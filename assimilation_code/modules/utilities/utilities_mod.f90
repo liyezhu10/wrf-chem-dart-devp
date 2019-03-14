@@ -225,16 +225,14 @@ call set_nml_output(write_nml)
 ! to be same as logunit.
 if (do_nml_file()) then
    if (nmlfilename /= lname) then
-      if (do_output_flag) &
-       write(*,*)'Trying to open namelist log ', trim(nmlfilename)
  
       nmlfileunit = get_unit()
-
       open(nmlfileunit, file=nmlfilename, form='formatted', &
            position='append', iostat = io )
       if ( io /= 0 ) then
          call error_handler(E_ERR,'initialize_utilities', &
-             'Cannot open namelist log file', source, revision, revdate)
+             'Cannot open namelist log file "'//trim(nmlfilename)//'"', &
+              source, revision, revdate)
       endif
  
    else
@@ -313,7 +311,6 @@ if ( .not. module_details) return
 ! been initialized yet.
 
 if ( .not. module_initialized ) call fatal_not_initialized('register_module')
-
 
 call log_it('')
 call log_it('Registering module :')

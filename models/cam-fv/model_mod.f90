@@ -219,6 +219,11 @@ real(r8), allocatable :: phis(:, :)
 ! default to localizing in pressure.  override with namelist
 integer :: vertical_localization_type = VERTISPRESSURE
 
+! flag used to know if the vertical unit system has numbers
+! that get larger as you move away from the earth's surface
+! (e.g. height) or smaller (e.g. pressure)
+logical :: higher_is_smaller
+
 ! commonly used numbers that we'll set in static_init_model
 real(r8) :: ref_model_top_pressure
 real(r8) :: ref_surface_pressure
@@ -349,6 +354,9 @@ if (no_obs_assim_above_level > 0) then
    call init_discard_high_obs()
    discarding_high_obs = .true.
 endif
+
+! set a flag based on the vertical localization coordinate selected
+call init_sign_of_vert_units()
 
 end subroutine static_init_model
 
@@ -3726,19 +3734,50 @@ end function above_ramp_start
 ! is the opposite.  these all depend on the global setting of the
 ! vertical localization type.
 
+
+!--------------------------------------------------------------------
+!> for pressure, level, and one flavor of scale height
+!> smaller numbers are further away from the surface.
+!> for height and the other flavor of scale height 
+!> the opposite is true.  set this once at init time.
+
+subroutine init_sign_of_vert_units()
+
+if (vertical_localization_type == VERTISHEIGHT) then 
+   higher_is_smaller = .false.
+
+else if (vertical_localization_type == VERTISSCALEHEIGHT) then 
+   ! FIXME: note from nick on scale height:
+   !  If no_normalization_of_scale_heights is true, then SH=log(pressure), 
+   !  and scale height will decrease with increasing height. 
+   !  However, if it is false then SH= -1*log(pressure/surface_pressure) 
+   !  and it will increase with increasing height. 
+
+   if (no_normalization_of_scale_heights) then 
+      higher_is_smaller = .true.
+   else
+      higher_is_smaller = .false.
+   endif
+
+else
+   higher_is_smaller = .true.
+
+endif
+
+end subroutine init_sign_of_vert_units
+
 !--------------------------------------------------------------------
 ! returns true if a is above b (higher in the atmosphere, 
 ! further from the surface of the earth).  
-! depends on the vertical_localization_type
 
 pure function v_above(a, b)
 real(r8), intent(in) :: a, b
 logical :: v_above
 
-if (vertical_localization_type == VERTISHEIGHT) then
-   v_above = (a > b)
-else
+if (higher_is_smaller) then
    v_above = (a < b)
+else
+   v_above = (a > b)
 endif
 
 end function v_above
@@ -3746,17 +3785,17 @@ end function v_above
 !--------------------------------------------------------------------
 ! returns new value of moving b distance down in the atmosphere
 ! starting at a.  for height, this results in a smaller value
-! but for every other vertical type this results in a larger value.
-! depends on the vertical_localization_type
+! (also one flavor of scale height), but for other vertical types 
+! this results in a larger value.
 
 pure function v_down(a, b)
 real(r8), intent(in) :: a, b
 real(r8) :: v_down
 
-if (vertical_localization_type == VERTISHEIGHT) then
-   v_down = (a - b)
-else
+if (higher_is_smaller) then
    v_down = (a + b)
+else
+   v_down = (a - b)
 endif
 
 end function v_down

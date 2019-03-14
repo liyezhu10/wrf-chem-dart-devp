@@ -30,9 +30,11 @@ program convert_f16_edr_dsk
 
 use         types_mod, only : r8, MISSING_R8, digits12
 
-use     utilities_mod, only : nc_check, initialize_utilities, finalize_utilities, &
+use     utilities_mod, only : initialize_utilities, finalize_utilities, &
                               find_namelist_in_file, check_namelist_read, do_output, &
                               error_handler, E_ERR, E_MSG
+
+use  netcdf_utilities_mod, only : nc_open_file_readonly, nc_close_file
 
 use  time_manager_mod, only : time_type, set_calendar_type, set_date, GREGORIAN, &
                               get_time, set_time, print_time, print_date
@@ -113,8 +115,7 @@ call find_namelist_in_file('input.nml', 'convert_f16_edr_dsk_nml', iunit)
 read(iunit, nml = convert_f16_edr_dsk_nml, iostat = io)
 call check_namelist_read(iunit, io, 'convert_f16_edr_dsk_nml')
 
-call nc_check(nf90_open(input_netcdf_file, nf90_nowrite, ncid), &
-        'convert_f16_edr_dsk', 'opening file ['//trim(input_netcdf_file)//']')
+ncid = nc_open_file_readonly(input_netcdf_file, 'convert_f16_edr_dsk')
 
 call getdimlen(ncid,"N_PIX_ALONG_DAY",  n_pix_along_day)
 call getdimlen(ncid,"N_PIX_ACROSS_DAY", n_pix_across_day)
@@ -152,8 +153,7 @@ endif
 
 where (ON2_uncertainty == org_missing) ON2_uncertainty = MISSING_R8
 
-call nc_check(nf90_close(ncid) , &
-        'convert_f16_edr_dsk', 'closing file '//trim(input_netcdf_file))
+call nc_close_file(ncid, 'convert_f16_edr_dsk')
 
 ! Ensure latitudes are within [-90,90]
 where( latitude < -90.0_r8 ) latitude = -90.0_r8

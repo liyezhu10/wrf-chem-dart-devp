@@ -10,8 +10,7 @@ module location_mod
 
 use            types_mod, only : i8, r8, MISSING_R8, MISSING_I
 use ensemble_manager_mod, only : ensemble_type
-use        utilities_mod, only : register_module, error_handler, E_ERR, ascii_file_format, &
-                                 nc_check
+use        utilities_mod, only : register_module, error_handler, E_ERR, ascii_file_format
 
 implicit none
 private
@@ -378,8 +377,6 @@ subroutine interactive_location(location, set_to_default)
 
 type(location_type), intent(out) :: location
 logical, intent(in), optional    :: set_to_default
-
-real(r8) :: x
 
 if ( .not. module_initialized ) call initialize_module
 

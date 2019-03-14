@@ -6,10 +6,9 @@
 
 !> @mainpage
 !> @{
-!> @brief  this program selects the member closest to the ensemble mean.
+!> @brief  Select the member closest to the ensemble mean.
 !>
-!>
-!>  this program has options to compute <em> distance </em> in several different ways
+!>  This program has options to compute <em> distance </em> in several different ways
 !>  and returns the ensemble member which has the smallest total distance from
 !>  the ensemble mean.
 !> @}
@@ -74,7 +73,7 @@ character(len=512)    :: msgstring, msgstring1
 logical               :: allqtys, done
 logical, allocatable  :: useqty(:), useindex(:)
 type(location_type)   :: loc
-type(time_type)       :: mean_time, member_time
+type(time_type)       :: member_time
 type(file_info_type)  :: ens_file_info
 
 
@@ -119,7 +118,7 @@ character(len=256), allocatable :: file_array_input(:,:)
 character(len=256)              :: my_base, my_desc
 integer(i8), allocatable        :: vars_array(:)
 integer(i8)                     :: owners_index
-integer                         :: num_domains, idom, imem
+integer                         :: num_domains, imem
 integer                         :: ENS_MEAN_COPY 
 integer                         :: copies, my_num_vars, num_copies
 real(r8), allocatable           :: total_diff(:)

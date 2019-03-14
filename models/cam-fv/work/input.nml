@@ -56,6 +56,7 @@
    num_output_state_members     = 3
    single_file_out              = .false.,
    write_all_stages_at_end      = .false.
+   distributed_state            = .true.
    compute_posterior            = .false.
    
    ens_size                     = 3

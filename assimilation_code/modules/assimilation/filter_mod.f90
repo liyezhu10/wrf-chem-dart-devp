@@ -330,7 +330,7 @@ type(time_type)             :: curr_ens_time, next_ens_time, window_time
 
 integer,    allocatable :: keys(:)
 integer(i8)             :: model_size
-integer                 :: i, iunit, io, time_step_number, num_obs_in_set, ntimes
+integer                 :: iunit, io, time_step_number, num_obs_in_set, ntimes
 integer                 :: last_key_used, key_bounds(2)
 integer                 :: in_obs_copy, obs_val_index
 integer                 :: prior_obs_mean_index, posterior_obs_mean_index

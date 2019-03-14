@@ -469,7 +469,6 @@ type(ensemble_type),         intent(inout) :: ens_handle
 type(adaptive_inflate_type), intent(in)    :: inflate_handle
 
 character(len=32)  :: label
-character(len=128) :: nmread
 integer            :: INF_MEAN_COPY, INF_SD_COPY
 real(r8)           :: inf_initial, sd_initial
 
@@ -496,19 +495,11 @@ endif
 
 if (.not. mean_from_restart(inflate_handle)) then
    inf_initial = get_inflate_mean(inflate_handle)
-   ! THIS IS NOW PRINTED OUT IN THE log_inflation_info() routine
-   !write(nmread, '(A, F12.6)') 'mean read from namelist as ', inf_initial
-   !call error_handler(E_MSG, trim(label) // ' inflation:', trim(nmread), &
-   !   source, revision, revdate)
    ens_handle%copies(INF_MEAN_COPY, :) = inf_initial
 endif
 
 if (.not. sd_from_restart(inflate_handle)) then
    sd_initial = get_inflate_sd(inflate_handle)
-   ! THIS IS NOW PRINTED OUT IN THE log_inflation_info() routine
-   !write(nmread, '(A, F12.6)') 'sd read from namelist as ', sd_initial
-   !call error_handler(E_MSG, trim(label) // ' inflation:', trim(nmread), &
-   !   source, revision, revdate)
    ens_handle%copies(INF_SD_COPY, :) = sd_initial
 endif
 
