@@ -45,8 +45,6 @@ use             model_mod, only : get_model_size
 
 use     mpi_utilities_mod, only : initialize_mpi_utilities, finalize_mpi_utilities
 
-use netcdf
-
 implicit none
 
 ! version controlled file description for error handling, do not edit

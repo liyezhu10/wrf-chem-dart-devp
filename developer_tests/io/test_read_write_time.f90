@@ -4,7 +4,7 @@
 !
 ! $Id: test_read_write_time.f90 13006 2019-03-06 23:28:13Z thoar@ucar.edu $
 
-!> @todo  FIXME - not done yet.
+!>@todo  FIXME - add more tests ... wrong calendars, etc.
 
 program test_read_write_time
 
@@ -13,8 +13,8 @@ use        utilities_mod, only : register_module, error_handler, E_ERR, E_MSG, &
                                  find_namelist_in_file, check_namelist_read,   &
                                  do_nml_file, do_nml_term, nmlfileunit, to_upper, &
                                  initialize_utilities, finalize_utilities
-! FIXME - add specific routines
-use netcdf_utilities_mod  
+
+use netcdf_utilities_mod, only : nc_open_file_readwrite, nc_close_file
 use     dart_time_io_mod, only : read_model_time, write_model_time
 use     time_manager_mod, only : time_type, set_calendar_type, get_calendar_type, &
                                  set_time, print_time, operator(+)
@@ -22,10 +22,10 @@ use     time_manager_mod, only : time_type, set_calendar_type, get_calendar_type
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
+character(len=*), parameter :: source   = &
    "$URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/recam/developer_tests/io/test_read_write_time.f90 $"
-character(len=32 ), parameter :: revision = "$Revision: 13006 $"
-character(len=128), parameter :: revdate  = "$Date: 2019-03-06 16:28:13 -0700 (Wed, 06 Mar 2019) $"
+character(len=*), parameter :: revision = "$Revision: 13006 $"
+character(len=*), parameter :: revdate  = "$Date: 2019-03-06 16:28:13 -0700 (Wed, 06 Mar 2019) $"
 
 character(len=512) :: msgstring
 

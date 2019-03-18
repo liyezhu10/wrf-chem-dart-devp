@@ -51,15 +51,13 @@ use      obs_kind_mod, only : SSUSI_O_N2_RATIO
 use obs_utilities_mod, only : getdimlen, getvar_real, getvar_real_2d, &
                               getvar_int, getvar_int_2d, add_obs_to_seq, create_3d_obs
 
-use netcdf
-
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
+character(len=*), parameter :: source   = &
    '$URL$'
-character(len=32 ), parameter :: revision = '$Revision$'
-character(len=128), parameter :: revdate  = '$Date$'
+character(len=*), parameter :: revision = '$Revision$'
+character(len=*), parameter :: revdate  = '$Date$'
 
 
 integer, parameter :: num_copies = 1,   &   ! number of copies in sequence

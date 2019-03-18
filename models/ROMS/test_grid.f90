@@ -51,15 +51,13 @@ use  distributed_state_mod, only : create_state_window, free_state_window, &
 
 use  test_roms_interpolate_mod, only : test_interpolate_single, test_interpolate_range
 
-use netcdf
-
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
+character(len=*), parameter :: source   = &
    "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 !------------------------------------------------------------------
 ! The namelist variables

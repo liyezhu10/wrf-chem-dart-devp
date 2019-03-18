@@ -49,8 +49,6 @@ use      obs_kind_mod, only : ACARS_U_WIND_COMPONENT, ACARS_V_WIND_COMPONENT, &
 use obs_utilities_mod, only : getvar_real, get_or_fill_QC, add_obs_to_seq, &
                               create_3d_obs, getvar_int, getdimlen, set_missing_name
 
-use netcdf
-
 implicit none
 
 character(len=14),  parameter :: acars_netcdf_file = 'acars_input.nc'

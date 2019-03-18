@@ -28,8 +28,6 @@ use             model_mod, only : get_model_size, &
                                   get_state_meta_data, &
                                   model_interpolate
 
-use netcdf
-
 implicit none
 private
 
