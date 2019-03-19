@@ -80,6 +80,7 @@ setenv CASE          `./xmlquery --value CASE`
 setenv CASEROOT      `./xmlquery --value CASEROOT`
 setenv COMPSET       `./xmlquery --value COMPSET`
 setenv EXEROOT       `./xmlquery --value EXEROOT`
+setenv RUNDIR        `./xmlquery --value RUNDIR`
 setenv num_instances `./xmlquery --subgroup ATM --value NINST`
 
 # ==============================================================================
@@ -265,7 +266,7 @@ cat << EndOfText >! update_dart_namelists
 ex input.nml <<ex_end
 g;ens_size ;s;= .*;= ${num_instances};
 g;num_output_state_members ;s;= .*;= ${num_instances};
-g;num_output_obs_members ;s;= .*;= ${num_instances};
+# g;num_output_obs_members ;s;= .*;= ${num_instances};
 wq
 ex_end
 
@@ -306,23 +307,31 @@ chmod 0755 update_dart_namelists
 #=========================================================================
 
 if ( $num_instances > 1 ) then
-   set SAMP_ERR_FILE = \
-       ${DARTROOT}/assimilation_code/programs/gen_sampling_err_table/work/sampling_error_correction_table.nc
+
+   set SAMP_ERR_DIR = assimilation_code/programs/gen_sampling_err_table/work
+   set SAMP_ERR_FILE = ${DARTROOT}/${SAMP_ERR_DIR}/sampling_error_correction_table.nc
 
    if (  -e   ${SAMP_ERR_FILE} ) then
-      ${COPY} ${SAMP_ERR_FILE} .
+      ${COPY} ${SAMP_ERR_FILE} ${RUNDIR}
+      if ( $num_instances < 3 || $num_instances > 200 ) then
+         echo ""
+         echo "ERROR: sampling_error_correction_table.nc handles ensemble sizes 3...200."
+         echo "ERROR: Yours is $num_instances"
+         echo ""
+         exit 75
+      endif
    else
-      echo ""
-      echo "WARNING: no sampling_error_correction_table.nc file found."
-      echo "         This file is NOT needed unless you want to turn on the"
-      echo "         sampling_error_correction feature in any of the models."
-      echo ""
-      
       set list = `grep sampling_error_correction input.nml | sed -e "s/[=\.,]//g`
-      if ($list[2] == "true") exit 80
-
+      if ($list[2] == "true") then
+         echo ""
+         echo "ERROR: No sampling_error_correction_table.nc file found ..."
+         echo "ERROR: the input.nml:assim_tool_nml:sampling_error_correction"
+         echo "ERROR: is 'true' so this file must exist."
+         echo ""
+         exit 80
+      endif
    endif
-   
+
 endif
 
 # ==============================================================================
