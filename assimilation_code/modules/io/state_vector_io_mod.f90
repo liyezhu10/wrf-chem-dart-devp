@@ -208,13 +208,13 @@ if (inflation_handles) then
    call print_inflation_source(file_info, post_inflate_handle,  'Posterior')
 
    ! If inflation is single state space read from a file, the copies array is filled here.
-   call fill_single_ss_inflate_from_read(state_ens_handle, prior_inflate_handle, post_inflate_handle)
+   call fill_single_inflate_val_from_read(state_ens_handle, prior_inflate_handle, post_inflate_handle)
 
    ! If inflation is from a namelist value it is set here.
    !>@todo FIXME: ditto here - the output should be from a routine
    !> in the adaptive_inflate_mod.f90 code
-   call fill_ss_from_nameslist_value(state_ens_handle, prior_inflate_handle)
-   call fill_ss_from_nameslist_value(state_ens_handle, post_inflate_handle)
+   call fill_inf_from_namelist_value(state_ens_handle, prior_inflate_handle)
+   call fill_inf_from_namelist_value(state_ens_handle, post_inflate_handle)
 
 endif
 
@@ -348,10 +348,10 @@ end subroutine write_restart_direct
 !> to all other tasks who then update their copies array.
 !> Note filling both mean and sd values if at least one of mean
 !> or sd is read from file.  If one is set from a namelist the copies 
-!> array is overwritten in fill_ss_from_namelist value
+!> array is overwritten in fill_inf_from_namelist_value()
 
 !>@todo We need to refactor this, not sure where it is being used
-subroutine fill_single_ss_inflate_from_read(ens_handle, &
+subroutine fill_single_inflate_val_from_read(ens_handle, &
                 prior_inflate_handle, post_inflate_handle)
 
 type(ensemble_type),         intent(inout) :: ens_handle
@@ -453,7 +453,7 @@ else
 
 endif
 
-end subroutine fill_single_ss_inflate_from_read
+end subroutine fill_single_inflate_val_from_read
 
 
 !-----------------------------------------------------------------------
@@ -461,7 +461,7 @@ end subroutine fill_single_ss_inflate_from_read
 !> fill copies array with namelist values for inflation if they do.
 
 
-subroutine fill_ss_from_nameslist_value(ens_handle, inflate_handle)
+subroutine fill_inf_from_namelist_value(ens_handle, inflate_handle)
 
 type(ensemble_type),         intent(inout) :: ens_handle
 type(adaptive_inflate_type), intent(in)    :: inflate_handle
@@ -487,7 +487,7 @@ else if (get_is_posterior(inflate_handle)) then
    label = "Posterior"
 else
    write(msgstring, *) "state space inflation but neither prior or posterior"
-   call error_handler(E_ERR, 'fill_ss_from_nameslist_value', msgstring, &
+   call error_handler(E_ERR, 'fill_inf_from_namelist_value', msgstring, &
       source, revision, revdate)
 endif
 
@@ -501,7 +501,7 @@ if (.not. sd_from_restart(inflate_handle)) then
    ens_handle%copies(INF_SD_COPY, :) = sd_initial
 endif
 
-end subroutine fill_ss_from_nameslist_value
+end subroutine fill_inf_from_namelist_value
 
 !-----------------------------------------------------------
 !> set stage names
