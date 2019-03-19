@@ -26,8 +26,8 @@
 #BSUB  -e Test0.bld1
 #--------------------------------------------
 #PBS  -N setup_advanced
-#PBS  -A P86850054
-#PBS  -q share
+#PBS  -A your_account_there
+#PBS  -q shared_node_queue_for_this_setup_script
 #
 # Resources to specify:
 #    select=#nodes
@@ -151,7 +151,6 @@
 #
 # ==============================================================================
 
-# The year of forcing
 setenv case            Test0
 setenv compset         HIST_CAM60_CLM50%BGC-CROP_CICE%PRES_DOCN%DOM_MOSART_SGLC_SWAV
 setenv user_grid       ''
@@ -815,7 +814,7 @@ if ($?LSB_JOBNAME) then
        -e '/ptile/c/#BSUB  -R "span[ptile=1]"'             \
        case.st_archive >! temp.$$  || exit 55
    ${MOVE} temp.$$ case.st_archive
-   ./xmlchange --subgroup case.st_archive --id JOB_QUEUE --val caldera
+   ./xmlchange --subgroup case.st_archive --id JOB_QUEUE --val share
 
 else if ($?PBS_JOBNAME) then
    # It would be nice to put the $PBS_JOBID value into the job name and st err/out file names,
