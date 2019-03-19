@@ -53,6 +53,9 @@ endif
 if ( ! $?COPY) then
    setenv COPY 'cp -f'
 endif
+if ( ! $?MOVE) then
+   setenv MOVE 'mv -f'
+endif
 
 if ( ! $?host) then
    setenv host `uname -n`
@@ -158,19 +161,17 @@ foreach MODEL ( $DO_THESE_MODELS )
       echo skipping tests of the template directory
 
     else 
+      # save original input.nml & obs seq files here
+      set SAVEDIR = saveme.test_dart
+      mkdir -p ${SAVEDIR}
+      ${COPY} input.nml obs_seq.* ${SAVEDIR}
+
       if ( -f workshop_setup.csh ) then
-        set SAVEDIR = saveme.test_dart
-        mkdir -p ${SAVEDIR}
-        ${COPY} input.nml obs_seq.* ${SAVEDIR}
   
         echo "Trying to run workshop_setup.csh for model $MODEL as a test"
         ./workshop_setup.csh || set FAILURE = 1
         echo "Re-running workshop_setup.csh to test overwriting files for model $MODEL"
         ./workshop_setup.csh || set FAILURE = 1
-  
-        echo "Restoring original input.nml and obs_seq files"
-        ${COPY} ${SAVEDIR}/* .
-        ${REMOVE} ${SAVEDIR}
   
       else
         echo "Trying to run pmo for model $MODEL as a test"
@@ -203,6 +204,11 @@ foreach MODEL ( $DO_THESE_MODELS )
       set PROG = `echo $TARGET | sed -e 's#mkmf_##'`
       ${REMOVE} $PROG
     end
+
+    echo "Restoring original input.nml and obs_seq files"
+    ${MOVE} ${SAVEDIR}/* .
+    ${REMOVE} ${SAVEDIR}
+  
     if ( $ncdlfiles > 0 ) then
       foreach i ( *.cdl )
         set base = `basename $i .cdl`
