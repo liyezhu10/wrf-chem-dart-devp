@@ -108,9 +108,6 @@ do
   # if we are already in the right state, loop to next file
   if ([ $before1 = $todo1 ] && [ $before2 = $todo2 ]); then continue; fi
  
-  echo something to do
-  # we do have something do to
-
   # save original copy for backup if one does not already exist.
   if [ ! -f ${f}.orig ]; then
     cp -p ${f} ${f}.orig

@@ -59,10 +59,10 @@ exactly the namelist used during the assimilation run.
 It creates files with names consistent with the input names expected by filter:
 </P>
 <pre>
-input_priorinf_mean.nc
-input_priorinf_sd.nc   
-input_postinf_mean.nc  
-input_postinf_sd.nc    
+<em class=file>input_priorinf_mean.nc</em>
+<em class=file>input_priorinf_sd.nc</em>
+<em class=file>input_postinf_mean.nc</em>
+<em class=file>input_postinf_sd.nc</em>
 </pre>                 
 
 <P>
@@ -145,7 +145,8 @@ utility routines behave.
 <TR><TD>write_prior_inf</TD>
     <TD>logical</TD>
     <TD>Setting this to .TRUE. writes both the prior inflation mean and
-    standard deviation file 'inflation_prior_mean', 'inflation_prior_sd'.
+    standard deviation files: <em class=file>input_priorinf_mean.nc</em>, 
+    <em class=file>input_priorinf_sd.nc</em>.
 </TD></TR>
 
 <TR><TD>prior_inf_mean</TD>
@@ -161,7 +162,8 @@ utility routines behave.
 <TR><TD>write_post_inf</TD>
     <TD>logical</TD>
     <TD>Setting this to .TRUE. writes both the posterior inflation mean and
-    standard deviation file 'inflation_post_mean', 'inflation_post_sd'.
+    standard deviation files <em class=file>input_postinf_mean.nc</em>, 
+    <em class=file>input_postinf_sd.nc</em>.
 </TD></TR>
 
 <TR><TD>post_inf_mean</TD>
@@ -202,7 +204,7 @@ utility routines behave.
 <br />
 
 <P>
-Here is an example of a typical namelist for fill_inflation_restart.
+Here is an example of a typical namelist for <em class=program>fill_inflation_restart</em> :
 </P>
 
 <div class=namelist>
@@ -210,12 +212,12 @@ Here is an example of a typical namelist for fill_inflation_restart.
 &amp;fill_inflation_restart_nml
 
    write_prior_inf    = .TRUE.
-   prior_inf_mean     = 1.0
+   prior_inf_mean     = 1.01
    prior_inf_sd       = 0.6
 
    write_post_inf     = .FALSE.
-   prior_inf_mean     = -88888.8888
-   prior_inf_sd       = -88888.8888
+   post_inf_mean      = 1.0
+   post_inf_sd        = 0.6
 
    single_file        = .FALSE.
    input_state_files  = ''
@@ -239,7 +241,7 @@ mpi_utilities_mod
 </PRE-->
 
 <!--==================================================================-->
-<P></P> <!-- stupid break to put top at end of page -->
+<P><!-- stupid break to put top at end of page --></P>
 
 <!--==================================================================-->
 <!-- Describe the Files Used by this module.                          -->
@@ -252,10 +254,10 @@ mpi_utilities_mod
 Creates:
 </P>
 <pre>
-input_priorinf_mean.nc
-input_priorinf_sd.nc
-input_postinf_mean.nc
-input_postinf_sd.nc
+<em class=file>input_priorinf_mean.nc</em>
+<em class=file>input_priorinf_sd.nc</em>
+<em class=file>input_postinf_mean.nc</em>
+<em class=file>input_postinf_sd.nc</em>
 </pre>
 <P>
 based on the template file from the specific model

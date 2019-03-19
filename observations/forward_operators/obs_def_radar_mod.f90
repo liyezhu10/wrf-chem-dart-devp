@@ -1106,8 +1106,6 @@ integer,  dimension(ens_size) :: rho_istatus, temp_istatus
 logical, save    :: first_time = .true.
 integer          :: imem
 logical          :: return_now
-!real(r8)         :: debug_location(3)
-!logical          :: debug = .false.  ! set to .true. to enable debug printout
 
 if ( .not. module_initialized ) call initialize_module
 

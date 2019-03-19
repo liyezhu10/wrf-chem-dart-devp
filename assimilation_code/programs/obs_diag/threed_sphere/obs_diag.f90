@@ -842,7 +842,7 @@ ObsFileLoop : do ifile=1, num_input_files
                call IPE(prior%NbadIZ(iepoch,level_index,iregion,flavor), 1)
             endif
 
-            if( po_zscore > rat_cri .and. has_posteriors) then
+            if(po_zscore > rat_cri .and. has_posteriors) then
                call IPE(poste%NbadIZ(iepoch,level_index,iregion,flavor), 1)
             endif
 
@@ -891,7 +891,7 @@ ObsFileLoop : do ifile=1, num_input_files
 
                   zscoreU = InnovZscore(U_obs, U_po_mean, U_po_sprd, U_obs_err_var, &
                                         U_qc, QC_MAX_POSTERIOR)
-                  if(po_zscore > rat_cri .or. zscoreU > rat_cri .and. has_posteriors) then
+                  if((po_zscore > rat_cri .or. zscoreU > rat_cri) .and. has_posteriors) then
                      call IPE(poste%NbadIZ(iepoch,level_index,iregion,wflavor), 1)
                   endif
 
@@ -967,7 +967,7 @@ ObsFileLoop : do ifile=1, num_input_files
 
                   zscoreU = InnovZscore(U_obs, U_po_mean, U_po_sprd, U_obs_err_var, &
                                         U_qc, QC_MAX_POSTERIOR)
-                  if(po_zscore > rat_cri .or. zscoreU > rat_cri .and. has_posteriors) then
+                  if((po_zscore > rat_cri .or. zscoreU > rat_cri) .and. has_posteriors) then
                      call IPE(posteAVG%NbadIZ(level_index,iregion,wflavor), 1)
                   endif
 
