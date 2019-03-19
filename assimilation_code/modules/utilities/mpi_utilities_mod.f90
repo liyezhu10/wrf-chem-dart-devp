@@ -116,8 +116,8 @@ character(len=128), parameter :: revdate  = "$Date$"
 
 logical :: module_initialized   = .false.
 
-character(len = 129) :: saved_progname = ''
-character(len = 129) :: shell_name = ''   ! if needed, add ksh, tcsh, bash, etc
+character(len = 256) :: saved_progname = ''
+character(len = 128) :: shell_name = ''   ! if needed, add ksh, tcsh, bash, etc
 integer :: head_task = 0         ! def 0, but N-1 if reverse_task_layout true
 logical :: print4status = .true. ! minimal messages for async4 handshake
 
@@ -1765,12 +1765,13 @@ end function get_dart_mpi_comm
 
 !-----------------------------------------------------------------------------
 !-----------------------------------------------------------------------------
-! Collect sum across tasks for a given array.
+! Sum array items across all tasks and send
+! results in an array of same size to one task.
 subroutine send_sum_to(local_val, task, global_val)
 
-real(r8), intent(in)  :: local_val(:) !> min max on each task
-integer,  intent(in)  :: task !> task to collect on
-real(r8), intent(out) :: global_val(:) !> only concerned with this on task collecting result
+real(r8), intent(in)  :: local_val(:)  !> addend vals on each task
+integer,  intent(in)  :: task          !> task to collect on
+real(r8), intent(out) :: global_val(:) !> results returned only on given task
 
 integer :: errcode
 
@@ -1789,9 +1790,9 @@ end subroutine send_sum_to
 ! Collect min and max on task.
 subroutine send_minmax_to(minmax, task, global_val)
 
-real(r8), intent(in)  :: minmax(2) !> min max on each task
-integer,  intent(in)  :: task !> task to collect on
-real(r8), intent(out) :: global_val(2) !> only concerned with this on task collecting result
+real(r8), intent(in)  :: minmax(2)     !> min max on each task
+integer,  intent(in)  :: task          !> task to collect on
+real(r8), intent(out) :: global_val(2) !> results returned only on given task
 
 integer :: errcode
 

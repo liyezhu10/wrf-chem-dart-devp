@@ -16,6 +16,7 @@ use utilities_mod, only    : register_module, error_handler,             &
                              E_ERR, E_WARN, E_MSG, E_DBG, finalize_utilities
 use time_manager_mod, only : time_type, set_time
 
+! the NAG compiler needs these special definitions enabled
 
 ! !!NAG_BLOCK_EDIT START COMMENTED_OUT
 ! use F90_unix_proc, only : sleep, system, exit
@@ -58,6 +59,7 @@ private
 ! !!SYSTEM_BLOCK_EDIT END COMMENTED_OUT
 
 
+! allow global sum to be computed for integers, r4, and r8s
 interface sum_across_tasks
    module procedure sum_across_tasks_int4
    module procedure sum_across_tasks_int8
@@ -74,10 +76,10 @@ public :: initialize_mpi_utilities, finalize_mpi_utilities,                  &
           task_count, my_task_id, block_task, restart_task,                  &
           task_sync, array_broadcast, send_to, receive_from, iam_task0,      &
           broadcast_send, broadcast_recv, shell_execute, sleep_seconds,      &
-          sum_across_tasks, send_minmax_to, datasize,                        &
+          sum_across_tasks, get_dart_mpi_comm, datasize, send_minmax_to,     &
           get_from_fwd, get_from_mean, broadcast_minmax, broadcast_flag,     &
           start_mpi_timer, read_mpi_timer, send_sum_to,                      &
-          all_reduce_min_max   ! deprecated, replace with broadcast_minmax
+          all_reduce_min_max  ! deprecated, replace by broadcast_minmax
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
@@ -85,11 +87,11 @@ character(len=256), parameter :: source   = &
 character(len=32 ), parameter :: revision = "$Revision$"
 character(len=128), parameter :: revdate  = "$Date$"
 
-logical, save :: module_initialized = .false.
+logical :: module_initialized   = .false.
 
-character(len = 129) :: saved_progname = ''
+character(len = 256) :: saved_progname = ''
 
-character(len = 129) :: errstring
+character(len = 256) :: errstring
 
 ! Namelist input - placeholder for now; no options yet in this module.
 !namelist /mpi_utilities_nml/ x
@@ -122,7 +124,7 @@ endif
 call initialize_utilities(progname, alternatename)
 
 if (present(progname)) then
-   if (len_trim(progname) < len(saved_progname)) then
+   if (len_trim(progname) <= len(saved_progname)) then
       saved_progname = trim(progname)
    else
       saved_progname = progname(1:len(saved_progname))
