@@ -294,6 +294,8 @@ else
    useindex(:) = .true.
 endif
 
+allocate(total_diff(ens_size))
+
 total_diff = compute_diff(ens_handle%copies(:,:), ens_handle%copies(ENS_MEAN_COPY,:))
 
 !------------------- Print out results     -----------------------
