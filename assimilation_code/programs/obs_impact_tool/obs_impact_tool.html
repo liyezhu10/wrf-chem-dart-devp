@@ -40,17 +40,12 @@
 <P>
 Utility program which assists in constructing a table that is read
 by filter at run time to alter how the assimilation
-of different types of observations impact the state vector values
+of different types of observations impact state vector values
 based on their quantity, and other observations based on their 
 observation type or quantity.  This tool allows users to group related
 collections of observation types and state vector quantities by name
 and then express the relationship of the named groups to each
 other in a concise way.
-</P>
-<P>
-At run time filter reads the output file from this tool
-and uses it to control the impact at assimilation time based
-on the relationships specified.
 </P>
 <P>
 We recommend using numeric values of 0.0 or 1.0 to either
@@ -64,9 +59,9 @@ All the listed observation types and state vector quantities
 must be known by the system.  If they are not, look at the
 &preprocess_nml :: input_items namelist which specifies
 which obs_def_xxx_mod.f90 files are included, which is
-where observation types are defined.  Quantities are defined
-in the obs_kinds/DEFAULT_obs_kinds_mod.F90 file and
-are static.  (Note you must add new quantities in 2 places 
+where observation types are defined.  Quantities are defined in
+<em class="file">assimilation_code/modules/observations/DEFAULT_obs_kinds_mod.F90</em>.
+(Note you must add new quantities in 2 places 
 if you do alter this file.)
 </P>
 <P>
@@ -131,9 +126,9 @@ END GROUP
 # (last entry wins).
 
 IMPACT
- QTY_xxx    QTY_xxx     0.0
- QTY_xxx    groupname1   0.0
- groupname1  QTY_xxx     0.0
+ QTY_xxx     QTY_xxx      0.0
+ QTY_xxx     groupname1   0.0
+ groupname1  QTY_xxx      0.0
  groupname1  groupname1   0.0
 END IMPACT
 
@@ -167,7 +162,7 @@ prematurely terminating the namelist.
 &amp;obs_impact_tool_nml
   input_filename          = 'cross_correlations.txt'
   output_filename         = 'control_impact_runtime.txt'
-  debug                   = .true.
+  debug                   = .false.
   /
 </pre>
 </div>

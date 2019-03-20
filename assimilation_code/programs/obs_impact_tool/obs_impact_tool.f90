@@ -6,34 +6,41 @@
 
 !> This program assists in constructing a table which can be read
 !> by filter at run-time to disable or alter how the assimilation
-!> of different types of observations impact the state vector values
-!> based on their kind.  This tool allows users to group related
-!> collections of observation types and state vector kinds by name
+!> of different types of observations impact state vector values
+!> based on their quantity.  This tool allows users to group related
+!> collections of observation types and state vector quantities by name
 !> and then express the relationship of the named groups to each
 !> other in a concise way.
 !>
-!> At run time, filter can read the output file from this tool
-!> and use it to control the impact at assimilation time based
-!> on the relationships specified.
+!> Normally filter determines the impact of an observation
+!> on the state based on the covariance and localization values.
+!> The impact factor is an additional multiplier in this process.
+!> For example, if the model does not
+!> accurately represent the relationship between different 
+!> parts of the model state (e.g part of the state is
+!> computed offline, or two different models are run
+!> which do not exchange information otherwise), then
+!> this tool can be used to prevent all impact of
+!> an observation on those parts of the state.
 !>
-!> The first version of this tool requires the last numeric
-!> column to be 0.0, but future extensions may allow different
-!> values to be used.
+!> We recommend initially only using values of 0.0 or 1.0,
+!> although other values can be used after careful analysis
+!> of the results.
 !>
-!> All the listed observation types and state vector kinds
+!> All the listed observation types and state vector quantities
 !> must be known by the system.  If they are not, look at the
 !> &preprocess_nml :: input_items namelist which specifies
 !> which obs_def_xxx_mod.f90 files are included, which is
-!> where observation types are defined.  kinds are defined
-!> in the obs_kinds/DEFAULT_obs_kinds_mod.F90 file and
-!> are static.  (note you must add new kinds in 2 places 
+!> where observation types are defined.  Quantities are defined
+!> in the assimilation_code/modules/observations/DEFAULT_obs_kinds_mod.F90 file.
+!> (Note you must add new quantities in 2 places 
 !> if you do alter this file.)
 !>
 
 
 
 ! program to read an ascii file with directions for which state and observation
-! KINDS should impact which other state and observation KINDS.
+! QTYS should impact which other state and observation QTYS.
 
 ! the format of the ascii input file is:
 !
@@ -49,56 +56,32 @@
 ! END GROUP
 !
 ! GROUP groupnameM
-! ALL EXCEPT QTY_xxx QTY_xxx
-! QTY_xxx
+!  ALL EXCEPT QTY_xxx QTY_xxx
+!  QTY_xxx
 ! END GROUP
-! # to choose all kinds except a select few
 !
-! # FIXME: this is not supported yet - should it be?  yes.
+! # to choose all quantities except a select few
 ! GROUP groupnameN
-! ALL EXCEPT groupnameY
+!  ALL EXCEPT groupnameY
 ! END GROUP
 !
-! also ALLTYPES, ALLKINDS, as well as ALL
+! also ALLTYPES, ALLQTYS, as well as ALL
 !
 ! IMPACT
-!  QTY_xxx    QTY_xxx     0.0
-!  QTY_xxx    groupname1   0.0
-!  groupname1  QTY_xxx     0.0
-!  groupname1  groupname1   0.0
+!  QTY_xxx     QTY_xxx      0.0
+!  QTY_xxx     groupname1   0.0
+!  groupname1  QTY_xxx      0.0
+!  groupname1  groupname2   0.0
 ! END IMPACT
 
-! # this also is not supported yet, should it be?
 ! GROUP groupnameX
-! # not only kinds, but other groups, recursively?
-!  different_groupname  # but what about loops?  even possible?
+!  different_groupname  # no circular dependencies allowed
 ! END GROUP
 
-! alternative output is triplets of 'kind1 kind2 value'
-! which gets put into the 2d array at run time?  is that better?
-
-! maybe prototype the application of these values inside assim_tools
-! first before deciding what the output should be.  inside the
-! filter run i think it should be a 2d array for speed, but is that
-! the most flexible for input to filter?
-
-! or finally, the input to this tool could be the ascii text file,
-! and the 2d table could be computed and filled in the initialization
-! code (if not too slow) and there is no separate tool needed?
-
-! i started to add types, but they can only appear in column 1 of the
-! triplet line.  rethink this.
-
 ! the output of this tool is a ascii file containing lines:
-!  KIND1_string   KIND2_string    0.0
+!  QTY1_string   QTY2_string    0.0
 !
-! the 2d table building will now be done at run time in assim_tools
-! use would be if (impact_table(kind1, kind2) > 0.0) then ok else 
-! change the increments. this could be done in assim_tools in a generic way.
 
-!>@todo FIXME move the namelist to here.
-!>pass in the input/output names/any value to the create routine.
-!>call a debug routine to turn on debugging messages.
 program obs_impact_tool
 
 use      types_mod, only : r8
