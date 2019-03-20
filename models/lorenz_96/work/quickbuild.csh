@@ -28,7 +28,7 @@
 set BUILDING = "Lorenz 96"
 
 # programs which have the option of building with MPI:
-set MPI_TARGETS = "filter perfect_model_obs model_mod_check"
+set MPI_TARGETS = "filter perfect_model_obs model_mod_check closest_member_tool"
 
 # set default (override with -mpi or -nompi):
 #  0 = build without MPI, 1 = build with MPI
