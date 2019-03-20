@@ -4,7 +4,7 @@
 !
 ! $Id$
 
-!> This module supports the obs_impact_tool and reading in the
+!> This module supports both the obs_impact_tool and reading in the
 !> table at runtime for use during the assimilation phase, to
 !> alter the impact of observations on the state vector.
 !>
@@ -329,7 +329,7 @@ logical,          intent(in)    :: allow_any_values
 character(len=*), intent(in), optional :: anyvals_string
 
 ! change this to true to force values to be 0 or 1
-logical, save :: must_be_on_or_off = .false.
+logical, save :: fully_on_or_off = .false.
 
 integer :: index1, index2
 
@@ -351,13 +351,14 @@ if (index2 < 0) then
                      source, revision, revdate, text2=errline, text3=readbuf)
 endif
 
-! options for the actual impact value here could be:  
+! options for the actual impact value:  
 !   1. anything goes
-!   2. restrict range to between 0.0 and 1.0
-!   3. allow ONLY 0.0 or 1.0
+!   2. values restricted
+!       a. must be 0.0 or 1.0 only
+!       b. must be between 0.0 and 1.0 inclusive
 
 if (.not. allow_any_values) then
-   if (must_be_on_or_off) then
+   if (fully_on_or_off) then
       if (rvalue /= 0.0_r8 .and. rvalue /= 1.0_r8) then 
          call error_handler(E_ERR, 'obs_impact', &
                            'impact values must be 0 or 1', &
