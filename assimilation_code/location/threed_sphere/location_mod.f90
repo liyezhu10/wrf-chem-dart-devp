@@ -2010,6 +2010,9 @@ find_del_lon = acos((a - (b*sin(latval))) / (c*cos(latval)))
 end function find_del_lon
 
 !---------------------------------------------------------------------------
+!> returns the maximum distance for the cutoff specified for the 
+!> observation type of interest.
+!> May be useful in custom 'get_close' applications.
 
 function get_maxdist(gc, obs_type)
 type(get_close_type), intent(in) :: gc
