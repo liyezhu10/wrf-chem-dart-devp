@@ -1567,7 +1567,6 @@ logical keep_going
       write (stdout,*) '           array(i) < array(i-1) for i=',i 
       write (stdout,*) '           array(i) for i=1..ia follows:'
       call exit_all()
-      !call abort()
     endif
   enddo
   if (value .lt. array(1) .or. value .gt. array(ia)) then
