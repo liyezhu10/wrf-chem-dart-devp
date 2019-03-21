@@ -594,14 +594,14 @@ function get_unit()
 integer :: get_unit
 
 integer :: i, iunit
-logical :: already_open
+logical :: open
 
 if ( .not. module_initialized ) call fatal_not_initialized('get_unit')
 
 iunit = -1
 do i = 10, 80
-   inquire (i, opened=already_open)
-   if (.not. already_open) then
+   inquire (i, opened=open)
+   if (.not. open) then
       get_unit = i
       return
    endif
@@ -1379,9 +1379,8 @@ end subroutine file_to_text
 
 !-----------------------------------------------------------------------
 !> Arguments are the name of a file which contains a list of filenames.
-!> This routine opens the listfile, and returns the index-th one.
-!>@todo FIXME this should return 512 chars, not 256.  will that 
-!>break some of the calling code?
+!> This routine opens the listfile, and returns the lineindex-th one.
+!> We agreed to support filenames/pathnames up to 256.
 
 function get_next_filename( listname, lineindex )
 
@@ -1390,10 +1389,9 @@ integer,           intent(in) :: lineindex
 character(len=256)            :: get_next_filename
 
 integer :: i, ios, funit
+character(len=512) :: string
 
-character(len=512)  :: string
-
-funit   = open_file(listname, form="FORMATTED", action="READ")
+funit = open_file(listname, form="FORMATTED", action="READ")
 
 do i=1, lineindex
 
@@ -1408,16 +1406,19 @@ do i=1, lineindex
 
 enddo
 
-! check for length problems
-if (len_trim(string) > len(get_next_filename)) then
+call close_file(funit)
+
+
+! check for length problems after stripping off any leading blanks.
+! @todo FIXME define 256 as a constant - MAXFILENAMELEN or something
+if (len_trim(adjustl(string)) > 256) then
    call error_handler(E_ERR, 'get_next_filename', &
                       'maximum filename length of 256 exceeded', &
                       source, revision, revdate)   
 endif
 
-! is this overly complicated?  either just adjustl() or nothing?
-get_next_filename = adjustl(string(1:len(get_next_filename)))
-call close_file(funit)
+
+get_next_filename = adjustl(string)
 
 end function get_next_filename
 
@@ -1685,6 +1686,7 @@ function next_file(fname,ifile)
 ! FIXME: THIS FUNCTION IS DEPRECATED AND SHOULD BE REMOVED.
 ! FIXME: THIS FUNCTION IS DEPRECATED AND SHOULD BE REMOVED.
 ! FIXME: THIS FUNCTION IS DEPRECATED AND SHOULD BE REMOVED.
+! (only used by obs_seq_to_netcdf currently.)
 
 !----------------------------------------------------------------------
 ! The file name can take one of three forms:
@@ -2648,7 +2650,7 @@ subroutine dump_unit_attributes(iunit)
 
 integer, intent(in) :: iunit
 
-logical :: exists, connected, named_file
+logical :: exists, open, named_file
 integer :: ios, reclen, nextrecnum
 character(len=256) :: file_name
 character(len=32)  :: ynu     ! YES, NO, UNDEFINED ... among others
@@ -2657,8 +2659,8 @@ if ( .not. module_initialized ) call initialize_utilities
 
 call output_unit_attribs(ios, 'for unit', '', ivalue=iunit)
 
-inquire(iunit, opened = connected, iostat=ios)
-call output_unit_attribs(ios, 'connected', '', lvalue=connected)
+inquire(iunit, opened = open, iostat=ios)
+call output_unit_attribs(ios, 'opened', '', lvalue=open)
 
 inquire(iunit, named = named_file, iostat=ios)
 call output_unit_attribs(ios, 'named file', '', lvalue=named_file)
