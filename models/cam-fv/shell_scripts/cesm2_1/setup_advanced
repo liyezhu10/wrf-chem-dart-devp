@@ -475,7 +475,7 @@ else if ($?PBS_JOBNAME) then
 else
    setenv setup_file_name $0:t
 endif
-${COPY} -f $setup_file_name ${caseroot}/${setup_file_name}.original
+${COPY} -n $setup_file_name ${caseroot}/${setup_file_name}.original
 
 # ==============================================================================
 # Configure the case.
@@ -487,7 +487,7 @@ cd ${caseroot}
 
 foreach FILE ( *xml )
    if ( ! -e          ${FILE}.original ) then
-      ${COPY} -f ${FILE} ${FILE}.original
+      ${COPY} -n ${FILE} ${FILE}.original
    endif
 end
 
