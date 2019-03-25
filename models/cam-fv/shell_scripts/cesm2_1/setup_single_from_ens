@@ -1,4 +1,11 @@
 #!/bin/csh -f
+#
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# DART $Id$
+#
 
 #--------------------------------------------
 # The job name should be the name of this script(file), 
@@ -113,6 +120,7 @@ setenv num_instances 1
 #                 This script will delete any existing caseroot, so this script,
 #                 and other useful things should be kept elsewhere.
 # cesmdata        Location of some supporting CESM data files.
+# NOTE: rundir and exeroot should be replaced by the cime_output mechanism as in setup_hybrid.
 # rundir          Will create the CESM run directory here.  Will need large
 #                 amounts of disk space, generally on a scratch partition.
 # exeroot         Will create the CESM executable directory here, where the
@@ -821,3 +829,8 @@ endif
 
 exit 0
 
+
+# <next few lines under version control, do not edit>
+# $URL$
+# $Revision$
+# $Date$

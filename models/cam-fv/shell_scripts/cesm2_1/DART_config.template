@@ -20,8 +20,8 @@
 # This script will try to build the DART executables if they are not found.
 # This might result in a preproc_nml being used, which is wrong for your observation set.
 #
-# There are many CESM binary files in big-endian format, and DART reads
-# some of them, so you MUST compile DART accordingly e.g.,
+# There may be CESM binary files in big-endian format, and DART reads some of them, 
+# so you MUST compile DART accordingly e.g.,
 # ifort -convert big_endian
 # Contact dart@ucar.edu if you want to use another compiler.
 #
@@ -29,12 +29,18 @@
 # How to set up the script
 # ---------------------
 #
-# -- Copy and rename this script into the $CASEROOT directory.
-#    > cp DART_config.template $CASEROOT/DART_config
-# -- Ensure DARTROOT references a valid DART directory.
+# -- > cd $CASEROOT
+# -- Script DART_config should have been created there by setup_{hybrid,advanced,...}
+# -- If not, copy and rename this script into the $CASEROOT directory.
+#    > cp  $DART_CESM_scripts/DART_config.template  $CASEROOT/DART_config
+# -- Ensure the following variables are set correctly;
+#       DARTROOT               references a valid DART directory.
+#       DART_SCRIPTS_DIR       $DARTROOT/models/cam-fv/shell_scripts/your_setup_script_dir
+#       BASEOBSDIR             your_observation_path
+#       SAVE_EVERY_MTH_RESTART days_between_archiving_restarts
 # -- Examine the whole script to identify things to change for your experiments.
 #    This includes choosing [no_]assimilate.csh.
-# -- Provide any initial inflation files needed by your run
+# -- Optionally provide any initial inflation files needed by your run.
 # -- Run this script.
 #    > ./DART_config | & tee DART_config.out1  
 # -- Edit the DART input.nml, that appears in the ${CASEROOT} directory,
@@ -115,13 +121,15 @@ if ($?CIMEROOT) ./xmlchange DATA_ASSIMILATION_SCRIPT=${CASEROOT}/assimilate.csh
 
 set nonomatch       # suppress "rm" warnings if wildcard does not match anything
 
-# The FORCE options are not optional.
-# The VERBOSE options are useful for debugging though
-# some systems don't like the -v option to any of the following.
-set   MOVE = '/bin/mv -f'
-set   COPY = '/bin/cp -f --preserve=timestamps'
-set   LINK = '/bin/ln -fs'
-set REMOVE = '/bin/rm -fr'
+# If the -f argument is needed, it is added to commands where they are used.
+# The verbose (-v) argument has been separated from these command definitions
+# because these commands may not accept it on some systems.  On those systems
+# set VERBOSE = ''
+set VERBOSE = '-v'
+set    MOVE = '/usr/bin/mv'
+set    COPY = '/usr/bin/cp --preserve=timestamps'
+set    LINK = '/usr/bin/ln'
+set  REMOVE = '/usr/bin/rm'
 
 echo ""
 
@@ -183,7 +191,7 @@ chmod 755 no_assimilate.csh
 # chmod 755 perfect_model.csh
 
 if (-f ${DART_SCRIPTS_DIR}/compress.csh) then
-   $COPY ${DART_SCRIPTS_DIR}/compress.csh . 
+   $COPY -f -${VERBOSE} ${DART_SCRIPTS_DIR}/compress.csh . || exit 43
 else
    echo "ERROR: no compress.csh in  ${DART_SCRIPTS_DIR}"
    exit 45
@@ -212,11 +220,11 @@ if [[ -e input.nml ]]; then
    if [[ -e input.nml.original ]]; then
       echo "input.nml.original already exists - not making another"
    else
-      ${COPY} input.nml input.nml.original
+      ${COPY} ${VERBOSE} input.nml input.nml.original
    fi
 
 elif [[ -e ${DARTROOT}/models/cam-fv/work/input.nml ]]; then
-   ${COPY} ${DARTROOT}/models/cam-fv/work/input.nml  input.nml
+   ${COPY} ${VERBOSE} ${DARTROOT}/models/cam-fv/work/input.nml  input.nml
    if [[ -x update_dart_namelists ]]; then
           ./update_dart_namelists
    fi
@@ -225,9 +233,9 @@ else
    exit 50
 fi
 
-${COPY} ${DARTROOT}/models/cam-fv/work/filter                 ${EXEROOT}
-${COPY} ${DARTROOT}/models/cam-fv/work/perfect_model_obs      ${EXEROOT}
-${COPY} ${DARTROOT}/models/cam-fv/work/fill_inflation_restart ${EXEROOT}
+${COPY} -f ${DARTROOT}/models/cam-fv/work/filter                 ${EXEROOT} || exit 55
+${COPY} -f ${DARTROOT}/models/cam-fv/work/perfect_model_obs      ${EXEROOT} || exit 56
+${COPY} -f ${DARTROOT}/models/cam-fv/work/fill_inflation_restart ${EXEROOT} || exit 57
 
 exit 0
 
@@ -312,7 +320,7 @@ if ( $num_instances > 1 ) then
    set SAMP_ERR_FILE = ${DARTROOT}/${SAMP_ERR_DIR}/sampling_error_correction_table.nc
 
    if (  -e   ${SAMP_ERR_FILE} ) then
-      ${COPY} ${SAMP_ERR_FILE} ${RUNDIR}
+      ${COPY} -f ${VERBOSE} ${SAMP_ERR_FILE} ${RUNDIR}  || exit 75
       if ( $num_instances < 3 || $num_instances > 200 ) then
          echo ""
          echo "ERROR: sampling_error_correction_table.nc handles ensemble sizes 3...200."
@@ -345,29 +353,36 @@ cat << EndOfText >! DART_instructions.txt
 
 Check the DART configuration:
 
-1) The default behavior is to invoke DART (set in setup_{hybrid,advanced,...).
-   If your confidence is not high that the CESM configuration will be correct,
-   we recommend turning off the assimilation at first.
+1) The default behavior setup_hybrid is too not run DART_config, which sets up assimilation.
+   The default behavior of setup_advanced is to invoke DART_config. 
 
-2) If you want to turn off DART, edit the env_run.xml: DATA_ASSIMILATION_* 
-   to disable running a DART script (assimilate.csh or perfect_model.csh)
-   after the model forecast.
+2) If you want to turn DART on or off, edit the 
+   env_run.xml: DATA_ASSIMILATION_* to specify which DART script 
+   to use after the model forecast;
+   assimilate.csh, no_assimilate.csh, or perfect_model.csh.
 
 3) Modify what you need to in the DART namelist file, i.e. ${CASEROOT}/input.nml
 
 4) If you have recompiled any part of the DART system, 'stage_dart_files'
    will copy them into the correct places.
 
-5) If you stage your own inflation files, make sure you read the INFLATION section
-   in ${CASEROOT}/DART_config
+5) If you stage your own inflation files, make sure you read the "INFLATION" section
+   in ${CASEROOT}/assimilate.csh.  At the very least, copy your inflation files
+   in ${RUNDIR} into the appropriate names:
+      input_priorinf_mean.nc
+      input_priorinf_sd.nc
+      input_postinf_mean.nc 
+      input_postinf_sd.nc   
+   If assimilate.csh does not find inflation files, it will call fill_inflation_restart
+   to create some from the inflation values in input.nml.
 
 6) Make sure the observation directory name in assimilate.csh or perfect_model.csh 
    matches the one on your system.
 
 7) Submit the CESM job in the normal way.
 
-8) You can use ${CASEROOT}/stage_cesm_files
-    to stage files to restart a run.
+8) You can use ${CASEROOT}/stage_cesm_files to stage an ensemble of files 
+   to restart a run at a date for which you have a restart set.
 
 -------------------------------------------------------------------------
 

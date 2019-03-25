@@ -111,6 +111,8 @@ setenv num_instances        1
 #               be in scratch (on yellowstone, your 'work' partition is suggested).
 #               This script will delete any existing caseroot, so this script,
 #               and other useful things should be kept elsewhere.
+#      NOTE: this cime_output is different from setup_{hybrid,advanced}
+#            This should be fixed.
 # cime_output   The directory where CESM's bld and run directories will be created.
 #               $CASEROOT is appended to this first.
 #               Large amount of space needed, generally on a scratch partition.  

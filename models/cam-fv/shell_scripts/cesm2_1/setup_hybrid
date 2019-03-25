@@ -92,7 +92,7 @@
 #
 # -- Confirm the variable values in $caseroot/env_{build,run,batch,...}.xml.
 #
-# -- (if running DART) Edit the DART input.nml that appears in the ${caseroot}
+# -- (if running filter) Edit the DART input.nml that appears in the ${caseroot}
 #    directory to replace default values with your preferred values.
 #
 # -- Submit the job using ${caseroot}/case.submit -M begin,end
@@ -170,11 +170,21 @@ setenv compset_args "${compset_args} --run-unsupported"
 #               This script will delete an existing caseroot with the same name,
 #               so this script and other things you want to preserve should be kept elsewhere.
 # dartroot      Location of the root of _your_ DART installation.
-# cime_output   The directory where CESM's bld and run directories will be created.
-#               $CASEROOT is appended to this first.
+# cime_output   $cime_root/$CASEROOT is the directory where CESM's build and run directories will be created.
 #               Large amount of space needed, generally on a scratch partition.  
-#               DART's preference is to put the archive directory there too, 
-#               but that's not the CESM default.
+#               CESM will define the following variables:
+#               RUNDIR:      The CESM run directory.  Needs large amounts of disk.
+#                            Default; $CIME_OUTPUT_ROOT/$CASE/run
+#               EXEROOT:     The CESM executable directory.
+#                            Default; $CIME_OUTPUT_ROOT/$CASE/bld
+#               DOUT_S_ROOT: The CESM short-term archive directory.
+#                            LARGE amount of disk.
+#                            Files remain here until you move them or they are purged.
+#                            Default; $CIME_OUTPUT_ROOT/archive/$CASE.
+#                            DART's preference is to define the archive directory to be;
+#                                     $CIME_OUTPUT_ROOT/$CASE/archive
+#                            This change of DOUT_S_ROOT may interfere with the ability to clone your case.
+#
 # archdir       The CESM short-term archive directory.
 #               Files will remain here until you move them to permanent storage
 #               (or are purged).
@@ -309,16 +319,19 @@ setenv timewall     1:00
 # instead of aliases defined by the user.
 # If the standard commands are not in the location listed below,
 # change the 'set' commands to use them.
-# The FORCE options listed are required.
+# The verbose (-v) argument has been separated from these command definitions
+# because these commands may not accept it on some systems.  On those systems
+# set VERBOSE = ''
 # ==============================================================================
 
 set nonomatch       # suppress "rm" warnings if wildcard does not match anything
 
-set   MOVE = '/usr/bin/mv'
-set   COPY = '/usr/bin/cp --preserve=timestamps'
-set   LINK = '/usr/bin/ln -s'
-set   LIST = '/usr/bin/ls'
-set REMOVE = '/usr/bin/rm'
+set VERBOSE = '-v'
+set    MOVE = '/usr/bin/mv'
+set    COPY = '/usr/bin/cp --preserve=timestamps'
+set    LINK = '/usr/bin/ln -s'
+set    LIST = '/usr/bin/ls'
+set  REMOVE = '/usr/bin/rm'
 
 # ==============================================================================
 # ==============================================================================
@@ -374,11 +387,11 @@ set old_files = ()
 if (-d $archdir/esp/hist) set old_files = `ls $archdir/esp/hist`
 if ($#old_files == 0) then
    echo "removing old directory ${caseroot}"
-   echo "removing old directory ${cime_output}/bld"
-   echo "removing old directory ${cime_output}/run"
+   echo "removing old directory ${cime_output}/${case}/bld"
+   echo "removing old directory ${cime_output}/${case}/run"
    ${REMOVE} -fr ${caseroot}
-   ${REMOVE} -fr ${cime_output}/bld
-   ${REMOVE} -fr ${cime_output}/run
+   ${REMOVE} -fr ${cime_output}/${case}/bld
+   ${REMOVE} -fr ${cime_output}/${case}/run
 else
    echo "There are DART output files in $archdir/esp/hist."
    echo "Either rename the case you are building, or delete the files and rebuild this case"
@@ -391,7 +404,7 @@ setenv CIME_MODEL cesm
 # Record which CIME is being used.
 cd ${CIMEROOT}
 echo "\n Using the starred branch, below, of $CIMEROOT "
-git branch
+git branch | grep '*'
 echo " " 
 cd -
 
@@ -443,7 +456,7 @@ else if ($?PBS_JOBNAME) then
 else
    setenv setup_file_name $0:t
 endif
-${COPY} -f $setup_file_name ${caseroot}/${setup_file_name}.original
+${COPY} -f ${VERBOSE} $setup_file_name ${caseroot}/${setup_file_name}.original || exit 30
 
 # ==============================================================================
 # Configure the case.
@@ -455,7 +468,7 @@ cd ${caseroot}
 
 foreach FILE ( *xml )
    if ( ! -e          ${FILE}.original ) then
-      ${COPY} -f ${FILE} ${FILE}.original
+      ${COPY} -f ${FILE} ${FILE}.original || exit 35
    endif
 end
 
@@ -700,7 +713,7 @@ endif
 # Import your SourceMods, if you have any.  DART doesn't have any of its own.
 if (-d ${sourcemods} ) then
    echo ' '
-   ${COPY} -r ${sourcemods}/* ${caseroot}/SourceMods/   || exit 62
+   ${COPY} -r ${VERBOSE} ${sourcemods}/* ${caseroot}/SourceMods/   || exit 62
    echo ' '
    echo ' '
 else
@@ -1032,7 +1045,7 @@ if ( \${CONTINUE_RUN} =~ TRUE ) then
 
       endif
 
-      ${COPY} \${RESTARTDIR}/* . || exit 101
+      ${COPY} -f \${RESTARTDIR}/* . || exit 101
 
    else
 
@@ -1179,9 +1192,9 @@ Time to check the case.
     ./xmlquery --partial <partial_string_of_interest> 
     is particularly useful.
 
-4)  The default initial configuration is to do NO ASSIMILATION."
-    When you are ready to add data assimilation, follow the instructions in "
-    .../yourDART/models/cam-fv/shell_scripts/${cesmtag}/DART_config.template. "
+4)  The default initial configuration is to do NO ASSIMILATION.
+    When you are ready to add data assimilation, follow the instructions in 
+    ${caseroot}/DART_config. 
 
 5)  Submit the job (and get mail when it starts and stops):
     ./case.submit -M begin,end
@@ -1202,7 +1215,7 @@ Time to check the case.
 EndOfText
 
 cat CESM_instructions.txt
-cat DART_instructions.txt
+
 echo "    If the first cycle generated an ensemble from a single state, change input.nml as described in the "
 echo "       instructions in it, to make cycles 2,...,N use the latest ensemble, unperturbed."
 echo "    Change values in env_batch.xml to accommodate longer runs."
