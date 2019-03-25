@@ -304,6 +304,9 @@ call initialize_utilities('obs_data_denial')
 call register_module(source,revision,revdate)
 call static_init_obs_sequence()
 
+call error_handler(E_ERR, 'obs_data_denial', 'this program is not finished yet', &
+     source, revision, revdate, text2='contact dart@ucar.edu for more info')
+
 end subroutine setup
 
 
