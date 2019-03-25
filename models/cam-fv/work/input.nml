@@ -103,53 +103,75 @@
 ! Creation of initial ensemble from a single model state.
 !     fields_to_perturb lists the state variables to be perturbed to make the ensemble.
 !         Providing an empty list is one of the changes to use an existing ensemble.
-!     perturbation_amplitude > 0 allows each point of the fields_to_perturb fields of each ens member
-!         to be randomly perturbed with a standard deviation of perturbation_amplitude.
+!     perturbation_amplitude > 0 allows each point of the fields_to_perturb fields 
+!         of each ensemble member to be randomly perturbed with a standard deviation 
+!         of perturbation_amplitude.
 !         Each field can be given a different perturbation_amplitude.
 !     Used by filter's call to pert_model_copies.
 !
 ! state_variables (5 columns for each variable):
 !     netcdf varname, dart quantity, min allowed value, max allowed value, (no)update this var
 !
+! vert_normalization_YYY
+!     The vert_normalization_scale_height default value was chosen based on 
+!     Pedatella's settling on 1.5 (scale heights/radian), based on tuning experiments.
+!     This is supported by tuning experiments with CAM5.
+!
 ! use_log_vertical_scale(vertical interpolation only):
 !     .false. or .true.
 !
-! start_damping_ramp_at_pressure
-!     The default values given are the minimums recommended, given the choices
-!     of several other CESM and DART parameters.
-!     You calculate your own as illustrated in models/cam/doc/highest_state_p_Pa.pptx.
-!     Or you can start with the minimum and increase it if there seems to be excessive
+! no_obs_assim_above_level 
+!     Prevents assimilation of observations whose vertical location is above
+!     this model level.  Note that, if this value is set to a large value,
+!     it may be within CAM's hybrid coordinate layers instead of in the pure pressure layers.
+!     This will result in the the observation cutoff height being at different pressure levels
+!     over mountains versus lower areas.
+
+! model_damping_ends_at_level
+!     This controls how much innovations are reduced near the model top, to mitigate the effects 
+!     of the extra diffusion sometimes applied there in CAM and WACCM (see fv_div24del2flag).
+!     The default value (-1) turns off the damping and relies on the choices of the following 
+!     variables to prevent assimilation from happening in CAM's diffusive top layers:
+!        no_obs_assim_above_level,
+!        use_log_vertical_scale,
+!        vert_normalization_YYY,
+!        cutoff.
+!     When it is turned on (> 0), it is the lowest level which will be damped.  
+!     Damping increases with height (smaller level numbers).
+!     The values given below are the minimums recommended for various models.
+!     You can start with the minimum and increase it if there seems to be excessive
 !     noise in the upper layers.
-! The parameters on which the minimum start_damping_ramp_at_pressure depends are:
-!     cutoff (0.2 assumed)
-!     vert_coord
-!     vert_normalization_{pressure,scale_height}
-!     CAM's model top
-!     number of model top levels with extra diffusion
 !
 ! CAM-FV Section
-!     model top 220 Pa
-!     number of model top levels with extra diffusion, controlled by div24del2:
+!     Model top 220 Pa
+!     Number of CAM model top levels with extra diffusion, controlled by div24del2:
 !         2 = div2    -> 2 levels
-!         4,24 = del2 -> 3 levels -> highest_state_pressure_Pa = 10500.
-!     vert_normalization_pressure = 20000. is a better choice than 100000.
-!         for allowing upper levels to be pulled towards the obs.
+!         4,24 = del2 -> 3 levels 
+!     CAM assimilations can use pressure or scale height vertical coordinate.
+!     We recommend scale height.
+!        use_log_vertical_scale          = .true.
+!        vert_normalization_scale_height = 1.5 
+!        vert_normalization_pressure     = 20000. 
+!     
+!     26 levels (CAM4):
+!        no_obs_assim_above_level            = 5       ! corresponds to ~3700 Pa
+!     30 levels (CAM5):
+!        no_obs_assim_above_level            = 5       ! corresponds to ~3800 Pa
+!     32 levels (CAM6):
+!        no_obs_assim_above_level            = 5       ! corresponds to ~3600 Pa
 !
-! WACCM can be used with either FV or SE
-!     vert_normalization_scale_height does not have extensive exploration available.
-!     Pedatella settled on 1.5.
+! WACCM 
 !     The model top for WACCM is (naturally) much higher: 4.5e-4 Pa
-!     This has ramifications for the diffusion near the model top so
-!     changes to start_damping_ramp_at_pressure and no_assim_above_pressure are appropriate.
-!     number of model top levels with extra diffusion, controlled by CAM's fv_div24del2flag:
+!     The number of model top levels with extra diffusion is controlled by WACCM's 
+!     fv_div24del2flag:
 !         2 = div2    -> 3 levels
 !         4,24 = del2 -> 4 levels
-!
-! WACCM settings that must be changed no matter what core is being used.
-!     vert_normalization_scale_height = 1.5
-!     use_log_vertical_scale          = .true.
-!     no_assim_above_pressure         = .0001
-!     start_damping_ramp_at_pressure  = .01
+!     70 levels (WACCM4):
+!        no_obs_assim_above_level            = 7       ! corresponds to 0.012 Pa
+!     This values must be used with WACCM assimilations;
+!        use_log_vertical_scale          = .true.
+!     This is recommended, but your own tuning experiments may support a different value.
+!        vert_normalization_scale_height = 1.5
 !
 !========================================================================
 
@@ -167,11 +189,11 @@
                            'PS',    'QTY_SURFACE_PRESSURE',    'NA', 'NA', 'UPDATE'
    assimilation_period_days            = 0
    assimilation_period_seconds         = 21600
-   no_obs_assim_above_level            = 12
-   model_damping_ends_at_level         = 7
+   no_obs_assim_above_level            = 5
+   model_damping_ends_at_level         = -1
    custom_routine_to_generate_ensemble = .true.
    fields_to_perturb                   = 'QTY_TEMPERATURE'
-   perturbation_amplitude              = 0.0001
+   perturbation_amplitude              = 0.1
    no_normalization_of_scale_heights   = .true.
    use_variable_mean_mass              = .false.
    using_chemistry                     = .false.
