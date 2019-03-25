@@ -94,6 +94,8 @@ endif
 ! Set the current window to the state window
 current_win = STATE_WINDOW
 
+data_count = copies_in_window(state_ens_handle)
+
 end subroutine create_state_window
 
 !-------------------------------------------------------------
