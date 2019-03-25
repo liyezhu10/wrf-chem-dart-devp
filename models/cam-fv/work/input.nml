@@ -26,10 +26,10 @@
 &filter_nml
    input_state_files            = ''
    input_state_file_list        = 'cam_init_files'
-   init_time_days               = -1
-   init_time_seconds            = -1
    single_file_in               = .false.
    perturb_from_single_instance = .true.
+   init_time_days               = -1
+   init_time_seconds            = -1
 
    stages_to_write              = 'preassim','output'
 
@@ -41,31 +41,32 @@
    num_output_state_members     = 3
    single_file_out              = .false.
    write_all_stages_at_end      = .false.
-   distributed_state            = .true.
-   compute_posterior            = .false.
+   output_interval              = 1
 
    ens_size                     = 3
    num_groups                   = 1
+   distributed_state            = .true.
 
    inf_flavor                  = 2,                       0
    inf_initial_from_restart    = .false.,                 .false.
-   inf_deterministic           = .true.,                  .true.
    inf_initial                 = 1.0,                     1.0
    inf_lower_bound             = 1.0,                     1.0
    inf_upper_bound             = 100.0,                   100.0
-   inf_damping                 = 0.9,                     0.9
    inf_sd_initial_from_restart = .false.,                 .false.
    inf_sd_initial              = 0.6,                     0.6
    inf_sd_lower_bound          = 0.6,                     0.6
    inf_sd_max_change           = 1.05,                    1.05
+   inf_damping                 = 0.9,                     0.9
+   inf_deterministic           = .true.,                  .true.
 
    obs_sequence_in_name     = 'obs_seq.out'
    obs_sequence_out_name    = 'obs_seq.final'
-   num_output_obs_members   = 3
    first_obs_days           = -1
    first_obs_seconds        = -1
    last_obs_days            = -1
    last_obs_seconds         = -1
+   compute_posterior        = .false.
+   num_output_obs_members   = 3
 
    adv_ens_command          = 'no_CESM_advance_script'
    trace_execution          = .true.
@@ -178,8 +179,9 @@
 &model_nml
    cam_template_filename       = 'caminput.nc'
    cam_phis_filename           = 'cam_phis.nc'
-   vertical_localization_coord = 'SCALEHEIGHT'
-   use_log_vertical_scale      = .true.
+   custom_routine_to_generate_ensemble = .true.
+   fields_to_perturb                   = 'QTY_TEMPERATURE'
+   perturbation_amplitude              = 0.1
    state_variables       = 'T',     'QTY_TEMPERATURE',         'NA', 'NA', 'UPDATE'
                            'US',    'QTY_U_WIND_COMPONENT',    'NA', 'NA', 'UPDATE'
                            'VS',    'QTY_V_WIND_COMPONENT',    'NA', 'NA', 'UPDATE'
@@ -187,18 +189,17 @@
                            'CLDLIQ','QTY_CLOUD_LIQUID_WATER',  'NA', 'NA', 'UPDATE'
                            'CLDICE','QTY_CLOUD_ICE',           'NA', 'NA', 'UPDATE'
                            'PS',    'QTY_SURFACE_PRESSURE',    'NA', 'NA', 'UPDATE'
-   assimilation_period_days            = 0
-   assimilation_period_seconds         = 21600
+   use_log_vertical_scale              = .true.
+   use_variable_mean_mass              = .false.
+   no_normalization_of_scale_heights   = .true.
+   vertical_localization_coord         = 'SCALEHEIGHT'
    no_obs_assim_above_level            = 5
    model_damping_ends_at_level         = -1
-   custom_routine_to_generate_ensemble = .true.
-   fields_to_perturb                   = 'QTY_TEMPERATURE'
-   perturbation_amplitude              = 0.1
-   no_normalization_of_scale_heights   = .true.
-   use_variable_mean_mass              = .false.
-   using_chemistry                     = .false.
-   suppress_grid_info_in_output        = .false.
-   debug_level                         = 0
+   using_chemistry                = .false.
+   assimilation_period_days       = 0
+   assimilation_period_seconds    = 21600
+   suppress_grid_info_in_output   = .false.
+   debug_level                    = 0
    /
 
 
