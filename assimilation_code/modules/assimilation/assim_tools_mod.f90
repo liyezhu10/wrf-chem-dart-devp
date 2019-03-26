@@ -1160,33 +1160,42 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
 
    !------------------------------------------------------
 
-   ! Now everybody updates their obs priors (only ones after this one)
-   if (timing(LG_GRN)) call start_timer(t_base(LG_GRN))
-   OBS_UPDATE: do j = 1, num_close_obs
-      obs_index = close_obs_ind(j)
+   ! you can skip the impact of obs on other obs if you are only
+   ! here to compute the adaptive posterior inflation.  we removed
+   ! support for observation space inflation, but if we put it back
+   ! in this code will need to change - we would need to call
+   ! update_from_obs_inc() in some cases before cycling because
+   ! that's the routine that computes obs space inflation.
+   if(.not. inflate_only .or. local_obs_inflate) then
 
-      ! Only have to update obs that have not yet been used
-      if(my_obs_indx(obs_index) > i) then
-
+      ! Everybody updates their obs priors for unassimilated obs.
+      if (timing(LG_GRN)) call start_timer(t_base(LG_GRN))
+      OBS_UPDATE: do j = 1, num_close_obs
+         obs_index = close_obs_ind(j)
+   
+         ! Only have to update obs that have not yet been used
+         if (my_obs_indx(obs_index) <= i) cycle OBS_UPDATE
+   
          ! If the forward observation operator failed, no need to 
          ! update the unassimilated observations 
          if (any(obs_ens_handle%copies(1:ens_size, obs_index) == MISSING_R8)) cycle OBS_UPDATE
-
+   
+         ! if external impact factors supplied, do a quick check for 0.0
+         ! before doing the work to compute the covariance factor.
+         if (adjust_obs_impact) then
+            impact_factor = obs_impact_table(base_obs_type, my_obs_kind(obs_index))
+            if (impact_factor <= 0.0_r8) cycle OBS_UPDATE
+         endif
+   
          ! Compute the distance and the covar_factor
          cov_factor = comp_cov_factor(close_obs_dist(j), cutoff_rev, &
             base_obs_loc, base_obs_type, my_obs_loc(obs_index), my_obs_kind(obs_index))
-
-         ! if external impact factors supplied, factor them in here
-         ! FIXME: this would execute faster for 0.0 impact factors if
-         ! we check for that before calling comp_cov_factor.  but it makes
-         ! the logic more complicated - this is simpler if we do it after.
-         if (adjust_obs_impact) then
-            impact_factor = obs_impact_table(base_obs_type, my_obs_kind(obs_index))
-            cov_factor = cov_factor * impact_factor
-         endif
-
-         if(cov_factor <= 0.0_r8) cycle OBS_UPDATE
-
+   
+         ! apply external impact factor now, if supplied
+         if (adjust_obs_impact) cov_factor = cov_factor * impact_factor
+   
+         if (cov_factor <= 0.0_r8) cycle OBS_UPDATE
+   
          if (timing(SM_GRN)) call start_timer(t_base(SM_GRN), t_items(SM_GRN), t_limit(SM_GRN), do_sync=.false.)
          ! Loop through and update ensemble members in each group
          do group = 1, num_groups
@@ -1199,9 +1208,7 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
          end do
          if (timing(SM_GRN)) call read_timer(t_base(SM_GRN), 'update_from_obs_inc_O', &
                                              t_items(SM_GRN), t_limit(SM_GRN), do_sync=.false.)
-
-         ! FIXME: could we move the if test for inflate only to here?
-
+   
          ! Compute an information factor for impact of this observation on this state
          if(num_groups == 1) then
              reg_factor = 1.0_r8
@@ -1211,20 +1218,24 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
             ! Negative indicates that this is an observation index
             reg_factor = comp_reg_factor(num_groups, reg_coef, obs_time, i, -1*my_obs_indx(obs_index))
          endif
-
+   
          ! Final weight is min of group and localization factors
          reg_factor = min(reg_factor, cov_factor)
-
-         ! Only update state if indicated (otherwise just getting inflation)
-         if(.not. inflate_only) then
-            obs_ens_handle%copies(1:ens_size, obs_index) = &
+   
+         ! Update expected obs values to compensate for the update to
+         ! state values (since all expected obs were originally computed
+         ! before any observations were assimilated).  this is updating
+         ! the 'extended state'.
+         obs_ens_handle%copies(1:ens_size, obs_index) = &
               obs_ens_handle%copies(1:ens_size, obs_index) + reg_factor * increment
-         endif
+         
+      end do OBS_UPDATE
+
+      if (timing(LG_GRN)) then
+         write(msgstring, '(A32,I7)') 'obs_update: obs', keys(i)
+         call read_timer(t_base(LG_GRN), msgstring)
       endif
-   end do OBS_UPDATE
-   if (timing(LG_GRN)) then
-      write(msgstring, '(A32,I7)') 'obs_update: obs', keys(i)
-      call read_timer(t_base(LG_GRN), msgstring)
+
    endif
 
    !call test_state_copies(ens_handle, 'after_obs_updates')
