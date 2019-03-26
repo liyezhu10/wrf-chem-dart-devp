@@ -35,9 +35,15 @@ use     location_mod, only : location_type, get_dist, query_location,          &
                              loc_get_close_state => get_close_state,           &
                              is_vertical, set_vertical_localization_coord
                              
-use netcdf_utilities_mod, only : nc_add_global_attribute, nc_synchronize_file, &
-                                 nc_add_global_creation_time, nc_check, &
-                                 nc_begin_define_mode, nc_end_define_mode
+use netcdf_utilities_mod, only : nc_add_global_attribute, nc_synchronize_file,                  &
+                                 nc_add_global_creation_time, nc_check,                         &
+                                 nc_begin_define_mode, nc_end_define_mode,                      &
+                                 nc_open_file_readonly, nc_close_file,                          &
+                                 nc_add_attribute_to_variable, nc_define_dimension,             &
+                                 nc_define_unlimited_dimension, nc_define_character_variable,   &
+                                 nc_define_double_variable, nc_get_variable, nc_put_variable,   &
+                                 nc_get_dimension_size, nc_variable_exists, nc_dimension_exists, &
+                                 nc_define_integer_variable
 
 use location_io_mod,      only :  nc_write_location_atts, nc_write_location
 
@@ -47,7 +53,7 @@ use default_model_mod,     only : nc_write_model_vars, adv_1step,          &
 
 use xyz_location_mod, only : xyz_location_type, xyz_set_location, xyz_get_location,         &
                              xyz_get_close_type, xyz_get_close_init, xyz_get_close_destroy, &
-                             xyz_find_nearest
+                             xyz_find_nearest, xyz_use_great_circle_dist
 
 use    utilities_mod, only : register_module, error_handler,                   &
                              E_ERR, E_WARN, E_MSG, logfileunit, get_unit,      &
@@ -142,8 +148,7 @@ public :: init_time,                      &
 ! generally useful routines for various support purposes.
 ! the interfaces here can be changed as appropriate.
 
-public :: get_model_analysis_filename,  &
-          get_grid_definition_filename, &
+public :: get_init_template_filename,   &
           analysis_file_to_statevector, &
           statevector_to_analysis_file, &
           get_analysis_time,            &
@@ -166,23 +171,28 @@ character(len=128), parameter :: revdate  = "$Date$"
 character(len=256) :: string1, string2, string3, locstring
 logical, save :: module_initialized = .false.
 
+! length of an mpas (also wrf) time string:  YYYY-MM-DD_hh:mm:ss
+integer, parameter :: TIMELEN = 19
+
 ! Real (physical) constants as defined exactly in MPAS.
 ! redefined here for consistency with the model.
 real(r8), parameter :: rgas = 287.0_r8
+real(r8), parameter :: rv = 461.6_r8
 real(r8), parameter :: cp = 1003.0_r8
 real(r8), parameter :: cv = 716.0_r8
 real(r8), parameter :: p0 = 100000.0_r8
 real(r8), parameter :: rcv = rgas/(cp-rgas)
+real(r8), parameter :: rvord = rv/rgas    
 
 ! earth radius; needed to convert lat/lon to x,y,z cartesian coords.
 ! FIXME: one of the example ocean files had a global attr with 6371220.0
-! instead of 1229.   ??
+! instead of 6371229.0   ??
 real(r8), parameter :: radius = 6371229.0 ! meters
 
-! roundoff error for single precision
+! roundoff error for single precision and double
+! r8 == r4
 !real(r8), parameter :: roundoff = 1.0e-5_r8
-
-! r8 r4
+! full r8
 real(r8), parameter :: roundoff = 1.0e-12_r8
 
 ! Storage for a random sequence for perturbing a single initial state
@@ -203,18 +213,18 @@ logical :: search_initialized = .false.
 logical :: add_static_data_to_diags = .false.
 
 ! variables which are in the module namelist
+character(len=256) :: init_template_filename = 'mpas_init.nc'
 integer            :: vert_localization_coord = VERTISHEIGHT
 integer            :: assimilation_period_days = 0
 integer            :: assimilation_period_seconds = 21600
 real(r8)           :: model_perturbation_amplitude = 0.0001   ! tiny amounts
+logical            :: log_p_vert_interp = .true.     ! if true, interpolate vertical pressure in log space
+character(len=32)  :: calendar = 'Gregorian'
 real(r8)           :: highest_obs_pressure_mb   = 100.0_r8    ! do not assimilate obs higher than this level.
 real(r8)           :: sfc_elev_max_diff = -1.0_r8    ! do not assimilate if |model - station| height is larger than this [m].
-logical            :: log_p_vert_interp = .true.     ! if true, interpolate vertical pressure in log space
-integer            :: debug = 0   ! turn up for more and more debug messages
+logical            :: always_assim_surf_altimeters = .false.
 integer            :: xyzdebug = 0
-character(len=32)  :: calendar = 'Gregorian'
-character(len=256) :: model_analysis_filename = 'mpas_init.nc'
-character(len=256) :: grid_definition_filename = 'mpas_init.nc'
+integer            :: debug = 0   ! turn up for more and more debug messages
 
 integer :: domid ! For state_structure_mod access
 
@@ -243,9 +253,21 @@ logical :: use_increments_for_u_update = .true.
 real(r8) :: outside_grid_level_tolerance = -1.0_r8
 logical  :: extrapolate = .false.
 
+! if the calling code updates an existing file it simply writes the state variable
+! data.  if it needs to create a file from scratch it calls nc_write_model_atts()
+! to optionally add grid info or any other non-state variables or attributes.
+! setting this to .true. adds the mpas grid info to the file.  .false. does
+! not and results in smaller diag/output files.
+logical :: write_grid_to_diag_files = .true. 
+
+! in converting to scale height for the vertical, set this to .false. to
+! use simply the log of the pressure.  to normalize by the surface pressure
+! (backwards compatible with previous code), set this to .true.
+logical :: no_normalization_of_scale_heights = .true. 
+
+
 namelist /model_nml/             &
-   model_analysis_filename,      &
-   grid_definition_filename,     &
+   init_template_filename,       &
    vert_localization_coord,      &
    assimilation_period_days,     &
    assimilation_period_seconds,  &
@@ -261,7 +283,9 @@ namelist /model_nml/             &
    highest_obs_pressure_mb,      &
    outside_grid_level_tolerance, &
    extrapolate,                  &
-   sfc_elev_max_diff
+   sfc_elev_max_diff,            &
+   write_grid_to_diag_files,     &
+   no_normalization_of_scale_heights
 
 ! DART state vector contents are specified in the input.nml:&mpas_vars_nml namelist.
 integer, parameter :: max_state_variables = 80
@@ -273,19 +297,18 @@ character(len=NF90_MAX_NAME) :: variable_table(max_state_variables, num_state_ta
 
 namelist /mpas_vars_nml/ mpas_state_variables, mpas_state_bounds
 
-! FIXME: this shouldn't be a global.  the progvar array
-! should be allocated at run time and nfields should be part
-! of a larger derived type that includes nfields and an array
-! of progvartypes.
 integer :: nfields
 
-! Everything needed to describe a variable
+!>@todo FIXME - this is all in the state structure now.
+!> the progvar stuff should be removed and the state routines
+!> used instead.  this duplicates work and makes us keep up
+!> code in 2 different places.
+
+! REMOVE ME: Everything needed to describe a variable
 
 type progvartype
    private
    character(len=NF90_MAX_NAME) :: varname
-   character(len=NF90_MAX_NAME) :: long_name
-   character(len=NF90_MAX_NAME) :: units
    character(len=NF90_MAX_NAME), dimension(NF90_MAX_VAR_DIMS) :: dimname
    integer, dimension(NF90_MAX_VAR_DIMS) :: dimlens
    integer :: xtype         ! netCDF variable type (NF90_double, etc.)
@@ -355,8 +378,8 @@ real(r8), allocatable :: edgeNormalVectors(:,:)
 ! Boundary information might be needed ... regional configuration?
 ! Read if available.
 
-integer,  allocatable :: boundaryEdge(:,:)
-integer,  allocatable :: boundaryVertex(:,:)
+integer,  allocatable :: bdyMaskCell(:)
+integer,  allocatable :: bdyMaskEdge(:)
 integer,  allocatable :: maxLevelCell(:)
 
 real(r8), allocatable :: ens_mean(:)   ! needed to convert vertical distances consistently
@@ -386,7 +409,7 @@ logical :: data_on_edges = .false.
 ! currently unused; for a regional model it is going to be necessary to know
 ! if the grid is continuous around longitudes (wraps in east-west) or not,
 ! and if it covers either of the poles.
-character(len= 64) :: ew_boundary_type, ns_boundary_type
+character(len=64) :: ew_boundary_type, ns_boundary_type
 
 ! common names that call specific subroutines based on the arg types
 INTERFACE vector_to_prog_var
@@ -477,15 +500,16 @@ integer :: nDimensions, nVariables, nAttributes, unlimitedDimID, TimeDimID
 integer :: cel1, cel2
 logical :: both
 real(r8) :: variable_bounds(max_state_variables, 2)
+character(len=*), parameter :: routine = 'static_init_model'
 
 if ( module_initialized ) return ! only need to do this once.
-
-! Print module information to log file and stdout.
-call register_module(source, revision, revdate)
 
 ! Since this routine calls other routines that could call this routine
 ! we'll say we've been initialized pretty dang early.
 module_initialized = .true.
+
+! Print module information to log file and stdout.
+call register_module(source, revision, revdate)
 
 ! Read the DART namelist for this model
 call find_namelist_in_file('input.nml', 'model_nml', iunit)
@@ -515,17 +539,18 @@ model_timestep = set_model_time_step()
 
 call get_time(model_timestep,ss,dd) ! set_time() assures the seconds [0,86400)
 
-write(string1,*)'assimilation period is ',dd,' days ',ss,' seconds'
-call error_handler(E_MSG,'static_init_model',string1,source,revision,revdate)
+write(string1,*)'assimilation window is ',dd,' days ',ss,' seconds'
+call error_handler(E_MSG,routine,string1,source,revision,revdate)
 
 !---------------------------------------------------------------
 ! 1) get grid dimensions
 ! 2) allocate space for the grids
 ! 3) read them from the analysis file
 
-! read_grid_dims() fills in the following module global variables:
-!  nCells, nVertices, nEdges, maxEdges, nVertLevels, nVertLevelsP1, vertexDegree, nSoilLevels
-call read_grid_dims()
+ncid = nc_open_file_readonly(init_template_filename, routine)
+
+! get sizes
+call read_grid_dims(ncid)
 
 allocate(latCell(nCells), lonCell(nCells))
 allocate(zGridFace(nVertLevelsP1, nCells))
@@ -550,10 +575,15 @@ if(data_on_edges) then
    allocate(latEdge(nEdges), lonEdge(nEdges))
 endif
 
-! this reads in latCell, lonCell, zGridFace, cellsOnVertex
-call get_grid()
+! is this a global or regional grid?  determined by the
+! existance of bdyMaskCells or bdyMaskEdges.
+! if regional, allocate and read in the boundry info here.
+call set_global_grid(ncid)
 
-! read in vert cell face locations and then compute vertical center locations
+! fill in the grid values
+call get_grid(ncid)
+
+! vertical faces are in the input file.  compute vertical center locations here.
 do kloc=1, nCells
    do iloc=1, nVertLevels
       zGridCenter(iloc,kloc) = (zGridFace(iloc,kloc) + zGridFace(iloc+1,kloc))*0.5_r8
@@ -584,21 +614,13 @@ endif
 
 !---------------------------------------------------------------
 ! Compile the list of model variables to use in the creation
-! of the DART state vector. Required to determine model_size.
+! of the DART state vector.
 !
-! Verify all variables are in the model analysis file
+! THIS CODE SHOULD BE REMOVED - it is done by the add_domain code.
 !
-! Compute the offsets into the state vector for the start of each
-! different variable type. Requires reading shapes from the model
-! analysis file. As long as TIME is the LAST dimension, we're OK.
-!
-! Record the extent of the data type in the state vector.
 
 
-call nc_check( nf90_open(trim(model_analysis_filename), NF90_NOWRITE, ncid), &
-                  'static_init_model', 'open '//trim(model_analysis_filename))
-
-call verify_state_variables( mpas_state_variables, ncid, model_analysis_filename, &
+call verify_state_variables( mpas_state_variables, ncid, init_template_filename, &
                              nfields, variable_table)
 
 TimeDimID = FindTimeDimension( ncid )
@@ -609,7 +631,7 @@ if (TimeDimID < 0 ) then
 endif
 
 call nc_check(nf90_Inquire(ncid,nDimensions,nVariables,nAttributes,unlimitedDimID), &
-                    'static_init_model', 'inquire '//trim(model_analysis_filename))
+                    'static_init_model', 'inquire '//trim(init_template_filename))
 
 if ( (TimeDimID > 0) .and. (unlimitedDimID > 0) .and. (TimeDimID /= unlimitedDimID)) then
    write(string1,*)'IF Time is not the unlimited dimension, I am lost.'
@@ -631,30 +653,13 @@ do ivar = 1, nfields
    progvar(ivar)%numcells    = MISSING_I
    progvar(ivar)%numedges    = MISSING_I
 
-   string2 = trim(model_analysis_filename)//' '//trim(varname)
+   string2 = trim(init_template_filename)//' '//trim(varname)
 
    call nc_check(nf90_inq_varid(ncid, trim(varname), VarID), &
             'static_init_model', 'inq_varid '//trim(string2))
 
    call nc_check(nf90_inquire_variable(ncid, VarID, xtype=progvar(ivar)%xtype, &
            dimids=dimIDs, ndims=numdims), 'static_init_model', 'inquire '//trim(string2))
-
-   ! If the long_name and/or units attributes are set, get them.
-   ! They are not REQUIRED to exist but are nice to use if they are present.
-
-   if( nf90_inquire_attribute(    ncid, VarID, 'long_name') == NF90_NOERR ) then
-      call nc_check( nf90_get_att(ncid, VarID, 'long_name' , progvar(ivar)%long_name), &
-                  'static_init_model', 'get_att long_name '//trim(string2))
-   else
-      progvar(ivar)%long_name = varname
-   endif
-
-   if( nf90_inquire_attribute(    ncid, VarID, 'units') == NF90_NOERR )  then
-      call nc_check( nf90_get_att(ncid, VarID, 'units' , progvar(ivar)%units), &
-                  'static_init_model', 'get_att units '//trim(string2))
-   else
-      progvar(ivar)%units = 'unknown'
-   endif
 
    ! Since we are not concerned with the TIME dimension, we need to skip it.
    ! When the variables are read, only a single timestep is ingested into
@@ -710,8 +715,7 @@ do ivar = 1, nfields
 
 enddo
 
-call nc_check( nf90_close(ncid), &
-                  'static_init_model', 'close '//trim(model_analysis_filename))
+call nc_close_file(ncid, routine)
 
 model_size = progvar(nfields)%indexN
 
@@ -728,8 +732,8 @@ if ( debug > 0 .and. do_output()) then
      write(logfileunit, *)'static_init_model: grid is a global grid '
      write(     *     , *)'static_init_model: grid is a global grid '
   else
-     write(logfileunit, *)'static_init_model: grid has boundaries '
-     write(     *     , *)'static_init_model: grid has boundaries '
+     write(logfileunit, *)'static_init_model: grid is NOT a global grid. Lateral boundaries exist '
+     write(     *     , *)'static_init_model: grid is NOT a global grid. Lateral boundaries exist '
   endif
   if ( all_levels_exist_everywhere ) then
      write(logfileunit, *)'static_init_model: all cells have same number of vertical levels '
@@ -815,7 +819,7 @@ allocate( ens_mean(model_size) )
 variable_bounds(1:nfields, 1) = progvar(1:nfields)%range(1)
 variable_bounds(1:nfields, 2) = progvar(1:nfields)%range(2)
 
-domid =  add_domain( trim(model_analysis_filename), nfields,    &
+domid =  add_domain( trim(init_template_filename), nfields,    &
                      var_names  = variable_table (1:nfields,1), &
                      clamp_vals = variable_bounds(1:nfields,:) )
 
@@ -946,9 +950,10 @@ subroutine model_interpolate(state_handle, ens_size, location, obs_type, expecte
 !
 !       ISTATUS = 99:  general error in case something terrible goes wrong...
 !       ISTATUS = 88:  this kind is not in the state vector
-!       ISTATUS = 11:  Could not find a triangle that contains this lat/lon
+!       ISTATUS = 11:  Could not find closest cell center
 !       ISTATUS = 12:  Height vertical coordinate out of model range.
 !       ISTATUS = 13:  Missing value in interpolation.
+!       ISTATUS = 14:  Could not find a triangle that contains this lat/lon
 !       ISTATUS = 16:  Don't know how to do vertical velocity for now
 !       ISTATUS = 17:  Unable to compute pressure values
 !       ISTATUS = 18:  altitude illegal
@@ -994,24 +999,29 @@ llv = get_location(location)
 verttype = nint(query_location(location))
 
 if (debug > 10) &
-print *, 'task ', my_task_id(), ' model_interpolate: obs_kind', obs_kind,' at', trim(locstring)
+   print *, 'task ', my_task_id(), ' model_interpolate: obs_kind', obs_kind,' at', trim(locstring)
+
+cellid = find_closest_cell_center(llv(2), llv(1))
+if (debug > 0) print *, ' model_interpolate: cellid', cellid  ! SYHA
+if (cellid < 1) then
+   print *, 'model_interpolate: lat/lon is in the boundary zone: ', &
+            istatus, llv(1), llv(2), cellid
+   istatus = 11
+   goto 100
+endif
 
 ! Reject obs if the station height is far way from the model terrain.
-! HK is this the same across the ensemble?
+! HK is this the same across the ensemble? yes, obs location is.
 if(is_vertical(location, "SURFACE").and. sfc_elev_max_diff >= 0) then
-   cellid = find_closest_cell_center(llv(2), llv(1))
-   if (cellid < 1) then
-      if(debug > 0) print *, 'no closest cell center for lat/lon: ', llv(1), llv(2), cellid
-      goto 100
-   endif
    if(abs(llv(3) - zGridFace(1,cellid)) > sfc_elev_max_diff) then
       !Soyoung: No threshold for surface altimeter 
-      !if(obs_kind == QTY_SURFACE_PRESSURE .or. obs_kind == QTY_SURFACE_ELEVATION) then
-      !   istatus = 0
-      !else
+      if (always_assim_surf_altimeters .and. &
+          (obs_kind == QTY_SURFACE_PRESSURE .or. obs_kind == QTY_SURFACE_ELEVATION)) then
+         istatus = 0
+      else
          istatus = 12
          goto 100
-      !endif
+      endif
    endif
 endif
 
@@ -1261,49 +1271,17 @@ subroutine nc_write_model_atts(ncid, domain_id)
 integer, intent(in) :: ncid
 integer, intent(in) :: domain_id
 
-! for the dimensions and coordinate variables
-integer :: nCellsDimID
-integer :: nEdgesDimID, maxEdgesDimID
-integer :: nVerticesDimID
-integer :: VertexDegreeDimID
-integer :: nSoilLevelsDimID
-integer :: nVertLevelsDimID
-integer :: nVertLevelsP1DimID
+character(len=*), parameter :: routine = 'nc_write_model_atts'
 
+real(r8), allocatable :: data1d(:)
+integer :: ncid2
 
-integer :: VarID, mpasFileID
-
-integer, dimension(NF90_MAX_VAR_DIMS) :: mydimids
-integer :: myndims
-
-character(len=128) :: filename
-
-real(r8), allocatable, dimension(:)   :: data1d
-
-
-if ( .not. module_initialized ) call static_init_model
-
-!--------------------------------------------------------------------
-! we only have a netcdf handle here so we do not know the filename
-! or the fortran unit number.  but construct a string with at least
-! the netcdf handle, so in case of error we can trace back to see
-! which netcdf file is involved.
-!--------------------------------------------------------------------
-
-write(filename,*) 'ncid', ncid
 
 !-------------------------------------------------------------------------------
-! make sure ncid refers to an open netCDF file,
-! and then put into define mode.
+! put file into define mode.
 !-------------------------------------------------------------------------------
 
 call nc_begin_define_mode(ncid)
-
-!-------------------------------------------------------------------------------
-! We need the dimension ID for the number of copies/ensemble members, and
-! we might as well check to make sure that Time is the Unlimited dimension.
-! Our job is create the 'model size' dimension.
-!-------------------------------------------------------------------------------
 
 !-------------------------------------------------------------------------------
 ! Write Global Attributes
@@ -1311,161 +1289,100 @@ call nc_begin_define_mode(ncid)
 
 call nc_add_global_creation_time(ncid)
 
-call nc_add_global_attribute(ncid, "model_source", source)
+call nc_add_global_attribute(ncid, "model_source",   source)
 call nc_add_global_attribute(ncid, "model_revision", revision)
-call nc_add_global_attribute(ncid, "model_revdate", revdate)
+call nc_add_global_attribute(ncid, "model_revdate",  revdate)
 
 call nc_add_global_attribute(ncid, "model", "MPAS_ATM")
 
+!----------------------------------------------------------------------------
+! if not adding grid info, return here
+!----------------------------------------------------------------------------
+
+if (.not. write_grid_to_diag_files) then
+   call nc_end_define_mode(ncid)
+   call nc_synchronize_file(ncid)
+   return
+endif
 
 !----------------------------------------------------------------------------
-! Define the new dimensions IDs
+!  Everything below here is static grid info
 !----------------------------------------------------------------------------
 
-call nc_check(nf90_def_dim(ncid, name='nCells', &
-       len = nCells, dimid = nCellsDimID),'nc_write_model_atts', 'nCells def_dim '//trim(filename))
+!----------------------------------------------------------------------------
+! Dimensions 
+!----------------------------------------------------------------------------
 
-call nc_check(nf90_def_dim(ncid, name='nEdges', &
-       len = nEdges, dimid = nEdgesDimID),'nc_write_model_atts', 'nEdges def_dim '//trim(filename))
+call nc_define_dimension(ncid, 'nCells',        nCells,        routine)
+call nc_define_dimension(ncid, 'nEdges',        nEdges,        routine)
+call nc_define_dimension(ncid, 'nVertLevels',   nVertLevels,   routine)
+call nc_define_dimension(ncid, 'nVertLevelsP1', nVertLevelsP1, routine)
+call nc_define_dimension(ncid, 'nSoilLevels',   nSoilLevels,   routine)
 
-call nc_check(nf90_def_dim(ncid, name='nVertLevels', &
-       len = nVertLevels, dimid = NVertLevelsDimID),'nc_write_model_atts', &
-                                   'nVertLevels def_dim '//trim(filename))
+call nc_define_dimension(ncid, 'maxEdges',      maxEdges,     routine)
+call nc_define_dimension(ncid, 'nVertices',     nVertices,    routine)
+call nc_define_dimension(ncid, 'VertexDegree',  VertexDegree, routine)
 
-call nc_check(nf90_def_dim(ncid, name='nVertLevelsP1', &
-       len = nVertLevelsP1, dimid = NVertLevelsP1DimID),'nc_write_model_atts', &
-                                   'nVertLevelsP1 def_dim '//trim(filename))
+!----------------------------------------------------------------------------
+! Coordinate Variables and the Attributes
+!----------------------------------------------------------------------------
 
-call nc_check(nf90_def_dim(ncid, name='nSoilLevels', &
-       len = nSoilLevels, dimid = nSoilLevelsDimID),'nc_write_model_atts', &
-            'nSoilLevels def_dim '//trim(filename))
+! Cell Longitudes
+call    nc_define_double_variable(ncid, 'lonCell', 'nCells', routine)
+call nc_add_attribute_to_variable(ncid, 'lonCell', 'long_name',   'cell center longitudes', routine)
+call nc_add_attribute_to_variable(ncid, 'lonCell', 'units',       'degrees_east',           routine)
+call nc_add_attribute_to_variable(ncid, 'lonCell', 'valid_range', (/ 0.0_r8, 360.0_r8 /),   routine)
 
+! Cell Latitudes
+call    nc_define_double_variable(ncid, 'latCell', 'nCells', routine)
+call nc_add_attribute_to_variable(ncid, 'latCell', 'long_name',   'cell center latitudes',  routine)
+call nc_add_attribute_to_variable(ncid, 'latCell', 'units',       'degrees_north',          routine)
+call nc_add_attribute_to_variable(ncid, 'latCell', 'valid_range', (/ -90.0_r8, 90.0_r8 /),  routine)
 
-if (add_static_data_to_diags) then
-   !----------------------------------------------------------------------------
-   ! Dimensions needed only if you are writing out static grid information
-   !----------------------------------------------------------------------------
-   call nc_check(nf90_def_dim(ncid, name='maxEdges', &
-          len = maxEdges, dimid = maxEdgesDimID),'nc_write_model_atts', 'maxEdges def_dim '//trim(filename))
+! Grid vertical information
+call    nc_define_double_variable(ncid, 'zgrid', (/ 'nVertLevelsP1', 'nCells       ' /), routine)
+call nc_add_attribute_to_variable(ncid, 'zgrid', 'long_name',        'grid zgrid',     routine)
+call nc_add_attribute_to_variable(ncid, 'zgrid', 'units',            'meters',         routine)
+call nc_add_attribute_to_variable(ncid, 'zgrid', 'positive',         'up',             routine)
+call nc_add_attribute_to_variable(ncid, 'zgrid', 'cartesian_axis',   'Z',              routine)
 
-   call nc_check(nf90_def_dim(ncid, name='nVertices', &
-          len = nVertices, dimid = nVerticesDimID),'nc_write_model_atts', &
-               'nVertices def_dim '//trim(filename))
+! Grid relationship information
+call   nc_define_integer_variable(ncid, 'nEdgesOnCell', 'nCells', routine)
+call nc_add_attribute_to_variable(ncid, 'nEdgesOnCell', 'long_name', 'grid nEdgesOnCell', routine)
 
-   call nc_check(nf90_def_dim(ncid, name='VertexDegree', &
-          len = VertexDegree, dimid = VertexDegreeDimID),'nc_write_model_atts', &
-               'VertexDegree def_dim '//trim(filename))
+call   nc_define_integer_variable(ncid, 'cellsOnVertex', (/ 'VertexDegree', 'nVertices   ' /), routine)
+call nc_add_attribute_to_variable(ncid, 'cellsOnVertex', 'long_name', 'grid cellsOnVertex', routine)
 
-   !----------------------------------------------------------------------------
-   ! Create the (empty) Coordinate Variables and the Attributes
-   !----------------------------------------------------------------------------
-   ! Cell Longitudes
-   call nc_check(nf90_def_var(ncid,name='lonCell', xtype=nf90_double, &
-                 dimids=nCellsDimID, varid=VarID),&
-                 'nc_write_model_atts', 'lonCell def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'cell center longitudes'), &
-                 'nc_write_model_atts', 'lonCell long_name '//trim(filename))
-   call nc_check(nf90_put_att(ncid,  VarID, 'units', 'degrees_east'), &
-                 'nc_write_model_atts', 'lonCell units '//trim(filename))
-   call nc_check(nf90_put_att(ncid,  VarID, 'valid_range', (/ 0.0_r8, 360.0_r8 /)), &
-                 'nc_write_model_atts', 'lonCell valid_range '//trim(filename))
+call   nc_define_integer_variable(ncid, 'verticesOnCell', (/ 'maxEdges', 'nCells  ' /), routine)
+call nc_add_attribute_to_variable(ncid, 'verticesOnCell', 'long_name', 'grid verticesOnCell', routine)
 
-   ! Cell Latitudes
-   call nc_check(nf90_def_var(ncid,name='latCell', xtype=nf90_double, &
-                 dimids=nCellsDimID, varid=VarID),&
-                 'nc_write_model_atts', 'latCell def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'cell center latitudes'), &
-                 'nc_write_model_atts', 'latCell long_name '//trim(filename))
-   call nc_check(nf90_put_att(ncid,  VarID, 'units', 'degrees_north'),  &
-                 'nc_write_model_atts', 'latCell units '//trim(filename))
-   call nc_check(nf90_put_att(ncid,  VarID,'valid_range',(/ -90.0_r8, 90.0_r8 /)), &
-                 'nc_write_model_atts', 'latCell valid_range '//trim(filename))
+! Cartesian coordinates for the same cells
+call    nc_define_double_variable(ncid, 'xCell', 'nCells', routine)
+call nc_add_attribute_to_variable(ncid, 'xCell', 'long_name', 'cell center x cartesian coordinates',   routine)
 
-   call nc_check(nf90_def_var(ncid,name='xCell', xtype=nf90_double, &
-                 dimids=nCellsDimID, varid=VarID),&
-                 'nc_write_model_atts', 'xCell def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'cell center x cartesian coordinates'), &
-                 'nc_write_model_atts', 'xCell long_name '//trim(filename))
+call    nc_define_double_variable(ncid, 'yCell', 'nCells', routine)
+call nc_add_attribute_to_variable(ncid, 'yCell', 'long_name', 'cell center y cartesian coordinates',   routine)
 
-   call nc_check(nf90_def_var(ncid,name='yCell', xtype=nf90_double, &
-                 dimids=nCellsDimID, varid=VarID),&
-                 'nc_write_model_atts', 'yCell def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'cell center y cartesian coordinates'), &
-                 'nc_write_model_atts', 'yCell long_name '//trim(filename))
+call    nc_define_double_variable(ncid, 'zCell', 'nCells', routine)
+call nc_add_attribute_to_variable(ncid, 'zCell', 'long_name', 'cell center z cartesian coordinates',   routine)
 
-   call nc_check(nf90_def_var(ncid,name='zCell', xtype=nf90_double, &
-                 dimids=nCellsDimID, varid=VarID),&
-                 'nc_write_model_atts', 'zCell def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'cell center z cartesian coordinates'), &
-                 'nc_write_model_atts', 'zCell long_name '//trim(filename))
+! Vertex Longitudes and latitudes
+call    nc_define_double_variable(ncid, 'lonVertex', 'nVertices', routine)
+call nc_add_attribute_to_variable(ncid, 'lonVertex', 'long_name', 'vertex longitudes', routine)
 
-   ! Grid vertical information
-   call nc_check(nf90_def_var(ncid,name='zgrid',xtype=nf90_double, &
-                 dimids=(/ nVertLevelsP1DimID, nCellsDimID /) ,varid=VarID), &
-                 'nc_write_model_atts', 'zgrid def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'grid zgrid'), &
-                 'nc_write_model_atts', 'zgrid long_name '//trim(filename))
-   call nc_check(nf90_put_att(ncid,  VarID, 'units', 'meters'),  &
-                 'nc_write_model_atts', 'zgrid units '//trim(filename))
-   call nc_check(nf90_put_att(ncid,  VarID, 'positive', 'up'),  &
-                 'nc_write_model_atts', 'zgrid units '//trim(filename))
-   call nc_check(nf90_put_att(ncid,  VarID, 'cartesian_axis', 'Z'),   &
-                 'nc_write_model_atts', 'zgrid cartesian_axis '//trim(filename))
+call    nc_define_double_variable(ncid, 'latVertex', 'nVertices', routine)
+call nc_add_attribute_to_variable(ncid, 'latVertex', 'long_name', 'vertex latitudes', routine)
 
-   ! Vertex Longitudes
-   call nc_check(nf90_def_var(ncid,name='lonVertex', xtype=nf90_double, &
-                 dimids=nVerticesDimID, varid=VarID),&
-                 'nc_write_model_atts', 'lonVertex def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'vertex longitudes'), &
-                 'nc_write_model_atts', 'lonVertex long_name '//trim(filename))
+! Edge Longitudes and latitudes
+if(data_on_edges) then
+   call    nc_define_double_variable(ncid, 'lonEdge', 'nEdges', routine)
+   call nc_add_attribute_to_variable(ncid, 'lonEdge', 'long_name', 'edge longitudes', routine)
 
-   ! Vertex Latitudes
-   call nc_check(nf90_def_var(ncid,name='latVertex', xtype=nf90_double, &
-                 dimids=nVerticesDimID, varid=VarID),&
-                 'nc_write_model_atts', 'latVertex def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'vertex latitudes'), &
-                 'nc_write_model_atts', 'latVertex long_name '//trim(filename))
+   call    nc_define_double_variable(ncid, 'latEdge', 'nEdges', routine)
+   call nc_add_attribute_to_variable(ncid, 'latEdge', 'long_name', 'edge latitudes', routine)
+endif
 
-   if(data_on_edges) then
-      ! Edge Longitudes
-      call nc_check(nf90_def_var(ncid,name='lonEdge', xtype=nf90_double, &
-                    dimids=nEdgesDimID, varid=VarID),&
-                    'nc_write_model_atts', 'lonEdge def_var '//trim(filename))
-      call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'edge longitudes'), &
-                    'nc_write_model_atts', 'lonEdge long_name '//trim(filename))
-
-      ! Edge Latitudes
-      call nc_check(nf90_def_var(ncid,name='latEdge', xtype=nf90_double, &
-                    dimids=nEdgesDimID, varid=VarID),&
-                    'nc_write_model_atts', 'latEdge def_var '//trim(filename))
-      call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'edge latitudes'), &
-                    'nc_write_model_atts', 'latEdge long_name '//trim(filename))
-   endif
-
-   ! Grid relationship information
-   call nc_check(nf90_def_var(ncid,name='nEdgesOnCell',xtype=nf90_int, &
-                 dimids=nCellsDimID ,varid=VarID), &
-                 'nc_write_model_atts', 'nEdgesOnCell def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'grid nEdgesOnCell'), &
-                 'nc_write_model_atts', 'nEdgesOnCell long_name '//trim(filename))
-
-   call nc_check(nf90_def_var(ncid,name='cellsOnVertex',xtype=nf90_int, &
-                 dimids=(/ VertexDegreeDimID, nVerticesDimID /) ,varid=VarID), &
-                 'nc_write_model_atts', 'cellsOnVertex def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'grid cellsOnVertex'), &
-                 'nc_write_model_atts', 'cellsOnVertex long_name '//trim(filename))
-
-   call nc_check(nf90_def_var(ncid,name='verticesOnCell',xtype=nf90_int, &
-                 dimids=(/ maxEdgesDimID, nCellsDimID /) ,varid=VarID), &
-                 'nc_write_model_atts', 'verticesOnCell def_var '//trim(filename))
-   call nc_check(nf90_put_att(ncid,  VarID, 'long_name', 'grid verticesOnCell'), &
-                 'nc_write_model_atts', 'verticesOnCell long_name '//trim(filename))
-
-   call nc_check(nf90_def_var(ncid,name='areaCell', xtype=nf90_double, &
-                 dimids=nCellsDimID, varid=VarID),&
-                 'nc_write_model_atts', 'areaCell def_var '//trim(filename))
-
-endif ! add_static_data_to_diags
+call nc_define_double_variable(ncid, 'areaCell', 'nCells', routine)
 
 !----------------------------------------------------------------------------
 ! Finished with dimension/variable definitions, must end 'define' mode to fill.
@@ -1473,123 +1390,57 @@ endif ! add_static_data_to_diags
 
 call nc_end_define_mode(ncid)
 
-if (add_static_data_to_diags) then
-   !----------------------------------------------------------------------------
-   ! Fill the coordinate variables that DART needs and has locally
-   !----------------------------------------------------------------------------
+!----------------------------------------------------------------------------
+! Fill the coordinate variables
+!----------------------------------------------------------------------------
 
-   call nc_check(NF90_inq_varid(ncid, 'lonCell', VarID), &
-                 'nc_write_model_atts', 'lonCell inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncid, VarID, lonCell ), &
-                'nc_write_model_atts', 'lonCell put_var '//trim(filename))
+call nc_put_variable(ncid, 'lonCell', lonCell, routine)
+call nc_put_variable(ncid, 'latCell', latCell, routine)
 
-   call nc_check(NF90_inq_varid(ncid, 'latCell', VarID), &
-                 'nc_write_model_atts', 'latCell inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncid, VarID, latCell ), &
-                'nc_write_model_atts', 'latCell put_var '//trim(filename))
+call nc_put_variable(ncid, 'zgrid', zGridFace, routine)
 
-   if(data_on_edges) then
-      call nc_check(NF90_inq_varid(ncid, 'lonEdge', VarID), &
-                    'nc_write_model_atts', 'lonEdge inq_varid '//trim(filename))
-      call nc_check(nf90_put_var(ncid, VarID, lonEdge ), &
-                   'nc_write_model_atts', 'lonEdge put_var '//trim(filename))
+if(data_on_edges) then
+   call nc_put_variable(ncid, 'lonEdge', lonEdge, routine)
+   call nc_put_variable(ncid, 'latEdge', latEdge, routine)
+endif
 
-      call nc_check(NF90_inq_varid(ncid, 'latEdge', VarID), &
-                    'nc_write_model_atts', 'latEdge inq_varid '//trim(filename))
-      call nc_check(nf90_put_var(ncid, VarID, latEdge ), &
-                   'nc_write_model_atts', 'latEdge put_var '//trim(filename))
-   endif
+call nc_put_variable(ncid, 'nEdgesOnCell', nEdgesOnCell, routine)
+call nc_put_variable(ncid, 'verticesOnCell', verticesOnCell, routine)
+call nc_put_variable(ncid, 'cellsOnVertex', cellsOnVertex, routine)
 
-   call nc_check(NF90_inq_varid(ncid, 'zgrid', VarID), &
-                 'nc_write_model_atts', 'zgrid inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncid, VarID, zGridFace ), &
-                'nc_write_model_atts', 'zgrid put_var '//trim(filename))
+!----------------------------------------------------------------------------
+! DART has not read these in, so we have to read them from the input file
+! and copy them to the DART output file.
+!----------------------------------------------------------------------------
 
-   call nc_check(NF90_inq_varid(ncid, 'nEdgesOnCell', VarID), &
-                 'nc_write_model_atts', 'nEdgesOnCell inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncid, VarID, nEdgesOnCell ), &
-                'nc_write_model_atts', 'nEdgesOnCell put_var '//trim(filename))
+ncid2 = nc_open_file_readonly(init_template_filename, routine)
 
-   call nc_check(NF90_inq_varid(ncid, 'verticesOnCell', VarID), &
-                 'nc_write_model_atts', 'verticesOnCell inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncid, VarID, verticesOnCell ), &
-                'nc_write_model_atts', 'verticesOnCell put_var '//trim(filename))
+allocate(data1d(nCells))
 
-   call nc_check(NF90_inq_varid(ncid, 'cellsOnVertex', VarID), &
-                 'nc_write_model_atts', 'cellsOnVertex inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncid, VarID, cellsOnVertex ), &
-                'nc_write_model_atts', 'cellsOnVertex put_var '//trim(filename))
+call nc_get_variable(ncid2, 'xCell', data1d, routine)
+call nc_put_variable(ncid,  'xCell', data1d, routine)
 
-   !----------------------------------------------------------------------------
-   ! Fill the coordinate variables needed for plotting only.
-   ! DART has not read these in, so we have to read them from the input file
-   ! and parrot them to the DART output file.
-   !----------------------------------------------------------------------------
+call nc_get_variable(ncid2, 'yCell', data1d, routine)
+call nc_put_variable(ncid,  'yCell', data1d, routine)
 
-   call nc_check(nf90_open(trim(grid_definition_filename), NF90_NOWRITE, mpasFileID), &
-                 'nc_write_model_atts','open '//trim(grid_definition_filename))
+call nc_get_variable(ncid2, 'zCell', data1d, routine)
+call nc_put_variable(ncid,  'zCell', data1d, routine)
 
-   allocate(data1d(nCells))
-   call nc_check(nf90_inq_varid(mpasFileID, 'xCell', VarID), &
-                 'nc_write_model_atts',     'xCell inq_varid ')
-   call nc_check(nf90_get_var(mpasFileID, VarID, data1d ), &
-                 'nc_write_model_atts',     'xCell get_var ')
-   call nc_check(nf90_inq_varid(ncid,   'xCell', VarID), &
-                 'nc_write_model_atts',     'xCell inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncid, VarID, data1d ), &
-                 'nc_write_model_atts',     'xCell put_var '//trim(filename))
+call nc_get_variable(ncid2, 'areaCell', data1d, routine)
+call nc_put_variable(ncid,  'areaCell', data1d, routine)
 
-   call nc_check(nf90_inq_varid(mpasFileID, 'yCell', VarID), &
-                 'nc_write_model_atts',     'yCell inq_varid ')
-   call nc_check(nf90_get_var(mpasFileID, VarID, data1d ), &
-                 'nc_write_model_atts',     'yCell get_var ')
-   call nc_check(nf90_inq_varid(ncid,   'yCell', VarID), &
-                 'nc_write_model_atts',     'yCell inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncid, VarID, data1d ), &
-                 'nc_write_model_atts',     'yCell put_var '//trim(filename))
+deallocate(data1d)
 
-   call nc_check(nf90_inq_varid(mpasFileID, 'zCell', VarID), &
-                 'nc_write_model_atts',     'zCell inq_varid ')
-   call nc_check(nf90_get_var(mpasFileID, VarID, data1d ), &
-                 'nc_write_model_atts',     'zCell get_var ')
-   call nc_check(nf90_inq_varid(ncid,   'zCell', VarID), &
-                 'nc_write_model_atts',     'zCell inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncid, VarID, data1d ), &
-                 'nc_write_model_atts',     'zCell put_var '//trim(filename))
+allocate(data1d(nVertices))
+call nc_get_variable(ncid2, 'lonVertex', data1d, routine)
+call nc_put_variable(ncid,  'lonVertex', data1d, routine)
 
-   call nc_check(nf90_inq_varid(mpasFileID, 'areaCell', VarID), &
-                 'nc_write_model_atts',     'areaCell inq_varid ')
-   call nc_check(nf90_get_var(mpasFileID, VarID, data1d ), &
-                 'nc_write_model_atts',     'areaCell get_var ')
-   call nc_check(nf90_inq_varid(ncid,   'areaCell', VarID), &
-                 'nc_write_model_atts',     'areaCell inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncid, VarID, data1d ), &
-                 'nc_write_model_atts',     'areaCell put_var '//trim(filename))
-   deallocate(data1d)
+call nc_get_variable(ncid2, 'latVertex', data1d, routine)
+call nc_put_variable(ncid,  'latVertex', data1d, routine)
 
-   allocate(data1d(nVertices))
-   call nc_check(nf90_inq_varid(mpasFileID, 'lonVertex', VarID), &
-                 'nc_write_model_atts',     'lonVertex inq_varid ')
-   call nc_check(nf90_get_var(mpasFileID, VarID, data1d ), &
-                 'nc_write_model_atts',     'lonVertex get_var ')
-   call nc_check(nf90_inq_varid(ncid,   'lonVertex', VarID), &
-                 'nc_write_model_atts',     'lonVertex inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncid, VarID, data1d ), &
-                 'nc_write_model_atts',     'lonVertex put_var '//trim(filename))
+deallocate(data1d)
 
-   call nc_check(nf90_inq_varid(mpasFileID, 'latVertex', VarID), &
-                 'nc_write_model_atts',     'latVertex inq_varid ')
-   call nc_check(nf90_get_var(mpasFileID, VarID, data1d ), &
-                 'nc_write_model_atts',     'latVertex get_var ')
-   call nc_check(nf90_inq_varid(ncid,   'latVertex', VarID), &
-                 'nc_write_model_atts',     'latVertex inq_varid '//trim(filename))
-   call nc_check(nf90_put_var(ncid, VarID, data1d ), &
-                 'nc_write_model_atts',     'latVertex put_var '//trim(filename))
-   deallocate(data1d)
-
-   call nc_check(nf90_close(mpasFileID),'nc_write_model_atts','close '//trim(grid_definition_filename))
-
-endif ! add_static_data_to_diags
+call nc_close_file(ncid2)
 
 !-------------------------------------------------------------------------------
 ! Flush the buffer and leave netCDF file open
@@ -1995,38 +1846,27 @@ end subroutine get_close_state
 !  (these are not required by dart but are used by other programs)
 !==================================================================
 
+subroutine get_init_template_filename( filename )
 
-subroutine get_model_analysis_filename( filename )
-
-! return the name of the analysis filename that was set
-! in the model_nml namelist
-
-character(len=*), intent(OUT) :: filename
-
-if ( .not. module_initialized ) call static_init_model
-
-filename = trim(model_analysis_filename)
-
-end subroutine get_model_analysis_filename
-
-
-!-------------------------------------------------------------------
-
-subroutine get_grid_definition_filename( filename )
-
-! return the name of the grid_definition filename that was set
-! in the model_nml namelist
+! return the name of the template filename that was set
+! in the model_nml namelist (ex. init.nc)
 
 character(len=*), intent(out) :: filename
 
 if ( .not. module_initialized ) call static_init_model
 
-filename = trim(grid_definition_filename)
+filename = trim(init_template_filename)
 
-end subroutine get_grid_definition_filename
+end subroutine get_init_template_filename
 
 
 !-------------------------------------------------------------------
+
+!>@todo FIXME: these need to be replaced by calls to the state structure.
+!> at the moment they are only used by the postprocessing program that
+!> moves the wind increments from cell centers to edges - it's not needed
+!> by anything in filter.  it's a holdover from code before the state structure
+!> was a general facility.
 
 subroutine analysis_file_to_statevector(filename, state_vector, model_time)
 
@@ -2038,7 +1878,6 @@ real(r8),         intent(inout) :: state_vector(:)
 type(time_type),  intent(out)   :: model_time
 
 ! temp space to hold data while we are reading it
-integer  :: ndim1, ndim2, ndim3
 integer  :: i, ivar
 real(r8), allocatable, dimension(:)         :: data_1d_array
 real(r8), allocatable, dimension(:,:)       :: data_2d_array
@@ -2049,6 +1888,7 @@ character(len=NF90_MAX_NAME) :: varname
 integer :: VarID, ncNdims, dimlen
 integer :: ncid, TimeDimID, TimeDimLength
 character(len=256) :: myerrorstring
+character(len=*), parameter :: routine = 'analysis_file_to_statevector'
 
 if ( .not. module_initialized ) call static_init_model
 
@@ -2061,16 +1901,9 @@ if ( .not. file_exist(filename) ) then
    call error_handler(E_ERR,'analysis_file_to_statevector',string1,source,revision,revdate)
 endif
 
-call nc_check(nf90_open(trim(filename), NF90_NOWRITE, ncid), &
-             'analysis_file_to_statevector','open '//trim(filename))
+ncid = nc_open_file_readonly(filename, routine)
 
 model_time = get_analysis_time(ncid, filename)
-
-! let the calling program print out the time information it wants.
-!if (do_output()) &
-!    call print_time(model_time,'time in restart file '//trim(filename))
-!if (do_output()) &
-!    call print_date(model_time,'date in restart file '//trim(filename))
 
 ! Start counting and filling the state vector one item at a time,
 ! repacking the Nd arrays into a single 1d list of numbers.
@@ -2113,11 +1946,6 @@ do ivar=1, nfields
       call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen), &
             'analysis_file_to_statevector', string1)
 
-      if ( dimlen /= progvar(ivar)%dimlens(i) ) then
-         write(string1,*) trim(myerrorstring),' dim/dimlen ',i,dimlen,' not ',progvar(ivar)%dimlens(i)
-         call error_handler(E_ERR,'analysis_file_to_statevector',string1,source,revision,revdate)
-      endif
-
       mycount(i) = dimlen
 
    enddo DimCheck
@@ -2134,8 +1962,7 @@ do ivar=1, nfields
 
       ! If the single dimension is TIME, we only need a scalar.
       ! Pretty sure this cannot happen ...
-      ndim1 = mycount(1)
-      allocate(data_1d_array(ndim1))
+      allocate(data_1d_array(mycount(1)))
       call nc_check(nf90_get_var(ncid, VarID, data_1d_array, &
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'analysis_file_to_statevector', 'get_var '//trim(varname))
@@ -2145,9 +1972,7 @@ do ivar=1, nfields
 
    elseif (ncNdims == 2) then
 
-      ndim1 = mycount(1)
-      ndim2 = mycount(2)
-      allocate(data_2d_array(ndim1, ndim2))
+      allocate(data_2d_array(mycount(1), mycount(2)))
       call nc_check(nf90_get_var(ncid, VarID, data_2d_array, &
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'analysis_file_to_statevector', 'get_var '//trim(varname))
@@ -2157,10 +1982,7 @@ do ivar=1, nfields
 
    elseif (ncNdims == 3) then
 
-      ndim1 = mycount(1)
-      ndim2 = mycount(2)
-      ndim3 = mycount(3)
-      allocate(data_3d_array(ndim1, ndim2, ndim3))
+      allocate(data_3d_array(mycount(1), mycount(2), mycount(3)))
       call nc_check(nf90_get_var(ncid, VarID, data_3d_array, &
         start=mystart(1:ncNdims), count=mycount(1:ncNdims)), &
             'analysis_file_to_statevector', 'get_var '//trim(varname))
@@ -2176,20 +1998,20 @@ do ivar=1, nfields
 
 enddo
 
-call nc_check(nf90_close(ncid), &
-             'analysis_file_to_statevector','close '//trim(filename))
+call nc_close_file(ncid, routine)
 
 end subroutine analysis_file_to_statevector
 
 
 !-------------------------------------------------------------------
 
-subroutine statevector_to_analysis_file(state_vector, filename, statetime)
+subroutine statevector_to_analysis_file(state_vector, ncid, filename, statetime)
 
 ! Writes the current time and state variables from a dart state
 ! vector (1d array) into a mpas netcdf analysis file.
 
 real(r8),         intent(in) :: state_vector(:)
+integer,          intent(in) :: ncid
 character(len=*), intent(in) :: filename
 type(time_type),  intent(in) :: statetime
 
@@ -2202,49 +2024,11 @@ real(r8), allocatable, dimension(:,:,:)     :: data_3d_array
 integer, dimension(NF90_MAX_VAR_DIMS) :: dimIDs, mystart, mycount
 character(len=NF90_MAX_NAME) :: varname
 integer :: VarID, ncNdims, dimlen
-integer :: ncid, TimeDimID, TimeDimLength
+integer :: TimeDimID, TimeDimLength
 logical :: done_winds
 type(time_type) :: model_time
 
 if ( .not. module_initialized ) call static_init_model
-
-! Check that the output file exists ...
-
-if ( .not. file_exist(filename) ) then
-   write(string1,*) 'cannot open file ', trim(filename),' for writing.'
-   call error_handler(E_ERR,'statevector_to_analysis_file',string1,source,revision,revdate)
-endif
-
-call nc_check(nf90_open(trim(filename), NF90_WRITE, ncid), &
-             'statevector_to_analysis_file','open '//trim(filename))
-
-! make sure the time in the file is the same as the time on the data
-! we are trying to insert.  we are only updating part of the contents
-! of the mpas analysis file, and state vector contents from a different
-! time won't be consistent with the rest of the file.
-
-model_time = get_analysis_time(ncid, filename)
-
-if ( model_time /= statetime ) then
-   call print_time( statetime,'DART current time',logfileunit)
-   call print_time(model_time,'mpas current time',logfileunit)
-   call print_time( statetime,'DART current time')
-   call print_time(model_time,'mpas current time')
-   write(string1,*)trim(filename),' current time must equal model time'
-   call error_handler(E_ERR,'statevector_to_analysis_file',string1,source,revision,revdate)
-endif
-
-! let the calling program print out the time information it wants.
-!if (do_output()) &
-!    call print_time(statetime,'time of DART file '//trim(filename))
-!if (do_output()) &
-!    call print_date(statetime,'date of DART file '//trim(filename))
-
-! The DART prognostic variables are only defined for a single time.
-! We already checked the assumption that variables are xy2d or xyz3d ...
-! IF the netCDF variable has a TIME dimension, it must be the last dimension,
-! and we need to read the LAST timestep and effectively squeeze out the
-! singleton dimension when we stuff it into the DART state vector.
 
 TimeDimID = FindTimeDimension( ncid )
 
@@ -2267,7 +2051,7 @@ PROGVARLOOP : do ivar=1, nfields
 
       ! this routine updates the edge winds from both the zonal and meridional
       ! fields, so only call it once.
-      call update_wind_components(ncid, state_vector, use_increments_for_u_update)
+      call update_wind_components(ncid, filename, state_vector, use_increments_for_u_update)
       done_winds = .true.
       cycle PROGVARLOOP
    endif
@@ -2296,13 +2080,6 @@ PROGVARLOOP : do ivar=1, nfields
       write(string1,'(''inquire dimension'',i2,A)') i,trim(string2)
       call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen), &
             'statevector_to_analysis_file', string1)
-
-      if ( dimlen /= progvar(ivar)%dimlens(i) ) then
-         write(string1,*) trim(string2),' dim/dimlen ',i,dimlen,' not ',progvar(ivar)%dimlens(i)
-         write(string2,*)' but it should be.'
-         call error_handler(E_ERR, 'statevector_to_analysis_file', string1, &
-                         source, revision, revdate, text2=string2)
-      endif
 
       mycount(i) = dimlen
 
@@ -2379,8 +2156,6 @@ PROGVARLOOP : do ivar=1, nfields
 
 enddo PROGVARLOOP
 
-call nc_check(nf90_close(ncid), &
-             'statevector_to_analysis_file','close '//trim(filename))
 
 end subroutine statevector_to_analysis_file
 
@@ -2615,9 +2390,6 @@ end function get_analysis_time_ncid
 
 function get_analysis_time_fname(filename)
 
-! HK I don't understand this comment, it is identical to the comment 
-! in get_analysis_time_ncid, but here there is no netcdf stuff?
-
 ! The analysis netcdf files have the start time of the experiment.
 ! The time array contains the time trajectory since then.
 ! This routine returns the start time of the experiment.
@@ -2630,19 +2402,21 @@ integer :: i
 
 if ( .not. module_initialized ) call static_init_model
 
+! why do we care?  we aren't opening this file, just taking the time
+! string from the filename itself.
 if ( .not. file_exist(filename) ) then
-   write(string1,*) 'cannot open file ', trim(filename),' for reading.'
+   write(string1,*) 'file ', trim(filename),' does not exist.' 
    call error_handler(E_ERR,'get_analysis_time',string1,source,revision,revdate)
 endif
 
-! find the first number and use that as the start of the string conversion
+! find the first digit and use that as the start of the string conversion
 i = scan(filename, "0123456789")
 if (i <= 0) then
    write(string1,*) 'cannot find time string in name ', trim(filename)
    call error_handler(E_ERR,'get_analysis_time',string1,source,revision,revdate)
 endif
 
-get_analysis_time_fname = string_to_time(filename(i:i+19))
+get_analysis_time_fname = string_to_time(filename(i:i+TIMELEN-1))
 
 end function get_analysis_time_fname
 
@@ -2655,7 +2429,7 @@ subroutine write_model_time_file(time_filename, model_time, adv_to_time)
  type(time_type),  intent(in), optional :: adv_to_time
 
 integer :: iunit
-character(len=19) :: timestring
+character(len=TIMELEN) :: timestring
 type(time_type)   :: deltatime
 
 iunit = open_file(time_filename, action='write')
@@ -2677,12 +2451,41 @@ call close_file(iunit)
 end subroutine write_model_time_file
 
 !-----------------------------------------------------------------------
+
 subroutine write_model_time_restart(ncid, dart_time)
 
 integer,             intent(in) :: ncid !< netcdf file handle
 type(time_type),     intent(in) :: dart_time
 
-call error_handler(E_MSG, 'write_model_time', 'no routine for mpas_atm write model time')
+integer :: year, month, day, hour, minute, second
+character(len=64) :: timestring
+character(len=*), parameter :: routine = 'write_model_time_restart'
+
+call get_date(dart_time, year, month, day, hour, minute, second)
+call set_wrf_date(timestring, year, month, day, hour, minute, second)
+
+! Define xtime variable if it does not already exist
+if (.not. nc_variable_exists(ncid, 'xtime')) then
+
+   call nc_begin_define_mode(ncid)
+
+   ! check to see if there are Time and date_string_length dimensions
+   if (.not. nc_dimension_exists(ncid, 'Time')) &
+      call nc_define_unlimited_dimension(ncid, 'Time', routine)
+
+   if (.not. nc_dimension_exists(ncid, 'StrLen')) &
+      call nc_define_dimension(ncid, 'StrLen', len(timestring), routine)
+
+   ! make xtime(Time, StrLen)
+   call nc_define_character_variable(ncid, 'xtime', (/ 'StrLen', 'Time  ' /), routine)
+   call nc_add_attribute_to_variable(ncid, 'xtime', 'units', "YYYY-MM-DD_hh:mm:ss", routine)
+   call nc_add_attribute_to_variable(ncid, 'xtime', 'long_name', 'Model valid time', routine)
+
+   call nc_end_define_mode(ncid)
+
+endif
+
+call nc_put_variable(ncid, 'xtime', timestring, routine)
 
 end subroutine write_model_time_restart
 
@@ -2735,28 +2538,21 @@ end subroutine get_xland
 
 
 !------------------------------------------------------------------
+!> convert time type into a character string with the
+!> format of YYYY-MM-DD_hh:mm:ss
 
 function time_to_string(t, interval)
 
-! convert time type into a character string with the
-! format of YYYY-MM-DD_hh:mm:ss
-
-! passed variables
- character(len=19) :: time_to_string
- type(time_type), intent(in) :: t
- logical, intent(in), optional :: interval
-
-! local variables
+type(time_type), intent(in) :: t
+logical,         intent(in), optional :: interval
+character(len=TIMELEN) :: time_to_string
 
 integer :: iyear, imonth, iday, ihour, imin, isec
 integer :: ndays, nsecs
 logical :: dointerval
 
-if (present(interval)) then
-   dointerval = interval
-else
-   dointerval = .false.
-endif
+dointerval = .false.
+if (present(interval)) dointerval = interval
 
 ! for interval output, output the number of days, then hours, mins, secs
 ! for date output, use the calendar routine to get the year/month/day hour:min:sec
@@ -2820,82 +2616,22 @@ end function set_model_time_step
 
 
 !------------------------------------------------------------------
+!> Read the grid dimensions from the MPAS netcdf file.
+!>
 
-subroutine read_grid_dims()
+subroutine read_grid_dims(ncid)
+integer, intent(in) :: ncid
 
-! Read the grid dimensions from the MPAS netcdf file.
-!
-! The file name comes from module storage ... namelist.
+character(len=*), parameter :: routine = 'read_grid_dims'
 
-integer :: grid_id, dimid
-
-if ( .not. module_initialized ) call static_init_model
-
-! get the ball rolling ...
-
-call nc_check( nf90_open(trim(grid_definition_filename), NF90_NOWRITE, grid_id), &
-              'read_grid_dims', 'open '//trim(grid_definition_filename))
-
-! nCells : get dimid for 'nCells' and then get value
-
-call nc_check(nf90_inq_dimid(grid_id, 'nCells', dimid), &
-              'read_grid_dims','inq_dimid nCells '//trim(grid_definition_filename))
-call nc_check(nf90_inquire_dimension(grid_id, dimid, len=nCells), &
-            'read_grid_dims','inquire_dimension nCells '//trim(grid_definition_filename))
-
-! nVertices : get dimid for 'nVertices' and then get value
-
-call nc_check(nf90_inq_dimid(grid_id, 'nVertices', dimid), &
-              'read_grid_dims','inq_dimid nVertices '//trim(grid_definition_filename))
-call nc_check(nf90_inquire_dimension(grid_id, dimid, len=nVertices), &
-            'read_grid_dims','inquire_dimension nVertices '//trim(grid_definition_filename))
-
-! nEdges : get dimid for 'nEdges' and then get value
-
-call nc_check(nf90_inq_dimid(grid_id, 'nEdges', dimid), &
-              'read_grid_dims','inq_dimid nEdges '//trim(grid_definition_filename))
-call nc_check(nf90_inquire_dimension(grid_id, dimid, len=nEdges), &
-            'read_grid_dims','inquire_dimension nEdges '//trim(grid_definition_filename))
-
-! maxEdges : get dimid for 'maxEdges' and then get value
-
-call nc_check(nf90_inq_dimid(grid_id, 'maxEdges', dimid), &
-              'read_grid_dims','inq_dimid maxEdges '//trim(grid_definition_filename))
-call nc_check(nf90_inquire_dimension(grid_id, dimid, len=maxEdges), &
-            'read_grid_dims','inquire_dimension maxEdges '//trim(grid_definition_filename))
-
-! nVertLevels : get dimid for 'nVertLevels' and then get value
-
-call nc_check(nf90_inq_dimid(grid_id, 'nVertLevels', dimid), &
-              'read_grid_dims','inq_dimid nVertLevels '//trim(grid_definition_filename))
-call nc_check(nf90_inquire_dimension(grid_id, dimid, len=nVertLevels), &
-            'read_grid_dims','inquire_dimension nVertLevels '//trim(grid_definition_filename))
-
-! nVertLevelsP1 : get dimid for 'nVertLevelsP1' and then get value
-
-call nc_check(nf90_inq_dimid(grid_id, 'nVertLevelsP1', dimid), &
-              'read_grid_dims','inq_dimid nVertLevelsP1 '//trim(grid_definition_filename))
-call nc_check(nf90_inquire_dimension(grid_id, dimid, len=nVertLevelsP1), &
-            'read_grid_dims','inquire_dimension nVertLevelsP1 '//trim(grid_definition_filename))
-
-! vertexDegree : get dimid for 'vertexDegree' and then get value
-
-call nc_check(nf90_inq_dimid(grid_id, 'vertexDegree', dimid), &
-              'read_grid_dims','inq_dimid vertexDegree '//trim(grid_definition_filename))
-call nc_check(nf90_inquire_dimension(grid_id, dimid, len=vertexDegree), &
-            'read_grid_dims','inquire_dimension vertexDegree '//trim(grid_definition_filename))
-
-! nSoilLevels : get dimid for 'nSoilLevels' and then get value
-
-call nc_check(nf90_inq_dimid(grid_id, 'nSoilLevels', dimid), &
-              'read_grid_dims','inq_dimid nSoilLevels '//trim(grid_definition_filename))
-call nc_check(nf90_inquire_dimension(grid_id, dimid, len=nSoilLevels), &
-            'read_grid_dims','inquire_dimension nSoilLevels '//trim(grid_definition_filename))
-
-! tidy up
-
-call nc_check(nf90_close(grid_id), &
-         'read_grid_dims','close '//trim(grid_definition_filename) )
+nCells        = nc_get_dimension_size(ncid, 'nCells',         routine)
+nVertices     = nc_get_dimension_size(ncid, 'nVertices',      routine)
+nEdges        = nc_get_dimension_size(ncid, 'nEdges',         routine)
+maxEdges      = nc_get_dimension_size(ncid, 'maxEdges',       routine)
+nVertLevels   = nc_get_dimension_size(ncid, 'nVertLevels',    routine)
+nVertLevelsP1 = nc_get_dimension_size(ncid, 'nVertLevelsP1',  routine)
+vertexDegree  = nc_get_dimension_size(ncid, 'vertexDegree',   routine)
+nSoilLevels   = nc_get_dimension_size(ncid, 'nSoilLevels',    routine)
 
 if (debug > 4 .and. do_output()) then
    write(*,*)
@@ -2913,154 +2649,64 @@ end subroutine read_grid_dims
 
 
 !------------------------------------------------------------------
+!> Read the grid values in from the MPAS netcdf file.
+!>
 
-subroutine get_grid()
+subroutine get_grid(ncid)
+integer, intent(in) :: ncid
 
-! Read the actual grid values in from the MPAS netcdf file.
-!
-! The file name comes from module storage ... namelist.
-! This reads in the following arrays:
-!   latCell, lonCell, zGridFace, cellsOnVertex (all in module global storage)
+character(len=*), parameter :: routine = 'get_grid'
 
 
-integer  :: ncid, VarID
+call nc_get_variable(ncid, 'lonCell',       lonCell,       routine)
+call nc_get_variable(ncid, 'latCell',       latCell,       routine)
 
-! Read the netcdf file data
-
-call nc_check(nf90_open(trim(grid_definition_filename), nf90_nowrite, ncid), 'get_grid', 'open '//trim(grid_definition_filename))
-
-! Read the variables
-
-call nc_check(nf90_inq_varid(ncid, 'latCell', VarID), &
-      'get_grid', 'inq_varid latCell '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, latCell), &
-      'get_grid', 'get_var latCell '//trim(grid_definition_filename))
-
-call nc_check(nf90_inq_varid(ncid, 'lonCell', VarID), &
-      'get_grid', 'inq_varid lonCell '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, lonCell), &
-      'get_grid', 'get_var lonCell '//trim(grid_definition_filename))
-
-call nc_check(nf90_inq_varid(ncid, 'zgrid', VarID), &
-      'get_grid', 'inq_varid zgrid '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, zGridFace), &
-      'get_grid', 'get_var zgrid '//trim(grid_definition_filename))
-
-call nc_check(nf90_inq_varid(ncid, 'cellsOnVertex', VarID), &
-      'get_grid', 'inq_varid cellsOnVertex '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, cellsOnVertex), &
-      'get_grid', 'get_var cellsOnVertex '//trim(grid_definition_filename))
-
-call nc_check(nf90_inq_varid(ncid, 'xland', VarID), &
-      'get_grid', 'inq_varid xland '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, xland), &
-      'get_grid', 'get_var xland '//trim(grid_definition_filename))
-
-! MPAS analysis files are in radians - at this point DART needs degrees.
+! MPAS locations are in radians - at this point DART needs degrees.
+! watch out for tiny rounding errors and clamp to exactly +/- 90
 
 latCell = latCell * rad2deg
 lonCell = lonCell * rad2deg
-where (latCell >  90.0_r8) latCell = 90.0_r8
+where (latCell >  90.0_r8) latCell =  90.0_r8
 where (latCell < -90.0_r8) latCell = -90.0_r8
 
-! Read the variables
+call nc_get_variable(ncid, 'zgrid',         zGridFace,     routine)
+call nc_get_variable(ncid, 'cellsOnVertex', cellsOnVertex, routine)
+call nc_get_variable(ncid, 'xland',         xland,         routine)
 
-call nc_check(nf90_inq_varid(ncid, 'edgeNormalVectors', VarID), &
-      'get_grid', 'inq_varid edgeNormalVectors '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, edgeNormalVectors), &
-      'get_grid', 'get_var edgeNormalVectors '//trim(grid_definition_filename))
-
-call nc_check(nf90_inq_varid(ncid, 'nEdgesOnCell', VarID), &
-      'get_grid', 'inq_varid nEdgesOnCell '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, nEdgesOnCell), &
-      'get_grid', 'get_var nEdgesOnCell '//trim(grid_definition_filename))
-
-call nc_check(nf90_inq_varid(ncid, 'edgesOnCell', VarID), &
-      'get_grid', 'inq_varid edgesOnCell '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, edgesOnCell), &
-      'get_grid', 'get_var edgesOnCell '//trim(grid_definition_filename))
-
-call nc_check(nf90_inq_varid(ncid, 'cellsOnEdge', VarID), &
-      'get_grid', 'inq_varid cellsOnEdge '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, cellsOnEdge), &
-      'get_grid', 'get_var cellsOnEdge '//trim(grid_definition_filename))
+call nc_get_variable(ncid, 'edgeNormalVectors', edgeNormalVectors, routine)
+call nc_get_variable(ncid, 'nEdgesOnCell',      nEdgesOnCell,      routine)
+call nc_get_variable(ncid, 'edgesOnCell',       edgesOnCell,       routine)
+call nc_get_variable(ncid, 'cellsOnEdge',       cellsOnEdge,       routine)
+call nc_get_variable(ncid, 'verticesOnCell',    verticesOnCell,    routine)
 
 if(data_on_edges) then
-   call nc_check(nf90_inq_varid(ncid, 'latEdge', VarID), &
-         'get_grid', 'inq_varid latEdge '//trim(grid_definition_filename))
-   call nc_check(nf90_get_var( ncid, VarID, latEdge), &
-         'get_grid', 'get_var latEdge '//trim(grid_definition_filename))
-
-   call nc_check(nf90_inq_varid(ncid, 'lonEdge', VarID), &
-         'get_grid', 'inq_varid lonEdge '//trim(grid_definition_filename))
-   call nc_check(nf90_get_var( ncid, VarID, lonEdge), &
-         'get_grid', 'get_var lonEdge '//trim(grid_definition_filename))
+   call nc_get_variable(ncid, 'lonEdge', lonEdge, routine)
+   call nc_get_variable(ncid, 'latEdge', latEdge, routine)
 
    latEdge = latEdge * rad2deg
    lonEdge = lonEdge * rad2deg
+   where (latEdge >  90.0_r8) latEdge =  90.0_r8
+   where (latEdge < -90.0_r8) latEdge = -90.0_r8
 
-   call nc_check(nf90_inq_varid(ncid, 'xEdge', VarID), &
-         'get_grid', 'inq_varid xEdge '//trim(grid_definition_filename))
-   call nc_check(nf90_get_var( ncid, VarID, xEdge), &
-         'get_grid', 'get_var xEdge '//trim(grid_definition_filename))
-
-   call nc_check(nf90_inq_varid(ncid, 'yEdge', VarID), &
-         'get_grid', 'inq_varid yEdge '//trim(grid_definition_filename))
-   call nc_check(nf90_get_var( ncid, VarID, yEdge), &
-         'get_grid', 'get_var yEdge '//trim(grid_definition_filename))
-
-   call nc_check(nf90_inq_varid(ncid, 'zEdge', VarID), &
-         'get_grid', 'inq_varid zEdge '//trim(grid_definition_filename))
-   call nc_check(nf90_get_var( ncid, VarID, zEdge), &
-         'get_grid', 'get_var zEdge '//trim(grid_definition_filename))
+   call nc_get_variable(ncid, 'xEdge', xEdge, routine)
+   call nc_get_variable(ncid, 'yEdge', yEdge, routine)
+   call nc_get_variable(ncid, 'zEdge', zEdge, routine)
 endif
 
-call nc_check(nf90_inq_varid(ncid, 'xVertex', VarID), &
-      'get_grid', 'inq_varid xVertex '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, xVertex), &
-      'get_grid', 'get_var xVertex '//trim(grid_definition_filename))
-
-call nc_check(nf90_inq_varid(ncid, 'yVertex', VarID), &
-      'get_grid', 'inq_varid yVertex '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, yVertex), &
-      'get_grid', 'get_var yVertex '//trim(grid_definition_filename))
-
-call nc_check(nf90_inq_varid(ncid, 'zVertex', VarID), &
-      'get_grid', 'inq_varid zVertex '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, zVertex), &
-      'get_grid', 'get_var zVertex '//trim(grid_definition_filename))
-
-call nc_check(nf90_inq_varid(ncid, 'verticesOnCell', VarID), &
-      'get_grid', 'inq_varid verticesOnCell '//trim(grid_definition_filename))
-call nc_check(nf90_get_var( ncid, VarID, verticesOnCell), &
-      'get_grid', 'get_var verticesOnCell '//trim(grid_definition_filename))
+call nc_get_variable(ncid, 'xVertex', xVertex, routine)
+call nc_get_variable(ncid, 'yVertex', yVertex, routine)
+call nc_get_variable(ncid, 'zVertex', zVertex, routine)
 
 ! Get the boundary information if available.
 ! Assuming the existence of this variable is sufficient to determine if
 ! the grid is defined everywhere or not.
 
-if ( nf90_inq_varid(ncid, 'boundaryEdge', VarID) == NF90_NOERR ) then
-   allocate(boundaryEdge(nVertLevels,nEdges))
-   call nc_check(nf90_get_var( ncid, VarID, boundaryEdge), &
-      'get_grid', 'get_var boundaryEdge '//trim(grid_definition_filename))
-   global_grid = .false.
-endif
-
-if ( nf90_inq_varid(ncid, 'boundaryVertex', VarID) == NF90_NOERR ) then
-   allocate(boundaryVertex(nVertLevels,nVertices))
-   call nc_check(nf90_get_var( ncid, VarID, boundaryVertex), &
-      'get_grid', 'get_var boundaryVertex '//trim(grid_definition_filename))
-   global_grid = .false.
-endif
-
-if ( nf90_inq_varid(ncid, 'maxLevelCell', VarID) == NF90_NOERR ) then
+if (nc_variable_exists(ncid, 'maxLevelCell')) then
    allocate(maxLevelCell(nCells))
-   call nc_check(nf90_get_var( ncid, VarID, maxLevelCell), &
-      'get_grid', 'get_var maxLevelCell '//trim(grid_definition_filename))
+   call nc_get_variable(ncid, 'maxLevelCell', maxlevelCell, routine)
    all_levels_exist_everywhere = .false.
 endif
 
-call nc_check(nf90_close(ncid), 'get_grid','close '//trim(grid_definition_filename) )
 
 ! A little sanity check
 
@@ -3087,10 +2733,10 @@ if ( debug > 9 .and. do_output() ) then
    write(*,*)'yVertex           range ',minval(yVertex),           maxval(yVertex)
    write(*,*)'zVertex           range ',minval(zVertex),           maxval(zVertex)
    write(*,*)'verticesOnCell    range ',minval(verticesOnCell),    maxval(verticesOnCell)
-   if (allocated(boundaryEdge)) &
-   write(*,*)'boundaryEdge      range ',minval(boundaryEdge),      maxval(boundaryEdge)
-   if (allocated(boundaryVertex)) &
-   write(*,*)'boundaryVertex    range ',minval(boundaryVertex),    maxval(boundaryVertex)
+   if (allocated(bdyMaskCell)) &
+   write(*,*)'bdyMaskCell       range ',minval(bdyMaskCell),       maxval(bdyMaskCell)
+   if (allocated(bdyMaskEdge)) &
+   write(*,*)'bdyMaskEdge       range ',minval(bdyMaskEdge),       maxval(bdyMaskEdge)
    if (allocated(maxLevelCell)) &
    write(*,*)'maxLevelCell      range ',minval(maxLevelCell),      maxval(maxLevelCell)
 
@@ -3101,9 +2747,10 @@ end subroutine get_grid
 
 !------------------------------------------------------------------
 
-subroutine update_wind_components(ncid, state_vector, use_increments_for_u_update)
+subroutine update_wind_components(ncid, filename, state_vector, use_increments_for_u_update)
 
- integer,  intent(in)  :: ncid                  ! netCDF handle for model_analysis_filename
+ integer,  intent(in)  :: ncid
+ character(len=*), intent(in) :: filename
  real(r8), intent(in)  :: state_vector(:)
  logical,  intent(in)  :: use_increments_for_u_update
 
@@ -3168,9 +2815,9 @@ allocate(vcell(nVertLevels, nCells))
 ! and uReconstructMeridional fields from the mpas analysis netcdf file.
 
 if (use_increments_for_u_update) then
-   call read_2d_from_nc_file(ncid, 'u', u)
-   call read_2d_from_nc_file(ncid, 'uReconstructZonal', ucell)
-   call read_2d_from_nc_file(ncid, 'uReconstructMeridional', vcell)
+   call read_2d_from_nc_file(ncid, filename, 'u', u)
+   call read_2d_from_nc_file(ncid, filename, 'uReconstructZonal', ucell)
+   call read_2d_from_nc_file(ncid, filename, 'uReconstructMeridional', vcell)
 
    if ((debug > 8) .and. do_output()) then
       write(*,*)
@@ -3227,7 +2874,7 @@ endif
 
 ! Write back to the mpas analysis file.
 
-call put_u(ncid, u)
+call put_u(ncid, filename, u)
 
 deallocate(ucell, vcell, u)
 
@@ -3236,8 +2883,9 @@ end subroutine update_wind_components
 
 !------------------------------------------------------------------
 
-subroutine read_2d_from_nc_file(ncid, varname, data)
+subroutine read_2d_from_nc_file(ncid, filename, varname, data)
  integer,          intent(in)  :: ncid
+ character(len=*), intent(in)  :: filename
  character(len=*), intent(in)  :: varname
  real(r8),         intent(out) :: data(:,:)
 
@@ -3252,17 +2900,17 @@ integer :: VarID, numdims, dimlen, i
 
 call nc_check(nf90_inq_varid(ncid, varname, VarID), &
               'read_from_nc_file', &
-              'inq_varid '//trim(varname)//' '//trim(model_analysis_filename))
+              'inq_varid '//trim(varname)//' '//trim(filename))
 
 call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
               'read_from_nc_file', &
-              'inquire '//trim(varname)//' '//trim(model_analysis_filename))
+              'inquire '//trim(varname)//' '//trim(filename))
 
 do i=1, numdims
    write(string1,*)'inquire length for dimension ',i
    call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=dimlen, name=dimname), &
                  'read_2d_from_nc_file', &
-                  trim(string1)//' '//trim(model_analysis_filename))
+                  trim(string1)//' '//trim(filename))
    if (trim(dimname) == 'Time') then
       mystart(i)       = dimlen
       mycount(numdims) = 1
@@ -3275,15 +2923,16 @@ enddo
 call nc_check( nf90_get_var(ncid, VarID, data, &
                start=mystart(1:numdims), count=mycount(1:numdims)), &
               'read_2d_from_nc_file', &
-              'get_var u '//trim(model_analysis_filename))
+              'get_var u '//trim(filename))
 
 end subroutine read_2d_from_nc_file
 
 
 !------------------------------------------------------------------
 
-subroutine put_u(ncid, u)
+subroutine put_u(ncid, filename, u)
  integer,  intent(in) :: ncid
+ character(len=*), intent(in) :: filename
  real(r8), intent(in) :: u(:,:)       ! u(nVertLevels, nEdges)
 
 ! Put the newly updated 'u' field back into the netcdf file.
@@ -3296,20 +2945,20 @@ if ( .not. module_initialized ) call static_init_model
 
 
 call nc_check(nf90_Inquire(ncid,nDimensions,nVariables,nAttributes,unlimitedDimID), &
-              'put_u', 'inquire '//trim(model_analysis_filename))
+              'put_u', 'inquire '//trim(filename))
 
 call nc_check(nf90_inquire_dimension(ncid, unlimitedDimID, len=ntimes), &
-              'put_u', 'inquire time dimension length '//trim(model_analysis_filename))
+              'put_u', 'inquire time dimension length '//trim(filename))
 
 call nc_check(nf90_inq_varid(ncid, 'u', VarID), &
-              'put_u', 'inq_varid u '//trim(model_analysis_filename))
+              'put_u', 'inq_varid u '//trim(filename))
 
 call nc_check(nf90_inquire_variable(ncid, VarID, dimids=dimIDs, ndims=numdims), &
-              'put_u', 'inquire u '//trim(model_analysis_filename))
+              'put_u', 'inquire u '//trim(filename))
 
 do i=1, numdims
    call nc_check(nf90_inquire_dimension(ncid, dimIDs(i), len=numu(i)), &
-                 'put_u', 'inquire U dimension length '//trim(model_analysis_filename))
+                 'put_u', 'inquire U dimension length '//trim(filename))
 enddo
 
 ! for all but the time dimension, read all the values.
@@ -3320,7 +2969,7 @@ mycount = numu
 mycount(numdims) = 1
 
 call nc_check(nf90_put_var(ncid, VarID, u, start=mystart, count=mycount), &
-              'put_u', 'put_var u '//trim(model_analysis_filename))
+              'put_u', 'put_var u '//trim(filename))
 
 
 ! A little sanity check
@@ -3346,24 +2995,12 @@ real(r8), dimension(:),   intent(in)  :: x
 integer,                  intent(in)  :: ivar
 real(r8), dimension(:),   intent(out) :: data_1d_array
 
-integer :: idim1,ii
+integer :: start_offset, end_offset
 
-if ( .not. module_initialized ) call static_init_model
+start_offset = progvar(ivar)%index1
+end_offset   = start_offset + size(data_1d_array) - 1
 
-ii = progvar(ivar)%index1
-
-do idim1 = 1, size(data_1d_array, 1)
-   data_1d_array(idim1) = x(ii)
-   ii = ii + 1
-enddo
-
-ii = ii - 1
-if ( ii /= progvar(ivar)%indexN ) then
-   write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' filled wrong.'
-   write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',ii
-   call error_handler(E_ERR,'vector_to_1d_prog_var', string1, &
-                    source, revision, revdate, text2=string2)
-endif
+data_1d_array = x(start_offset:end_offset)
 
 end subroutine vector_to_1d_prog_var
 
@@ -3379,26 +3016,12 @@ real(r8), dimension(:),   intent(in)  :: x
 integer,                  intent(in)  :: ivar
 real(r8), dimension(:,:), intent(out) :: data_2d_array
 
-integer :: idim1,idim2,ii
+integer :: start_offset, end_offset
 
-if ( .not. module_initialized ) call static_init_model
+start_offset = progvar(ivar)%index1
+end_offset   = start_offset + size(data_2d_array) - 1
 
-ii = progvar(ivar)%index1
-
-do idim2 = 1,size(data_2d_array, 2)
-   do idim1 = 1,size(data_2d_array, 1)
-      data_2d_array(idim1,idim2) = x(ii)
-      ii = ii + 1
-   enddo
-enddo
-
-ii = ii - 1
-if ( ii /= progvar(ivar)%indexN ) then
-   write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' filled wrong.'
-   write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',ii
-   call error_handler(E_ERR,'vector_to_2d_prog_var', string1, &
-                    source, revision, revdate, text2=string2)
-endif
+data_2d_array = reshape(x(start_offset:end_offset), shape(data_2d_array))
 
 end subroutine vector_to_2d_prog_var
 
@@ -3414,28 +3037,12 @@ real(r8), dimension(:),     intent(in)  :: x
 integer,                    intent(in)  :: ivar
 real(r8), dimension(:,:,:), intent(out) :: data_3d_array
 
-integer :: idim1,idim2,idim3,ii
+integer :: start_offset, end_offset
 
-if ( .not. module_initialized ) call static_init_model
+start_offset = progvar(ivar)%index1
+end_offset   = start_offset + size(data_3d_array) - 1
 
-ii = progvar(ivar)%index1
-
-do idim3 = 1,size(data_3d_array, 3)
-   do idim2 = 1,size(data_3d_array, 2)
-      do idim1 = 1,size(data_3d_array, 1)
-         data_3d_array(idim1,idim2,idim3) = x(ii)
-         ii = ii + 1
-      enddo
-   enddo
-enddo
-
-ii = ii - 1
-if ( ii /= progvar(ivar)%indexN ) then
-   write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' filled wrong.'
-   write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',ii
-   call error_handler(E_ERR,'vector_to_3d_prog_var', string1, &
-                    source, revision, revdate, text2=string2)
-endif
+data_3d_array = reshape(x(start_offset:end_offset), shape(data_3d_array))
 
 end subroutine vector_to_3d_prog_var
 
@@ -3451,24 +3058,12 @@ real(r8), dimension(:),   intent(in)    :: data_1d_array
 real(r8), dimension(:),   intent(inout) :: x
 integer,                  intent(in)    :: ivar
 
-integer :: idim1,ii
+integer :: start_offset, end_offset
 
-if ( .not. module_initialized ) call static_init_model
+start_offset = progvar(ivar)%index1
+end_offset   = start_offset + size(data_1d_array) - 1
 
-ii = progvar(ivar)%index1
-
-do idim1 = 1, size(data_1d_array, 1)
-   x(ii) = data_1d_array(idim1)
-   ii = ii + 1
-enddo
-
-ii = ii - 1
-if ( ii /= progvar(ivar)%indexN ) then
-   write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' read wrong.'
-   write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',ii
-   call error_handler(E_ERR,'prog_var_1d_to_vector', string1, &
-                    source, revision, revdate, text2=string2)
-endif
+x(start_offset:end_offset) = data_1d_array
 
 end subroutine prog_var_1d_to_vector
 
@@ -3484,26 +3079,12 @@ real(r8), dimension(:,:), intent(in)    :: data_2d_array
 real(r8), dimension(:),   intent(inout) :: x
 integer,                  intent(in)    :: ivar
 
-integer :: idim1,idim2,ii
+integer :: start_offset, end_offset
 
-if ( .not. module_initialized ) call static_init_model
+start_offset = progvar(ivar)%index1
+end_offset   = start_offset + size(data_2d_array) - 1
 
-ii = progvar(ivar)%index1
-
-do idim2 = 1,size(data_2d_array, 2)
-   do idim1 = 1,size(data_2d_array, 1)
-      x(ii) = data_2d_array(idim1,idim2)
-      ii = ii + 1
-   enddo
-enddo
-
-ii = ii - 1
-if ( ii /= progvar(ivar)%indexN ) then
-   write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' read wrong.'
-   write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',ii
-   call error_handler(E_ERR,'prog_var_2d_to_vector', string1, &
-                    source, revision, revdate, text2=string2)
-endif
+x(start_offset:end_offset) = reshape(data_2d_array, (/ size(data_2d_array) /) )
 
 end subroutine prog_var_2d_to_vector
 
@@ -3519,33 +3100,20 @@ real(r8), dimension(:,:,:), intent(in)    :: data_3d_array
 real(r8), dimension(:),     intent(inout) :: x
 integer,                    intent(in)    :: ivar
 
-integer :: idim1,idim2,idim3,ii
+integer :: start_offset, end_offset
 
-if ( .not. module_initialized ) call static_init_model
+start_offset = progvar(ivar)%index1
+end_offset   = start_offset + size(data_3d_array) - 1
 
-ii = progvar(ivar)%index1
-
-do idim3 = 1,size(data_3d_array, 3)
-   do idim2 = 1,size(data_3d_array, 2)
-      do idim1 = 1,size(data_3d_array, 1)
-         x(ii) = data_3d_array(idim1,idim2,idim3)
-         ii = ii + 1
-      enddo
-   enddo
-enddo
-
-ii = ii - 1
-if ( ii /= progvar(ivar)%indexN ) then
-   write(string1, *)'Variable '//trim(progvar(ivar)%varname)//' read wrong.'
-   write(string2, *)'Should have ended at ',progvar(ivar)%indexN,' actually ended at ',ii
-   call error_handler(E_ERR,'prog_var_3d_to_vector', string1, &
-                    source, revision, revdate, text2=string2)
-endif
+x(start_offset:end_offset) = reshape(data_3d_array, (/ size(data_3d_array) /))
 
 end subroutine prog_var_3d_to_vector
 
 
 !------------------------------------------------------------------
+
+!>@todo do we still need this?  does it fill in the inputs we need
+!>for the add_domain() routine?  help.
 
 subroutine verify_state_variables( state_variables, ncid, filename, ngood, table )
 
@@ -3708,8 +3276,6 @@ integer,  intent(in)           :: ivar
 !%! type progvartype
 !%!    private
 !%!    character(len=NF90_MAX_NAME) :: varname
-!%!    character(len=NF90_MAX_NAME) :: long_name
-!%!    character(len=NF90_MAX_NAME) :: units
 !%!    integer, dimension(NF90_MAX_VAR_DIMS) :: dimlens
 !%!    integer :: xtype         ! netCDF variable type (NF90_double, etc.)
 !%!    integer :: numdims       ! number of dims - excluding TIME
@@ -3736,10 +3302,6 @@ write(logfileunit,*)
 write(     *     ,*)
 write(logfileunit,*) 'variable number ',ivar,' is ',trim(progvar(ivar)%varname)
 write(     *     ,*) 'variable number ',ivar,' is ',trim(progvar(ivar)%varname)
-write(logfileunit,*) '  long_name   ',trim(progvar(ivar)%long_name)
-write(     *     ,*) '  long_name   ',trim(progvar(ivar)%long_name)
-write(logfileunit,*) '  units       ',trim(progvar(ivar)%units)
-write(     *     ,*) '  units       ',trim(progvar(ivar)%units)
 write(logfileunit,*) '  xtype       ',progvar(ivar)%xtype
 write(     *     ,*) '  xtype       ',progvar(ivar)%xtype
 write(logfileunit,*) '  dimlens     ',progvar(ivar)%dimlens(1:progvar(ivar)%numdims)
@@ -3955,45 +3517,6 @@ progvar(ivar)%out_of_range_fail = .false.  ! should be unused so setting shouldn
 return
 
 end subroutine get_variable_bounds
-
-!------------------------------------------------------------
-
-subroutine define_var_dims(ncid,ivar, memberdimid, unlimiteddimid, ndims, dimids)
-
-! set the dimids array needed to augment the natural shape of the variable
-! with the two additional dimids needed by the DART diagnostic output.
-integer,               intent(in)  :: ncid
-integer,               intent(in)  :: ivar
-integer,               intent(in)  :: memberdimid, unlimiteddimid
-integer,               intent(out) :: ndims
-integer, dimension(:), intent(out) :: dimids
-
-integer :: i,mydimid
-
-ndims  = 0
-dimids = 0
-
-do i = 1,progvar(ivar)%numdims
-
-   ! Each of these dimension names (originally from the MPAS analysis file)
-   ! must exist in the DART diagnostic netcdf files.
-
-   call nc_check(nf90_inq_dimid(ncid, trim(progvar(ivar)%dimname(i)), mydimid), &
-              'define_var_dims','inq_dimid '//trim(progvar(ivar)%dimname(i)))
-
-   ndims = ndims + 1
-
-   dimids(ndims) = mydimid
-
-enddo
-
-ndims         = ndims + 1
-dimids(ndims) = memberdimid
-ndims         = ndims + 1
-dimids(ndims) = unlimiteddimid
-
-end subroutine define_var_dims
-
 
 !------------------------------------------------------------
 
@@ -4283,11 +3806,14 @@ real(r8), dimension(3,ens_size)  :: zk_mid, values, fract, fdata
 integer,  dimension(3,ens_size)  :: k_low, k_up
 real(r8), dimension(ens_size)    :: zin, zout
 real(r8), dimension(ens_size)    :: tk, fullp, surfp
+logical :: at_surf, do_norm
 type(location_type), dimension(ens_size) :: surfloc
 
 real(r8) :: weights(3)
 integer  :: ztypein, i, e, n
 integer  :: c(3), ivars(3) 
+integer  :: cellid              !SYHA
+real(r8) :: llv(3)              !SYHA
 
 ! assume failure.
 istatus = 1
@@ -4300,10 +3826,8 @@ weights = 0.0_r8
 ! first off, check if ob is identity ob.  if so get_state_meta_data() will
 ! have returned location information already in the requested vertical type.
 if (obs_kind < 0) then
-   call get_state_meta_data(int(obs_kind,i8),location(1)) ! will be the same across the ensemble
+   call get_state_meta_data(-int(obs_kind,i8),location(1)) ! will be the same across the ensemble
    location(:) = location(1)
-   istatus(:) = 0
-   return
 endif
 
 ! if the existing coord is already in the requested vertical units
@@ -4323,8 +3847,24 @@ endif
 ! we do need to convert the vertical.  start by
 ! extracting the location lon/lat/vert values.
 do e = 1, ens_size
-   llv_loc(:, e) = get_location(location(e))
+   llv = get_location(location(e))
+   llv_loc(:, e) = llv
+   !SYHA - Check boundaries for regional MPAS (May-2018)
+   cellid = find_closest_cell_center(llv(2), llv(1))
+   if(cellid < 0) then
+      istatus(e) = 11
+   else
+      istatus(e) = 0
+   endif
 enddo
+!SYHA - Check boundaries for regional MPAS (May-2018)
+if(any(istatus > 0)) then
+   if(debug > 9) then
+      write(string1,'(A,I7)') 'either outside or in the boundary zone:', istatus
+      call error_handler(E_MSG, 'convert_vert_distrib',string1,source, revision, revdate)
+   endif
+   return
+endif
 
 ! the routines below will use zin as the incoming vertical value
 ! and zout as the new outgoing one.  start out assuming failure
@@ -4364,6 +3904,10 @@ select case (ztypeout)
    ! and the fraction (fract) for vertical interpolation.
 
    call find_triangle (location(1), n, c, weights, istatus(1))
+   if (istatus(1) /= 0) then
+      istatus(:) = istatus(1)
+      return
+   endif
    call find_vert_indices (state_handle, ens_size, location(1), n, c, k_low, k_up, fract, istatus)
    if( all(istatus /= 0) ) return
 
@@ -4412,6 +3956,10 @@ select case (ztypeout)
    case (VERTISHEIGHT)
 
    call find_triangle (location(1), n, c, weights, istatus(1))
+   if (istatus(1) /= 0) then
+      istatus(:) = istatus(1)
+      return
+   endif
    call find_vert_indices (state_handle, ens_size, location(1), n, c, k_low, k_up, fract, istatus)
    if( all(istatus /= 0) ) return
 
@@ -4444,26 +3992,36 @@ select case (ztypeout)
    ! ------------------------------------------------------------
    case (VERTISSCALEHEIGHT)
 
-     if ( ztypein /= VERTISSURFACE ) then
+     ! Scale Height is defined as:  log(pressure) 
+     ! if namelist item:  no_normalization_of_scale_heights = .true. 
+     ! otherwise it is defined as: -log(pressure / surface_pressure)
 
-       ! Scale Height is defined here as: -log(pressure / surface_pressure)
+     ! set logicals here so we can do the minimum amount of work.
+     ! finding gridcells and computing pressure is expensive in this model.
+     ! logic table is:
+     !  surf T, norm T:  return 0.0 by definition
+     !  surf T, norm F:  need surfp only
+     !  surf F, norm F:  need fullp only
+     !  surf F, norm T:  need both surfp and fullp
 
-       ! Need to get base offsets for the potential temperature, density, and water
-       ! vapor mixing fields in the state vector
+     at_surf = (ztypein == VERTISSURFACE)
+     do_norm = .not. no_normalization_of_scale_heights
+
+     ! if normalizing pressure and we're on the surface, by definition scale height 
+     ! is log(1.0) so skip the rest of these computations.
+     if (at_surf .and. do_norm) then
+        zout = 0.0_r8  
+        istatus(:) = 0
+        goto 101
+     endif
+
+     ! Base offsets for the potential temperature, density, and water
+     ! vapor mixing fields in the state vector.
        ivars(1) = get_progvar_index_from_kind(QTY_POTENTIAL_TEMPERATURE)
        ivars(2) = get_progvar_index_from_kind(QTY_DENSITY)
        ivars(3) = get_progvar_index_from_kind(QTY_VAPOR_MIXING_RATIO)
 
-       ! Get theta, rho, qv at the interpolated location
-       call compute_scalar_with_barycentric (state_handle, ens_size, location(1), 3, ivars, values, istatus)
-       !if (istatus /= 0) return
-
-       ! Convert theta, rho, qv into pressure
-       call compute_full_pressure(ens_size, values(1, :), values(2, :), values(3, :), fullp(:), tk(:), istatus(:))
-       if (debug > 9) then
-         write(string2,'("zout_full_pressure, theta, rho, qv:",3F10.2,F18.8)') fullp, values(1:3,1)
-         call error_handler(E_MSG, 'convert_vert_distrib',string2,source, revision, revdate)
-       endif
+     if (at_surf .or. do_norm) then  ! we will need surface pressure
 
        ! Get theta, rho, qv at the surface corresponding to the interpolated location
        surfloc(1) = set_location(llv_loc(1, 1), llv_loc(2, 1), 1.0_r8, VERTISLEVEL)
@@ -4477,19 +4035,47 @@ select case (ztypeout)
          call error_handler(E_MSG, 'convert_vert_distrib',string2,source, revision, revdate)
        endif
 
-       ! and finally, convert into scale height
-       where (surfp /= 0.0_r8 .and. fullp /= MISSING_R8)
-         zout = -log(fullp / surfp)
+     endif
+
+     if (.not. at_surf) then   ! we will need full pressure
+
+        ! Get theta, rho, qv at the interpolated location
+        call compute_scalar_with_barycentric (state_handle, ens_size, location(1), 3, ivars, values, istatus)
+
+        ! Convert theta, rho, qv into pressure
+        call compute_full_pressure(ens_size, values(1, :), values(2, :), values(3, :), fullp(:), tk(:), istatus(:))
+        if (debug > 9) then
+          write(string2,'("zout_full_pressure, theta, rho, qv:",3F10.2,F18.8)') fullp, values(1:3,1)
+          call error_handler(E_MSG, 'convert_vert_distrib',string2,source, revision, revdate)
+        endif
+     endif
+
+     ! we have what we need now.  figure out the case and set zout to the right values.
+     ! we've already taken care of the (at_surf .and. do_norm) case, so that simplifies
+     ! the tests here.
+     if (at_surf) then
+        where (surfp /= MISSING_R8)
+           zout = log(surfp)
        else where
          zout = MISSING_R8
        end where
 
-     else
+     else if (.not. do_norm) then
+        where (fullp /= MISSING_R8)
+           zout = log(fullp)
+        else where
+           zout = MISSING_R8
+        end where
 
-       zout = -log(1.0_r8)
-       istatus(:) = 0
-
+     else  ! not at surface, and normalizing by surface pressure
+        where (surfp /= MISSING_R8 .and. surfp > 0.0_r8 .and. fullp /= MISSING_R8)   
+           zout = -log(fullp / surfp)
+        else where
+           zout = MISSING_R8
+        end where
      endif
+
+101 continue
 
      if (debug > 9) then
        write(string2,'("zout_in_scaleheight:",F10.2)') zout
@@ -4762,7 +4348,7 @@ vert = llv(3)
 verttype = nint(query_location(loc))
 
 ! these first 3 types need no cell/edge location information.
-if ((debug > 11) .and. do_output()) then
+if ((debug > 10) .and. do_output()) then
    write(string2,'("vert, which_vert:",3F20.12,I5)') lon,lat,vert,verttype
    call error_handler(E_MSG, 'find_vert_level',string2,source, revision, revdate)
 endif
@@ -5213,7 +4799,10 @@ integer     :: e
 dval = MISSING_R8
 
 call find_triangle (loc, nc, c, weights, ier(1))
-if(ier(1) /= 0) return
+if (ier(1) /= 0) then
+   ier(:) = ier(1)
+   return
+endif
 
 call find_vert_indices (state_handle, ens_size, loc, nc, c, lower, upper, fract, ier)
 if(all(ier /= 0)) return
@@ -5244,7 +4833,7 @@ do k=1, n
       ! now have vertically interpolated values at cell centers.
       ! use weights to compute value at interp point.
       dval(k, e) = sum(weights(1:nc) * fdata(1:nc, e))
-      !if(debug > 11) print *, 'compute_scalar_with_barycentric: k, e, dval(k,e) = ', k, e, dval(k,e)
+      if(debug > 10) print *, 'compute_scalar_with_barycentric: k, e, dval(k,e) = ', k, e, dval(k,e)
 
    enddo
 
@@ -5321,30 +4910,20 @@ vert = llv(3)
 verttype = nint(query_location(loc))
 
 cellid = find_closest_cell_center(lat, lon)
-if ((xyzdebug > 5) .and. do_output()) &
-   print *, 'closest cell center for lon/lat: ', lon, lat, cellid
+if ((xyzdebug > 1) .and. do_output()) &
+   print *, 'ft: closest cell center for lon/lat: ', lon, lat, cellid
 if (cellid < 1) then
-   if(xyzdebug > 0) print *, 'closest cell center for lon/lat: ', lon, lat, cellid
+   if(xyzdebug > 0) print *, 'ft: closest cell center for lon/lat: ', lon, lat, cellid
    ier = 11
    return
 endif
 
 c(1) = cellid
 
-if (on_boundary(cellid)) then
-   ier = 12
-   return
-endif
-
-if (.not. inside_cell(cellid, lat, lon)) then
-   ier = 13
-   return
-endif
-
 ! closest vertex to given point.
 closest_vert = closest_vertex_ll(cellid, lat, lon)
 if ((xyzdebug > 5) .and. do_output()) &
-   print *, 'closest vertex for lon/lat: ', lon, lat, closest_vert
+   print *, 'ft: closest vertex for lon/lat: ', lon, lat, closest_vert
 
 ! collect the neighboring cell ids and vertex numbers
 ! this 2-step process avoids us having to read in the
@@ -5356,13 +4935,21 @@ if ((xyzdebug > 5) .and. do_output()) &
 vindex = 1
 nedges = nEdgesOnCell(cellid)
 do i=1, nedges
+!print *, 'ft: i: ', i
    edgeid = edgesOnCell(i, cellid)
+!print *, 'ft: edgeid: ', edgeid
+   if (.not. global_grid .and. &
+      (cellsOnEdge(1, edgeid) == 0 .or. cellsOnEdge(2, edgeid) == 0)) then
+      ier = 14
+      return
+   endif
    if (cellsOnEdge(1, edgeid) /= cellid) then
       neighborcells(i) = cellsOnEdge(1, edgeid)
    else
       neighborcells(i) = cellsOnEdge(2, edgeid)
    endif
    verts(i) = verticesOnCell(i, cellid)
+!print *, 'ft: verts: ', verts(i), closest_vert
    if (verts(i) == closest_vert) vindex = i
    call latlon_to_xyz(latCell(neighborcells(i)), lonCell(neighborcells(i)), &
       xdata(i), ydata(i), zdata(i))
@@ -5374,6 +4961,7 @@ call latlon_to_xyz(latCell(cellid), lonCell(cellid), t1(1), t1(2), t1(3))
 
 ! and the observation point
 call latlon_to_xyz(lat, lon, r(1), r(2), r(3))
+!print *, 'ft: lat/lon: ', lat, lon
 
 if (all(abs(t1-r) < roundoff)) then   ! Located at a grid point (counting roundoff errors)
 
@@ -5398,6 +4986,13 @@ findtri: do i=vindex, vindex+nedges
    t3(2) = ydata(vp1)
    t3(3) = zdata(vp1)
    call inside_triangle(t1, t2, t3, r, lat, lon, inside, weights)
+if (debug > 2) then
+ print *, 'ft: inside: ', inside
+ print *, 'ft:  r: ', r
+ print *, 'ft: t1: ', t1
+ print *, 'ft: t2: ', t2
+ print *, 'ft: t3: ', t3
+endif
    if (inside) then
       ! weights are the barycentric weights for the point r
       ! in the triangle formed by t1, t2, t3.
@@ -5419,8 +5014,16 @@ findtri: do i=vindex, vindex+nedges
    endif
 enddo findtri
 if (.not. foundit) then
+if (debug > 2) print *, 'ft: fail r, t1, t2, t3: ', r, t1, t2, t3
    ier = 14     ! 11
    return
+endif
+
+if(nc == 3) then
+   if (on_boundary_cell(c(2)) .or. on_boundary_cell(c(3))) then
+      ier = 15
+      return
+   endif
 endif
 
 endif     ! horizontal index search is done now.
@@ -5456,12 +5059,12 @@ integer :: e
 ! need vert index for the vertical level
 call find_vert_level(state_handle, ens_size, loc, nc, c, .true., lower, upper, fract, ier)
 
-if (debug > 11) then
+if (debug > 10) then
    write(string3,*) 'ier = ',ier (1), ' triangle = ',c(1:nc), ' vert_index = ',lower(1:nc, 1)+fract(1:nc, 1)
    call error_handler(E_MSG, 'find_vert_indices', string3, source, revision, revdate)
 endif
 
-if (debug > 11) then
+if (debug > 10) then
    do e = 1, ens_size
    if(ier(e) /= 0) then   
       print *, 'find_vert_indices: e = ', e, ' nc = ', nc, ' ier = ', ier(e)
@@ -5661,12 +5264,6 @@ if (cellid < 1) then
    return
 endif
 
-if (.not. inside_cell(cellid, lat, lon)) then
-   nedges = 0
-   edge_list(:) = -1
-   return
-endif
-
 ! inside this cell, find the vertex id that the point
 ! is closest to.  this is a return from this subroutine.
 vertexid = closest_vertex_ll(cellid, lat, lon)
@@ -5748,6 +5345,18 @@ select case (use_rbf_option)
                          source, revision, revdate)
 end select
 
+! Ha: Check if any of edges are located in the boundary zone.
+! FIXME: Do we want to list up the edges actually located in the boundary zone?
+!        Do we want to interpolate from non-boundary edges instead of discarding the obs?
+!        For now, we skip the obs if there are any edges located in the boundary.
+if (on_boundary_edgelist(edge_list)) then
+   nedges = -1
+   edge_list(:) = -1
+   call error_handler(E_MSG, 'find_surrounding_edges', 'edges in the boundary', &
+                      source, revision, revdate)
+   return
+endif 
+
 end subroutine find_surrounding_edges
 
 !------------------------------------------------------------
@@ -5770,14 +5379,18 @@ enddo
 ! get 2nd arg from max dcEdge or a namelist item where it's precomputed
 call xyz_get_close_init(cc_gc, 33000.0_r8, nCells, cell_locs)
 
+if (.not. global_grid) &
+   call xyz_use_great_circle_dist(radius)
+
 end subroutine init_closest_center
 
 !------------------------------------------------------------
+!> Determine the cell index for the closest center to the given point
+!> 2D calculation only.   If the closest cell is on the boundary for
+!> the regional case, the location is considered outside the region.
+!> for the global case this can't happen.
 
 function find_closest_cell_center(lat, lon)
-
-! Determine the cell index for the closest center to the given point
-! 2D calculation only.
 
 real(r8), intent(in)  :: lat, lon
 integer               :: find_closest_cell_center
@@ -5794,17 +5407,29 @@ endif
 pointloc = xyz_set_location(lon, lat, 0.0_r8, radius)
 
 call xyz_find_nearest(cc_gc, pointloc, cell_locs, closest_cell, rc)
+if(debug > 0) print *, 'find_closest_cell_center: rc, closest_cell ', rc, closest_cell   ! SYHA
 
-! decide what to do if we don't find anything.
+! decide what to do if we don't find anything.  this is unexpected.
+! make this a fatal error.
 if (rc /= 0 .or. closest_cell < 0) then
-   if (debug > 8) &
-       print *, 'cannot find nearest cell to lon, lat: ', lon, lat
-   find_closest_cell_center = -1
-   return
+   write(string1, *) 'could not find cell close to lon, lat: ', lon, lat
+   call error_handler(E_ERR, 'find_closest_cell_center: ', string1, &
+                      source, revision, revdate)
+   !if (debug > 8) &
+   !    print *, 'cannot find nearest cell to lon, lat: ', lon, lat
+   !find_closest_cell_center = -1
+   !return
 endif
 
-! this is the cell index for the closest center
-find_closest_cell_center = closest_cell
+if (debug > 0) print *, 'lat/lon for cellid: ', latCell(closest_cell), lonCell(closest_cell)
+
+! don't allow boundary cells to be returned.
+if (on_boundary_cell(closest_cell)) then
+   find_closest_cell_center = -1
+else
+   ! this is the cell index for the closest center
+   find_closest_cell_center = closest_cell
+endif
 
 end function find_closest_cell_center
 
@@ -5821,113 +5446,90 @@ end subroutine finalize_closest_center
 
 !------------------------------------------------------------
 
-function on_boundary(cellid)
+subroutine set_global_grid(ncid)
+integer, intent(in) :: ncid
 
-! use the surface (level 1) to determine if any edges (or vertices?)
-! are on the boundary, and return true if so.   if the global flag
-! is set, skip all code and return false immediately.
+character(len=*), parameter :: routine = 'set_global_grid'
 
-integer,  intent(in)  :: cellid
-logical               :: on_boundary
+global_grid = .true.
 
-! do this completely with topology of the grid.  if any of
-! the cell edges are marked as boundary edges, return no.
-! otherwise return yes.
-
-integer :: nedges, i, edgeid, vertical
-
-if (global_grid) then
-   on_boundary = .false.
-   return
+if (nc_variable_exists(ncid, 'bdyMaskCell')) then
+   allocate(bdyMaskCell(nCells))
+   call nc_get_variable(ncid, 'bdyMaskCell', bdyMaskCell, routine)
+   global_grid = .false.
 endif
 
-! how many edges (same # for verts) to check
-nedges = nEdgesOnCell(cellid)
+! the atmosphere doesn't use this array, but it might be used for
+! the ocean.  test out the regional configuration and if the edges are
+! really never needed for the atmosphere don't allocate this
+! array and don't read it in to save space.
+if (nc_variable_exists(ncid, 'bdyMaskEdge')) then
+   allocate(bdyMaskEdge(nEdges))
+   call nc_get_variable(ncid, 'bdyMaskEdge', bdyMaskEdge, routine)
+   global_grid = .false.
+endif
 
-! go around the edges and check the boundary array.
-! if any are boundaries, return true.  else, false.
+if ( global_grid ) then
+   string1 = 'MPAS running in global mode'
+else
+   string1 = 'MPAS running in regional (limited-area) mode'
+endif
+call error_handler(E_MSG,'set_global_grid',string1,source,revision,revdate)
 
-do i=1, nedges
-   edgeid = edgesOnCell(i, cellid)
-
-   vertical = 1
-
-   ! FIXME: this is an int array.  is it 0=false,1=true?
-   if (boundaryEdge(edgeid, vertical) > 0) then
-      on_boundary = .true.
-      return
-   endif
-
-enddo
-
-on_boundary = .false.
-
-end function on_boundary
+end subroutine set_global_grid
 
 !------------------------------------------------------------
+!> Determine if this cell is on the boundary, and return true if so.   
+!> if the global flag is set, skip all code and return false immediately.
+!> Unlike the previous version of on_boundary, we do not return true
+!> if any surrounding edges belong to the boundary zone. We will take care
+!> of those edges either in uv_cell_to_edges or in find_surrounding_edges
+!> individually.
 
-function inside_cell(cellid, lat, lon)
-
-! this function no longer really determines if we are inside
-! the cell or not.  what it does do is determine if the nearest
-! cell is on the grid boundary in any way and says no if it is
-! a boundary.  if we have a flag saying this a global grid, we
-! can avoid doing any work and immediately return true.  for a
-! global atmosphere this is always so; for a regional atmosphere
-! and for the ocean (which does not have cells on land) this is
-! necessary test.
+function on_boundary_cell(cellid)
 
 integer,  intent(in)  :: cellid
-real(r8), intent(in)  :: lat, lon
-logical               :: inside_cell
+logical               :: on_boundary_cell
 
-! do this completely with topology of the grid.  if any of
-! the cell edges are marked as boundary edges, return no.
-! otherwise return yes.
+on_boundary_cell = .false.
 
-integer :: nedges, i, edgeid, vert
+if (global_grid .or. .not. allocated(bdyMaskCell)) return
 
-! if we're on a global grid, skip all this code
-if (global_grid) then
-   inside_cell = .true.
-   return
-endif
+if (bdyMaskCell(cellid) > 0) on_boundary_cell = .true.
 
-nedges = nEdgesOnCell(cellid)
+end function on_boundary_cell
 
-! go around the edges and check the boundary array.
-! if any are true, return false.  even if we are inside
-! this cell, we aren't going to be able to interpolate it
-! so shorten the code path.
+!------------------------------------------------------------
+!> Determine if this edge is on the boundary
 
-! FIXME: at some point we can be more selective and try to
-! interpolate iff the edges of the three cells which are
-! going to contribute edges to the RBF exist, even if some
-! of the other cell edges are on the boundary.  so this
-! decision means we won't be interpolating some obs that in
-! theory we have enough information to interpolate.  but it
-! is conservative for now - we certainly won't try to interpolate
-! outside the existing grid.
+function on_boundary_edge(edgeid)
 
-do i=1, nedges
-   edgeid = edgesOnCell(i, cellid)
+integer,  intent(in)  :: edgeid
+logical               :: on_boundary_edge
 
-   ! FIXME: this is an int array.  is it 0=false,1=true?
-   ! BOTHER - we need the vert for this and we don't have it
-   ! and in fact can't compute it if the interpolation point
-   ! has pressure or height as its vertical coordinate.
-   vert = 1
+on_boundary_edge = .false.
 
-   if (boundaryEdge(edgeid, vert) > 0) then
-      inside_cell = .false.
-      return
-   endif
+if (global_grid .or. .not. allocated(bdyMaskEdge)) return
 
-enddo
+if (bdyMaskEdge(edgeid) > 0) on_boundary_edge = .true.
 
-inside_cell = .true.
+end function on_boundary_edge
 
-end function inside_cell
+!------------------------------------------------------------
+!> Determine if any of these edges are on the boundary
+
+function on_boundary_edgelist(edgeids)
+
+integer,  intent(in)  :: edgeids(:)
+logical               :: on_boundary_edgelist
+
+on_boundary_edgelist = .false.
+
+if (global_grid .or. .not. allocated(bdyMaskEdge)) return
+
+if (any(bdyMaskEdge(edgeids) > 0)) on_boundary_edgelist = .true.
+
+end function on_boundary_edgelist
 
 !------------------------------------------------------------
 
@@ -6030,27 +5632,11 @@ enddo
 ! new edge is added.  check arrays for enough length before
 ! starting to work.
 
-
-! FIXME: the ocean files have:
-!  integer boundaryEdge(nVertLevels, nEdges)
-!  integer boundaryVertex(nVertLevels, nVertices)
-! as a first pass, if ANY of the edges or vertices are on
-! the boundary, punt and return 0 as the edge count.  later
-! once this is working, decide if a single boundary vertex or
-! edge is ok if it's the exterior of the edges we are including
-! and if it has good data values.
-
 listlen = 0
 do c=1, ncells
    edgecount = nEdgesOnCell(cellid_list(c))
    do e=1, edgecount
       nextedge = edgesOnCell(e, cellid_list(c))
-      ! FIXME:
-      ! if (boundaryEdge(nextedge, vert)) then
-      !    nedges = 0
-      !    edge_list(:) = -1
-      !    return
-      ! endif
       found = .false.
       addloop: do l=1, listlen
          if (edge_list(l) == nextedge) then
@@ -6073,9 +5659,6 @@ end subroutine make_edge_list_from_verts
 
 subroutine make_edge_list_from_cells(ncells, cellids, nedges, edge_list)
 
-! FIXME: will need a vertical level number input arg here to detect
-! the boundary edges/vertices correctly.
-
 ! given a list of cellids, return a unique list of edges
 ! the edge_list output should be at least ncells * maxedges long
 
@@ -6091,27 +5674,11 @@ logical :: found
 ! new edge is added.  check arrays for enough length before
 ! starting to work.
 
-
-! FIXME: the ocean files have:
-!  integer boundaryEdge(nVertLevels, nEdges)
-!  integer boundaryVertex(nVertLevels, nVertices)
-! as a first pass, if ANY of the edges or vertices are on
-! the boundary, punt and return 0 as the edge count.  later
-! once this is working, decide if a single boundary vertex or
-! edge is ok if it's the exterior of the edges we are including
-! and if it has good data values.
-
 listlen = 0
 do c=1, ncells
    edgecount = nEdgesOnCell(cellids(c))
    do e=1, edgecount
       nextedge = edgesOnCell(e, cellids(c))
-      ! FIXME:
-      ! if (boundaryEdge(nextedge, vert)) then
-      !    nedges = 0
-      !    edge_list(:) = -1
-      !    return
-      ! endif
       found = .false.
       addloop: do l=1, listlen
          if (edge_list(l) == nextedge) then
@@ -6204,27 +5771,11 @@ cell_list(3) = cellsOnVertex(3, vertexid)
 ncells = 3
 if (degree == 1) return
 
-
-! FIXME: the ocean files have:
-!  integer boundaryEdge(nVertLevels, nEdges)
-!  integer boundaryVertex(nVertLevels, nVertices)
-! as a first pass, if ANY of the edges or vertices are on
-! the boundary, punt and return 0 as the edge count.  later
-! once this is working, decide if a single boundary vertex or
-! edge is ok if it's the exterior of the edges we are including
-! and if it has good data values.
-
 listlen = ncells
 do c=1, ncells
    vertcount = nEdgesOnCell(cell_list(c))
    do v=1, vertcount
       nextvert = verticesOnCell(v, cell_list(c))
-      ! FIXME:
-      ! if (boundaryVertex(nextvert, vert)) then
-      !    ncells = 0
-      !    cell_list(:) = -1
-      !    return
-      ! endif
       do c2=1, 3
          nextcell = cellsOnVertex(c2, nextvert)
          found = .false.
@@ -6251,12 +5802,6 @@ do c=1, ncells
    vertcount = nEdgesOnCell(cell_list(c))
    do v=1, vertcount
       nextvert = verticesOnCell(v, cell_list(c))
-      ! FIXME:
-      ! if (boundaryVertex(nextvert, vert)) then
-      !    ncells = 0
-      !    cell_list(:) = -1
-      !    return
-      ! endif
       do c2=1, 3
          nextcell = cellsOnVertex(c2, nextvert)
          found = .false.
@@ -6706,6 +6251,8 @@ do iCell = 1, nCells
                      +  edgeNormalVectors(2,iEdge) * north(2,iCell) &
                      +  edgeNormalVectors(3,iEdge) * north(3,iCell))
       enddo
+      ! Ha: We do not update edges in the boundary zone.
+      if(on_boundary_edge(iEdge)) du(:,iEdge) = 0.0
    enddo
 enddo
 
@@ -6828,6 +6375,44 @@ call nc_check(ret, 'closing', filename)
 
 
 end function read_model_time
+
+!----------------------------------------------------------------------
+! Returns integers taken from tstring
+! It is assumed that the tstring char array is as YYYY-MM-DD_hh:mm:ss
+
+subroutine set_wrf_date (tstring, year, month, day, hour, minute, second)
+
+integer,                intent(in) :: year, month, day, hour, minute, second
+character(len=TIMELEN), intent(out)  :: tstring
+
+character(len=4)  :: ch_year
+character(len=2)  :: ch_month, ch_day, ch_hour, ch_minute, ch_second
+
+write(ch_year,'(i4)') year
+write(ch_month,'(i2)') month
+if (ch_month(1:1) == " ") ch_month(1:1) = "0"
+write(ch_day,'(i2)') day
+if (ch_day(1:1) == " ") ch_day(1:1) = "0"
+write(ch_hour,'(i2)') hour
+if (ch_hour(1:1) == " ") ch_hour(1:1) = "0"
+write(ch_minute,'(i2)') minute
+if (ch_minute(1:1) == " ") ch_minute(1:1) = "0"
+write(ch_second,'(i2)') second
+if (ch_second(1:1) == " ") ch_second(1:1) = "0"
+tstring(1:4)   = ch_year
+tstring(5:5)   = "-"
+tstring(6:7)   = ch_month
+tstring(8:8)   = "-"
+tstring(9:10)  = ch_day
+tstring(11:11) = "_"
+tstring(12:13) = ch_hour
+tstring(14:14) = ":"
+tstring(15:16) = ch_minute
+tstring(17:17) = ":"
+tstring(18:19) = ch_second
+
+end subroutine set_wrf_date
+
 
 !===================================================================
 ! End of model_mod
