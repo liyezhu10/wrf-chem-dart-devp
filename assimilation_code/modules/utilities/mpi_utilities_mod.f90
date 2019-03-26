@@ -39,25 +39,25 @@ use time_manager_mod, only : time_type, get_time, set_time
 use mpi
 
 ! the NAG compiler needs these special definitions enabled
-! but we don't preprocess this file (why?) so you have to
-! edit this by hand for NAG.
 
-!#ifdef __NAG__
- !use F90_unix_proc, only : sleep, system, exit
- !! block for NAG compiler
- !  PURE SUBROUTINE SLEEP(SECONDS,SECLEFT)
- !    INTEGER,INTENT(IN) :: SECONDS
- !    INTEGER,OPTIONAL,INTENT(OUT) :: SECLEFT
- !
- !  SUBROUTINE SYSTEM(STRING,STATUS,ERRNO)
- !    CHARACTER*(*),INTENT(IN) :: STRING
- !    INTEGER,OPTIONAL,INTENT(OUT) :: STATUS,ERRNO
- !
- !!also used in exit_all outside this module
- !  SUBROUTINE EXIT(STATUS)
- !    INTEGER,OPTIONAL :: STATUS
- !! end block
-!#endif
+! !!NAG_BLOCK_EDIT START COMMENTED_OUT
+! !#ifdef __NAG__
+! use F90_unix_proc, only : sleep, system, exit
+! ! block for NAG compiler
+!   PURE SUBROUTINE SLEEP(SECONDS,SECLEFT)
+!     INTEGER,INTENT(IN) :: SECONDS
+!     INTEGER,OPTIONAL,INTENT(OUT) :: SECLEFT
+! 
+!   SUBROUTINE SYSTEM(STRING,STATUS,ERRNO)
+!     CHARACTER*(*),INTENT(IN) :: STRING
+!     INTEGER,OPTIONAL,INTENT(OUT) :: STATUS,ERRNO
+! 
+! !also used in exit_all outside this module
+!   SUBROUTINE EXIT(STATUS)
+!     INTEGER,OPTIONAL :: STATUS
+! ! end block
+!  !#endif
+! !!NAG_BLOCK_EDIT END COMMENTED_OUT
 
 implicit none
 private
@@ -113,15 +113,15 @@ public :: initialize_mpi_utilities, finalize_mpi_utilities,                  &
           all_reduce_min_max  ! deprecated, replace by broadcast_minmax
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
+character(len=*), parameter :: source   = &
    "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 logical :: module_initialized   = .false.
 
 character(len = 256) :: saved_progname = ''
-character(len = 256) :: shell_name = ''   ! if needed, add ksh, tcsh, bash, etc
+character(len = 128) :: shell_name = ''   ! if needed, add ksh, tcsh, bash, etc
 integer :: head_task = 0         ! def 0, but N-1 if reverse_task_layout true
 logical :: print4status = .true. ! minimal messages for async4 handshake
 
@@ -184,6 +184,8 @@ contains
 ! mpi cover routines
 !-----------------------------------------------------------------------------
 
+!-----------------------------------------------------------------------------
+
 !> Initialize MPI and query it for global information.  Make a duplicate
 !> communicator so that any user code which wants to call MPI will not 
 !> interfere with any outstanding asynchronous requests, accidental tag
@@ -226,10 +228,10 @@ if (.not.already) then
 endif
 
 if (.not. present(communicator)) then
-! give this a temporary initial value, in case we call the abort code.
-! later down, we will dup the world comm and use a private comm for
-! our communication.
-my_local_comm = MPI_COMM_WORLD
+   ! give this a temporary initial value, in case we call the abort code.
+   ! later down, we will dup the world comm and use a private comm for
+   ! our communication.
+   my_local_comm = MPI_COMM_WORLD
 else
    my_local_comm = communicator
    given_communicator = .true.
@@ -259,6 +261,9 @@ if (present(progname)) then
    endif
 endif
 
+!> @todo FIXME this is in a funny place now.
+!> set module_initialized = .true. up higher, and
+!> just call register_module() here, no if() block..
 if ( .not. module_initialized ) then
    ! Initialize the module with utilities
    call register_module(source, revision, revdate)
@@ -436,6 +441,7 @@ endif
 ! Normally we shut down MPI here.  If the user tells us not to shut down MPI
 ! they must call this routine from their own code before exiting.
 if (dofinalize) then
+   if (verbose) write(*,*) "PE", myrank, ": MPI finalize being called now"
    call MPI_Finalize(errcode)
    if (errcode /= MPI_SUCCESS) then
       write(errstring, '(a,i8)') 'MPI_Finalize returned error code ', errcode
@@ -445,18 +451,18 @@ else
    if (verbose) write(*,*) "PE", myrank, ": finalize_mpi_utilities called without shutting down MPI"
 endif
 
-! on some systems you cannot do any i/o after mpi has shut down.
-! tasks hang waiting to write to closed streams.
+! NO I/O after calling MPI_Finalize.  on some MPI implementations
+! this can hang the job.
 
 end subroutine finalize_mpi_utilities
 
 
 !-----------------------------------------------------------------------------
 
-function task_count()
+!> Return the total number of MPI tasks.  e.g. if the number of tasks is 4,
+!> it returns 4.  (The actual task numbers are 0-3.)
 
-! Return the total number of MPI tasks.  e.g. if the number of tasks is 4,
-! it returns 4.  (The actual task numbers are 0-3.)
+function task_count()
 
 integer :: task_count
 
@@ -858,123 +864,6 @@ end subroutine array_broadcast
 
 
 !-----------------------------------------------------------------------------
-! TODO: do i need to overload this for both integer and real?
-!       do i need to handle 2D inputs?
-
-subroutine array_distribute(srcarray, root, dstarray, dstcount, how, which)
- real(r8), intent(in) :: srcarray(:)
- integer, intent(in) :: root
- real(r8), intent(out) :: dstarray(:)
- integer, intent(out) :: dstcount
- integer, intent(in) :: how
- integer, intent(out) :: which(:)
-
-! 'srcarray' on the root task will be distributed across all the tasks
-! into 'dstarray'.  dstarray must be large enough to hold each task's share
-! of the data.  The actual number of values returned on each task will be
-! passed back in the 'count' argument.  'how' is a flag to select how to
-! distribute the data (round-robin, contiguous chunks, etc).  'which' is an
-! integer index array which lists which of the original values were selected
-! and put into 'dstarray'.
-
-real(r8), allocatable :: localchunk(:)
-integer :: srccount, leftover
-integer :: i, tag, errcode
-logical :: iamroot
-integer :: status(MPI_STATUS_SIZE)
-
-if ( .not. module_initialized ) then
-   write(errstring, *) 'initialize_mpi_utilities() must be called first'
-   call error_handler(E_ERR,'array_distribute', errstring, source, revision, revdate)
-endif
-
-! simple idiotproofing
-if ((root < 0) .or. (root >= total_tasks)) then
-   write(errstring, '(a,i8,a,i8)') "root task id ", root, &
-                                   "must be >= 0 and < ", total_tasks
-   call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-endif
-
-iamroot = (root == myrank)
-tag = 1
-
-srccount = size(srcarray)
-
-! TODO: right now this code does contig chunks only
-! TODO: it should select on the 'how' argument
-dstcount = srccount / total_tasks
-leftover = srccount - (dstcount * total_tasks)
-if (myrank == total_tasks-1) dstcount = dstcount + leftover
-
-
-! idiotproofing, continued...
-if (size(dstarray) < dstcount) then
-   write(errstring, '(a,i8,a,i8)') "size of dstarray is", size(dstarray), & 
-                      " but must be >= ", dstcount
-   call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-endif
-if (size(which) < dstcount) then
-   write(errstring, '(a,i8,a,i8)') "size of which is", size(which), & 
-                      " but must be >= ", dstcount
-   call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-endif
-
-! TODO: this code is separate from the 'dstcount' computation because we
-! need to test to be sure the user has passed us in arrays large enough to
-! hold the data, but then this section needs to have a select (how) and set
-! the corresponding index numbers accordingly.
-which(1:dstcount) = (/ (i, i= myrank *dstcount, (myrank+1)*dstcount - 1) /)
-if (size(which) > dstcount) which(dstcount+1:) = -1
-   
-
-if (.not.iamroot) then
-
-   ! my task is receiving data.
-   call MPI_Recv(dstarray, dstcount, datasize, root, MPI_ANY_TAG, &
-                 my_local_comm, status, errcode)
-   if (errcode /= MPI_SUCCESS) then
-      write(errstring, '(a,i8)') 'MPI_Recv returned error code ', errcode
-      call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-   endif
-
-else
-   ! my task must send to everyone else and copy to myself.
-   allocate(localchunk(dstcount), stat=errcode)  
-   if (errcode /= 0) then
-      write(errstring, *) 'allocation error of allocatable array'
-      call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-   endif
-
-   do i=0, total_tasks-1
-      ! copy correct data from srcarray to localchunk for each destination
-      if (i == myrank) then
-         ! this is my task, so do a copy from localchunk to dstarray
-         dstarray(1:dstcount) = localchunk(1:dstcount)
-      else
-         ! call MPI to send the data to the remote task
-         call MPI_Ssend(localchunk, dstcount, datasize, i, tag, &
-                        my_local_comm, errcode)
-         if (errcode /= MPI_SUCCESS) then
-            write(errstring, '(a,i8)') 'MPI_Ssend returned error code ', errcode
-            call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-         endif
-      endif
-      tag = tag + 1
-   enddo
-
-   deallocate(localchunk, stat=errcode)  
-   if (errcode /= 0) then
-      write(errstring, *) 'deallocation error of allocatable array'
-      call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-   endif
-endif
-   
-! set any additional space which wasn't filled with zeros.
-if (size(dstarray) > dstcount) dstarray(dstcount+1:) = 0.0
-
-end subroutine array_distribute
-
-!-----------------------------------------------------------------------------
 ! DART-specific cover utilities
 !-----------------------------------------------------------------------------
 
@@ -995,14 +884,15 @@ iam_task0 = (myrank == 0)
 end function iam_task0
 
 !-----------------------------------------------------------------------------
+
+!> this must be paired with the same number of broadcast_recv()s on all 
+!> other tasks.  it will not return until all tasks in the communications 
+!> group have made the call.
+!>
 !> cover routine for array broadcast.  one additional sanity check -- make 
 !> sure the 'from' matches my local task id.  also, these arrays are
 !> intent(in) here, but they call a routine which is intent(inout) so they
 !> must be the same here.
-!>
-!> this must be paired with the same number of broadcast_recv()s on all 
-!> other tasks.  it will not return until all tasks in the communications 
-!> group have made the call.
 
 subroutine broadcast_send(from, array1, array2, array3, array4, array5, &
                           scalar1, scalar2, scalar3, scalar4, scalar5)
@@ -1071,17 +961,17 @@ endif
 end subroutine broadcast_send
 
 !-----------------------------------------------------------------------------
-!> cover routine for array broadcast.  one additional sanity check -- make 
-!> sure the 'from' is not the same as my local task id.  these arrays are
-!> intent(out) here, but they call a routine which is intent(inout) so they
-!> must be the same here.
-!>
+
 !> this must be paired with a single broadcast_send() on one other task, and
 !> broadcast_recv() on all other tasks, and it must match exactly the number 
 !> of args in the sending call.
 !> it will not return until all tasks in the communications group have
 !> made the call.
-
+!>
+!> cover routine for array broadcast.  one additional sanity check -- make 
+!> sure the 'from' is not the same as my local task id.  these arrays are
+!> intent(out) here, but they call a routine which is intent(inout) so they
+!> must be the same here.
 
 subroutine broadcast_recv(from, array1, array2, array3, array4, array5, &
                           scalar1, scalar2, scalar3, scalar4, scalar5)
@@ -1150,6 +1040,7 @@ endif
 end subroutine broadcast_recv
 
 !-----------------------------------------------------------------------------
+
 !> figure out how many items are in the specified arrays, total.
 !> also note if there's more than a single array (array1) to send,
 !> and if there are any scalars specified.
@@ -1389,10 +1280,11 @@ if (present(scalar5)) scalar5 = local(5)
 end subroutine unpackscalar
    
 !-----------------------------------------------------------------------------
+!-----------------------------------------------------------------------------
 ! overloaded global reduce routines
 
-! The external32 representations of the datatypes returned by MPI_TYPE_CREATE_F90_REAL/COMPLEX/INTEGER 
-! are given by the following rules.
+! The external32 representations of the datatypes returned by 
+! MPI_TYPE_CREATE_F90_REAL/COMPLEX/INTEGER are given by the following rules.
 ! For MPI_TYPE_CREATE_F90_REAL:
 ! 
 !    if      (p > 33) or (r > 4931) then  external32 representation 
@@ -1413,12 +1305,17 @@ end subroutine unpackscalar
 !
 !
 !-----------------------------------------------------------------------------
-subroutine sum_across_tasks_int4(addend, sum)
- integer, intent(in) :: addend
- integer, intent(out) :: sum
 
- integer :: errcode
- integer :: localaddend(1), localsum(1)
+!> take values from each task, add them, and return
+!> the sum to all tasks.  integer version
+
+subroutine sum_across_tasks_int4(addend, sum)
+
+integer, intent(in) :: addend
+integer, intent(out) :: sum
+
+integer :: errcode
+integer :: localaddend(1), localsum(1)
 
 if ( .not. module_initialized ) then
    write(errstring, *) 'initialize_mpi_utilities() must be called first'
@@ -1441,12 +1338,17 @@ sum = localsum(1)
 end subroutine sum_across_tasks_int4
 
 !-----------------------------------------------------------------------------
-subroutine sum_across_tasks_int8(addend, sum)
- integer(i8), intent(in)  :: addend
- integer(i8), intent(out) :: sum
 
- integer :: errcode
- integer(i8) :: localaddend(1), localsum(1)
+!> take values from each task, add them, and return
+!> the sum to all tasks. long integer version.
+
+subroutine sum_across_tasks_int8(addend, sum)
+
+integer(i8), intent(in)  :: addend
+integer(i8), intent(out) :: sum
+
+integer :: errcode
+integer(i8) :: localaddend(1), localsum(1)
 
 if ( .not. module_initialized ) then
    write(errstring, *) 'initialize_mpi_utilities() must be called first'
@@ -1470,12 +1372,16 @@ end subroutine sum_across_tasks_int8
 
 !-----------------------------------------------------------------------------
 
-subroutine sum_across_tasks_real(addend, sum)
- real(r8), intent(in) :: addend
- real(r8), intent(out) :: sum
+!> take values from each task, add them, and return
+!> the sum to all tasks. real version.
 
- integer :: errcode
- real(r8) :: localaddend(1), localsum(1)
+subroutine sum_across_tasks_real(addend, sum)
+
+real(r8), intent(in) :: addend
+real(r8), intent(out) :: sum
+
+integer :: errcode
+real(r8) :: localaddend(1), localsum(1)
 
 if ( .not. module_initialized ) then
    write(errstring, *) 'initialize_mpi_utilities() must be called first'
@@ -1496,6 +1402,111 @@ endif
 sum = localsum(1)
 
 end subroutine sum_across_tasks_real
+
+!-----------------------------------------------------------------------------
+
+!> Sum array items across all tasks and send
+!> results in an array of same size to one task.
+
+subroutine send_sum_to(local_val, task, global_val)
+
+real(r8), intent(in)  :: local_val(:)  !> addend vals on each task
+integer,  intent(in)  :: task          !> task to collect on
+real(r8), intent(out) :: global_val(:) !> results returned only on given task
+
+integer :: errcode
+
+if ( .not. module_initialized ) then
+   write(errstring, *) 'initialize_mpi_utilities() must be called first'
+   call error_handler(E_ERR,'send_sum_to', errstring, source, revision, revdate)
+endif
+
+! collect values on a single given task 
+call mpi_reduce(local_val(:), global_val(:), size(global_val), datasize, MPI_SUM, &
+                task, get_dart_mpi_comm(), errcode)
+
+end subroutine send_sum_to
+
+!-----------------------------------------------------------------------------
+
+!> Collect global min and max values on one task.
+
+subroutine send_minmax_to(minmax, task, global_val)
+
+real(r8), intent(in)  :: minmax(2)     !> min max on each task
+integer,  intent(in)  :: task          !> task to collect on
+real(r8), intent(out) :: global_val(2) !> results returned only on given task
+
+integer :: errcode
+
+if ( .not. module_initialized ) then
+   write(errstring, *) 'initialize_mpi_utilities() must be called first'
+   call error_handler(E_ERR,'send_minmax_to', errstring, source, revision, revdate)
+endif
+
+! collect values on a single given task 
+call mpi_reduce(minmax(1:1), global_val(1:1), 1, datasize, MPI_MIN, task, get_dart_mpi_comm(), errcode)
+call mpi_reduce(minmax(2:2), global_val(2:2), 1, datasize, MPI_MAX, task, get_dart_mpi_comm(), errcode)
+
+end subroutine send_minmax_to
+
+!-----------------------------------------------------------------------------
+
+!> cover routine which is deprecated.  when all user code replaces this
+!> with broadcast_minmax(), remove this.
+
+subroutine all_reduce_min_max(min_var, max_var, num_elements)
+
+integer,  intent(in)    :: num_elements
+real(r8), intent(inout) :: min_var(num_elements)
+real(r8), intent(inout) :: max_var(num_elements)
+
+call broadcast_minmax(min_var, max_var, num_elements)
+
+end subroutine all_reduce_min_max
+
+!-----------------------------------------------------------------------------
+
+!> Find min and max of each element of an array, put the result on every task.
+!> Overwrites arrays min_var, max_var with the minimum and maximum for each 
+!> element across all tasks.
+
+subroutine broadcast_minmax(min_var, max_var, num_elements)
+
+integer,  intent(in)    :: num_elements
+real(r8), intent(inout) :: min_var(num_elements)
+real(r8), intent(inout) :: max_var(num_elements)
+
+integer :: errcode
+
+if ( .not. module_initialized ) then
+   write(errstring, *) 'initialize_mpi_utilities() must be called first'
+   call error_handler(E_ERR,'broadcast_minmax', errstring, source, revision, revdate)
+endif
+
+call mpi_allreduce(MPI_IN_PLACE, min_var, num_elements, datasize, MPI_MIN, get_dart_mpi_comm(), errcode)
+call mpi_allreduce(MPI_IN_PLACE, max_var, num_elements, datasize, MPI_MAX, get_dart_mpi_comm(), errcode)
+
+end subroutine broadcast_minmax
+
+!-----------------------------------------------------------------------------
+!> Broadcast logical
+
+subroutine broadcast_flag(flag, root)
+
+logical, intent(inout) :: flag
+integer, intent(in)    :: root !> relative to get_dart_mpi_comm()
+
+integer :: errcode
+
+if ( .not. module_initialized ) then
+   write(errstring, *) 'initialize_mpi_utilities() must be called first'
+   call error_handler(E_ERR,'broadcast_flag', errstring, source, revision, revdate)
+endif
+
+call MPI_Bcast(flag, 1, MPI_LOGICAL, root, my_local_comm, errcode)
+
+end subroutine broadcast_flag
 
 !-----------------------------------------------------------------------------
 ! pipe-related utilities - used in 'async4' handshakes between mpi jobs
@@ -1681,7 +1692,7 @@ end subroutine restart_task
 subroutine finished_task(async)
  integer, intent(in) :: async
 
-character(len = 32) :: fifo_name, filter_to_model, non_pipe
+character(len = 32) :: filter_to_model, non_pipe
 integer :: rc
 
 if ( .not. module_initialized ) then
@@ -1727,9 +1738,10 @@ end subroutine finished_task
 !> is true, do each call serially.
 
 function shell_execute(execute_string, serialize)
- character(len=*), intent(in) :: execute_string
- logical, intent(in), optional :: serialize
- integer :: shell_execute
+
+character(len=*), intent(in) :: execute_string
+logical, intent(in), optional :: serialize
+integer :: shell_execute
 
 logical :: all_at_once
 integer :: errcode, dummy(1)
@@ -1752,7 +1764,7 @@ shell_execute = -1
 if (all_at_once) then
 
    ! all tasks call system at the same time
-   call do_system(shell_name, execute_string, shell_execute)
+   call do_system(execute_string, shell_execute)
    if (async2_verbose) write(*,*) "PE", myrank, ": execution returns, rc = ", shell_execute
 
    return
@@ -1767,7 +1779,7 @@ dummy = 0
 if (myrank == 0) then
 
    ! my turn to execute
-   call do_system(shell_name, execute_string, shell_execute)
+   call do_system(execute_string, shell_execute)
    if (async2_verbose) write(*,*) "PE", myrank, ": execution returns, rc = ", shell_execute
 
    if (total_tasks > 1) then
@@ -1792,7 +1804,7 @@ else if (myrank /= (total_tasks-1)) then
    endif
 
    ! my turn to execute
-   call do_system(shell_name, execute_string, shell_execute)
+   call do_system(execute_string, shell_execute)
    if (async2_verbose) write(*,*) "PE", myrank, ": execution returns, rc = ", shell_execute
 
    ! and now tell (me+1) to go
@@ -1814,7 +1826,7 @@ else
    endif
 
    ! my turn to execute
-   call do_system(shell_name, execute_string, shell_execute)
+   call do_system(execute_string, shell_execute)
    if (async2_verbose) write(*,*) "PE", myrank, ": execution returns, rc = ", shell_execute
 
 endif
@@ -1824,18 +1836,21 @@ end function shell_execute
 !-----------------------------------------------------------------------------
 
 !> wrapper so you only have to make this work in a single place
+!> 'shell_name' is a namelist item and normally is the null string.
+!> on at least on cray system, the compute nodes only had one type
+!> of shell and you had to specify it.
 
-subroutine do_system(shell, execute, rc)
+subroutine do_system(execute, rc)
 
-character(len=*), intent(in)  :: shell
 character(len=*), intent(in)  :: execute
 integer,          intent(out) :: rc
 
-!#ifdef __NAG__
-!  call system(trim(shell)//' '//trim(execute)//' '//char(0), errno=rc)
-!#else
-   rc = system(trim(shell)//' '//trim(execute)//' '//char(0))
-!#endif
+! !!NAG_BLOCK_EDIT START COMMENTED_OUT
+!  call system(trim(shell_name)//' '//trim(execute)//' '//char(0), errno=rc)
+! !!NAG_BLOCK_EDIT END COMMENTED_OUT
+! !!OTHER_BLOCK_EDIT START COMMENTED_IN
+    rc = system(trim(shell_name)//' '//trim(execute)//' '//char(0))
+! !!OTHER_BLOCK_EDIT END COMMENTED_IN
 
 end subroutine do_system
 
@@ -1903,111 +1918,15 @@ read_mpi_timer = now - base
 end function read_mpi_timer
 
 !-----------------------------------------------------------------------------
-!> return our private communicator (or world, if no private created)
+!> return our communicator
 
 function get_dart_mpi_comm()
- integer :: get_dart_mpi_comm
 
- get_dart_mpi_comm = my_local_comm
+integer :: get_dart_mpi_comm
+
+get_dart_mpi_comm = my_local_comm
 
 end function get_dart_mpi_comm
-
-!-----------------------------------------------------------------------------
-!> Collect sum across tasks for a given array.
-
-subroutine send_sum_to(local_val, task, global_val)
-
-real(r8), intent(in)  :: local_val(:) !> min max on each task
-integer,  intent(in)  :: task !> task to collect on
-real(r8), intent(out) :: global_val(:) !> only concerned with this on task collecting result
-
-integer :: errcode
-
-if ( .not. module_initialized ) then
-   write(errstring, *) 'initialize_mpi_utilities() must be called first'
-   call error_handler(E_ERR,'send_sum_to', errstring, source, revision, revdate)
-endif
-
-! collect values on a single given task 
-call mpi_reduce(local_val(:), global_val(:), size(global_val), datasize, MPI_SUM, task, get_dart_mpi_comm(), errcode)
-
-end subroutine send_sum_to
-
-!-----------------------------------------------------------------------------
-!> Collect min and max on task.
-
-subroutine send_minmax_to(minmax, task, global_val)
-
-real(r8), intent(in)  :: minmax(2) !> min max on each task
-integer,  intent(in)  :: task !> task to collect on
-real(r8), intent(out) :: global_val(2) !> only concerned with this on task collecting result
-
-integer :: errcode
-
-if ( .not. module_initialized ) then
-   write(errstring, *) 'initialize_mpi_utilities() must be called first'
-   call error_handler(E_ERR,'send_minmax_to', errstring, source, revision, revdate)
-endif
-
-! collect values on a single given task 
-call mpi_reduce(minmax(1:1), global_val(1:1), 1, datasize, MPI_MIN, task, get_dart_mpi_comm(), errcode)
-call mpi_reduce(minmax(2:2), global_val(2:2), 1, datasize, MPI_MAX, task, get_dart_mpi_comm(), errcode)
-
-end subroutine send_minmax_to
-
-!-----------------------------------------------------------------------------
-!> cover routine which is deprecated.  when all user code replaces this
-!> with broadcast_minmax(), remove this.
-subroutine all_reduce_min_max(min_var, max_var, num_elements)
-
-integer,  intent(in)    :: num_elements
-real(r8), intent(inout) :: min_var(num_elements)
-real(r8), intent(inout) :: max_var(num_elements)
-
-call broadcast_minmax(min_var, max_var, num_elements)
-
-end subroutine all_reduce_min_max
-
-!-----------------------------------------------------------------------------
-!> Find min and max of each element of an array, put the result on every task.
-!> Overwrites arrays min_var, max_var with the minimum and maximum for each 
-!> element across all tasks.
-subroutine broadcast_minmax(min_var, max_var, num_elements)
-
-integer,  intent(in)    :: num_elements
-real(r8), intent(inout) :: min_var(num_elements)
-real(r8), intent(inout) :: max_var(num_elements)
-
-integer :: errcode
-
-if ( .not. module_initialized ) then
-   write(errstring, *) 'initialize_mpi_utilities() must be called first'
-   call error_handler(E_ERR,'broadcast_minmax', errstring, source, revision, revdate)
-endif
-
-call mpi_allreduce(MPI_IN_PLACE, min_var, num_elements, datasize, MPI_MIN, get_dart_mpi_comm(), errcode)
-call mpi_allreduce(MPI_IN_PLACE, max_var, num_elements, datasize, MPI_MAX, get_dart_mpi_comm(), errcode)
-
-end subroutine broadcast_minmax
-
-!-----------------------------------------------------------------------------
-!> Broadcast logical
-
-subroutine broadcast_flag(flag, root)
-
-logical, intent(inout) :: flag
-integer, intent(in)    :: root !> relative to get_dart_mpi_comm()
-
-integer :: errcode
-
-if ( .not. module_initialized ) then
-   write(errstring, *) 'initialize_mpi_utilities() must be called first'
-   call error_handler(E_ERR,'broadcast_flag', errstring, source, revision, revdate)
-endif
-
-call MPI_Bcast(flag, 1, MPI_LOGICAL, root, my_local_comm, errcode)
-
-end subroutine broadcast_flag
 
 !-----------------------------------------------------------------------------
 !-----------------------------------------------------------------------------
@@ -2028,8 +1947,8 @@ integer :: errcode
 ! => Don't do anything with x in between mpi_get and mpi_win_lock
 
 ! Note to programmer: openmpi 1.10.0 does not
-! allow scalars in mpi calls. openmpi 1.10.1 fixes
-! this.
+! allow scalars in mpi calls. openmpi 1.10.1 fixes this.
+
 target_disp = (mindex - 1)
 call mpi_win_lock(MPI_LOCK_SHARED, owner, 0, window, errcode)
 call mpi_get(x, 1, datasize, owner, target_disp, 1, datasize, window, errcode)

@@ -24,6 +24,9 @@ use utilities_mod, only : register_module, error_handler, &
                              initialize_utilities, finalize_utilities
 use time_manager_mod, only : time_type, set_time
 
+! the NAG compiler needs these special definitions enabled
+
+! !!NAG_BLOCK_EDIT START COMMENTED_OUT
 !#ifdef __NAG__
  !use F90_unix_proc, only : sleep, system, exit
  !! block for NAG compiler
@@ -40,6 +43,8 @@ use time_manager_mod, only : time_type, set_time
  !    INTEGER,OPTIONAL :: STATUS
  !! end block
 !#endif
+! !!NAG_BLOCK_EDIT END COMMENTED_OUT
+
 
 implicit none
 private
@@ -66,6 +71,7 @@ private
 ! !!SYSTEM_BLOCK_EDIT END COMMENTED_OUT
 
 
+! allow global sum to be computed for integers, r4, and r8s
 interface sum_across_tasks
    module procedure sum_across_tasks_int4
    module procedure sum_across_tasks_int8
@@ -99,7 +105,7 @@ character(len=128), parameter :: revdate  = "$Date$"
 logical :: module_initialized   = .false.
 
 character(len = 256) :: saved_progname = ''
-character(len = 256) :: shell_name = ''   ! if needed, add ksh, tcsh, bash, etc
+character(len = 128) :: shell_name = ''   ! if needed, add ksh, tcsh, bash, etc
 
 character(len = 256) :: errstring
 
@@ -280,30 +286,6 @@ end subroutine array_broadcast
 
 
 !-----------------------------------------------------------------------------
-
-subroutine array_distribute(srcarray, root, dstarray, dstcount, how, which)
- real(r8), intent(in)  :: srcarray(:)
- integer,  intent(in)  :: root
- real(r8), intent(out) :: dstarray(:)
- integer,  intent(out) :: dstcount
- integer,  intent(in)  :: how
- integer,  intent(out) :: which(:)
-
-
-if ( .not. module_initialized ) call initialize_mpi_utilities()
-
-! simple idiotproofing
-if ((root < 0) .or. (root >= total_tasks)) then
-   write(errstring, '(a,i8,a,i8)') "root task id ", root, &
-                                   "must be >= 0 and < ", total_tasks
-   call error_handler(E_ERR,'array_broadcast', errstring, source, revision, revdate)
-endif
-
-dstarray = srcarray
-
-end subroutine array_distribute
-
-!-----------------------------------------------------------------------------
 ! DART-specific cover utilities
 !-----------------------------------------------------------------------------
 
@@ -408,6 +390,79 @@ sum = addend
 
 end subroutine sum_across_tasks_real
 
+!-----------------------------------------------------------------------------
+
+!> Sum array items across all tasks and send
+!> results in an array of same size to one task.
+
+subroutine send_sum_to(local_val, task, global_val)
+
+real(r8), intent(in)  :: local_val(:)  !> addend vals on each task
+integer,  intent(in)  :: task          !> task to collect on
+real(r8), intent(out) :: global_val(:) !> results returned only on given task
+
+global_val(:) = local_val(:) ! only one task.
+
+end subroutine send_sum_to
+
+!-----------------------------------------------------------------------------
+
+!> Collect min and max on task.
+
+subroutine send_minmax_to(minmax, task, global_val)
+
+real(r8), intent(in)  :: minmax(2)     !> min max on each task
+integer,  intent(in)  :: task          !> task to collect on
+real(r8), intent(out) :: global_val(2) !> results returned only on given task
+
+global_val(:) = minmax(:) ! only one task.
+
+end subroutine send_minmax_to
+
+!-----------------------------------------------------------------------------
+
+!> cover routine which is deprecated.  when all user code replaces this
+!> with broadcast_minmax(), remove this.
+
+subroutine all_reduce_min_max(min_var, max_var, num_elements)
+
+integer,  intent(in)    :: num_elements
+real(r8), intent(inout) :: min_var(num_elements)
+real(r8), intent(inout) :: max_var(num_elements)
+
+call broadcast_minmax(min_var, max_var, num_elements)
+
+end subroutine all_reduce_min_max
+
+!-----------------------------------------------------------------------------
+
+!> Find min and max of each element of an array across tasks, put the result on every task.
+!> For this null_mpi_version min_var and max_var are unchanged because there is
+!> only 1 task.
+
+subroutine broadcast_minmax(min_var, max_var, num_elements)
+
+integer,  intent(in)    :: num_elements
+real(r8), intent(inout) :: min_var(num_elements)
+real(r8), intent(inout) :: max_var(num_elements)
+
+end subroutine broadcast_minmax
+
+!-----------------------------------------------------------------------------
+
+!> Broadcast logical
+
+subroutine broadcast_flag(flag, root)
+
+logical, intent(inout) :: flag
+integer, intent(in)    :: root !> relative to get_dart_mpi_comm()
+
+integer :: errcode
+
+! does nothing because data is already there
+
+end subroutine broadcast_flag
+
 
 !-----------------------------------------------------------------------------
 ! pipe-related utilities
@@ -441,11 +496,9 @@ function shell_execute(execute_string, serialize)
  logical, intent(in), optional :: serialize
  integer :: shell_execute
 
-character(len=255) :: doit
-
 !DEBUG: print *, "in-string is: ", trim(execute_string)
 
-call do_system(shell_name, execute_string, shell_execute)
+call do_system(execute_string, shell_execute)
 
 !DEBUG: print *, "execution returns, rc = ", shell_execute
     
@@ -454,18 +507,21 @@ end function shell_execute
 !-----------------------------------------------------------------------------
 
 !> wrapper so you only have to make this work in a single place
+!> 'shell_name' is a namelist item and normally is the null string.
+!> on at least on cray system, the compute nodes only had one type
+!> of shell and you had to specify it.
 
-subroutine do_system(shell, execute, rc)
+subroutine do_system(execute, rc)
 
-character(len=*), intent(in)  :: shell
 character(len=*), intent(in)  :: execute
 integer,          intent(out) :: rc
 
-!#ifdef __NAG__
-!  call system(trim(shell)//' '//trim(execute)//' '//char(0), errno=rc)
-!#else
-   rc = system(trim(shell)//' '//trim(execute)//' '//char(0))
-!#endif
+! !!NAG_BLOCK_EDIT START COMMENTED_OUT
+!  call system(trim(shell_name)//' '//trim(execute)//' '//char(0), errno=rc)
+! !!NAG_BLOCK_EDIT END COMMENTED_OUT
+! !!OTHER_BLOCK_EDIT START COMMENTED_IN
+    rc = system(trim(shell_name)//' '//trim(execute)//' '//char(0))
+! !!OTHER_BLOCK_EDIT END COMMENTED_IN
 
 end subroutine do_system
 
@@ -541,85 +597,14 @@ end function read_mpi_timer
 !> Return the communicator number.
 
 function get_dart_mpi_comm()
- integer :: get_dart_mpi_comm
+
+integer :: get_dart_mpi_comm
 
 get_dart_mpi_comm = my_local_comm
 
 end function get_dart_mpi_comm
 
 !-----------------------------------------------------------------------------
-!> Collect sum across tasks for a given array.
-
-subroutine send_sum_to(local_val, task, global_val)
-
-real(r8), intent(in)  :: local_val(:) !> min max on each task
-integer,  intent(in)  :: task !> task to collect on
-real(r8), intent(out) :: global_val(:) !> only concerned with this on task collecting result
-
-integer :: errcode
-
-! collect values on a single given task 
-global_val(:) = local_val(:) ! only one task.
-
-end subroutine send_sum_to
-
-!-----------------------------------------------------------------------------
-!> Collect min and max on task. This is for adaptive_inflate_mod
-
-subroutine send_minmax_to(minmax, task, global_val)
-
-real(r8), intent(in)  :: minmax(2) ! min max on each task
-integer,  intent(in)  :: task ! task to collect on
-real(r8), intent(out) :: global_val(2) ! only concerned with this on task collecting result
-
-global_val(:) = minmax(:) ! only one task.
-
-end subroutine send_minmax_to
-
-!-----------------------------------------------------------------------------
-! cover routine which is deprecated.  when all user code replaces this
-! with broadcast_minmax(), remove this.
-subroutine all_reduce_min_max(min_var, max_var, num_elements)
-
-integer,  intent(in)    :: num_elements
-real(r8), intent(inout) :: min_var(num_elements)
-real(r8), intent(inout) :: max_var(num_elements)
-
-call broadcast_minmax(min_var, max_var, num_elements)
-
-end subroutine all_reduce_min_max
-
-!-----------------------------------------------------------------------------
-! Find min and max of each element of an array across tasks, put the result on every task.
-! For this null_mpi_version min_var and max_var are unchanged because there is
-! only 1 task.
-subroutine broadcast_minmax(min_var, max_var, num_elements)
-
-integer,  intent(in)    :: num_elements
-real(r8), intent(inout) :: min_var(num_elements)
-real(r8), intent(inout) :: max_var(num_elements)
-
-end subroutine broadcast_minmax
-
-!-----------------------------------------------------------------------------
-!> Broadcast logical
-
-subroutine broadcast_flag(flag, root)
-
-logical, intent(inout) :: flag
-integer, intent(in)    :: root !> relative to get_dart_mpi_comm()
-
-integer :: errcode
-
-if ( .not. module_initialized ) then
-   write(errstring, *) 'initialize_mpi_utilities() must be called first'
-   call error_handler(E_ERR,'broadcast_flag', errstring, source, revision, revdate)
-endif
-
-! does nothing because data is already there
-
-end subroutine broadcast_flag
-
 !-----------------------------------------------------------------------------
 !-----------------------------------------------------------------------------
 ! One sided communication
@@ -672,7 +657,9 @@ end module mpi_utilities_mod
 !> this can be called from any code in the system.
 
 subroutine exit_all(exit_code)
-
+! !!NAG_BLOCK_EDIT START COMMENTED_OUT
+! use F90_unix_proc, only : exit
+! !!NAG_BLOCK_EDIT END COMMENTED_OUT
  integer, intent(in) :: exit_code
 
    call exit(exit_code)
