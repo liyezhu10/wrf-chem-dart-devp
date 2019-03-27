@@ -32,13 +32,13 @@ endif
 # MPI builds and tests.  set the argument to the build scripts so it
 # knows which ones to build.
 if ( "$usingmpi" == "yes" ) then
-  echo "Will be building with MPI enabled"
+  echo "Building with MPI support."
   set QUICKBUILD_ARG='-mpi'
 else if ( "$usingmpi" == "default" ) then
-  echo "Will be building with the default MPI settings"
+  echo "Building with the default MPI settings"
   set QUICKBUILD_ARG=''
 else if ( "$usingmpi" == "no" ) then
-  echo "Will NOT be building with MPI enabled"
+  echo "Building WITHOUT MPI support."
   set QUICKBUILD_ARG='-nompi'
 else
   echo "Internal error: unrecognized value of usingmpi; should not happen"
@@ -49,6 +49,12 @@ endif
 
 if ( ! $?REMOVE) then
    setenv REMOVE 'rm -f'
+endif
+if ( ! $?COPY) then
+   setenv COPY 'cp -f'
+endif
+if ( ! $?MOVE) then
+   setenv MOVE 'mv -f'
 endif
 
 if ( ! $?host) then
@@ -85,8 +91,6 @@ set DO_THESE_MODELS = ( \
   template \
   wrf \
 )
-
-# needed soon: null_model
 
 #----------------------------------------------------------------------
 # Compile all executables for each model.
@@ -137,11 +141,6 @@ end
 
 foreach MODEL ( $DO_THESE_MODELS ) 
     
-    if ($MODEL == 'bgrid_solo') then
-      echo 'skipping bgrid run for now'
-      continue
-    endif
-
     echo
     echo
     echo "=================================================================="
@@ -151,48 +150,71 @@ foreach MODEL ( $DO_THESE_MODELS )
     echo "=================================================================="
     echo
     echo
-
+ 
     cd ${modeldir}/${MODEL}/work
     set FAILURE = 0
+    echo "Current directory is " `pwd`
 
     @ ncdlfiles = `ls *.cdl | wc -l`
 
-    if ( -f workshop_setup.csh ) then
-      echo "Trying to run workshop_setup.csh for model $MODEL as a test"
-      ./workshop_setup.csh || set FAILURE = 1
-      echo "Re-running workshop_setup.csh to test overwriting files for model $MODEL"
-      ./workshop_setup.csh || set FAILURE = 1
-    else
-      echo "Trying to run pmo for model $MODEL as a test"
-      echo "Will generate NetCDF files from any .cdl files first."
-      # try not to error out if no .cdl files found
-      if ( $ncdlfiles > 0 ) then
-         foreach i ( *.cdl )
-           set base = `basename $i .cdl`
-           if ( -f ${base}.nc ) continue
-           ncgen -o ${base}.nc $i
-         end
+    if ( "$MODEL" == "template" ) then
+      echo skipping tests of the template directory
+
+    else 
+      # save original input.nml & obs seq files here
+      set SAVEDIR = saveme.test_dart
+      mkdir -p ${SAVEDIR}
+      ${COPY} input.nml obs_seq.* ${SAVEDIR}
+
+      if ( -f workshop_setup.csh ) then
+  
+        echo "Trying to run workshop_setup.csh for model $MODEL as a test"
+        ./workshop_setup.csh || set FAILURE = 1
+        echo "Re-running workshop_setup.csh to test overwriting files for model $MODEL"
+        ./workshop_setup.csh || set FAILURE = 1
+  
+      else
+        echo "Trying to run pmo for model $MODEL as a test"
+        echo "Will generate NetCDF files from any .cdl files first."
+        # try not to error out if no .cdl files found
+        if ( $ncdlfiles > 0 ) then
+           foreach i ( *.cdl )
+             set base = `basename $i .cdl`
+             if ( -f ${base}.nc ) continue
+             ncgen -o ${base}.nc $i
+           end
+        endif
+        # assumes the executables from the first pass are still here
+        ./perfect_model_obs || set FAILURE = 1
+        echo "Rerunning PMO to test for file overwrite"
+        ./perfect_model_obs || set FAILURE = 1
+        # if possible, try running filter here as well?
       endif
-      # assumes the executables from the first pass are still here
-      ./perfect_model_obs || set FAILURE = 1
-      echo "Rerunning PMO to test for file overwrite"
-      ./perfect_model_obs || set FAILURE = 1
+  
+      if ( -f model_mod_check ) then
+        echo "Trying to run model_mod_check for model $MODEL as a test"
+        ./model_mod_check || set FAILURE = 1 
+      endif
     endif
 
-    echo "Removing the newly-built objects and restoring original input.nml"
+    echo "Removing the newly-built objects"
     ${REMOVE} *.o *.mod 
     ${REMOVE} Makefile input.nml.*_default .cppdefs
     foreach TARGET ( mkmf_* )
       set PROG = `echo $TARGET | sed -e 's#mkmf_##'`
       ${REMOVE} $PROG
     end
+
+    echo "Restoring original input.nml and obs_seq files"
+    ${MOVE} ${SAVEDIR}/* .
+    ${REMOVE} ${SAVEDIR}
+  
     if ( $ncdlfiles > 0 ) then
       foreach i ( *.cdl )
         set base = `basename $i .cdl`
         if ( -f ${base}.nc ) rm ${base}.nc
       end
     endif
-    svn revert input.nml obs_seq.*
 
     @ modelnum = $modelnum + 1
 
