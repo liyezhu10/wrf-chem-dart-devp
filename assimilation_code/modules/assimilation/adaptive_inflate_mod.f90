@@ -364,7 +364,8 @@ end function deterministic_inflate
 
 subroutine validate_inflate_options(inf_flavor, inf_damping, inf_initial_from_restart, &
                                     inf_sd_initial_from_restart, inf_deterministic, inf_sd_max_change,  &
-                                    do_prior_inflate, do_posterior_inflate, output_inflation)
+                                    do_prior_inflate, do_posterior_inflate, output_inflation, &
+                                    compute_posterior)
 
 integer,  intent(in)    :: inf_flavor(2)
 real(r8), intent(inout) :: inf_damping(2)
@@ -375,6 +376,7 @@ real(r8), intent(in)    :: inf_sd_max_change(2)
 logical,  intent(out)   :: do_prior_inflate
 logical,  intent(out)   :: do_posterior_inflate
 logical,  intent(out)   :: output_inflation 
+logical,  intent(in)    :: compute_posterior
 
 integer :: i
 character(len=32) :: string(2)
@@ -410,6 +412,13 @@ if(inf_flavor(1) == 1 .or. inf_flavor(2) == 1) call error_handler(E_ERR, 'valida
 ! Relaxation-to-prior-spread (RTPS) is only an option for posterior inflation
 if(inf_flavor(1) == 4) call error_handler(E_ERR, 'validate_inflate_options', &
    'RTPS inflation (type 4) only supported for Posterior inflation', source, revision, revdate)
+
+! Cannot select posterior options if not computing posterior
+if(.not. compute_posterior .and. inf_flavor(2) > 0) then
+   write(msgstring, *) 'cannot enable posterior inflation if not computing posterior values'
+   call error_handler(E_ERR,'validate_inflate_options', msgstring, source, revision, revdate, &
+                             text2='"compute_posterior" is false; posterior inflation flavor must be 0')
+endif
 
 ! RTPS needs a single parameter from namelist: inf_initial(2).  
 ! Do not read in any files.  Also, no damping.  but warn the user if they try to set different
@@ -588,12 +597,9 @@ real(r8), intent(in)  :: x_p, sigma_p_2, y_o, sigma_o_2, lambda_mean, lambda_sd
 real(r8), intent(in)  :: gamma_corr, sd_lower_bound_in, sd_max_change_in
 real(r8), intent(out) :: new_cov_inflate, new_cov_inflate_sd
 
-integer  :: i, mlambda_index(1)
 real(r8) :: dist_2, rate, shape_old, shape_new, rate_new
 real(r8) :: lambda_sd_2, density_1, density_2, omega, ratio
 real(r8) :: new_1_sd, new_max
-real(r8) :: b, c, d, Q, R, disc, alpha, beta, cube_root_alpha, cube_root_beta, x
-real(r8) :: rrr, cube_root_rrr, angle, mx(3), sep(3), mlambda(3)
 
 ! If gamma is 0, nothing changes
 if(gamma_corr <= 0.0_r8) then
@@ -609,6 +615,10 @@ lambda_sd_2 = lambda_sd**2
 dist_2 = (y_o - x_p)**2
    
 ! this block of code no longer being used.  it's here for historical purposes.
+
+!integer  :: i, mlambda_index(1)
+!real(r8) :: b, c, d, Q, R, disc, alpha, beta, cube_root_alpha, cube_root_beta, x
+!real(r8) :: rrr, cube_root_rrr, angle, mx(3), sep(3), mlambda(3)
 
 !   ! Use ONLY the linear approximation, cubic solution below can be numerically
 !   ! unstable for extreme cases. Should look at this later.
@@ -688,7 +698,7 @@ if (inf_type == AND2009) then
    
       ! Find value at a point one OLD sd above new mean value
       new_1_sd = compute_new_density(dist_2, sigma_p_2, sigma_o_2, lambda_mean, lambda_sd, gamma_corr, &
-      new_cov_inflate + lambda_sd)
+                                     new_cov_inflate + lambda_sd)
    
       ! If either the numerator or denominator of the following computation 
       ! of 'ratio' is going to be zero (or almost so), return the original incoming
@@ -712,7 +722,10 @@ if (inf_type == AND2009) then
    
       ! Prevent an increase in the sd of lambda???
       ! For now, this is mostly countering numerical errors in this computation
-      if(new_cov_inflate_sd > lambda_sd) new_cov_inflate_sd = lambda_sd
+      if(new_cov_inflate_sd > lambda_sd) then
+         new_cov_inflate_sd = lambda_sd
+         return
+      endif
    
    endif
 
@@ -770,9 +783,12 @@ else if (inf_type == GHA2017) then
    
       ! If the updated variance is more than xx% the prior variance, keep the prior unchanged 
       ! for stability reasons. Also, if the updated variance is NaN (not sure why this
-      ! can happen; never did when develping this code), keep the prior variance unchanged. 
+      ! can happen; never did when developing this code), keep the prior variance unchanged. 
       if ( new_cov_inflate_sd > sd_max_change_in*lambda_sd .OR. &
-          new_cov_inflate_sd /= new_cov_inflate_sd) new_cov_inflate_sd = lambda_sd
+           new_cov_inflate_sd /= new_cov_inflate_sd) then
+         new_cov_inflate_sd = lambda_sd
+         return
+      endif
    endif
    
 else

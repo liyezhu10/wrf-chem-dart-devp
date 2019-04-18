@@ -51,6 +51,12 @@ public :: get_num_types_of_obs, get_num_quantities
 ! DART system.  Future versions of the preprocess program will be able to
 ! generate this table automatically.
 
+!>@todo FIXME: replace this list with a formatted comment
+!>and have an input to preprocess have a kinds type include list.
+!>it can default to 'all' but it could be grouped by atmosphere,
+!>ocean, land, chemistry, etc?  if you ignore duplicates, these
+!>could be overlapping groups of any resolution you want.
+!
 ! Definition and public access to the observation types/kinds
 ! Unique index values associated with each observation type and
 ! kind strings are defined here.
@@ -453,6 +459,11 @@ integer, parameter, public :: &
   QTY_SATURATED_WATER               = 354, &
   QTY_SNOW_DEPTH                    = 355, &
   QTY_SOLAR_INDUCED_FLUORESCENCE    = 356
+
+! WACCAM
+integer, parameter, public :: &
+  QTY_ION_O_MIXING_RATIO            = 365, &
+  QTY_ATOMIC_H_MIXING_RATIO         = 366
 
 ! kinds for CICE added by C. Bitz
 integer, parameter, public :: &
@@ -921,6 +932,9 @@ obs_kind_names(354) = obs_kind_type(QTY_SATURATED_WATER            ,'QTY_SATURAT
 obs_kind_names(355) = obs_kind_type(QTY_SNOW_DEPTH                 ,'QTY_SNOW_DEPTH')
 obs_kind_names(356) = obs_kind_type(QTY_SOLAR_INDUCED_FLUORESCENCE ,'QTY_SOLAR_INDUCED_FLUORESCENCE')
 
+obs_kind_names(365) = obs_kind_type(QTY_ION_O_MIXING_RATIO,    'QTY_ION_O_MIXING_RATIO')
+obs_kind_names(366) = obs_kind_type(QTY_ATOMIC_H_MIXING_RATIO, 'QTY_ATOMIC_H_MIXING_RATIO')
+
 obs_kind_names(411) = obs_kind_type(QTY_SEAICE_AGREG_CONCENTR ,'QTY_SEAICE_AGREG_CONCENTR')
 obs_kind_names(412) = obs_kind_type(QTY_SEAICE_AGREG_VOLUME   ,'QTY_SEAICE_AGREG_VOLUME')
 obs_kind_names(413) = obs_kind_type(QTY_SEAICE_AGREG_SNOWVOLUME,'QTY_SEAICE_AGREG_SNOWVOLUME')
@@ -975,6 +989,7 @@ obs_kind_names(461) = obs_kind_type(QTY_LARGE_SCALE_STATE     ,'QTY_LARGE_SCALE_
 obs_kind_names(462) = obs_kind_type(QTY_SMALL_SCALE_STATE     ,'QTY_SMALL_SCALE_STATE')
 obs_kind_names(463) = obs_kind_type(QTY_CWP_PATH              ,'QTY_CWP_PATH')
 obs_kind_names(464) = obs_kind_type(QTY_CWP_PATH_ZERO         ,'QTY_CWP_PATH_ZERO')
+
 
 ! count here, then output below
 

@@ -252,11 +252,11 @@ while ( $inst <= $num_instances )
    set DOMAINFILE = '/glade/p/cesmdata/cseg/inputdata/share/domains/domain.lnd.fv0.9x1.25_gx1v7.151020.nc'
 
    echo "domainfile = '${DOMAINFILE}'" >> ${fname}
-   echo "streams = '$FILE1 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
-   echo "          '$FILE2 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
-   echo "          '$FILE3 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
-   echo "          '$FILE4 $stream_year_align $stream_year_first $stream_year_last'," >> ${fname}
-   echo "          'datm.streams.txt.presaero.clim_2000${inst_string} 1 1 1'"         >> ${fname}
+   echo "streams = '$FILE1 $stream_year_align $stream_year_first $stream_year_last',"  >> ${fname}
+   echo "          '$FILE2 $stream_year_align $stream_year_first $stream_year_last',"  >> ${fname}
+   echo "          '$FILE3 $stream_year_align $stream_year_first $stream_year_last',"  >> ${fname}
+   echo "          '$FILE4 $stream_year_align $stream_year_first $stream_year_last',"  >> ${fname}
+   echo "          'datm.streams.txt.presaero.clim_2000${inst_string} 2000 2000 2000'" >> ${fname}
    echo "vectors  = 'u:v' "     >> ${fname}
    echo "mapmask  = 'nomask', " >> ${fname}
    echo "           'nomask', " >> ${fname}

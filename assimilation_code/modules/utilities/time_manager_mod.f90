@@ -83,7 +83,7 @@ public :: month_name
 
 public :: julian_day
 
-public :: get_calendar_units
+public :: get_calendar_udunits
 
 ! Subroutines and functions for basic I/O
 public :: time_manager_init, print_time, print_date
@@ -774,7 +774,7 @@ end subroutine set_calendar_type_string
 
 !> returns the calendar units as a string
 
-subroutine get_calendar_units(units_string)
+subroutine get_calendar_udunits(units_string)
 
 ! If you 'call print_date(set_time(0,0))' with each calendar, you get:
 !    thirty_day_months    1 Jan 01 00:00:00
@@ -787,7 +787,7 @@ subroutine get_calendar_units(units_string)
 character(len=*), intent(out) :: units_string
 
 integer, parameter :: max_calendar_string_length = len_trim('THIRTY_DAY_MONTHS')
-character(len=*), parameter :: routine = 'get_calendar_units'
+character(len=*), parameter :: routine = 'get_calendar_udunits'
 character(len=max_calendar_string_length) :: cstring
 
 if ( .not. module_initialized ) call time_manager_init
@@ -816,7 +816,7 @@ select case (cstring)
 
 end select
 
-end subroutine get_calendar_units
+end subroutine get_calendar_udunits
 
 
 function get_calendar_type()
@@ -1459,6 +1459,7 @@ ominutes = 0; if(present(minutes)) ominutes = minutes
 ohours   = 0; if(present(hours  )) ohours   = hours
 
 ! Need to check for bogus dates
+!>@todo this logic allows Feb 29,30 and 31, Apr 31, etc.
 
 if( oseconds > 59 .or. oseconds < 0 .or. &
     ominutes > 59 .or. ominutes < 0 .or. &

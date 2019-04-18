@@ -142,7 +142,10 @@ use time_manager_mod, only : time_type, get_date, set_date, print_date, print_ti
 use    utilities_mod, only : register_module, E_ERR, E_MSG, error_handler, &
                              check_namelist_read, find_namelist_in_file,   &
                              nmlfileunit, do_output, do_nml_file, do_nml_term, &
-                             nc_check, file_exist, is_longitude_between
+                             file_exist, is_longitude_between
+
+use  netcdf_utilities_mod, only : nc_check
+
 
 use     obs_kind_mod, only : QTY_RADIATION_VISIBLE_DOWN, &
                              QTY_RADIATION_NEAR_IR_DOWN, &

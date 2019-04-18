@@ -41,10 +41,8 @@ use     location_mod, only : location_type, get_location, set_location_missing, 
                              is_vertical, VERTISUNDEF, VERTISSURFACE,  &
                              VERTISLEVEL, VERTISPRESSURE, VERTISHEIGHT,   &
                              VERTISSCALEHEIGHT
-use time_manager_mod, only : time_type, get_calendar_udunits, leap_year, &
-                             set_calendar_type, get_calendar_string, &
-                             set_date, get_date, print_date, &
-                             set_time, get_time, print_time, &
+use time_manager_mod, only : time_type, set_date, set_time, get_time, print_time, &
+                             set_calendar_type, print_date, GREGORIAN, &
                              operator(*),  operator(+),  operator(-), &
                              operator(>),  operator(<),  operator(/), &
                              operator(/=), operator(<=), operator(>=)
@@ -52,8 +50,9 @@ use    utilities_mod, only : open_file, close_file, register_module, &
                              file_exist, error_handler, E_ERR, E_WARN, E_MSG,  &
                              initialize_utilities, logfileunit, nmlfileunit,   &
                              find_namelist_in_file, check_namelist_read,       &
-                             nc_check, do_nml_file, do_nml_term,               &
-                             set_filename_list, finalize_utilities
+                             do_nml_file, do_nml_term, finalize_utilities,     &
+                             set_filename_list
+use netcdf_utilities_mod, only : nc_check
 use         sort_mod, only : sort
 use   random_seq_mod, only : random_seq_type, init_random_seq, several_random_gaussians
 
@@ -183,10 +182,9 @@ real(r8):: input_qc_threshold    = 3.0_r8    ! maximum NCEP QC factor
 
 !-----------------------------------------------------------------------
 ! Namelist with default values
-!
+
 character(len=256) :: obs_sequence_name(max_num_input_files) = ''
 character(len=256) :: obs_sequence_list = ''
-character(len=256) :: calendar = 'gregorian'
 integer, dimension(6) :: first_bin_center = (/ 2003, 1, 1, 0, 0, 0 /)
 integer, dimension(6) :: last_bin_center  = (/ 2003, 1, 2, 0, 0, 0 /)
 integer, dimension(6) :: bin_separation   = (/    0, 0, 0, 6, 0, 0 /)
@@ -224,7 +222,7 @@ namelist /obs_diag_nml/ obs_sequence_name, obs_sequence_list,                 &
                        reg_names, print_mismatched_locs, print_obs_locations, &
                        create_rank_histogram, outliers_in_histogram,          &
                        plevel_edges, hlevel_edges, mlevel_edges,              &
-                       verbose, trusted_obs, use_zero_error_obs, calendar
+                       verbose, trusted_obs, use_zero_error_obs
 
 !-----------------------------------------------------------------------
 ! Variables used to accumulate the statistics.
@@ -333,7 +331,7 @@ type(time_type) :: beg_time, end_time  ! of the particular bin
 type(time_type) :: binsep, binwidth, halfbinwidth
 type(time_type) :: seqT1, seqTN        ! first,last time in entire observation sequence
 type(time_type) :: AllseqT1, AllseqTN  ! first,last time in ALL observation sequences
-type(time_type) :: obs_time, averaging_start_time
+type(time_type) :: obs_time, skip_time
 
 character(len=512) :: string1, string2, string3
 character(len=stringlength) :: obsname
@@ -387,8 +385,7 @@ endif
 
 ! Now that we have input, do some checking and setup
 
-call set_calendar_type(calendar)
-if (verbose) call date_increment_test()
+call set_calendar_type(GREGORIAN)
 call Namelist2Times()    ! convert namelist times to DART times
 call DefineTimeBins()    ! Set the temporal binning variables
 call SetPressureLevels(plevel, plevel_edges, Nplevels)
@@ -399,6 +396,7 @@ call CountTrustedObsTypes()
 call SetScaleFactors() ! for plotting purposes
 
 Nlevels = maxval((/ Nplevels, Nhlevels, Nmlevels /))
+
 call InitializeALLVariables( Nepochs, Nlevels, Nregions, num_obs_types)
 
 U_obs_loc = set_location_missing()
@@ -516,6 +514,23 @@ ObsFileLoop : do ifile=1, num_input_files
             prior_spread_index, posterior_spread_index, &
             ens_copy_index )
 
+   if ( any( (/ prior_mean_index, prior_spread_index/) < 0) ) then
+      string1 = 'Observation sequence has no prior information.'
+      string2 = 'You will still get a count, maybe observation value, incoming qc, ...'
+      string3 = 'For simple information, you may want to use "obs_seq_to_netcdf" instead.'
+      call error_handler(E_MSG, 'obs_diag', string1, &
+                 source, revision, revdate, text2=string2, text3=string3)
+   endif
+
+   has_posteriors = .true.
+   if ( any( (/ posterior_mean_index, posterior_spread_index /) < 0) ) then
+      has_posteriors = .false.
+      string1 = 'Observation sequence has no posterior information,'
+      string2 = 'therefore - posterior diagnostics are not possible.'
+      call error_handler(E_WARN, 'obs_diag', string1, &
+                 source, revision, revdate, text2=string2)
+   endif
+
    ! Loop over all potential time periods ... the observation sequence
    ! files are not required to be in any particular order.
 
@@ -616,6 +631,8 @@ ObsFileLoop : do ifile=1, num_input_files
          posterior_mean(1)   = 0.0_r8
          prior_spread(1)     = 0.0_r8
          posterior_spread(1) = 0.0_r8
+         pr_zscore           = 0.0_r8
+         po_zscore           = 0.0_r8
 
             call get_obs_values(observation,              obs,              obs_index)
          if (prior_mean_index > 0) &
@@ -632,7 +649,7 @@ ObsFileLoop : do ifile=1, num_input_files
          if ( dart_qc_index > 0 ) then
             qc_value = qc(dart_qc_index)
          else
-            ! If there is no dart_qc, this must be a case where we
+            ! If there is no dart_qc, this must be a case where we 
             ! are interested only in getting the location information.
             qc_value = 0
          endif
@@ -724,9 +741,11 @@ ObsFileLoop : do ifile=1, num_input_files
 
          pr_zscore = InnovZscore(obs(1), pr_mean, pr_sprd, obs_error_variance, &
                                  qc_value, QC_MAX_PRIOR)
+         po_zscore = InnovZscore(obs(1), po_mean, po_sprd, obs_error_variance, &
+                                 qc_value, QC_MAX_POSTERIOR)
 
          if (has_posteriors) po_zscore = InnovZscore(obs(1), po_mean, po_sprd, &
-                 obs_error_variance, qc_value, QC_MAX_POSTERIOR)
+                                    obs_error_variance, qc_value, QC_MAX_POSTERIOR)
 
          indx         = min(int(pr_zscore), MaxSigmaBins)
          nsigma(indx) = nsigma(indx) + 1
@@ -805,9 +824,9 @@ ObsFileLoop : do ifile=1, num_input_files
 
             if (      org_qc_index  > 0 ) then
                if (qc(org_qc_index) > input_qc_threshold ) then
-               call IPE(prior%NbigQC(iepoch,level_index,iregion,flavor), 1)
-               if (has_posteriors) &
-                  call IPE(poste%NbigQC(iepoch,level_index,iregion,flavor), 1)
+                  call IPE(prior%NbigQC(iepoch,level_index,iregion,flavor), 1)
+                  if (has_posteriors) &
+                     call IPE(poste%NbigQC(iepoch,level_index,iregion,flavor), 1)
                endif
             endif
 
@@ -823,7 +842,7 @@ ObsFileLoop : do ifile=1, num_input_files
                call IPE(prior%NbadIZ(iepoch,level_index,iregion,flavor), 1)
             endif
 
-            if( has_posteriors .and. po_zscore > rat_cri ) then
+            if(po_zscore > rat_cri .and. has_posteriors) then
                call IPE(poste%NbadIZ(iepoch,level_index,iregion,flavor), 1)
             endif
 
@@ -866,13 +885,13 @@ ObsFileLoop : do ifile=1, num_input_files
 
                   zscoreU = InnovZscore(U_obs, U_pr_mean, U_pr_sprd, U_obs_err_var, &
                                         U_qc, QC_MAX_PRIOR)
-                  if(pr_zscore > rat_cri .or. zscoreU > rat_cri) then
+                  if(pr_zscore > rat_cri .or. zscoreU > rat_cri)  then
                      call IPE(prior%NbadIZ(iepoch,level_index,iregion,wflavor), 1)
                   endif
 
                   zscoreU = InnovZscore(U_obs, U_po_mean, U_po_sprd, U_obs_err_var, &
                                         U_qc, QC_MAX_POSTERIOR)
-                  if(has_posteriors .and. (po_zscore > rat_cri .or. zscoreU > rat_cri)) then
+                  if((po_zscore > rat_cri .or. zscoreU > rat_cri) .and. has_posteriors) then
                      call IPE(poste%NbadIZ(iepoch,level_index,iregion,wflavor), 1)
                   endif
 
@@ -891,7 +910,7 @@ ObsFileLoop : do ifile=1, num_input_files
             ! end of time series statistics
             !===========================================================
 
-            if ( obs_time < averaging_start_time ) cycle Areas
+            if ( obs_time < skip_time ) cycle Areas
 
             !===========================================================
             ! vertical statistics part ... after skipping the burn-in
@@ -902,9 +921,9 @@ ObsFileLoop : do ifile=1, num_input_files
 
             if (      org_qc_index  > 0 ) then
                if (qc(org_qc_index) > input_qc_threshold ) then
-               call IPE(priorAVG%NbigQC(level_index,iregion,flavor), 1)
-               if (has_posteriors) &
-                  call IPE(posteAVG%NbigQC(level_index,iregion,flavor), 1)
+                  call IPE(priorAVG%NbigQC(level_index,iregion,flavor), 1)
+                  if (has_posteriors) &
+                     call IPE(posteAVG%NbigQC(level_index,iregion,flavor), 1)
                endif
             endif
 
@@ -919,7 +938,7 @@ ObsFileLoop : do ifile=1, num_input_files
                call IPE(priorAVG%NbadIZ(level_index,iregion,flavor), 1)
             endif
 
-            if(has_posteriors .and. po_zscore > rat_cri)  then
+            if(po_zscore > rat_cri .and. has_posteriors)  then
                call IPE(posteAVG%NbadIZ(level_index,iregion,flavor), 1)
             endif
 
@@ -942,13 +961,13 @@ ObsFileLoop : do ifile=1, num_input_files
 
                   zscoreU = InnovZscore(U_obs, U_pr_mean, U_pr_sprd, U_obs_err_var, &
                                         U_qc, QC_MAX_PRIOR)
-                  if(pr_zscore > rat_cri .or. zscoreU > rat_cri) then
+                  if( (pr_zscore > rat_cri) .or. (zscoreU > rat_cri) )  then
                      call IPE(priorAVG%NbadIZ(level_index,iregion,wflavor), 1)
                   endif
 
                   zscoreU = InnovZscore(U_obs, U_po_mean, U_po_sprd, U_obs_err_var, &
                                         U_qc, QC_MAX_POSTERIOR)
-                  if(has_posteriors .and. (po_zscore > rat_cri .or. zscoreU > rat_cri)) then
+                  if((po_zscore > rat_cri .or. zscoreU > rat_cri) .and. has_posteriors) then
                      call IPE(posteAVG%NbadIZ(level_index,iregion,wflavor), 1)
                   endif
 
@@ -956,7 +975,7 @@ ObsFileLoop : do ifile=1, num_input_files
                           iregion, wflavor, priorAVG, posteAVG, uqc=U_qc)
 
                   call Bin3D(qc_value, level_index, iregion,  &
-                      wflavor, .false., obs(1), obs_error_variance, pr_mean, pr_sprd,      &
+                      wflavor, .false., obs(1), obs_error_variance, pr_mean, pr_sprd, &
                       po_mean, po_sprd, U_obs, U_obs_err_var, U_pr_mean, U_pr_sprd, &
                       U_po_mean, U_po_sprd, U_qc)
                endif
@@ -1038,6 +1057,7 @@ write(*,*) '# prior DART QC 6 : ',sum(prior%NDartQC_6)
 write(*,*) '# prior DART QC 7 : ',sum(prior%NDartQC_7)
 write(*,*) '# prior DART QC 8 : ',sum(prior%NDartQC_8)
 write(*,*)
+
 if (has_posteriors) then
    write(*,*) '# trusted poste   : ',sum(poste%Ntrusted)
    write(*,*) '# poste DART QC 0 : ',sum(poste%NDartQC_0)
@@ -1075,6 +1095,7 @@ write(logfileunit,*) '# prior DART QC 6 : ',sum(prior%NDartQC_6)
 write(logfileunit,*) '# prior DART QC 7 : ',sum(prior%NDartQC_7)
 write(logfileunit,*) '# prior DART QC 8 : ',sum(prior%NDartQC_8)
 write(logfileunit,*)
+
 if (has_posteriors) then
    write(logfileunit,*) '# trusted poste   : ',sum(poste%Ntrusted)
    write(logfileunit,*) '# poste DART QC 0 : ',sum(poste%NDartQC_0)
@@ -1126,267 +1147,18 @@ call error_handler(E_MSG,'obs_diag','Finished successfully.')
 call finalize_utilities()
 
 
+!======================================================================
 CONTAINS
-
-!======================================================================
-! These routines use common variables from the scope of this file.
-! If it's not in the argument list ... it's scoped within this file.
 !======================================================================
 
 
-subroutine InitializeALLVariables( ntimes, nlevs, nareas, ntypes )
-
-! Global variables set in this routine:
-! type(TLRV_type), intent(out) :: poste,    prior
-! type( LRV_type), intent(out) :: posteAVG, priorAVG
-
-integer, intent(in)  :: ntimes
-integer, intent(in)  :: nlevs
-integer, intent(in)  :: nareas
-integer, intent(in)  :: ntypes
-
-call AllocateOneTLRVVariable( prior, ntimes, nlevs, nareas, ntypes )
-call    ResetOneTLRVVariable( prior, ntimes, nlevs, nareas, ntypes, 'guess')
-
-call AllocateOneTLRVVariable( poste, ntimes, nlevs, nareas, ntypes )
-call    ResetOneTLRVVariable( poste, ntimes, nlevs, nareas, ntypes, 'analy')
-
-call AllocateOneLRVVariable( priorAVG, nlevs, nareas, ntypes )
-call    ResetOneLRVVariable( priorAVG, nlevs, nareas, ntypes, 'VPguess')
-
-call AllocateOneLRVVariable( posteAVG, nlevs, nareas, ntypes )
-call    ResetOneLRVVariable( posteAVG, nlevs, nareas, ntypes, 'VPanaly')
-
-end subroutine InitializeALLVariables
-
-
-!======================================================================
-
-
-subroutine AllocateOneTLRVVariable( thisvar, ntimes, nlevs, nareas, ntypes )
-
-type(TLRV_type), intent(inout) :: thisvar
-integer,         intent(in)    :: ntimes
-integer,         intent(in)    :: nlevs
-integer,         intent(in)    :: nareas
-integer,         intent(in)    :: ntypes
-
-allocate(thisvar%rmse(       ntimes, nlevs, nareas, ntypes), &
-         thisvar%bias(       ntimes, nlevs, nareas, ntypes), &
-         thisvar%spread(     ntimes, nlevs, nareas, ntypes), &
-         thisvar%totspread(  ntimes, nlevs, nareas, ntypes), &
-         thisvar%observation(ntimes, nlevs, nareas, ntypes), &
-         thisvar%ens_mean(   ntimes, nlevs, nareas, ntypes), &
-         thisvar%Nposs(      ntimes, nlevs, nareas, ntypes), &
-         thisvar%Nused(      ntimes, nlevs, nareas, ntypes), &
-         thisvar%NbigQC(     ntimes, nlevs, nareas, ntypes), &
-         thisvar%NbadIZ(     ntimes, nlevs, nareas, ntypes), &
-         thisvar%NbadUV(     ntimes, nlevs, nareas, ntypes), &
-         thisvar%NbadLV(     ntimes, nlevs, nareas, ntypes), &
-         thisvar%NbadDartQC( ntimes, nlevs, nareas, ntypes), &
-         thisvar%Ntrusted(   ntimes, nlevs, nareas, ntypes), &
-         thisvar%NDartQC_0(  ntimes, nlevs, nareas, ntypes), &
-         thisvar%NDartQC_1(  ntimes, nlevs, nareas, ntypes), &
-         thisvar%NDartQC_2(  ntimes, nlevs, nareas, ntypes), &
-         thisvar%NDartQC_3(  ntimes, nlevs, nareas, ntypes), &
-         thisvar%NDartQC_4(  ntimes, nlevs, nareas, ntypes), &
-         thisvar%NDartQC_5(  ntimes, nlevs, nareas, ntypes), &
-         thisvar%NDartQC_6(  ntimes, nlevs, nareas, ntypes), &
-         thisvar%NDartQC_7(  ntimes, nlevs, nareas, ntypes), &
-         thisvar%NDartQC_8(  ntimes, nlevs, nareas, ntypes)  )
-
-end subroutine AllocateOneTLRVVariable
-
-
-!======================================================================
-
-
-subroutine ResetOneTLRVVariable(thisvar, ntimes, nlevs, nareas, ntypes, label)
-
-type(TLRV_type),  intent(inout) :: thisvar
-integer,          intent(in)    :: ntimes
-integer,          intent(in)    :: nlevs
-integer,          intent(in)    :: nareas
-integer,          intent(in)    :: ntypes
-character(len=*), intent(in)    :: label
-
-thisvar%rmse        = 0.0_r8
-thisvar%bias        = 0.0_r8
-thisvar%spread      = 0.0_r8
-thisvar%totspread   = 0.0_r8
-thisvar%observation = 0.0_r8
-thisvar%ens_mean    = 0.0_r8
-thisvar%Nposs       = 0
-thisvar%Nused       = 0
-thisvar%NbigQC      = 0
-thisvar%NbadIZ      = 0
-thisvar%NbadUV      = 0
-thisvar%NbadLV      = 0
-thisvar%NbadDartQC  = 0
-thisvar%Ntrusted    = 0
-thisvar%NDartQC_0   = 0
-thisvar%NDartQC_1   = 0
-thisvar%NDartQC_2   = 0
-thisvar%NDartQC_3   = 0
-thisvar%NDartQC_4   = 0
-thisvar%NDartQC_5   = 0
-thisvar%NDartQC_6   = 0
-thisvar%NDartQC_7   = 0
-thisvar%NDartQC_8   = 0
-
-thisvar%string        = label
-thisvar%num_times     = ntimes
-thisvar%num_levels    = nlevs
-thisvar%num_regions   = nareas
-thisvar%num_variables = ntypes
-
-end subroutine ResetOneTLRVVariable
-
-
-!======================================================================
-
-
-subroutine AllocateOneLRVVariable( thisvar, nlevs, nareas, ntypes )
-
-type(LRV_type), intent(inout) :: thisvar
-integer,        intent(in)    :: nlevs
-integer,        intent(in)    :: nareas
-integer,        intent(in)    :: ntypes
-
-allocate(thisvar%rmse(       nlevs, nareas, ntypes), &
-         thisvar%bias(       nlevs, nareas, ntypes), &
-         thisvar%spread(     nlevs, nareas, ntypes), &
-         thisvar%totspread(  nlevs, nareas, ntypes), &
-         thisvar%observation(nlevs, nareas, ntypes), &
-         thisvar%ens_mean(   nlevs, nareas, ntypes), &
-         thisvar%Nposs(      nlevs, nareas, ntypes), &
-         thisvar%Nused(      nlevs, nareas, ntypes), &
-         thisvar%NbigQC(     nlevs, nareas, ntypes), &
-         thisvar%NbadIZ(     nlevs, nareas, ntypes), &
-         thisvar%NbadUV(     nlevs, nareas, ntypes), &
-         thisvar%NbadLV(     nlevs, nareas, ntypes), &
-         thisvar%NbadDartQC( nlevs, nareas, ntypes), &
-         thisvar%Ntrusted(   nlevs, nareas, ntypes), &
-         thisvar%NDartQC_0(  nlevs, nareas, ntypes), &
-         thisvar%NDartQC_1(  nlevs, nareas, ntypes), &
-         thisvar%NDartQC_2(  nlevs, nareas, ntypes), &
-         thisvar%NDartQC_3(  nlevs, nareas, ntypes), &
-         thisvar%NDartQC_4(  nlevs, nareas, ntypes), &
-         thisvar%NDartQC_5(  nlevs, nareas, ntypes), &
-         thisvar%NDartQC_6(  nlevs, nareas, ntypes), &
-         thisvar%NDartQC_7(  nlevs, nareas, ntypes), &
-         thisvar%NDartQC_8(  nlevs, nareas, ntypes)  )
-
-end subroutine AllocateOneLRVVariable
-
-
-!======================================================================
-
-
-subroutine ResetOneLRVVariable(thisvar, nlevs, nareas, ntypes, label)
-
-type(LRV_type),   intent(inout) :: thisvar
-integer,          intent(in)    :: nlevs
-integer,          intent(in)    :: nareas
-integer,          intent(in)    :: ntypes
-character(len=*), intent(in)    :: label
-
-thisvar%rmse        = 0.0_r8
-thisvar%bias        = 0.0_r8
-thisvar%spread      = 0.0_r8
-thisvar%totspread   = 0.0_r8
-thisvar%observation = 0.0_r8
-thisvar%ens_mean    = 0.0_r8
-thisvar%Nposs       = 0
-thisvar%Nused       = 0
-thisvar%NbigQC      = 0
-thisvar%NbadIZ      = 0
-thisvar%NbadUV      = 0
-thisvar%NbadLV      = 0
-thisvar%NbadDartQC  = 0
-thisvar%Ntrusted    = 0
-thisvar%NDartQC_0   = 0
-thisvar%NDartQC_1   = 0
-thisvar%NDartQC_2   = 0
-thisvar%NDartQC_3   = 0
-thisvar%NDartQC_4   = 0
-thisvar%NDartQC_5   = 0
-thisvar%NDartQC_6   = 0
-thisvar%NDartQC_7   = 0
-thisvar%NDartQC_8   = 0
-
-thisvar%string        = label
-thisvar%num_levels    = nlevs
-thisvar%num_regions   = nareas
-thisvar%num_variables = ntypes
-
-end subroutine ResetOneLRVVariable
-
-
-!======================================================================
-
-
-subroutine DestroyVariables()
-
-if (associated(prior%hist_bin)) deallocate(prior%hist_bin)
-if (allocated(ens_copy_index))  deallocate(ens_copy_index)
-
-deallocate(prior%rmse,        prior%bias,      prior%spread,    prior%totspread, &
-           prior%observation, prior%ens_mean,  prior%Nposs,     prior%Nused,     &
-           prior%NbigQC,      prior%NbadIZ,    prior%NbadUV,    prior%NbadLV,    &
-           prior%NbadDartQC,  prior%Ntrusted)
-
-deallocate(prior%NDartQC_0,   prior%NDartQC_1, prior%NDartQC_2, prior%NDartQC_3, &
-           prior%NDartQC_4,   prior%NDartQC_5, prior%NDartQC_6, prior%NDartQC_7, &
-           prior%NDartQC_8)
-
-deallocate(poste%rmse,        poste%bias,      poste%spread,    poste%totspread, &
-           poste%observation, poste%ens_mean,  poste%Nposs,     poste%Nused,     &
-           poste%NbigQC,      poste%NbadIZ,    poste%NbadUV,    poste%NbadLV,    &
-           poste%NbadDartQC,  poste%Ntrusted)
-
-deallocate(poste%NDartQC_0,   poste%NDartQC_1, poste%NDartQC_2, poste%NDartQC_3, &
-           poste%NDartQC_4,   poste%NDartQC_5, poste%NDartQC_6, poste%NDartQC_7, &
-           poste%NDartQC_8)
-
-deallocate(priorAVG%rmse,       priorAVG%bias,        priorAVG%spread,   &
-           priorAVG%totspread,  priorAVG%observation, priorAVG%ens_mean, &
-           priorAVG%Nposs,      priorAVG%Nused,       priorAVG%NbigQC,   &
-           priorAVG%NbadIZ,     priorAVG%NbadUV,      priorAVG%NbadLV,   &
-           priorAVG%NbadDartQC, priorAVG%Ntrusted)
-
-deallocate(priorAVG%NDartQC_0,  priorAVG%NDartQC_1,   priorAVG%NDartQC_2, &
-           priorAVG%NDartQC_3,  priorAVG%NDartQC_4,   priorAVG%NDartQC_5, &
-           priorAVG%NDartQC_6,  priorAVG%NDartQC_7,   priorAVG%NDartQC_8)
-
-deallocate(posteAVG%rmse,       posteAVG%bias,        posteAVG%spread,    &
-           posteAVG%totspread,  posteAVG%observation, posteAVG%ens_mean,  &
-           posteAVG%Nposs,      posteAVG%Nused,       posteAVG%NbigQC,    &
-           posteAVG%NbadIZ,     posteAVG%NbadUV,      posteAVG%NbadLV,    &
-           posteAVG%NbadDartQC, posteAVG%Ntrusted)
-
-deallocate(posteAVG%NDartQC_0,  posteAVG%NDartQC_1,   posteAVG%NDartQC_2, &
-           posteAVG%NDartQC_3,  posteAVG%NDartQC_4,   posteAVG%NDartQC_5, &
-           posteAVG%NDartQC_6,  posteAVG%NDartQC_7,   posteAVG%NDartQC_8)
-
-deallocate(epoch_center, epoch_edges, bin_center, obs_used_in_epoch)
-
-deallocate(obs_type_strings, which_vert, scale_factor)
-
-end subroutine DestroyVariables
-
-
-!======================================================================
-
-
-!> ----------------------------------------------------------------------
+!----------------------------------------------------------------------
 !> Define/Append the 'horizontal wind' obs_kinds to supplant the list declared
 !> in obs_kind_mod.f90 i.e. if there is a RADIOSONDE_U_WIND_COMPONENT
 !> and a RADIOSONDE_V_WIND_COMPONENT, there must be a RADIOSONDE_HORIZONTAL_WIND
 !> Replace calls to 'get_name_for_type_of_obs' with variable 'obs_type_strings'
 
 function grok_observation_names(my_names)
-
 
 character(len=stringlength), pointer :: my_names(:) ! INTENT OUT, btw
 integer :: grok_observation_names
@@ -1500,13 +1272,42 @@ subroutine Namelist2Times( )
 ! Global-scope variables set in this routine:
 ! type(time_type), intent(out) :: beg_time     ! first_bin_center
 ! type(time_type), intent(out) :: end_time     ! last_bin_center
-! type(time_type), intent(out) :: averaging_start_time  ! time to start averaging
+! type(time_type), intent(out) :: skip_time    ! time AFTER first bin leading edge
 ! type(time_type), intent(out) :: binsep       ! time between bin centers
 ! type(time_type), intent(out) :: binwidth     ! period of interest around center
 ! type(time_type), intent(out) :: halfbinwidth ! half that period
 
-integer :: iyear, imonth, iday, ihour, iminute, isecond
-type(time_type) :: offset
+! We are using bin_separation and bin_width as offsets relative to the
+! first time. to ensure this, the year and month must be zero.
+
+logical :: error_out = .false.
+integer :: seconds
+
+! do some error-checking first
+
+if ( (bin_separation(1) /= 0) .or. (bin_separation(2) /= 0) ) then
+   write(string1,*)'bin_separation:year,month must both be zero, they are ', &
+   bin_separation(1),bin_separation(2)
+   call error_handler(E_WARN,'Namelist2Times',string1,source,revision,revdate)
+   error_out = .true.
+endif
+
+if ( (bin_width(1) /= 0) .or. (bin_width(2) /= 0) ) then
+   write(string1,*)'bin_width:year,month must both be zero, they are ', &
+   bin_width(1),bin_width(2)
+   call error_handler(E_WARN,'Namelist2Times',string1,source,revision,revdate)
+   error_out = .true.
+endif
+
+if ( (time_to_skip(1) /= 0) .or. (time_to_skip(2) /= 0) ) then
+   write(string1,*)'time_to_skip:year,month must both be zero, they are ', &
+   time_to_skip(1),time_to_skip(2)
+   call error_handler(E_WARN,'Namelist2Times',string1,source,revision,revdate)
+   error_out = .true.
+endif
+
+if ( error_out ) call error_handler(E_ERR,'Namelist2Times', &
+    'namelist parameter out-of-bounds. Fix and try again.',source,revision,revdate)
 
 ! Set time of first bin center
 beg_time   = set_date(first_bin_center(1), first_bin_center(2), &
@@ -1518,34 +1319,22 @@ end_time   = set_date( last_bin_center(1),  last_bin_center(2), &
                        last_bin_center(3),  last_bin_center(4), &
                        last_bin_center(5),  last_bin_center(6) )
 
-! Set the bin width - as an offset to the first bin center.
-iyear     =  bin_width(1)
-imonth    =  bin_width(2)
-iday      =  bin_width(3)
-ihour     =  bin_width(4)
-iminute   =  bin_width(5)
-isecond   =  bin_width(6)
-binwidth  = increment_date(beg_time, iyear, imonth, iday, ihour, iminute, isecond) - &
-                     beg_time
+seconds  = bin_separation(4)*3600 + bin_separation(5)*60 + bin_separation(6)
+binsep   = set_time(seconds, bin_separation(3))
+
+seconds  = bin_width(     4)*3600 + bin_width(     5)*60 + bin_width(     6)
+binwidth = set_time(seconds, bin_width(     3))
 
 halfbinwidth = binwidth / 2
 
-! Set time that defines the END of the burn-in period
-! i.e. the START of the time-averaged quantities.
+! Set time that defines the end of the burn-in period.
 ! Anything at or after this time will be used to accumulate time-averaged quantities.
+seconds   = time_to_skip(4)*3600 + time_to_skip(5)*60 + time_to_skip(6)
 
-iyear     = time_to_skip(1)
-imonth    = time_to_skip(2)
-iday      = time_to_skip(3)
-ihour     = time_to_skip(4)
-iminute   = time_to_skip(5)
-isecond   = time_to_skip(6)
-offset    = increment_date(beg_time, iyear, imonth, iday, ihour, iminute , isecond)
-
-if (offset <= halfbinwidth ) then
-   averaging_start_time = set_time(0,0)
+if ( (beg_time + set_time(seconds,time_to_skip(3))) <= halfbinwidth) then
+   skip_time = set_time(0,0)
 else
-   averaging_start_time = offset - halfbinwidth
+   skip_time = beg_time - halfbinwidth + set_time(seconds, time_to_skip(3))
 endif
 
 if ( verbose ) then
@@ -1553,24 +1342,24 @@ if ( verbose ) then
    call print_date(    beg_time,'requested first bincenter date')
    call print_date(    end_time,'requested last  bincenter date',logfileunit)
    call print_date(    end_time,'requested last  bincenter date')
-   call print_date(   averaging_start_time,'first date to start time averaging',logfileunit)
-   call print_date(   averaging_start_time,'first date to start time averaging')
+   call print_date(   skip_time,'implied   skip-to         date',logfileunit)
+   call print_date(   skip_time,'implied   skip-to         date')
    write(logfileunit,*)
    write(*,*)
    call print_time(    beg_time,'requested first bincenter time',logfileunit)
    call print_time(    beg_time,'requested first bincenter time')
    call print_time(    end_time,'requested last  bincenter time',logfileunit)
    call print_time(    end_time,'requested last  bincenter time')
-   call print_time(   averaging_start_time,'first time to start time averaging',logfileunit)
-   call print_time(   averaging_start_time,'first time to start time averaging')
+   call print_time(   skip_time,'implied   skip-to         time',logfileunit)
+   call print_time(   skip_time,'implied   skip-to         time')
    write(logfileunit,*)
    write(*,*)
-   call print_time(      binsep,'requested (first) bin separation',logfileunit)
-   call print_time(      binsep,'requested (first) bin separation')
-   call print_time(    binwidth,'requested (first) bin      width',logfileunit)
-   call print_time(    binwidth,'requested (first) bin      width')
-   call print_time(halfbinwidth,'implied   (first)   halfbinwidth',logfileunit)
-   call print_time(halfbinwidth,'implied   (first)   halfbinwidth')
+   call print_time(      binsep,'requested bin separation',logfileunit)
+   call print_time(      binsep,'requested bin separation')
+   call print_time(    binwidth,'requested bin      width',logfileunit)
+   call print_time(    binwidth,'requested bin      width')
+   call print_time(halfbinwidth,'implied     halfbinwidth',logfileunit)
+   call print_time(halfbinwidth,'implied     halfbinwidth')
 endif
 
 end subroutine Namelist2Times
@@ -1589,6 +1378,7 @@ subroutine DefineTimeBins()
 ! Global variables read in this routine:
 ! integer,         intent(in)  :: max_num_bins
 ! type(time_type), intent(in)  :: beg_time, end_time  ! of the particular bin
+! type(time_type), intent(in)  :: binsep, halfbinwidth
 
 ! Global variables set in this routine:
 ! type(time_type), intent(out) :: TimeMin, TimeMax
@@ -1600,31 +1390,11 @@ subroutine DefineTimeBins()
 ! integer,         intent(out), dimension(  :) :: obs_used_in_epoch
 
 integer :: iepoch, seconds, days
-integer :: bsyear, bsmonth, bsday, bshour, bsminute, bssecond
-integer :: bwyear, bwmonth, bwday, bwhour, bwminute, bwsecond
-
-type(time_type) :: future_bin, past_bin
-
-bsyear    = bin_separation(1)
-bsmonth   = bin_separation(2)
-bsday     = bin_separation(3)
-bshour    = bin_separation(4)
-bsminute  = bin_separation(5)
-bssecond  = bin_separation(6)
-
-bwyear    = bin_width(1)
-bwmonth   = bin_width(2)
-bwday     = bin_width(3)
-bwhour    = bin_width(4)
-bwminute  = bin_width(5)
-bwsecond  = bin_width(6)
 
 TimeMin  = beg_time
-
 NepochLoop : do iepoch = 1,max_num_bins
    Nepochs = iepoch
-   TimeMax = increment_date(TimeMin,bsyear,bsmonth,bsday,bshour,bsminute,bssecond)
-
+   TimeMax = TimeMin + binsep
    if ( TimeMax > end_time ) exit NepochLoop
    TimeMin = TimeMax
 enddo NepochLoop
@@ -1632,7 +1402,7 @@ enddo NepochLoop
 write(string1,*)'Requesting ',Nepochs,' assimilation periods.'
 call error_handler(E_MSG,'DefineTimeBins',string1)
 
-allocate(  bin_center(Nepochs),   bin_edges(2,Nepochs), &
+allocate(   bin_center(Nepochs),    bin_edges(2,Nepochs), &
          epoch_center(Nepochs), epoch_edges(2,Nepochs), &
     obs_used_in_epoch(Nepochs) )
 
@@ -1646,8 +1416,8 @@ obs_used_in_epoch = 0
 ! only to the first bin leading edge.
 
 iepoch = 1
-bin_center( iepoch) = beg_time
-bin_edges(2,iepoch) = beg_time + halfbinwidth
+bin_center( iepoch)    = beg_time
+bin_edges(2,iepoch)    = beg_time + halfbinwidth
 
 if (beg_time <= halfbinwidth ) then
    bin_edges(1,iepoch) = set_time(0,0)
@@ -1666,18 +1436,9 @@ epoch_edges(2,iepoch) = days + seconds/86400.0_digits12
 
 BinLoop : do iepoch = 2,Nepochs
 
-   bin_center(iepoch) = increment_date(bin_center(iepoch-1), &
-                            bsyear, bsmonth, bsday, bshour, bsminute, bssecond)
-
-   ! now must determine what half the bin width is for this time
-
-   past_bin = decrement_date(bin_center(iepoch), &
-                            bwyear, bwmonth, bwday, bwhour, bwminute, bwsecond)
-   future_bin = increment_date(bin_center(iepoch), &
-                            bwyear, bwmonth, bwday, bwhour, bwminute, bwsecond)
-
-   bin_edges(1,iepoch) = (bin_center(iepoch) + past_bin)/2 + set_time(1,0)
-   bin_edges(2,iepoch) = (bin_center(iepoch) + future_bin)/2
+   bin_center( iepoch) = bin_center(iepoch-1) + binsep
+   bin_edges(1,iepoch) = bin_center(iepoch) - halfbinwidth + set_time(1,0)
+   bin_edges(2,iepoch) = bin_center(iepoch) + halfbinwidth
 
    call get_time(bin_center(iepoch),seconds,days)
    epoch_center(iepoch) = days + seconds/86400.0_digits12
@@ -2118,6 +1879,188 @@ end subroutine SetScaleFactors
 
 
 !======================================================================
+
+subroutine InitializeALLVariables( ntimes, nlevs, nareas, ntypes )
+
+! Global variables set in this routine:
+! type(TLRV_type), intent(out) :: poste,    prior
+! type( LRV_type), intent(out) :: posteAVG, priorAVG
+
+integer, intent(in)  :: ntimes
+integer, intent(in)  :: nlevs
+integer, intent(in)  :: nareas
+integer, intent(in)  :: ntypes
+
+call AllocateOneTLRVVariable( prior, ntimes, nlevs, nareas, ntypes )
+call    ResetOneTLRVVariable( prior, ntimes, nlevs, nareas, ntypes, 'guess')
+
+call AllocateOneTLRVVariable( poste, ntimes, nlevs, nareas, ntypes )
+call    ResetOneTLRVVariable( poste, ntimes, nlevs, nareas, ntypes, 'analy')
+
+call AllocateOneLRVVariable( priorAVG, nlevs, nareas, ntypes )
+call    ResetOneLRVVariable( priorAVG, nlevs, nareas, ntypes, 'VPguess')
+
+call AllocateOneLRVVariable( posteAVG, nlevs, nareas, ntypes )
+call    ResetOneLRVVariable( posteAVG, nlevs, nareas, ntypes, 'VPanaly')
+
+end subroutine InitializeALLVariables
+
+!======================================================================
+
+subroutine AllocateOneTLRVVariable( thisvar, ntimes, nlevs, nareas, ntypes )
+
+type(TLRV_type), intent(inout) :: thisvar
+integer, intent(in)  :: ntimes
+integer, intent(in)  :: nlevs
+integer, intent(in)  :: nareas
+integer, intent(in)  :: ntypes
+
+allocate(thisvar%rmse(       ntimes, nlevs, nareas, ntypes), &
+         thisvar%bias(       ntimes, nlevs, nareas, ntypes), &
+         thisvar%spread(     ntimes, nlevs, nareas, ntypes), &
+         thisvar%totspread(  ntimes, nlevs, nareas, ntypes), &
+         thisvar%observation(ntimes, nlevs, nareas, ntypes), &
+         thisvar%ens_mean(   ntimes, nlevs, nareas, ntypes), &
+         thisvar%Nposs(      ntimes, nlevs, nareas, ntypes), &
+         thisvar%Nused(      ntimes, nlevs, nareas, ntypes), &
+         thisvar%NbigQC(     ntimes, nlevs, nareas, ntypes), &
+         thisvar%NbadIZ(     ntimes, nlevs, nareas, ntypes), &
+         thisvar%NbadUV(     ntimes, nlevs, nareas, ntypes), &
+         thisvar%NbadLV(     ntimes, nlevs, nareas, ntypes), &
+         thisvar%NbadDartQC( ntimes, nlevs, nareas, ntypes), &
+         thisvar%NDartQC_0(  ntimes, nlevs, nareas, ntypes), &
+         thisvar%NDartQC_1(  ntimes, nlevs, nareas, ntypes), &
+         thisvar%NDartQC_2(  ntimes, nlevs, nareas, ntypes), &
+         thisvar%NDartQC_3(  ntimes, nlevs, nareas, ntypes), &
+         thisvar%NDartQC_4(  ntimes, nlevs, nareas, ntypes), &
+         thisvar%NDartQC_5(  ntimes, nlevs, nareas, ntypes), &
+         thisvar%NDartQC_6(  ntimes, nlevs, nareas, ntypes), &
+         thisvar%NDartQC_7(  ntimes, nlevs, nareas, ntypes), &
+         thisvar%NDartQC_8(  ntimes, nlevs, nareas, ntypes), &
+         thisvar%Ntrusted(   ntimes, nlevs, nareas, ntypes)  )
+
+end subroutine AllocateOneTLRVVariable
+
+!======================================================================
+
+subroutine ResetOneTLRVVariable(thisvar, ntimes, nlevs, nareas, ntypes, label)
+
+type(TLRV_type), intent(inout) :: thisvar
+integer, intent(in)  :: ntimes
+integer, intent(in)  :: nlevs
+integer, intent(in)  :: nareas
+integer, intent(in)  :: ntypes
+character(len=*), intent(in) :: label
+
+thisvar%rmse        = 0.0_r8
+thisvar%bias        = 0.0_r8
+thisvar%spread      = 0.0_r8
+thisvar%totspread   = 0.0_r8
+thisvar%observation = 0.0_r8
+thisvar%ens_mean    = 0.0_r8
+thisvar%Nposs       = 0
+thisvar%Nused       = 0
+thisvar%NbigQC      = 0
+thisvar%NbadIZ      = 0
+thisvar%NbadUV      = 0
+thisvar%NbadLV      = 0
+thisvar%NbadDartQC  = 0
+thisvar%NDartQC_0   = 0
+thisvar%NDartQC_1   = 0
+thisvar%NDartQC_2   = 0
+thisvar%NDartQC_3   = 0
+thisvar%NDartQC_4   = 0
+thisvar%NDartQC_5   = 0
+thisvar%NDartQC_6   = 0
+thisvar%NDartQC_7   = 0
+thisvar%NDartQC_8   = 0
+thisvar%Ntrusted    = 0
+
+thisvar%string        = label
+thisvar%num_times     = ntimes
+thisvar%num_levels    = nlevs
+thisvar%num_regions   = nareas
+thisvar%num_variables = ntypes
+
+end subroutine ResetOneTLRVVariable
+
+!======================================================================
+
+subroutine AllocateOneLRVVariable( thisvar, nlevs, nareas, ntypes )
+
+type(LRV_type), intent(inout) :: thisvar
+integer, intent(in)  :: nlevs
+integer, intent(in)  :: nareas
+integer, intent(in)  :: ntypes
+
+allocate(thisvar%rmse(       nlevs, nareas, ntypes), &
+         thisvar%bias(       nlevs, nareas, ntypes), &
+         thisvar%spread(     nlevs, nareas, ntypes), &
+         thisvar%totspread(  nlevs, nareas, ntypes), &
+         thisvar%observation(nlevs, nareas, ntypes), &
+         thisvar%ens_mean(   nlevs, nareas, ntypes), &
+         thisvar%Nposs(      nlevs, nareas, ntypes), &
+         thisvar%Nused(      nlevs, nareas, ntypes), &
+         thisvar%NbigQC(     nlevs, nareas, ntypes), &
+         thisvar%NbadIZ(     nlevs, nareas, ntypes), &
+         thisvar%NbadUV(     nlevs, nareas, ntypes), &
+         thisvar%NbadLV(     nlevs, nareas, ntypes), &
+         thisvar%NbadDartQC( nlevs, nareas, ntypes), &
+         thisvar%NDartQC_0(  nlevs, nareas, ntypes), &
+         thisvar%NDartQC_1(  nlevs, nareas, ntypes), &
+         thisvar%NDartQC_2(  nlevs, nareas, ntypes), &
+         thisvar%NDartQC_3(  nlevs, nareas, ntypes), &
+         thisvar%NDartQC_4(  nlevs, nareas, ntypes), &
+         thisvar%NDartQC_5(  nlevs, nareas, ntypes), &
+         thisvar%NDartQC_6(  nlevs, nareas, ntypes), &
+         thisvar%NDartQC_7(  nlevs, nareas, ntypes), &
+         thisvar%NDartQC_8(  nlevs, nareas, ntypes), &
+         thisvar%Ntrusted(   nlevs, nareas, ntypes)  )
+
+end subroutine AllocateOneLRVVariable
+
+!======================================================================
+
+subroutine ResetOneLRVVariable(thisvar, nlevs, nareas, ntypes, label)
+
+type(LRV_type), intent(inout) :: thisvar
+integer, intent(in)  :: nlevs
+integer, intent(in)  :: nareas
+integer, intent(in)  :: ntypes
+character(len=*), intent(in) :: label
+
+thisvar%rmse        = 0.0_r8
+thisvar%bias        = 0.0_r8
+thisvar%spread      = 0.0_r8
+thisvar%totspread   = 0.0_r8
+thisvar%observation = 0.0_r8
+thisvar%ens_mean    = 0.0_r8
+thisvar%Nposs       = 0
+thisvar%Nused       = 0
+thisvar%NbigQC      = 0
+thisvar%NbadIZ      = 0
+thisvar%NbadUV      = 0
+thisvar%NbadLV      = 0
+thisvar%NbadDartQC  = 0
+thisvar%NDartQC_0   = 0
+thisvar%NDartQC_1   = 0
+thisvar%NDartQC_2   = 0
+thisvar%NDartQC_3   = 0
+thisvar%NDartQC_4   = 0
+thisvar%NDartQC_5   = 0
+thisvar%NDartQC_6   = 0
+thisvar%NDartQC_7   = 0
+thisvar%NDartQC_8   = 0
+thisvar%Ntrusted    = 0
+
+thisvar%string        = label
+thisvar%num_levels    = nlevs
+thisvar%num_regions   = nareas
+thisvar%num_variables = ntypes
+
+end subroutine ResetOneLRVVariable
+
+!----------------------------------------------------------------------
 !> We need to know the time of the first and last observations in the sequence,
 !> primarily just to see if they intersect the desired Epoch window.
 !> We also record these times so we can report the first/last times of all
@@ -2135,21 +2078,20 @@ type(time_type),         intent(out)   :: my_seqTN
 type(time_type),         intent(inout) :: my_AllseqT1 ! ALL observation sequences
 type(time_type),         intent(inout) :: my_AllseqTN ! ALL observation sequences
 
-character(len=*), parameter :: routine = 'GetFirstLastObs'
 type(obs_def_type) :: obs_def
 
 logical, SAVE :: first_time = .true.
 
 if ( .not. get_first_obs(my_sequence, my_obs1) ) then
-   call error_handler(E_ERR, routine, 'No first observation in '//trim(my_fname), &
-              source, revision, revdate)
+   call error_handler(E_ERR,'GetFirstLastObs','No first observation in '//trim(my_fname), &
+   source,revision,revdate)
 endif
 call get_obs_def(my_obs1,   obs_def)
 my_seqT1 = get_obs_def_time(obs_def)
 
 if ( .not. get_last_obs(my_sequence, my_obsN) ) then
-   call error_handler(E_ERR, routine, 'No last observation in '//trim(my_fname), &
-              source, revision, revdate)
+   call error_handler(E_ERR,'GetFirstLastObs','No last observation in '//trim(my_fname), &
+   source,revision,revdate)
 endif
 call get_obs_def(my_obsN,   obs_def)
 my_seqTN = get_obs_def_time(obs_def)
@@ -2241,7 +2183,6 @@ integer :: GetEnsSize
 ! Using 'seq' from global scope
 
 integer :: i
-logical, save :: reported = .false.
 
 GetEnsSize = 0
 
@@ -2250,11 +2191,8 @@ MetaDataLoop : do i=1, get_num_copies(seq)
                 GetEnsSize = GetEnsSize + 1
 enddo MetaDataLoop
 
-if( .not. reported ) then
-   write(string1,'(''There are '',i4,'' ensemble members.'')') GetEnsSize
-   call error_handler(E_MSG,'GetEnsSize',string1)
-   reported = .true.
-endif
+write(string1,'(''There are '',i4,'' ensemble members.'')') GetEnsSize
+call error_handler(E_MSG,'GetEnsSize',string1)
 
 end function GetEnsSize
 
@@ -2278,9 +2216,6 @@ integer, intent(out) :: posterior_mean_index
 integer, intent(out) :: prior_spread_index
 integer, intent(out) :: posterior_spread_index
 integer, intent(out) :: ens_copy_index(:)
-
-character(len=*), parameter :: routine = 'SetIndices'
-logical, save :: reported = .false.
 
 ! Using 'seq' and 'ens_size' from global scope
 
@@ -2336,29 +2271,29 @@ enddo QCMetaDataLoop
 ! Make sure we find an index for each of them.
 !--------------------------------------------------------------------
 
-if ( verbose .and. prior_mean_index       < 0 ) then
+if ( prior_mean_index       < 0 ) then
    write(string1,*)'metadata:"prior ensemble mean" not found'
-   call error_handler(E_MSG,routine,string1)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
-if ( verbose .and. posterior_mean_index   < 0 ) then
+if ( posterior_mean_index   < 0 ) then
    write(string1,*)'metadata:"posterior ensemble mean" not found'
-   call error_handler(E_MSG,routine,string1)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
-if ( verbose .and. prior_spread_index     < 0 ) then
+if ( prior_spread_index     < 0 ) then
    write(string1,*)'metadata:"prior ensemble spread" not found'
-   call error_handler(E_MSG,routine,string1)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
-if ( verbose .and. posterior_spread_index < 0 ) then
+if ( posterior_spread_index < 0 ) then
    write(string1,*)'metadata:"posterior ensemble spread" not found'
-   call error_handler(E_MSG,routine,string1)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
-if ( verbose .and.           org_qc_index < 0 ) then
+if (           org_qc_index < 0 ) then
    write(string1,*)'metadata:"Quality Control" not found'
-   call error_handler(E_MSG,routine,string1)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
-if ( verbose .and.          dart_qc_index < 0 ) then
+if (          dart_qc_index < 0 ) then
    write(string1,*)'metadata:"DART quality control" not found'
-   call error_handler(E_MSG,routine,string1)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
 
 ! Only require obs_index to be present; this allows the program
@@ -2371,7 +2306,7 @@ if ( obs_index < 0 ) then
    else
       write(string1,*)'metadata:"observation" not found'
    endif
-   if (verbose) call error_handler(E_ERR,routine,string1,source,revision,revdate)
+   call error_handler(E_ERR,'SetIndices',string1,source,revision,revdate)
 endif
 
 !--------------------------------------------------------------------
@@ -2385,64 +2320,43 @@ else
    write(string1,'(''"observation"          index '',i2,'' metadata '',a)') &
      obs_index, trim(get_copy_meta_data(seq,obs_index))
 endif
-if (verbose) call error_handler(E_MSG,routine,string1)
+call error_handler(E_MSG,'SetIndices',string1)
 
-if (verbose .and. prior_mean_index > 0 ) then
+if (prior_mean_index > 0 ) then
    write(string1,'(''"prior mean"           index '',i2,'' metadata '',a)') &
         prior_mean_index, trim(get_copy_meta_data(seq,prior_mean_index))
-   call error_handler(E_MSG,routine,string1)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
 
-if (verbose .and. posterior_mean_index > 0 ) then
+if (posterior_mean_index > 0 ) then
    write(string1,'(''"posterior mean"       index '',i2,'' metadata '',a)') &
         posterior_mean_index, trim(get_copy_meta_data(seq,posterior_mean_index))
-   call error_handler(E_MSG,routine,string1)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
 
-if (verbose .and. prior_spread_index > 0 ) then
+if (prior_spread_index > 0 ) then
    write(string1,'(''"prior spread"         index '',i2,'' metadata '',a)') &
         prior_spread_index, trim(get_copy_meta_data(seq,prior_spread_index))
-   call error_handler(E_MSG,routine,string1)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
 
-if (verbose .and. posterior_spread_index > 0 ) then
+if (posterior_spread_index > 0 ) then
    write(string1,'(''"posterior spread"     index '',i2,'' metadata '',a)') &
         posterior_spread_index, trim(get_copy_meta_data(seq,posterior_spread_index))
-   call error_handler(E_MSG,routine,string1)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
 
-if (verbose .and. org_qc_index > 0 ) then
+if (org_qc_index > 0 ) then
    write(string1,'(''"Quality Control"      index '',i2,'' metadata '',a)') &
          org_qc_index, trim(get_qc_meta_data(seq,org_qc_index))
-   call error_handler(E_MSG,routine,string1)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
 
-if (verbose .and. dart_qc_index > 0 ) then
+if (dart_qc_index > 0 ) then
    write(string1,'(''"DART quality control" index '',i2,'' metadata '',a)') &
         dart_qc_index, trim(get_qc_meta_data(seq,dart_qc_index))
-   call error_handler(E_MSG,routine,string1)
+   call error_handler(E_MSG,'SetIndices',string1)
 endif
-
-if ( any( (/ prior_mean_index, prior_spread_index/) < 0) .and. .not. reported) then
-   string1 = 'Observation sequence has no prior information.'
-   string2 = 'You will still get a count, maybe observation value, incoming qc, ...'
-   string3 = 'For simple information, you may want to use "obs_seq_to_netcdf" instead.'
-   call error_handler(E_MSG, routine, string1, &
-              source, revision, revdate, text2=string2, text3=string3)
-endif
-
-has_posteriors = .true.
-if ( any( (/ posterior_mean_index, posterior_spread_index /) < 0) ) then
-   has_posteriors = .false.
-   string1 = 'Observation sequence has no posterior information,'
-   string2 = 'therefore - posterior diagnostics are not possible.'
-
-   if (.not. reported) &
-   call error_handler(E_WARN, routine, string1, &
-              source, revision, revdate, text2=string2)
-endif
-
-reported = .true.
 
 end subroutine SetIndices
 
@@ -3024,7 +2938,7 @@ end subroutine CountDartQC_3D
 
 !----------------------------------------------------------------------
 !> This function simply accumulates the appropriate sums.
-!> The normalization occurs after all the data has been read, naturally.
+!> The normalization occurrs after all the data has been read, naturally.
 
 subroutine Bin4D(iqc, iepoch, ilevel, iregion, flavor, trusted, &
              obsval,  obserrvar,  prmean,  prsprd,  pomean,  posprd, rank, &
@@ -3203,7 +3117,7 @@ end subroutine Bin4D
 
 !----------------------------------------------------------------------
 !> This function simply accumulates the appropriate sums.
-!> The normalization occurs after all the data has been read, naturally.
+!> The normalization occurrs after all the data has been read, naturally.
 
 subroutine Bin3D(iqc, ilevel, iregion, flavor, trusted, &
              obsval,  obserrvar,  prmean,  prsprd,  pomean,  posprd, &
@@ -3965,12 +3879,9 @@ call nc_check(nf90_put_att(ncid, TimeVarID, 'standard_name',    'time'), &
           'WriteNetCDF', 'time:standard_name')
 call nc_check(nf90_put_att(ncid, TimeVarID, 'long_name', 'temporal bin midpoints'), &
           'WriteNetCDF', 'time:long_name')
-
-call get_calendar_udunits(string1)
-call nc_check(nf90_put_att(ncid, TimeVarID, 'units', string1), &
+call nc_check(nf90_put_att(ncid, TimeVarID, 'units',     'days since 1601-1-1'), &
           'WriteNetCDF', 'time:units')
-
-call nc_check(nf90_put_att(ncid, TimeVarID, 'calendar', trim(calendar)), &
+call nc_check(nf90_put_att(ncid, TimeVarID, 'calendar',    'Gregorian'), &
           'WriteNetCDF', 'time:calendar')
 call nc_check(nf90_put_att(ncid, TimeVarID, 'axis',    'T'), &
           'WriteNetCDF', 'time:axis')
@@ -3989,9 +3900,9 @@ call nc_check(nf90_def_var(ncid=ncid, name='time_bounds', xtype=nf90_double, &
             'WriteNetCDF', 'time_bounds:def_var')
 call nc_check(nf90_put_att(ncid, TimeBoundsVarID, 'long_name', 'temporal bin edges'), &
           'WriteNetCDF', 'time_bounds:long_name')
-call nc_check(nf90_put_att(ncid, TimeBoundsVarID, 'units', string1), &
+call nc_check(nf90_put_att(ncid, TimeBoundsVarID, 'units',     'days since 1601-1-1'), &
           'WriteNetCDF', 'time_bounds:units')
-call nc_check(nf90_put_att(ncid, TimeBoundsVarID, 'calendar',  trim(calendar)), &
+call nc_check(nf90_put_att(ncid, TimeBoundsVarID, 'calendar',  'Gregorian'), &
           'WriteNetCDF', 'time_bounds:calendar')
 call nc_check(nf90_put_att(ncid, TimeBoundsVarID, 'valid_range', &
           (/ epoch_edges(1,1), epoch_edges(2,Nepochs) /)), &
@@ -4097,7 +4008,7 @@ call nc_check(nf90_sync( ncid), 'WriteNetCDF', 'sync '//trim(fname))
 
 !----------------------------------------------------------------------------
 ! write the data we took such pains to collate ...
-! The priors always have values. It is possible there are no posteriors.
+! The priors always have values. It is possible that there are no posteriors.
 !----------------------------------------------------------------------------
 
 if ( create_rank_histogram ) then
@@ -4106,6 +4017,7 @@ else
    call WriteTLRV(ncid, prior, TimeDimID, CopyDimID, RegionDimID)
 endif
 call WriteTLRV(ncid, poste,    TimeDimID, CopyDimID, RegionDimID)
+
 call WriteLRV( ncid, priorAVG,            CopyDimID, RegionDimID)
 call WriteLRV( ncid, posteAVG,            CopyDimID, RegionDimID)
 
@@ -4117,6 +4029,59 @@ call nc_check(nf90_sync( ncid), 'WriteNetCDF', 'sync '//trim(fname))
 call nc_check(nf90_close(ncid), 'init_diag_output', 'close '//trim(fname))
 
 end subroutine WriteNetCDF
+
+
+!======================================================================
+
+
+subroutine DestroyVariables()
+
+if (associated(prior%hist_bin)) deallocate(prior%hist_bin)
+if (allocated(ens_copy_index))  deallocate(ens_copy_index)
+
+deallocate(prior%rmse,        prior%bias,      prior%spread,    prior%totspread, &
+           prior%observation, prior%ens_mean,  prior%Nposs,     prior%Nused,     &
+           prior%NbigQC,      prior%NbadIZ,    prior%NbadUV,    prior%NbadLV,    &
+           prior%NbadDartQC,  prior%Ntrusted)
+
+deallocate(prior%NDartQC_0,   prior%NDartQC_1, prior%NDartQC_2, prior%NDartQC_3, &
+           prior%NDartQC_4,   prior%NDartQC_5, prior%NDartQC_6, prior%NDartQC_7, &
+           prior%NDartQC_8)
+
+deallocate(poste%rmse,        poste%bias,      poste%spread,    poste%totspread, &
+           poste%observation, poste%ens_mean,  poste%Nposs,     poste%Nused,     &
+           poste%NbigQC,      poste%NbadIZ,    poste%NbadUV,    poste%NbadLV,    &
+           poste%NbadDartQC,  poste%Ntrusted)
+
+deallocate(poste%NDartQC_0,   poste%NDartQC_1, poste%NDartQC_2, poste%NDartQC_3, &
+           poste%NDartQC_4,   poste%NDartQC_5, poste%NDartQC_6, poste%NDartQC_7, &
+           poste%NDartQC_8)
+
+deallocate(priorAVG%rmse,       priorAVG%bias,        priorAVG%spread,   &
+           priorAVG%totspread,  priorAVG%observation, priorAVG%ens_mean, &
+           priorAVG%Nposs,      priorAVG%Nused,       priorAVG%NbigQC,   &
+           priorAVG%NbadIZ,     priorAVG%NbadUV,      priorAVG%NbadLV,   &
+           priorAVG%NbadDartQC, priorAVG%Ntrusted)
+
+deallocate(priorAVG%NDartQC_0,  priorAVG%NDartQC_1,   priorAVG%NDartQC_2, &
+           priorAVG%NDartQC_3,  priorAVG%NDartQC_4,   priorAVG%NDartQC_5, &
+           priorAVG%NDartQC_6,  priorAVG%NDartQC_7,   priorAVG%NDartQC_8)
+
+deallocate(posteAVG%rmse,       posteAVG%bias,        posteAVG%spread,    &
+           posteAVG%totspread,  posteAVG%observation, posteAVG%ens_mean,  &
+           posteAVG%Nposs,      posteAVG%Nused,       posteAVG%NbigQC,    &
+           posteAVG%NbadIZ,     posteAVG%NbadUV,      posteAVG%NbadLV,    &
+           posteAVG%NbadDartQC, posteAVG%Ntrusted)
+
+deallocate(posteAVG%NDartQC_0,  posteAVG%NDartQC_1,   posteAVG%NDartQC_2, &
+           posteAVG%NDartQC_3,  posteAVG%NDartQC_4,   posteAVG%NDartQC_5, &
+           posteAVG%NDartQC_6,  posteAVG%NDartQC_7,   posteAVG%NDartQC_8)
+
+deallocate(epoch_center, epoch_edges, bin_center, obs_used_in_epoch)
+
+deallocate(obs_type_strings, which_vert, scale_factor)
+
+end subroutine DestroyVariables
 
 
 !======================================================================
@@ -4767,350 +4732,7 @@ IRemoveDuplicates = n
 end function IRemoveDuplicates
 
 
-!-------------------------------------------------------------------------------
-!> Given time and some date increment, computes new time.
-!> If incrementing by a 'month', things may become ill-defined.
-!> If the input date is the last day of the month, and you increment by 1 month,
-!> do you want the last day of the next month? If so,
-!> 29 June + 1 month is 29 July
-!> 30 June + 1 month is 31 July  ... no way to go from 30 June to 30 July
-!> 28,29 Feb + 1 mon is 31 March  ... no way to get to March 28,29,30
-!>
-!> When adding 'months' to a input date that is the end of the month,
-!> this routine increments to the last day of the new month.
-
-function increment_date(time, years, months, days, hours, minutes, seconds)
-
-type(time_type), intent(in)           :: time
-integer,         intent(in), optional :: years, months, days, hours, minutes, seconds
-type(time_type)                       :: increment_date
-
-integer :: tseconds, tminutes, thours, tdays, tmonths, tyears
-integer :: oseconds, ominutes, ohours, odays, omonths, oyears
-integer :: cseconds, cminutes, chours, cdays, cmonths, cyears
-integer :: imonth
-
-type(time_type) :: newtime
-type(time_type) :: day_after
-type(time_type) :: oneday
-logical :: end_of_month
-
-! if ( .not. module_initialized ) call time_manager_init
-
-oneday = set_time(0,1)
-
-! Missing optionals are set to 0
-
-oseconds = 0; if(present(seconds)) oseconds = seconds
-ominutes = 0; if(present(minutes)) ominutes = minutes
-ohours   = 0; if(present(hours  )) ohours   = hours
-odays    = 0; if(present(days   )) odays    = days
-omonths  = 0; if(present(months )) omonths  = months
-oyears   = 0; if(present(years  )) oyears   = years
-
-! Increment must be positive
-
-if( oseconds < 0 .or. ominutes < 0 .or. &
-    ohours   < 0 .or. odays    < 0 .or. &
-    omonths  < 0 .or. oyears   < 0) then
-   write(string1,*)'illegal increment s,m,h,d,mn,y', &
-                      oseconds,ominutes,ohours,odays,omonths,oyears
-   call error_handler(E_ERR,'increment_date',string1,source,revision,revdate)
-endif
-
-call get_date(time, cyears, cmonths, cdays, chours, cminutes, cseconds)
-
-cyears = cyears + oyears
-
-! If you are at the end of a month, adding 1 month means you are at
-! the end of the next month
-
-end_of_month = .false.
-day_after = time + oneday
-call get_date(day_after, tyears, tmonths, tdays, thours, tminutes, tseconds)
-if (tmonths /= cmonths .and. (omonths > 0 .or. oyears > 0)) end_of_month = .true.
-
-do imonth = 1,omonths
-   cmonths = cmonths + 1
-   if (cmonths > 12) then
-      cyears = cyears + 1
-      cmonths = 1
-   endif
-enddo
-
-if (end_of_month) then
-
-   ! Get the last day of the new month, to do that, we need to
-   ! get the first day of next month and subtract one day.
-
-   tyears  = cyears
-   tmonths = cmonths + 1
-
-   if (tmonths > 12) then
-      tmonths = 1
-      tyears = tyears + 1
-   endif
-
-   newtime        = set_date(tyears, tmonths, 1, chours, cminutes, cseconds)
-   increment_date = newtime - oneday
-
-else
-
-   increment_date = set_date(cyears, cmonths, cdays, chours, cminutes, cseconds) + &
-                    set_time(ohours*3600 + ominutes*60 + oseconds, odays)
-endif
-
-! call print_date(increment_date,'increment_date')
-
-end function increment_date
-
-
-!-------------------------------------------------------------------------------
-!> Given time and some date decrement, computes new time.
-!> When subtracting 'months' to a input date that is the end of the month,
-!> this routine decrements to the last day of the new month.
-!>
-!> This algoritm is not perfect.
-!> 30 July - 1 month results in 30 June
-!> 31 July - 1 month results in 30 June (also)
-!> 30 June - 1 month is 31 May   (no way to get to 30 May)
-
-function decrement_date(time, years, months, days, hours, minutes, seconds)
-
-type(time_type), intent(in)           :: time
-integer,         intent(in), optional :: years, months, days, hours, minutes, seconds
-type(time_type)                       :: decrement_date
-
-integer :: tseconds, tminutes, thours, tdays, tmonths, tyears
-integer :: oseconds, ominutes, ohours, odays, omonths, oyears
-integer :: cseconds, cminutes, chours, cdays, cmonths, cyears
-integer :: imonth, origyear
-
-type(time_type) :: newtime
-type(time_type) :: offset_time
-type(time_type) :: day_after
-type(time_type) :: oneday
-logical :: end_of_month
-
-! if ( .not. module_initialized ) call time_manager_init
-
-oneday = set_time(0,1)
-
-! Missing optionals are set to 0
-
-oseconds = 0; if(present(seconds)) oseconds = seconds
-ominutes = 0; if(present(minutes)) ominutes = minutes
-ohours   = 0; if(present(hours  )) ohours   = hours
-odays    = 0; if(present(days   )) odays    = days
-omonths  = 0; if(present(months )) omonths  = months
-oyears   = 0; if(present(years  )) oyears   = years
-
-! Decrement must be positive
-
-if( oseconds < 0 .or. ominutes < 0 .or. &
-    ohours   < 0 .or. odays    < 0 .or. &
-    omonths  < 0 .or. oyears < 0) then
-    write(string1,*)'illegal decrement ',oyears,omonths,odays,ohours,ominutes,oseconds
-    call error_handler(E_ERR,'decrement_date',string1,source,revision,revdate)
-endif
-
-! call print_date(time,'original  time')
-
-call get_date(time, cyears, cmonths, cdays, chours, cminutes, cseconds)
-origyear = cyears
-
-! If you are at the end of the month to start, and you decrement a month,
-! you should return the end of the previous month.
-
-end_of_month = .false.
-day_after = time + oneday
-call get_date(day_after, tyears, tmonths, tdays, thours, tminutes, tseconds)
-if (tmonths /= cmonths .and. (omonths > 0 .or. oyears > 0)) end_of_month = .true.
-
-! March is a special case ... March 29,30,31
-! can all derefernce to the end of February.
-
-if (leap_year(time) .and. cmonths == 3 .and. cdays >= 29) then
-   end_of_month = .true.
-elseif ( cmonths == 3 .and. cdays >= 28 ) then
-   end_of_month = .true.
-endif
-
-! call print_date(day_after,'day      after')
-
-cyears = cyears - oyears
-
-do imonth = 1,omonths
-   cmonths = cmonths - 1
-   if (cmonths < 1) then
-      cyears = cyears - 1
-      if (cyears < 0) then
-         write(string1,*)'illegal decrement ',oyears,omonths,odays,ohours,ominutes,oseconds
-         write(string1,*)'Results in a negative year, original year is ', origyear
-         call error_handler(E_ERR, 'decrement_date', string1, &
-                    source, revision, revdate, text2=string1)
-      endif
-      cmonths = 12
-   endif
-enddo
-
-if (end_of_month) then
-   ! Get the last day of the new month, to do that, we need to
-   ! get the first day of next month and subtract one day.
-
-   tyears  = cyears
-   tmonths = cmonths + 1
-
-   if (tmonths > 12) then
-      tmonths = 1
-      tyears = tyears + 1
-   endif
-
-   newtime    = set_date(tyears, tmonths, 1, chours, cminutes, cseconds)
-   decrement_date = newtime - oneday
-
-else
-
-   newtime     = set_date(cyears, cmonths, cdays, chours, cminutes, cseconds)
-   offset_time = set_time(ohours*3600 + ominutes*60 + oseconds, odays)
-   decrement_date = newtime - offset_time
-
-endif
-
-end function decrement_date
-
-
-!-------------------------------------------------------------------------------
-!> Routine to show potential problems when incrementing by months or years
-
-subroutine date_increment_test
-
-type(time_type) :: time1, time2, time3
-
-! test to see if it is desired to increment by years or months
-! If not, just return.
-! If so, demonstrate the peculiarities.
-
-if (bin_separation(1) == 0 .and. bin_separation(2) == 0 .and. &
-         bin_width(1) == 0 .and.      bin_width(2) == 0 .and. &
-      time_to_skip(1) == 0 .and.   time_to_skip(2) == 0 ) return
-
-call get_calendar_string(string1)
-
-write(*,*)''
-write(*,*)'date_increment_test() report using the ',trim(string1),' calendar.'
-write(*,*)'Depending on the calendar, these might generate unexpected results.'
-if (trim(string1) == 'GREGORIAN') &
-write(*,*) '2000 Feb 29 is a valid date with the GREGORIAN calendar'
-write(*,*)''
-
-time1 = set_date(2000,1,31)
-time2 = decrement_date(time1,0,1)
-time3 = increment_date(time1,0,1)
-call print_date(time2,'2000 Jan 31 - one month = ')
-call print_date(time3,'2000 Jan 31 + one month = ')
-write(*,*)''
-
-time1 = set_date(2000,2,1)
-time2 = decrement_date(time1,0,1)
-time3 = increment_date(time1,0,1)
-call print_date(time2,'2000 Feb  1 - one month = ')
-call print_date(time3,'2000 Feb  1 + one month = ')
-write(*,*)''
-
-time1 = set_date(2000,2,15)
-time2 = decrement_date(time1,0,1)
-time3 = increment_date(time1,0,1)
-call print_date(time2,'2000 Feb 15 - one month = ')
-call print_date(time3,'2000 Feb 15 + one month = ')
-write(*,*)''
-
-time1 = set_date(2000,2,29)
-time2 = decrement_date(time1,0,1)
-time3 = increment_date(time1,0,1)
-call print_date(time1,'2000 Feb 29 = ')
-call print_date(time2,'2000 Feb 29 - one month = ')
-call print_date(time3,'2000 Feb 29 + one month = ')
-write(*,*)''
-
-time1 = set_date(2001,2,28)
-time2 = decrement_date(time1,0,1)
-time3 = increment_date(time1,0,1)
-call print_date(time2,'2001 Feb 28 - one month = ')
-call print_date(time3,'2001 Feb 28 + one month = ')
-write(*,*)''
-
-time1 = set_date(1999,3,29)
-time2 = decrement_date(time1,0,1)
-time3 = increment_date(time1,0,1)
-call print_date(time2,'1999 Mar 29 - one month = ')
-call print_date(time3,'1999 Mar 29 + one month = ')
-write(*,*)''
-
-time1 = set_date(2000,3,29)
-time2 = decrement_date(time1,0,1)
-time3 = increment_date(time1,0,1)
-call print_date(time2,'2000 Mar 29 - one month = ')
-call print_date(time3,'2000 Mar 29 + one month = ')
-write(*,*)''
-
-time1 = set_date(2000,3,30)
-time2 = decrement_date(time1,0,1)
-time3 = increment_date(time1,0,1)
-call print_date(time2,'2000 Mar 30 - one month = ')
-call print_date(time3,'2000 Mar 30 + one month = ')
-write(*,*)''
-
-time1 = set_date(2000,3,31)
-time2 = decrement_date(time1,0,1)
-time3 = increment_date(time1,0,1)
-call print_date(time2,'2000 Mar 31 - one month = ')
-call print_date(time3,'2000 Mar 31 + one month = ')
-write(*,*)''
-
-time1 = set_date(2000,4,30)
-time2 = decrement_date(time1,0,2)
-time3 = increment_date(time1,0,2)
-call print_date(time2,'2000 Apr 30 - two months = ')
-call print_date(time3,'2000 Apr 30 + two months = ')
-write(*,*)''
-
-time1 = set_date(2000,6,30)
-time2 = decrement_date(time1,0,1)
-time3 = increment_date(time1,0,1)
-call print_date(time2,'2000 Jun 30 - one month = ')
-call print_date(time3,'2000 Jun 30 + one month = ')
-write(*,*)''
-
-time1 = set_date(2000,7,1)
-time2 = decrement_date(time1,0,1)
-time3 = increment_date(time1,0,1)
-call print_date(time2,'2000 Jul  1 - one month = ')
-call print_date(time3,'2000 Jul  1 + one month = ')
-write(*,*)''
-
-time1 = set_date(2000,7,30)
-time2 = decrement_date(time1,0,1)
-time3 = increment_date(time1,0,1)
-call print_date(time2,'2000 Jul 30 - one month = ')
-call print_date(time3,'2000 Jul 30 + one month = ')
-write(*,*)''
-
-time1 = set_date(2000,7,30)
-time2 = decrement_date(time1,0,2)
-time3 = increment_date(time1,0,2)
-call print_date(time2,'2000 Jul 30 - two months = ')
-call print_date(time3,'2000 Jul 30 + two months = ')
-write(*,*)''
-
-time1 = set_date(2000,7,31)
-time2 = decrement_date(time1,0,1)
-time3 = increment_date(time1,0,1)
-call print_date(time2,'2000 Jul 31 - one month = ')
-call print_date(time3,'2000 Jul 31 + one month = ')
-write(*,*)''
-
-end subroutine date_increment_test
+!======================================================================
 
 
 end program obs_diag

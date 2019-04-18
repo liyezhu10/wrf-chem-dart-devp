@@ -131,18 +131,18 @@ LD = ifort
 # uncomment the following line and set value to where lib and include
 # are found for the netcdf files that match this compiler.
 #
-# NETCDF = /opt/local
+NETCDF = /Users/thoar/intel_16.0.0
 
 INCS = -I$(NETCDF)/include
-# LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf -lhdf5_hl -lhdf5 -lhdf5hl_fortran -lhdf5_fortran
-LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf 
-FFLAGS  = -O2 $(INCS)
+LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf -lhdf5_hl -lhdf5 -lhdf5hl_fortran -lhdf5_fortran
+#LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf 
+# FFLAGS  = -O2 $(INCS)
 LDFLAGS = $(FFLAGS) $(LIBS)
 
 # for development or debugging, use this instead:
-# FFLAGS = -g -C -check noarg_temp_created -fpe0 \
-#          -fp-model precise  -ftrapuv -traceback \
-#          -warn declarations,uncalled,unused $(INCS)
+FFLAGS = -g -C -check noarg_temp_created -fpe0 \
+         -fp-model precise  -ftrapuv -traceback \
+         -warn declarations,uncalled,unused $(INCS)
 #
 # for speed on yellowstone (verify against a run with with -O and -fp-model precise
 #        that the numerical differences aren't too large to be acceptable):
