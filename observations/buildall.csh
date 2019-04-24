@@ -11,34 +11,39 @@ set clobber
 
 set startdir=`pwd`
 
-foreach project ( `find . -name quickbuild.csh -print` )
+# The NCEP prep_bufr converters are a special case
+
+set FAILURE = 0
+cd NCEP/prep_bufr
+./install.sh || set FAILURE = 1
+
+if ( $FAILURE != 0 ) then
+   echo
+   echo "ERROR unsuccessful build in $dir"
+   echo "ERROR unsuccessful build in $dir"
+   echo "ERROR unsuccessful build in $dir"
+   echo
+   exit -1
+endif
+
+cd $startdir
+
+foreach project ( AIRNOW IASI IASI_CO IASI_O3 MODIS MOPITT_CO NCEP PANDA )
 
    set dir = $project:h
    set FAILURE = 0
 
-   cd $dir
-   echo
-   echo building in $dir
-
    switch ("$dir")
 
-      case */var/*
-         echo "expected to fail unless you have the WRF code in-situ."
-      breaksw
-         
-      case *AIRS*
-         ./quickbuild.csh
-         echo "AIRS build is expected to fail due to dependency on hdfeos libs,"
-         echo "not required to be part of the standard DART environment."
-      breaksw
-         
-      case *quikscat*
-         ./quickbuild.csh
-         echo "quikscat build is expected to fail due to dependency on mfhdf libs,"
-         echo "not required to be part of the standard DART environment."
+      case *NCEP*
+         cd $dir/ascii_to_obs/work
+         echo "building in `pwd`"
+         ./quickbuild.csh || set FAILURE = 1
       breaksw
          
       default:
+         cd $dir/work
+         echo "building in `pwd`"
          ./quickbuild.csh || set FAILURE = 1
       breaksw
          
@@ -50,7 +55,7 @@ foreach project ( `find . -name quickbuild.csh -print` )
       echo "ERROR unsuccessful build in $dir"
       echo "ERROR unsuccessful build in $dir"
       echo
-#     exit -1
+      exit -1
    endif
 
    cd $startdir
@@ -62,4 +67,5 @@ exit 0
 # $URL$
 # $Revision$
 # $Date$
+
 
