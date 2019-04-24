@@ -3472,13 +3472,23 @@ else
             iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_co)
 
             fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+            if(fld(1).eq.missing_r8) then
+               print *, 'fld,dx,dxm,dy,dym ',fld(1),dx,dxm,dy,dym
+               print *, 'x_ill,x_ilr,x_iul,x_iur ',x(ill),x(ilr),x(iul),x(iur)
+            endif
 
    ! Interpolation for the CO field at level k+1
             ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_co)
             iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_co)
             ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_co)
             iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_co)         
+
             fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+
+            if(fld(2).eq.missing_r8) then
+               print *, 'fld,dx,dxm,dy,dym ',fld(2),dx,dxm,dy,dym
+               print *, 'x_ill,x_ilr,x_iul,x_iur ',x(ill),x(ilr),x(iul),x(iur)
+            endif
          endif
       endif
 !
@@ -4897,7 +4907,7 @@ if ( obs_val == missing_r8 .and. istatus == 0 ) then
    istatus = 99
 endif
 
-! Pring the observed value if in debug mode
+! Print the observed value if in debug mode
 if(debug) then
   print*,'model_interpolate() return value for obs_kind ',obs_kind, ' = ',obs_val
 endif

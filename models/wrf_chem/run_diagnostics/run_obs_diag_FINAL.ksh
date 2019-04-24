@@ -6,12 +6,40 @@
 ############################################################################### 
 #
 export START_DATE=2014072006
-export END_DATE=2014072206
+export END_DATE=2014072006
+export START_DATE=2014071706
+export END_DATE=2014071718
+#
+# Define EXPERIMENT path
+#export DIR_NAME=real_FRAPPE_RETR_CONTROL
+export DIR_NAME=real_FRAPPE_RETR_MOP_CO
+#export DIR_NAME=real_FRAPPE_RETR_MOP_AIR_CO
+#export DIR_NAME=real_FRAPPE_CPSR_MOP_CO_VLOC
+#export DIR_NAME=real_FRAPPE_CPSR_MOP_AIR_CO
+#export DIR_NAME=real_FRAPPE_CPSR_MOP_CO_NOVLOC
+#
+# Define FILTER path
 export DART_FILTER=dart_filter
+#
+#export DART_FILTER=/NOVLOC_HORZ_1p5_CUT_p10/dart_filter
+#export DART_FILTER=/NOVLOC_NOHORZ_0p5_CUT_p05/dart_filter
+#export DART_FILTER=/NOVLOC_NOHORZ_0p5_CUT_p10/dart_filter
+#export DART_FILTER=/NOVLOC_NOHORZ_1p0_CUT_p05/dart_filter
+#export DART_FILTER=/NOVLOC_NOHORZ_1p0_CUT_p10/dart_filter
+#export DART_FILTER=/NOVLOC_NOHORZ_1p5_CUT_p05/dart_filter
+#export DART_FILTER=/NOVLOC_NOHORZ_1p5_CUT_p10/dart_filter
+#
+#export DART_FILTER=/VLOC_HORZ_1p5/dart_filter
+#export DART_FILTER=/VLOC_NOHORZ_0p5_CUT_p05/dart_filter
+#export DART_FILTER=/VLOC_NOHORZ_0p5_CUT_p10/dart_filter
+#export DART_FILTER=/VLOC_NOHORZ_1p0_CUT_p05/dart_filter
+#export DART_FILTER=/VLOC_NOHORZ_1p0_CUT_p10/dart_filter
+#export DART_FILTER=/VLOC_NOHORZ_1p5_CUT_p05/dart_filter
+#export DART_FILTER=/VLOC_NOHORZ_1p5_CUT_p10/dart_filter
 #
 export DELETE_FLG=true
 export DOMAIN=01
-export NUM_MEMBERS=10
+export NUM_MEMBERS=30
 export CYCLE_PERIOD=6
 export FCST_PERIOD=6
 export ASIM_PERIOD=3
@@ -21,40 +49,20 @@ export LBC_FREQ=3
 #
 # Define code versions
 export DART_VER=DART_CHEM_REPOSITORY
-export WRFCHEM_VER=WRFCHEMv3.4_dmpar
-export WRF_VER=WRFv3.4_dmpar
-export WRFDA_VER=WRFDAv3.4_dmpar
-#
-# Set job submission parameters
-export PROJ_NUMBER=P19010000
-export TIME_LIMIT_FILTER=1:40
-export TIME_LIMIT_WRFCHEM=1:40
-export NUM_TASKS=32
-export TASKS_PER_NODE=16
-export JOB_CLASS=regular
-#
-# Define independent directory paths
-#export DIR_NAME=real_FRAPPE_RETR_CNTL
-#export DIR_NAME=real_FRAPPE_RETR_AIR_CO
-#export DIR_NAME=real_FRAPPE_RETR_AIR_O3
-#export DIR_NAME=real_FRAPPE_RETR_MOP_CO
-export DIR_NAME=real_FRAPPE_RETR_IAS_CO
-#export DIR_NAME=real_FRAPPE_RETR_IAS_O3
-#export DIR_NAME=real_FRAPPE_RETR_MOPnAIR_CO
-#export DIR_NAME=real_FRAPPE_RETR_IASnAIR_O3
+export WRFCHEM_VER=WRFCHEMv3.9.1.1_dmpar
+export WRF_VER=WRFv3.9.1.1_dmpar
+export WRFDA_VER=WRFDAv3.9.1.1_dmpar
 #
 # Independent path settings
-export SCRATCH_DIR=/glade/scratch/mizzi
-export PROJECT_DIR=/glade/p/work/mizzi
-export ACD_DIR=/glade/p/acd/mizzi
-export FRAPPE_DIR=/glade/p/FRAPPE/FINAL
+export SCRATCH_DIR=/scratch/summit/mizzi
+export PROJECT_DIR=/projects/mizzi
+export DATA_DIR=/gpfs/summit/datasets/GEOSChem_met_emis/wrf
 #
 # Dependent path settings
 export RUN_DIR=${SCRATCH_DIR}/DART_OBS_DIAG/${DIR_NAME}
-export EXP_DIR=${RUN_DIR}
+export EXP_DIR=${SCRATCH_DIR}/${DIR_NAME}
 export TRUNK_DIR=${PROJECT_DIR}/TRUNK
 #
-export SAVE_DIR=${FRAPPE_DIR}/${DIR_NAME}
 export DART_DIR=${TRUNK_DIR}/${DART_VER}
 export WRF_DIR=${TRUNK_DIR}/${WRF_VER}
 export WRFCHEM_DIR=${TRUNK_DIR}/${WRFCHEM_VER}
@@ -89,23 +97,23 @@ while [[ ${L_DATE} -le ${END_DATE} ]]; do
 #
 # Create obs_seq file list
    export FILE=obs_seq.final
-   if [[ ! -d ${EXP_DIR}/${L_DATE}/${DART_FILTER} ]]; then
-      mkdir -p ${EXP_DIR}/${L_DATE}/${DART_FILTER}
-      cd ${EXP_DIR}/${L_DATE}/${DART_FILTER}
+   if [[ ! -d ${RUN_DIR}/${L_DATE}/${DART_FILTER} ]]; then
+      mkdir -p ${RUN_DIR}/${L_DATE}/${DART_FILTER}
+      cd ${RUN_DIR}/${L_DATE}/${DART_FILTER}
    else
-      cd ${EXP_DIR}/${L_DATE}/${DART_FILTER}
+      cd ${RUN_DIR}/${L_DATE}/${DART_FILTER}
    fi
    if [[ -f ${FILE} && ${DELETE_FLG} == true ]]; then
       rm -rf ${FILE}
    fi
    if [[ ! -f ${FILE} ]]; then
-      cp ${SAVE_DIR}/${L_DATE}/${DART_FILTER}/${FILE} ${FILE}
+      cp ${EXP_DIR}/${L_DATE}/${DART_FILTER}/${FILE} ${FILE}
    fi
    cd ${RUN_DIR}
-   if [[ -f ${EXP_DIR}/${L_DATE}/${DART_FILTER}/${FILE} ]]; then
-      echo ${EXP_DIR}/${L_DATE}/${DART_FILTER}/${FILE} >> file_list.txt
+   if [[ -f ${RUN_DIR}/${L_DATE}/${DART_FILTER}/${FILE} ]]; then
+      echo ${RUN_DIR}/${L_DATE}/${DART_FILTER}/${FILE} >> file_list.txt
    else
-      echo APM: cp failed for ${EXP_DIR}/${L_DATE}/${DART_FILTER}/${FILE}
+      echo APM: cp failed for ${RUN_DIR}/${L_DATE}/${DART_FILTER}/${FILE}
       exit
    fi
 #
@@ -204,7 +212,7 @@ export NL_TIME_TO_SKIP_HH=0
 export NL_TIME_TO_SKIP_MN=0
 export NL_TIME_TO_SKIP_SS=0
 export NL_MAX_NUM_BINS=1000
-export NL_PLEVEL='1000., 850., 750., 650., 500'
+export NL_PLEVEL='1000., 925., 850., 700., 500., 400., 300., 250., 200., 150.'
 export NL_NREGIONS=1
 export NL_LONLIM1=0.
 export NL_LONLIM2=360.
@@ -266,7 +274,7 @@ export NL_PRINT_TABLE=.false.
    export NL_USE_INDEP_CHEM_ASSIM=${INDEP_CHEM_ASIM}
    export NL_DEFAULT_STATE_VARIABLES=.false.
    export NL_CONV_STATE_VARIABLES="'U',     'KIND_U_WIND_COMPONENT',     'TYPE_U',  'UPDATE','999',
-             'V',     'KIND_V_WIND_COMPONENT',     'TYPE_V',  'UPDATE','999',
+             'V',     'KIND_V_WINDCOMPONENT',     'TYPE_V',  'UPDATE','999',
              'W',     'KIND_VERTICAL_VELOCITY',    'TYPE_W',  'UPDATE','999',
              'PH',    'KIND_GEOPOTENTIAL_HEIGHT',  'TYPE_GZ', 'UPDATE','999',
              'T',     'KIND_POTENTIAL_TEMPERATURE','TYPE_T',  'UPDATE','999',
@@ -447,13 +455,19 @@ export NL_PRINT_TABLE=.false.
                                       'AIRCRAFT_TEMPERATURE',
                                       'SAT_U_WIND_COMPONENT',
                                       'SAT_V_WIND_COMPONENT',
-                                      'MOPITT_CO_RETRIEVAL',
-                                      'IASI_CO_RETRIEVAL',
-                                      'IASI_O3_RETRIEVAL',
-                                      'MODIS_AOD_RETRIEVAL',
-                                      'AIRNOW_CO',
-                                      'AIRNOW_O3',
-                                      'OMI_NO2_COLUMN'"
+                                      'MOPITT_CO_RETRIEVAL'"
+#                                      'AIRNOW_CO'"
+#                                      'OMI_NO2_COLUMN'"
+#                                      'AIRNOW_O3'"
+#                                      'IASI_CO_RETRIEVAL',
+#                                      'IASI_O3_RETRIEVAL',
+#                                      'MODIS_AOD_RETRIEVAL',
+   export NL_EVALUATE_THESE_OBS_TYPES="'MODIS_AOD_RETRIEVAL'"
+#                                      'IASI_CO_RETRIEVAL',
+#                                      'AIRNOW_O3'"
+#                                      'AIRNOW_CO',
+#                                      'MODIS_AOD_RETRIEVAL'"
+
 #
 # &replace_wrf_fields_nml
    export NL_FIELDNAMES="'SNOWC',
@@ -469,6 +483,18 @@ export NL_PRINT_TABLE=.false.
                       'SNOWH',
                       'SNOW'"
    export NL_FIELDLIST_FILE="' '"
+#
+# &location_nml
+export NL_HORIZ_DIST_ONLY=.false.
+export NL_VERT_NORMALIZATION_PRESSURE=100000.0
+export NL_VERT_NORMALIZATION_HEIGHT=10000.0
+export NL_VERT_NORMALIZATION_VELVE=20.0
+export NL_VERT_NORMALIZATION_SCALE_HEIGHT=1.5
+export NL_SPECIAL_VERT_NORMALIZATION_OBS_TYPES="'IASI_CO_RETRIEVAL','MOPITT_CO_RETRIEVAL'"
+export NL_SPECIAL_VERT_NORMALIZATION_PRESSURES="100000.0,100000.0"
+export NL_SPECIAL_VERT_NORMALIZATION_HEIGHTS="10000.0,10000.0"
+export NL_SPECIAL_VERT_NORMALIZATION_LEVELS="20.0,20.0"
+export NL_SPECIAL_VERT_NORMALIZATION_SCALE_HEIGHTS="4.5,4.5"
 #
 rm -rf input.nml
 ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_input.nml.ksh

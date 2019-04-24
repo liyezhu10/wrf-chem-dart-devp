@@ -126,13 +126,17 @@
       character(len=129)           :: file_name='airnow_obs_seq'
       character(len=180)           :: file_in
       logical                      :: use_log_co, use_log_o3
+
+      real                         :: pi,err_frac,ran1,ran2,zfac
 !
 !============================================================
 !obs sequence extra variables
 !============================================================
 !
 !============================================================
+      pi=4.*atan(1.0)
       fac=1.0
+      err_frac=0.4
       obs_qc(1)=0.
       namelist /create_airnow_obs_nml/year0,month0,day0,hour0,beg_year,beg_mon,beg_day, &
       beg_hour,beg_min,beg_sec,end_year,end_mon,end_day,end_hour,end_min,end_sec, &
@@ -228,6 +232,11 @@
             lon_mn .le. lon_temp .and. lon_mx .ge. lon_temp .and. &
             beg_greg_sec .le. data_greg_sec_temp .and. end_greg_sec .ge. data_greg_sec_temp) then
             indx=indx+1
+!            call random_number(ran1)
+!            if(ran1.eq.0.) call random_number(ran1)
+!            call random_number(ran2)
+!            if(ran2.eq.0.) call random_number(ran2)
+!            zfac=sqrt(-2.*log(ran1))*cos(2.*pi*ran2)
             lat(indx)=lat_temp
             lon(indx)=lon_temp
             year(indx)=year_temp
@@ -236,16 +245,16 @@
             hour(indx)=hour_temp
             minute(indx)=minute_temp
             obs_val(indx)=obs_val_temp*fac
-            obs_err(indx)=.2 * obs_val_temp
-            if (use_log_co .and. obs_val(indx).gt.0.) then
-               co_log_max=log10(obs_val(indx)+obs_err(indx))
-               if (obs_val(indx)-obs_err(indx).le. 0.) then
-                  obs_err(indx)=co_log_max-log10(obs_val(indx))
-               else
-                  co_log_min=log10(obs_val(indx)-obs_err(indx))
-                  obs_err(indx)=min(log10(obs_val(indx))-co_log_min, co_log_max-log10(obs_val(indx)))
-               endif
-               obs_val(indx)=log10(obs_val(indx))
+! physical space error
+!            obs_err(indx)=obs_val_temp*fac*err_frac
+            obs_err(indx)=(exp(err_frac)-1.)*obs_val_temp*fac
+            if (use_log_co) then
+!               co_log_max=log(obs_val(indx)+obs_err(indx))
+!               co_log_min=log(obs_val(indx)-obs_err(indx))
+!               obs_err(indx)=co_log_max-log(obs_val(indx))
+! log space error
+               obs_err(indx)=err_frac
+               obs_val(indx)=log(obs_val(indx))
             endif
             data_greg_sec(indx)=data_greg_sec_temp
          endif
@@ -274,7 +283,8 @@
 !
 ! location
          obs_val_out(1:num_copies)=obs_val(indx)
-         level=0.0
+!         level=0.0
+         level=1
          latitude=lat(indx) 
          if (lon(indx)<0) then
             longitude=lon(indx)+360
@@ -290,11 +300,12 @@
          min1=minute(indx)
          sec1=0
 !
-         print *, year1,month1,day1,hour1,min1
+!         print *, year1,month1,day1,hour1,min1
          obs_time=set_date(year1,month1,day1,hour1,min1,sec1)
          call get_time(obs_time, seconds, days)
 !        
-         which_vert           = -1       ! vert is surface
+!         which_vert           = -1       ! vert is surface
+         which_vert           = 1       ! vert is level
          obs_location         = set_location(longitude, latitude, level, which_vert)
          ob_err_var           = obs_err(indx)*obs_err(indx)
          obs_kind             = AIRNOW_CO

@@ -1,4 +1,3 @@
-
 ! Data Assimilation Research Testbed -- DART
 ! Copyright 2004-2007, Data Assimilation Research Section
 ! University Corporation for Atmospheric Research
@@ -127,6 +126,7 @@ integer                 :: lon_qc, lat_qc
 integer                 :: i, j, k, l, kk, ik, ikk, k1, k2, kstr 
 integer                 :: line_count, index, nlev, nlevp, prs_idx
 integer                 :: seconds, days, which_vert, old_ob
+integer                 :: spc_vloc,iasi_co_vloc,iasi_o3_vloc,kmax
 integer,dimension(max_num_obs)             :: qc_iasi, qc_thinning
 integer,dimension(12)                      :: days_in_month=(/ &
                                            31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31  /)
@@ -135,15 +135,16 @@ integer,dimension(nlon_qc,nlat_qc,500)     :: xg
 integer,dimension(1000)                    :: index_20
 integer,dimension(nlon_qc,nlat_qc)         :: xg_nlvls
 !
-real*8                          :: eps_tol=1.e-3
-real*8                          :: dofs, co_tot_col, co_tot_err
+real*8                          :: eps_tol=1.e-3,log10e
+real*8                          :: dofs, sdof, co_tot_col, co_tot_err
 real*8                          :: latitude, longitude, level
 real*8                          :: co_psurf, err, co_error, co_prior
 real                            :: bin_beg, bin_end
 real                            :: sec, lat, lon, nlevels
 real                            :: pi ,rad2deg, re, wt, corr_err, fac, fac_obs_error
-real                            :: ln_10, xg_sec_avg, co_log_max, co_log_min, co_min
-real                            :: irot, nlvls_fix
+real                            :: xg_sec_avg, co_log_max, co_log_min, co_min
+real                            :: prs_loc
+integer                         :: irot, nlvls_fix
 real*8, dimension(1000)         :: unif
 real*8, dimension(num_qc)       :: co_qc
 real*8, dimension(ias_dim)      :: co_avgker
@@ -155,7 +156,7 @@ real,dimension(ias_dim)         :: ret_x_r, ret_x_p
 real,dimension(ias_dim)         :: xcomp, xcomperr, xapr
 real,dimension(ias_dim,ias_dim) :: avgker, avg_k, adj_avg_k, temp_mat
 real,dimension(ias_dim,ias_dim) :: raw_cov, ret_cov, cov_a, cov_r, cov_m, cov_use
-real,dimension(nlon_qc,nlat_qc) :: xg_lon, xg_lat, xg_twt
+real,dimension(nlon_qc,nlat_qc) :: xg_lon, xg_lat, xg_twt, xg_dof
 real,dimension(nlon_qc,nlat_qc,ias_dim) :: xg_sec, xg_raw_err, xg_ret_err
 real,dimension(nlon_qc,nlat_qc,ias_dim) :: xg_raw_adj_x_r, xg_raw_adj_x_p, xg_raw_x_r, xg_raw_x_p
 real,dimension(nlon_qc,nlat_qc,ias_dim) :: xg_ret_adj_x_r, xg_ret_adj_x_p, xg_ret_x_r, xg_ret_x_p
@@ -163,7 +164,7 @@ real,dimension(nlon_qc,nlat_qc,ias_dim) :: xg_norm, xg_nint
 real,dimension(nlon_qc,nlat_qc,ias_dim,ias_dim) :: xg_avg_k, xg_raw_cov, xg_ret_cov
 real,dimension(nlon_qc,nlat_qc,ias_dimp) :: xg_prs, xg_prs_norm
 !
-double precision,dimension(ias_dim) ::  adj_x_p 
+double precision,dimension(ias_dim) ::  adj_raw_x_r, adj_raw_x_p, adj_ret_x_r, adj_ret_x_p 
 !
 character*129           :: qc_meta_data='IASI CO QC index'
 character*129           :: file_name='iasi_obs_seq'
@@ -176,7 +177,8 @@ character*129           :: IASI_O3_retrieval_type
 !
 ! QOR/CPSR variables
 integer                                        :: info,nlvls_trc,qstatus
-real,dimension(lwrk)                           :: wrk
+integer                                        :: cpsr_co_trunc_lim, cpsr_o3_trunc_lim
+double precision,dimension(lwrk)               :: wrk
 double precision,allocatable,dimension(:)      :: ZV,SV_cov
 double precision,allocatable,dimension(:)      :: rr_x_r,rr_x_p
 double precision,allocatable,dimension(:)      :: rs_x_r,rs_x_p
@@ -186,6 +188,8 @@ double precision,allocatable,dimension(:,:)    :: rs_avg_k,rs_cov
 !
 logical                 :: use_log_co
 logical                 :: use_log_o3
+logical                 :: use_cpsr_co_trunc
+logical                 :: use_cpsr_o3_trunc
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
@@ -196,10 +200,11 @@ logical                 :: use_log_o3
 !     CPSR - compact phase space retrievals
 !
 namelist /create_iasi_obs_nml/filedir,filename,year,month,day,hour,bin_beg, bin_end, &
-         IASI_CO_retrieval_type,IASI_O3_retrieval_type,fac_obs_error,use_log_co,use_log_o3
+         IASI_CO_retrieval_type,IASI_O3_retrieval_type,fac_obs_error,use_log_co,use_log_o3, &
+         use_cpsr_co_trunc,cpsr_co_trunc_lim,use_cpsr_o3_trunc,cpsr_o3_trunc_lim
 !
 ! Set constants
-ln_10=log(10.)
+log10e=log10(exp(1.0))
 pi=4.*atan(1.)
 rad2deg=360./(2.*pi)
 re=6371000.
@@ -212,6 +217,8 @@ hour_lst=-9999
 minute_lst=-9999
 second_lst=-9999 
 fac=1.0
+iasi_co_vloc=0
+iasi_o3_vloc=0
 !
 call find_namelist_in_file("input.nml", "create_iasi_obs_nml", iunit)
 read(iunit, nml = create_iasi_obs_nml, iostat = io)
@@ -238,12 +245,7 @@ call init_obs_sequence(seq, num_copies, num_qc, max_num_obs)
 ! Initialize the obs variable
 call init_obs(obs, num_copies, num_qc)
 
-! If use_log_co is 'true' the make sure retrieval type is RETR
-if (use_log_co.eq..TRUE. .and. trim(IASI_CO_retrieval_type).ne.'RETR') then
-   print *, 'APM: if use_log_co=true then IASI_CO_retrieval_type=RETR'
-   stop
-endif 
-
+!
 do icopy =1, num_copies
    if (icopy == 1) then
        copy_meta_data='IASI CO observation'
@@ -312,7 +314,7 @@ fac=fac_obs_error
 
 ! Error Check
   if (ios /=0) then
-      write(6,*) 'no data on file ', TRIM(filen)
+      write(6,*) 'no data in file ', TRIM(filen)
       go to 999
   endif
   nlvls=nint(nlevels)
@@ -349,7 +351,7 @@ fac=fac_obs_error
        qc_iasi(index_qc)=0
 
        !-------------------------------------------------------
-       ! Bin to nlat_qcxnlon_qc
+       ! Bin to nlat_qc x nlon_qc
        !-------------------------------------------------------
        ! find lon_qc, lat_qc
        lon_qc=nint((lon+180)/dlon_qc) + 1
@@ -409,15 +411,18 @@ fac=fac_obs_error
   xg_lon(:,:)=0.
   xg_lat(:,:)=0.
   xg_twt(:,:)=0.
+  xg_dof(:,:)=0.
   xg_prs(:,:,:)=0.          
   xg_raw_x_r(:,:,:)=0.          
   xg_raw_x_p(:,:,:)=0.          
   xg_raw_err(:,:,:)=0.          
+  xg_raw_adj_x_r(:,:,:)=0.
   xg_raw_adj_x_p(:,:,:)=0.
   xg_raw_cov(:,:,:,:)=0.          
   xg_ret_x_r(:,:,:)=0.          
   xg_ret_x_p(:,:,:)=0.          
   xg_ret_err(:,:,:)=0.          
+  xg_ret_adj_x_r(:,:,:)=0.
   xg_ret_adj_x_p(:,:,:)=0.
   xg_ret_cov(:,:,:,:)=0.          
   xg_avg_k(:,:,:,:)=0.          
@@ -451,7 +456,7 @@ fac=fac_obs_error
   endif
 !
 !-------------------------------------------------------
-! MAIN LOOP FOR IASI OBS
+! MAIN LOOP FOR IASI OBS (ppbv)
 !-------------------------------------------------------
 !
   do while(ios == 0)
@@ -477,6 +482,13 @@ fac=fac_obs_error
         cov_m(i,1:nlvls)=temp_mat(1:nlvls,i)
      enddo
      read(fileid,*) co_tot_col,co_tot_err
+!     print *, 'nlvls ',nlvls
+!     print *, 'x_r ',x_r(1:nlvls)
+!     print *, 'x_p ',x_p(1:nlvls)
+!     do k=1,nlvls
+!        print *, 'k, avg_k ',k,avg_k(k,1:nlvls)
+!        print *, 'k, cov_r ',k,cov_r(k,1:nlvls)
+!     enddo
 !
 ! calculate the air column for column to vmr conversion
      do i=1,nlvls
@@ -511,15 +523,20 @@ fac=fac_obs_error
         cov_use(:,:)=cov_r(:,:)
         raw_cov(:,:)=cov_use(:,:)
 !
-! Calculate prior term
-        adj_x_p(:)=0.
+! Calculate RAW prior term
+        adj_raw_x_r(:)=0.
+        adj_raw_x_p(:)=0.
+        adj_avg_k(:,:)=0.
         do i=1,nlvls
            do j=1,nlvls
               adj_avg_k(i,j)=-1.*avg_k(i,j)
            enddo
            adj_avg_k(i,i)=adj_avg_k(i,i)+1.
         enddo
-        call lh_mat_vec_prd(dble(adj_avg_k),dble(x_p),adj_x_p,nlvls)
+        call lh_mat_vec_prd(dble(adj_avg_k),dble(x_p),adj_raw_x_p,nlvls)
+!        print *, 'adj_x_p ',adj_raw_x_p(1:nlvls)
+        adj_raw_x_r(1:nlvls)=x_r(1:nlvls)-adj_raw_x_p(1:nlvls)
+!        print *, 'adj_x_r ',adj_raw_x_r(1:nlvls)
 !
 ! Calculate RAW retrieval and RAW prior
         do i=1,nlvls
@@ -533,28 +550,33 @@ fac=fac_obs_error
 ! (APM: IS THIS CORRECT?)
         do i=1,nlvls
            do j=1,nlvls
-              ret_cov(i,j)=raw_cov(i,j)/raw_x_r(i)/raw_x_r(j)/ln_10/ln_10
+              ret_cov(i,j)=raw_cov(i,j)/raw_x_r(i)/raw_x_r(j)/log10e/log10e
            enddo
         enddo
 !
-! Calculate errors for NO ROT RAW case
-        do j=1,nlvls
-           raw_err(j)=sqrt(raw_cov(j,j))
-        enddo
+! Calculate RAW errors
+!        do i=1,nlvls
+!           do j=1,nlvls
+!              raw_cov(i,j)=raw_cov(i,j)/raw_x_p(i)/raw_x_p(j)
+!           enddo
+!        enddo
 !
 ! Calculate errors for NO ROT RET case
         co_min=.01
         do j=1,nlvls
 ! (APM: IS THIS CORRECT?)
-!           ret_err(j)=sqrt(ret_cov(j,j)))
-!           ret_err(j)=log10(sqrt(raw_cov(j,j)))
-           co_log_max=log10(ret_x_r(j)+sqrt(raw_cov(j,j)))
-           if(ret_x_r(j)-sqrt(raw_cov(j,j)) .le. 0.) then
-              ret_err(j)=co_log_max-log10(ret_x_r(j)) 
+           co_log_max=log10(raw_x_r(j)+sqrt(raw_cov(j,j)))
+           if(raw_x_r(j)-sqrt(raw_cov(j,j)).le.0.) then
+              ret_err(j)=(co_log_max - ret_x_r(j))/2.
            else
-              co_log_min=log10(ret_x_r(j)-sqrt(raw_cov(j,j)))
-              ret_err(j)=min(log10(ret_x_r(j))-co_log_min, co_log_max-log10(ret_x_r(j))) 
+              co_log_min=log10(raw_x_r(j)-sqrt(raw_cov(j,j)))
+              ret_err(j)=(co_log_max - co_log_min)/2.
            endif
+        enddo
+!
+! Calculate errors for NO ROT RAW case
+        do j=1,nlvls
+           raw_err(j)=sqrt(raw_cov(j,j))
         enddo
 !
 ! Calculate superobs
@@ -563,6 +585,7 @@ fac=fac_obs_error
         xg_twt(lon_qc,lat_qc)=xg_twt(lon_qc,lat_qc)+wt
         xg_lon(lon_qc,lat_qc)=xg_lon(lon_qc,lat_qc)+lon*wt
         xg_lat(lon_qc,lat_qc)=xg_lat(lon_qc,lat_qc)+lat*wt
+        xg_dof(lon_qc,lat_qc)=xg_dof(lon_qc,lat_qc)+dofs*wt
         do i=kstr,ias_dim
            xg_norm(lon_qc,lat_qc,i)=xg_norm(lon_qc,lat_qc,i)+wt
            xg_prs_norm(lon_qc,lat_qc,i)=xg_prs_norm(lon_qc,lat_qc,i)+wt
@@ -576,13 +599,16 @@ fac=fac_obs_error
            xg_raw_x_r(lon_qc,lat_qc,i)=xg_raw_x_r(lon_qc,lat_qc,i)+raw_x_r(i-kstr+1)*wt
            xg_raw_x_p(lon_qc,lat_qc,i)=xg_raw_x_p(lon_qc,lat_qc,i)+raw_x_p(i-kstr+1)*wt
            xg_raw_err(lon_qc,lat_qc,i)=xg_raw_err(lon_qc,lat_qc,i)+raw_err(i-kstr+1)*wt
-           xg_raw_adj_x_p(lon_qc,lat_qc,i)=xg_raw_adj_x_p(lon_qc,lat_qc,i)+adj_x_p(i-kstr+1)*wt
+           xg_raw_adj_x_r(lon_qc,lat_qc,i)=xg_raw_adj_x_r(lon_qc,lat_qc,i)+adj_raw_x_r(i-kstr+1)*wt
+           xg_raw_adj_x_p(lon_qc,lat_qc,i)=xg_raw_adj_x_p(lon_qc,lat_qc,i)+adj_raw_x_p(i-kstr+1)*wt
            xg_ret_x_r(lon_qc,lat_qc,i)=xg_ret_x_r(lon_qc,lat_qc,i)+ret_x_r(i-kstr+1)*wt
            xg_ret_x_p(lon_qc,lat_qc,i)=xg_ret_x_p(lon_qc,lat_qc,i)+ret_x_p(i-kstr+1)*wt
            xg_ret_err(lon_qc,lat_qc,i)=xg_ret_err(lon_qc,lat_qc,i)+ret_err(i-kstr+1)*wt
+!           xg_ret_adj_x_r(lon_qc,lat_qc,i)=xg_ret_adj_x_r(lon_qc,lat_qc,i)+adj_ret_x_r(i-kstr+1)*wt
+!           xg_ret_adj_x_p(lon_qc,lat_qc,i)=xg_ret_adj_x_p(lon_qc,lat_qc,i)+adj_ret_x_p(i-kstr+1)*wt
            do j=kstr,ias_dim
-              xg_raw_cov(lon_qc,lat_qc,i,j)=xg_raw_cov(lon_qc,lat_qc,i,j)+raw_cov(i-kstr+1,j-kstr+1)*wt
               xg_ret_cov(lon_qc,lat_qc,i,j)=xg_ret_cov(lon_qc,lat_qc,i,j)+ret_cov(i-kstr+1,j-kstr+1)*wt
+              xg_raw_cov(lon_qc,lat_qc,i,j)=xg_raw_cov(lon_qc,lat_qc,i,j)+raw_cov(i-kstr+1,j-kstr+1)*wt
               xg_avg_k(lon_qc,lat_qc,i,j)=xg_avg_k(lon_qc,lat_qc,i,j)+avg_k(i-kstr+1,j-kstr+1)*wt
            enddo
         enddo
@@ -604,11 +630,7 @@ fac=fac_obs_error
         if(xg_twt(i,j).eq.0) cycle
         xg_lon(i,j)=xg_lon(i,j)/xg_twt(i,j)
         xg_lat(i,j)=xg_lat(i,j)/xg_twt(i,j)
-!
-! Skip for SINGLE_CLUSTER   
-!        if((xg_lon(i,j).lt.-97. .or. xg_lon(i,j).gt.-93.) .or. &
-!           (xg_lat(i,j).lt.38.  .or. xg_lat(i,j).gt.42.)) cycle
-!
+        xg_dof(i,j)=xg_dof(i,j)/xg_twt(i,j)
         do k=1,ias_dim
            if(xg_norm(i,j,k).eq.0) cycle
            xg_sec(i,j,k)=xg_sec(i,j,k)/xg_norm(i,j,k)
@@ -617,10 +639,13 @@ fac=fac_obs_error
            xg_raw_x_r(i,j,k)=xg_raw_x_r(i,j,k)/real(xg_norm(i,j,k))
            xg_raw_x_p(i,j,k)=xg_raw_x_p(i,j,k)/real(xg_norm(i,j,k))
            xg_raw_err(i,j,k)=xg_raw_err(i,j,k)/real(xg_norm(i,j,k))
+           xg_raw_adj_x_r(i,j,k)=xg_raw_adj_x_r(i,j,k)/real(xg_norm(i,j,k))
+           xg_raw_adj_x_p(i,j,k)=xg_raw_adj_x_p(i,j,k)/real(xg_norm(i,j,k))
            xg_ret_x_r(i,j,k)=xg_ret_x_r(i,j,k)/real(xg_norm(i,j,k))
            xg_ret_x_p(i,j,k)=xg_ret_x_p(i,j,k)/real(xg_norm(i,j,k))
            xg_ret_err(i,j,k)=xg_ret_err(i,j,k)/real(xg_norm(i,j,k))
-           xg_raw_adj_x_p(i,j,k)=xg_raw_adj_x_p(i,j,k)/real(xg_norm(i,j,k))
+!           xg_ret_adj_x_p(i,j,k)=xg_ret_adj_x_p(i,j,k)/real(xg_norm(i,j,k))
+!           xg_ret_adj_x_p(i,j,k)=xg_ret_adj_x_p(i,j,k)/real(xg_norm(i,j,k))
            do l=1,ias_dim
               if(xg_norm(i,j,l).eq.0) cycle
               xg_raw_cov(i,j,k,l)=xg_raw_cov(i,j,k,l)/real(xg_norm(i,j,k))
@@ -628,9 +653,7 @@ fac=fac_obs_error
               xg_avg_k(i,j,k,l)=xg_avg_k(i,j,k,l)/real(xg_norm(i,j,k))
            enddo
         enddo
-!        if(xg_prs_norm(i,j,ias_dimp).ne.0.) then
-           xg_prs(i,j,ias_dimp)=xg_prs(i,j,ias_dimp)/real(xg_prs_norm(i,j,ias_dimp))
-!        endif
+        xg_prs(i,j,ias_dimp)=xg_prs(i,j,ias_dimp)/real(xg_prs_norm(i,j,ias_dimp))
 !
 ! Get number of vertical levels
         klvls=ias_dim
@@ -640,40 +663,8 @@ fac=fac_obs_error
           endif
         enddo
         xg_nlvls(i,j)=klvls
-!
-! Calculate RAW prior term based on RAW averaged quantities
         nlvls=xg_nlvls(i,j)
         kstr=ias_dim-xg_nlvls(i,j)+1
-        adj_avg_k(:,:)=0.
-        adj_x_p(:)=0.
-        x_r(:)=0.
-        x_p(:)=0.
-        do k=1,ias_dim
-           if(xg_norm(i,j,k).eq.0) cycle
-           do l=1,ias_dim
-              if(xg_norm(i,j,l).eq.0) cycle
-              adj_avg_k(k-kstr+1,l-kstr+1)=-1.*xg_avg_k(i,j,k,l)
-           enddo
-           adj_avg_k(k-kstr+1,k-kstr+1)=adj_avg_k(k,k)+1.
-        enddo
-!        print *, 'raw_x_r ',(xg_raw_x_r(i,j,l),l=kstr,ias_dim)
-!        print *, 'raw_x_p ',(xg_raw_x_p(i,j,l),l=kstr,ias_dim)
-        x_r(1:xg_nlvls(i,j))=xg_raw_x_r(i,j,kstr:ias_dim)
-        x_p(1:xg_nlvls(i,j))=xg_raw_x_p(i,j,kstr:ias_dim)
-        call lh_mat_vec_prd(dble(adj_avg_k),dble(x_p),adj_x_p,xg_nlvls(i,j))
-        xg_raw_adj_x_p(i,j,:)=0.
-        xg_raw_adj_x_p(i,j,kstr:ias_dim)=adj_x_p(1:xg_nlvls(i,j))
-!
-! Adjust the RAW retrieval to remove the RAW prior
-        xg_raw_adj_x_r(:,:,:)=0.
-        do k=1,ias_dim
-           if(xg_norm(i,j,k).eq.0) cycle
-           xg_raw_adj_x_r(i,j,k)=x_r(k)-xg_raw_adj_x_p(i,j,k)
-        enddo
-!           print *, 'adj_x_r ',(xg_raw_adj_x_r(i,j,l),l=1,ias_dim)
-!           do k=kstr,ias_dim
-!             print *, 'cov ',k,(xg_raw_cov(i,j,k,l),l=kstr,ias_dim)
-!           enddo
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
@@ -785,9 +776,11 @@ fac=fac_obs_error
            Z(1:nlvls,1:nlvls)=dble(xg_avg_k(i,j,kstr:ias_dim,kstr:ias_dim))
            call dgesvd('A','A',nlvls,nlvls,Z,nlvls,SV_cov,U_cov,nlvls,VT_cov,nlvls,wrk,lwrk,info)
            nlvls_trc=0
+           sdof=0.
            do k=1,nlvls
               if(SV_cov(k).ge.eps_tol) then
                  nlvls_trc=k
+                 sdof=sdof+SV_cov(k)
               else
                  SV_cov(k)=0
                  U_cov(:,k)=0. 
@@ -802,6 +795,7 @@ fac=fac_obs_error
 !
 ! Rotate terms in the forward operator
            ZL(1:nlvls,1:nlvls)=dble(xg_avg_k(i,j,kstr:ias_dim,kstr:ias_dim))
+! averaging kernel
            call mat_prd(UT_cov(1:nlvls,1:nlvls),ZL(1:nlvls,1:nlvls), &
            rr_avg_k(1:nlvls,1:nlvls),nlvls,nlvls,nlvls,nlvls)
 !              do k=1,nlvls
@@ -813,6 +807,8 @@ fac=fac_obs_error
 !              do k=1,nlvls
 !                print *, 'rr_avg_k ',k,(rr_avg_k(k,l),l=1,nlvls)
 !              enddo
+
+! retrieval error covariance
            ZL(1:nlvls,1:nlvls)=dble(xg_raw_cov(i,j,kstr:ias_dim,kstr:ias_dim))
            call mat_tri_prd(UT_cov(1:nlvls,1:nlvls),ZL(1:nlvls,1:nlvls),U_cov(1:nlvls,1:nlvls), &
            rr_cov(1:nlvls,1:nlvls),nlvls,nlvls,nlvls,nlvls,nlvls,nlvls)
@@ -825,6 +821,7 @@ fac=fac_obs_error
 !              do k=1,nlvls
 !                print *, 'rr_cov ',k,(rr_cov(k,l),l=1,nlvls)
 !              enddo
+! adjusted retrieval
            ZV(1:nlvls)=dble(xg_raw_adj_x_r(i,j,kstr:ias_dim))
            call lh_mat_vec_prd(UT_cov(1:nlvls,1:nlvls),ZV(1:nlvls),rr_x_r(1:nlvls),nlvls)
 !              do k=1,nlvls
@@ -847,7 +844,7 @@ fac=fac_obs_error
               SV_cov(k)=0
               U_cov(:,k)=0. 
               VT_cov(k,:)=0.
-           enddo 
+           enddo
 !
 ! Scale the singular vectors (NO SCALE/SCALE)     
            do k=1,nlvls_trc
@@ -867,7 +864,12 @@ fac=fac_obs_error
 !              enddo
 !
 ! Rotate terms in the forward operator
-           ZL(1:nlvls,1:nlvls)=rr_avg_k(1:nlvls,1:nlvls)
+           ZL(:,:)=0.
+           do k=1,nlvls
+              do kk=1,nlvls
+                 ZL(k,kk)=rr_avg_k(k,kk)
+              enddo
+           enddo
            call mat_prd(UT_cov(1:nlvls,1:nlvls),ZL(1:nlvls,1:nlvls), &
            rs_avg_k(1:nlvls,1:nlvls),nlvls,nlvls,nlvls,nlvls)
 !              do k=1,nlvls
@@ -879,7 +881,12 @@ fac=fac_obs_error
 !              do k=1,nlvls
 !                print *, 'rs_avg_k ',k,(rs_avg_k(k,l),l=1,nlvls)
 !              enddo
-           ZL(1:nlvls,1:nlvls)=rr_cov(1:nlvls,1:nlvls)
+           ZL(:,:)=0.
+           do k=1,nlvls
+              do kk=1,nlvls
+                 ZL(k,kk)=rr_cov(k,kk)
+              enddo
+           enddo
            call mat_tri_prd(UT_cov(1:nlvls,1:nlvls),ZL(1:nlvls,1:nlvls),U_cov(1:nlvls,1:nlvls), &
            rs_cov(1:nlvls,1:nlvls),nlvls,nlvls,nlvls,nlvls,nlvls,nlvls)
 !              do k=1,nlvls
@@ -891,14 +898,20 @@ fac=fac_obs_error
 !              do k=1,nlvls
 !                print *, 'rs_cov ',k,(rs_cov(k,l),l=1,nlvls)
 !              enddo
-           ZV(1:nlvls)=rr_x_r(1:nlvls)
+           ZV(:)=0.
+           do k=1,nlvls
+              ZV(k)=rr_x_r(k)
+           enddo
            call lh_mat_vec_prd(UT_cov(1:nlvls,1:nlvls),ZV(1:nlvls),rs_x_r(1:nlvls),nlvls)
 !              do k=1,nlvls
 !                print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
 !              enddo
 !              print *, 'rr_x_r ',(rr_x_r(l),l=1,nlvls)
 !              print *, 'rs_x_r ',(rs_x_r(l),l=1,nlvls)
-           ZV(1:nlvls)=rr_x_p(1:nlvls)
+           ZV(:)=0.
+           do k=1,nlvls
+              ZV(k)=rr_x_p(k)
+           enddo
            call lh_mat_vec_prd(UT_cov(1:nlvls,1:nlvls),ZV(1:nlvls),rs_x_p(1:nlvls),nlvls)
 !              do k=1,nlvls
 !                 print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
@@ -928,20 +941,23 @@ fac=fac_obs_error
            irot=1
            nlvls_fix=nlvls_trc
         endif
-        do k=1,nlvls_fix
 !
-! Remove the higher modes (or remove the upper troposphere obs)
-! This removes upper most ob in physical space and the highest mode ob in phase space
-           if(irot.eq.0 .and. k+kstr-1.ge.17) cycle
-!           if(irot.eq.0 .and. (k+kstr-1.eq.15 .or. k+kstr-1.eq.16 .or. k+kstr-1.ge.17)) cycle
-!           if(irot.eq.1 .and. k.eq.nlvls_trc) cycle
+! Truncate the number of CPSR modes
+        if(use_cpsr_co_trunc.eq..TRUE. .and. nlvls_fix.gt.cpsr_co_trunc_lim) then
+           print *,'APM change limit ', nlvls_fix,cpsr_co_trunc_lim
+           nlvls_fix=cpsr_co_trunc_lim
+        endif
+!
+        do k=1,nlvls_fix
+           if(irot.eq.1 .and. k.eq.2) cycle
            qc_count=qc_count+1
 !
 ! RAW with NO ROT
            if(trim(IASI_CO_retrieval_type) .eq. 'RAWR') then
-              xcomp(k)=xg_raw_x_r(i,j,k+kstr-1)
+              xcomp(k)=xg_raw_adj_x_r(i,j,k+kstr-1)
               xcomperr(k)=fac*xg_raw_err(i,j,k+kstr-1)
-              xapr(k)=xg_raw_x_p(i,j,k+kstr-1)
+!              xapr(k)=xg_raw_adj_x_p(i,j,k+kstr-1)
+              xapr(k)=0.
               do l=1,xg_nlvls(i,j)
                  avgker(k,l)=xg_avg_k(i,j,k+kstr-1,l+kstr-1)
               enddo
@@ -949,9 +965,10 @@ fac=fac_obs_error
 !
 ! RET with NO ROT
            if(trim(IASI_CO_retrieval_type) .eq. 'RETR') then
-              xcomp(k)=xg_ret_x_r(i,j,k+kstr-1)
+              xcomp(k)=xg_ret_adj_x_r(i,j,k+kstr-1)
               xcomperr(k)=fac*xg_ret_err(i,j,k+kstr-1)
-              xapr(k)=xg_ret_x_p(i,j,k+kstr-1)
+!              xapr(k)=xg_ret_adj_x_p(i,j,k+kstr-1)
+              xapr(k)=0.
               do l=1,xg_nlvls(i,j)
                  avgker(k,l)=xg_avg_k(i,j,k+kstr-1,l+kstr-1)
               enddo
@@ -1008,7 +1025,7 @@ fac=fac_obs_error
               enddo
            endif
 !
-! Calculate vertical average seconds
+! Calculate average seconds
            xg_sec_avg=0.
            do l=1,xg_nlvls(i,j)
               xg_sec_avg=xg_sec_avg+xg_sec(i,j,l+kstr-1)/xg_nlvls(i,j)
@@ -1101,16 +1118,25 @@ fac=fac_obs_error
 ! Use each mixing ratio as a separate obs
 !--------------------------------------------------------
 !
-! APM: change the vertical location to accout for v5 
-!      layer average convention
-           level=(xg_prs(i,j,k+kstr-1)+xg_prs(i,j,k+kstr))/2*100
-           which_vert=2       ! pressure surfaces
-           if(irot.eq.1) then
-              level=k
-              which_vert=1       ! level
-           endif  
+           spc_vloc=iasi_co_vloc
+           if(spc_vloc.eq.1) then
+              call vertical_locate(prs_loc,kmax,xg_prs(i,j,kstr:ias_dimp), &
+              avgker(k,1:xg_nlvls(i,j)),xg_nlvls(i,j)+1,xg_nlvls(i,j))
+              if(irot.eq.1) then
+                 level=prs_loc*100.
+                 which_vert=2       ! pressure surface
+              elseif(irot.eq.0) then
+                 level=prs_loc*100.
+                 which_vert=2       ! pressure surface
+              endif
+           elseif(irot.eq.1) then
+              level=1
+              which_vert=-2         ! undefined
+           elseif(irot.eq.0) then  
+              level=(xg_prs(i,j,k+kstr-1)+xg_prs(i,j,k+kstr))/2*100.
+              which_vert=2          ! pressure surface
+           endif
            obs_kind = IASI_CO_RETRIEVAL
-!
            obs_location=set_location(longitude, latitude, level, which_vert)
            co_psurf=xg_prs(i,j,kstr)*100.
            co_avgker(1:xg_nlvls(i,j))=avgker(k,1:xg_nlvls(i,j))
@@ -1367,3 +1393,59 @@ end program create_iasi_obs_sequence
       enddo
       calc_greg_sec=calc_greg_sec+sec
    end function calc_greg_sec
+!
+   subroutine vertical_locate(prs_loc,prs,avgk,nlvp,nlvk)
+!
+! This subroutine is attache to mopitt_ascii_to_obs.f90 to identify to vertical
+! location for vertical localization 
+! 
+      implicit none
+      integer,parameter           :: nlv=19
+      integer                     :: nlvp,nlvk
+      integer                     :: k,kk,kk_st,kk_nd,kmax
+      real                        :: wt_ctr,wt_end,zmax,sum
+      real                        :: prs_loc
+      real,dimension(nlvp)        :: prs
+      real,dimension(nlvk)        :: avgk
+      real,dimension(nlv)         :: avgk_sm
+!
+! apply vertical smoother
+      wt_ctr=2.
+      wt_end=1.
+      avgk_sm(:)=0.
+      do k=1,nlvk
+         if(k.eq.1) then
+            avgk_sm(k)=(wt_ctr*avgk(k)+wt_end*avgk(k+1))/(wt_ctr+wt_end)
+            cycle
+         elseif(k.eq.nlvk) then
+            avgk_sm(k)=(wt_end*avgk(k-1)+wt_ctr*avgk(k))/(wt_ctr+wt_end)
+            cycle
+         else
+            avgk_sm(k)=(wt_end*avgk(k-1)+wt_ctr*avgk(k)+wt_end*avgk(k+1))/(wt_ctr+2.*wt_end)
+         endif
+      enddo
+!
+! locate the three-point maximum
+      zmax=-1.e10
+      kmax=0
+      do k=2,nlvk-1
+         kk_st=k-1
+         kk_nd=k+1
+         sum=0.
+         do kk=kk_st,kk_nd
+            sum=sum+avgk_sm(kk)
+         enddo
+         if(abs(sum).gt.zmax) then
+            zmax=abs(sum)
+            kmax=k
+         endif
+      enddo
+      if(kmax.eq.1) then
+         prs_loc=(prs(1)+prs(2))/2.
+      elseif(kmax.eq.nlvk) then
+         prs_loc=(prs(nlvk)+prs(nlvk+1))/2.
+      else 
+         prs_loc=(prs(kmax-1)+2.*prs(kmax)+prs(kmax+1))/4.
+      endif
+      return
+  end subroutine vertical_locate

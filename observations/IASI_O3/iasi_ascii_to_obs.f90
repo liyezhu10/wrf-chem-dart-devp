@@ -137,7 +137,7 @@ program create_iasi_obs_sequence
   real*8                          :: eps_tol=1.e-3
   real*8                          :: dofs, o3_tot_col, o3_tot_err
   real*8                          :: latitude, longitude, level
-  real*8                          :: o3_psurf, err, o3_error, o3_prior
+  real*8                          :: o3_psurf, err, o3_error, o3_prior_trm
   real                            :: bin_beg, bin_end
   real                            :: sec, lat, lon, dummy, nlevels
   real                            :: pi ,rad2deg, re, wt, corr_err, fac, fac_obs_error
@@ -145,7 +145,7 @@ program create_iasi_obs_sequence
   real                            :: ias_psf, irot, nlvls_fix
   real*8, dimension(1000)         :: unif
   real*8, dimension(num_qc)       :: o3_qc
-  real*8, dimension(ias_dim)      :: o3_avgker, o3_aircol
+  real*8, dimension(ias_dim)      :: o3_avgker, o3_aircol, o3_prior
   real*8, dimension(ias_dim)     :: o3_press, o3_altag
   real*8, dimension(num_copies)   :: o3_vmr
   real,dimension(ias_dim)        :: ias_alt,ias_prs
@@ -179,6 +179,7 @@ program create_iasi_obs_sequence
 !
 ! QOR/CPSR variables
   integer                                        :: info,nlvls_trc,qstatus
+  integer                                        :: cpsr_co_trunc_lim, cpsr_o3_trunc_lim
   real,dimension(lwrk)                           :: wrk
   double precision,allocatable,dimension(:)      :: ZV,SV_cov
   double precision,allocatable,dimension(:)      :: rr_x_r,rr_x_p
@@ -189,6 +190,8 @@ program create_iasi_obs_sequence
 !
   logical                 :: use_log_co
   logical                 :: use_log_o3
+  logical                 :: use_cpsr_co_trunc
+  logical                 :: use_cpsr_o3_trunc
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
@@ -198,7 +201,8 @@ program create_iasi_obs_sequence
 !     CPSR - compact phase space retrievals
 !
   namelist /create_iasi_obs_nml/filedir,filename,year,month,day,hour,bin_beg, bin_end, &
-         IASI_CO_retrieval_type,IASI_O3_retrieval_type,fac_obs_error,use_log_co,use_log_o3
+         IASI_CO_retrieval_type,IASI_O3_retrieval_type,fac_obs_error,use_log_co,use_log_o3, &
+         use_cpsr_co_trunc,cpsr_co_trunc_lim,use_cpsr_o3_trunc,cpsr_o3_trunc_lim
 !
 ! Set constants
   ln_10=log(10.)
@@ -562,7 +566,7 @@ program create_iasi_obs_sequence
            enddo
            adj_avg_k(i,i)=adj_avg_k(i,i)+1.
         enddo
-        call lh_mat_vec_prd(dble(adj_avg_k),dble(x_p_vmr),adj_x_p,nlvls)
+        call lh_mat_vec_prd(dble(adj_avg_k(1:nlvls,1:nlvls)),dble(x_p_vmr(1:nlvls)),adj_x_p(1:nlvls),nlvls)
 !
 ! Calculate RAW retrieval and RAW prior
         do i=1,nlvls
@@ -582,7 +586,6 @@ program create_iasi_obs_sequence
 !
 ! Calculate errors for NO ROT RAW case
         do j=1,nlvls
-!           print *, 'j raw_cov ',j,raw_cov(j,j)
            raw_err(j)=sqrt(raw_cov(j,j))
         enddo
 !
@@ -590,14 +593,12 @@ program create_iasi_obs_sequence
         o3_min=.01
         do j=1,nlvls
 ! (APM: IS THIS CORRECT?)
-!           ret_err(j)=sqrt(ret_cov(j,j)))
-!           ret_err(j)=log10(sqrt(raw_cov(j,j)))
-           o3_log_max=log10(ret_x_r(j)+sqrt(raw_cov(j,j)))
-           if(ret_x_r(j)-sqrt(raw_cov(j,j)) .le. 0.) then
-              ret_err(j)=o3_log_max-log10(ret_x_r(j)) 
+           o3_log_max=log10(raw_x_r(j)+sqrt(raw_cov(j,j)))
+           if(raw_x_r(j)-sqrt(raw_cov(j,j)).le.0.) then
+              ret_err(j)=(o3_log_max - ret_x_r(j))/2.
            else
-              o3_log_min=log10(ret_x_r(j)-sqrt(raw_cov(j,j)))
-              ret_err(j)=min(log10(ret_x_r(j))-o3_log_min, o3_log_max-log10(ret_x_r(j))) 
+              o3_log_min=log10(raw_x_r(j)-sqrt(raw_cov(j,j)))
+              ret_err(j)=(o3_log_max - o3_log_min)/2.
            endif
         enddo
 !
@@ -691,21 +692,26 @@ program create_iasi_obs_sequence
         adj_x_p(:)=0.
         x_r(:)=0.
         x_p(:)=0.
-        do k=1,ias_dim
+        do k=kstr,ias_dim
            if(xg_norm(i,j,k).eq.0) cycle
-           do l=1,ias_dim
+           do l=kstr,ias_dim
               if(xg_norm(i,j,l).eq.0) cycle
               adj_avg_k(k-kstr+1,l-kstr+1)=-1.*xg_avg_k(i,j,k,l)
            enddo
-           adj_avg_k(k-kstr+1,k-kstr+1)=adj_avg_k(k,k)+1.
+           adj_avg_k(k-kstr+1,k-kstr+1)=adj_avg_k(k-kstr+1,k-kstr+1)+1.
         enddo
-!        print *, 'raw_x_r ',(xg_raw_x_r(i,j,l),l=kstr,ias_dim)
-!        print *, 'raw_x_p ',(xg_raw_x_p(i,j,l),l=kstr,ias_dim)
-        x_r(1:xg_nlvls(i,j))=xg_raw_x_r(i,j,kstr:ias_dim)
-        x_p(1:xg_nlvls(i,j))=xg_raw_x_p(i,j,kstr:ias_dim)
-        call lh_mat_vec_prd(dble(adj_avg_k),dble(x_p),adj_x_p,xg_nlvls(i,j))
+        x_r(1:nlvls)=xg_raw_x_r(i,j,kstr:ias_dim)
+        x_p(1:nlvls)=xg_raw_x_p(i,j,kstr:ias_dim)
+        call lh_mat_vec_prd(dble(adj_avg_k(1:nlvls,1:nlvls)),dble(x_p(1:nlvls)), &
+        adj_x_p(1:nlvls),nlvls)
         xg_raw_adj_x_p(i,j,:)=0.
         xg_raw_adj_x_p(i,j,kstr:ias_dim)=adj_x_p(1:xg_nlvls(i,j))
+!
+!APM: Test printing
+!        do k=kstr,ias_dim
+!           print *,'APM: x_r, x_p, avg_k, adj_avg_k, adj_x_p ',xg_raw_x_r(i,j,k),xg_raw_x_p(i,j,k), &
+!           xg_avg_k(i,j,kstr,k),adj_avg_k(1,k-kstr+1),adj_x_p(k-kstr+1)
+!        enddo
 !
 ! Adjust the RAW retrieval to remove the RAW prior
         xg_raw_adj_x_r(:,:,:)=0.
@@ -969,6 +975,13 @@ program create_iasi_obs_sequence
            irot=1
            nlvls_fix=nlvls_trc
         endif
+!
+! Truncate the number of CPSR modes
+        if(use_cpsr_o3_trunc.eq..TRUE. .and. nlvls_fix.gt.cpsr_o3_trunc_lim) then
+           print *,'APM change limit ', nlvls_fix,cpsr_o3_trunc_lim
+           nlvls_fix=cpsr_o3_trunc_lim
+        endif
+!
         do k=1,nlvls_fix
 !
 ! Remove the higher modes (or remove the upper troposphere obs)
@@ -1158,7 +1171,8 @@ program create_iasi_obs_sequence
            o3_press(1:xg_nlvls(i,j))=xg_prs(i,j,kstr:ias_dim)*100.
            o3_altag(1:xg_nlvls(i,j))=xg_alt(i,j,kstr:ias_dim)
            o3_aircol(1:xg_nlvls(i,j))=xg_air_col(i,j,kstr:ias_dim)
-           o3_prior=xapr(k)  
+           o3_prior(1:xg_nlvls(i,j))=xg_raw_x_p(i,j,kstr:ias_dim)
+           o3_prior_trm=xapr(k)  
            o3_vmr(1)=xcomp(k)
            err = xcomperr(k)
            o3_error=err*err
@@ -1167,8 +1181,8 @@ program create_iasi_obs_sequence
            call set_obs_def_location(obs_def, obs_location)
            call set_obs_def_time(obs_def, obs_time)
            call set_obs_def_error_variance(obs_def, o3_error)
-           call set_obs_def_iasi_o3(qc_count, o3_avgker, o3_press, o3_prior, &
-           o3_psurf, o3_altag, o3_aircol, xg_nlvls(i,j))
+           call set_obs_def_iasi_o3(qc_count, o3_avgker, o3_press, o3_prior_trm, &
+           o3_psurf, o3_altag, o3_aircol, o3_prior, xg_nlvls(i,j))
            call set_obs_def_key(obs_def, qc_count)
            call set_obs_values(obs, o3_vmr, 1)
            call set_qc(obs, o3_qc, num_qc)

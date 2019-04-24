@@ -24,6 +24,12 @@ cat > input.nml << EOF
    fac_obs_error               = ${NL_FAC_OBS_ERROR}
    use_log_co                  = ${NL_USE_LOG_CO}
    use_log_o3                  = ${NL_USE_LOG_O3}
+   use_cpsr_co_trunc           = ${NL_USE_CPSR_CO_TRUNC}
+   cpsr_co_trunc_lim           = ${NL_CPSR_CO_TRUNC_LIM}
+   use_cpsr_o3_trunc           = ${NL_USE_CPSR_O3_TRUNC}
+   cpsr_o3_trunc_lim           = ${NL_CPSR_O3_TRUNC_LIM}
+   iasi_co_vloc                = ${NL_IASI_CO_VLOC}
+   iasi_o3_vloc                = ${NL_IASI_O3_VLOC}
 /
 &obs_sequence_nml
    write_binary_obs_sequence   = .false.

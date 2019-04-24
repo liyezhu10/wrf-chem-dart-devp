@@ -128,20 +128,21 @@ LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf -lmkl_rt -lmkl_lapack95_lp64 -lmkl_bla
 #FFLAGS  = -g -C -CB -ftz -vec-report0 -mcmodel=medium -shared-intel -fp-model precise $(INCS)
 #
 # for development or debugging, use this instead:
- FFLAGS = -g -C -check noarg_temp_created -fpe0 -mcmodel=large -shared-intel \
-          -fp-model precise  -ftrapuv -traceback \
-          -warn declarations,uncalled,unused $(INCS)
- LDFLAGS = $(FFLAGS) $(LIBS)
+# FFLAGS = -g -C -check noarg_temp_created -fpe0 -mcmodel=large -shared-intel \
+#          -fp-model precise  -ftrapuv -traceback \
+#          -warn declarations,uncalled,unused $(INCS)
 #
 # for speed on yellowstone (verify against a run with with -O and -fp-model precise
 #        that the numerical differences aren't too large to be acceptable):
-# FFLAGS = -O3 -axavx -ipo -vec-report0 $(INCS)
+ FFLAGS = -O3 -axavx -ipo -vec-report0 $(INCS)
 #
 # Some optimized (BLAS, LAPACK) libraries may be available with:
 # LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf -lmkl -lmkl_lapack -lguide -lpthread
 #
 # If you get this error: libimf.so: warning: warning: feupdateenv is not implemented
 # try adding: -limf -lm to your LIBS line.
+
+ LDFLAGS = $(FFLAGS) $(LIBS)
 
 # <next few lines under version control, do not edit>
 # $URL$
