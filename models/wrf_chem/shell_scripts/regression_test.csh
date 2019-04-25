@@ -1,10 +1,10 @@
 #!/bin/csh -f
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# $Id$
+# DART $Id$
 
 set GOLDSTANDARD = /glade/p/image/DART_test_cases/wrf_chem/gold_standard_fast/2008060500/dart_filter
 set TESTCASE = /glade/scratch/thoar/DART_TEST_AVE/MOPnIASnMOD_Exp_2_MgDA_20M_100km_COnXXnAOD_CPSR_Joint_All/2008060500/dart_filter

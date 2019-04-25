@@ -1,10 +1,10 @@
 #!/bin/tcsh 
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# $Id: runme_filter 6269 2013-06-13 21:40:55Z thoar $
+# DART $Id: runme_filter 6269 2013-06-13 21:40:55Z thoar $
 #
 # start at a generic run script for the mpi version.  this should probably
 # end up in the shell scripts directory - but it is here for now.  nsc.
@@ -57,7 +57,6 @@
 #PBS -o filter.log
 #PBS -q medium
 #PBS -l nodes=16:ppn=2
-
 
 # if async=2, e.g. you are going to run './wrf.exe', single process
 # (or possibly 'mpirun -np 1 ./wrf.exe'), so each processor advances 
