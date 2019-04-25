@@ -1,4 +1,12 @@
 #!/bin/ksh -aeux
+#
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# $Id$
+#
+
 export JOBID=$1
 export PROJECT_NUMBER=$2
 export TIME_LIMIT=$3
@@ -29,3 +37,9 @@ else
    exit
 fi
 EOF
+#
+# <next few lines under version control, do not edit>
+# $URL$
+# $Id$
+# $Revision$
+# $Date$

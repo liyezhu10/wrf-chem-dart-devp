@@ -1,4 +1,12 @@
 #!/bin/ksh -x
+#
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# $Id$
+#
+
 #-----------------------------------------------------------------------
 # Script da_run_update_bc.ksh
 #
@@ -37,3 +45,9 @@ else
    cp wrfbdy_d01 $BDYCDN_OUT
 fi
 exit $?
+#
+# <next few lines under version control, do not edit>
+# $URL$
+# $Id$
+# $Revision$
+# $Date$

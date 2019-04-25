@@ -1,4 +1,12 @@
 #!/bin/ksh -x
+#
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# $Id$
+#
+
 ###############################################################################
 #
 #  Script to run obs_diag for WRFCHEM in the DART framework
@@ -465,3 +473,9 @@ cd ${RUN_DIR}
 #rm -rf LargeInnov.txt
 #rm -rf obs_diag
 exit
+#
+# <next few lines under version control, do not edit>
+# $URL$
+# $Id$
+# $Revision$
+# $Date$

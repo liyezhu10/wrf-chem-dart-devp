@@ -1,4 +1,12 @@
 #!/bin/ksh -aeux 
+#
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# $Id$
+#
+
    export NUM_MEMBERS=20
    export DOMAIN=01
    export PROJ_NUMBER_ACD=P19010000
@@ -178,3 +186,9 @@ EOF
 #
 # Wait for wrf_to_dart to complete for each member
    ${HYBRID_SCRIPTS_DIR}/da_run_hold.ksh ${RAN_APM}
+#
+# <next few lines under version control, do not edit>
+# $URL$
+# $Id$
+# $Revision$
+# $Date$

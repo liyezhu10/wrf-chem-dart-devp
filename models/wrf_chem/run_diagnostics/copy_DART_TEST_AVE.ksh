@@ -1,5 +1,13 @@
 #!/bin/ksh -aeux
 #
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# $Id$
+#
+
+#
 # Set experiment parameters
 #
 # 2008 case dates
@@ -118,3 +126,9 @@ done
 mv old_prior_file.nc ${PRIOR_CAT_FILE}
 mv old_post_file.nc ${POST_CAT_FILE}
 exit
+#
+# <next few lines under version control, do not edit>
+# $URL$
+# $Id$
+# $Revision$
+# $Date$

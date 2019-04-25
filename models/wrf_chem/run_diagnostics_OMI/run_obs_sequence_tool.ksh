@@ -1,5 +1,13 @@
 #!/bin/ksh -aeux 
 #
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# $Id$
+#
+
+#
   set echo
 #
 # TO SETUP AN ENVIRONMENT TO RUN obs_sequence_tool.
@@ -142,3 +150,9 @@
      export L_DATE=$(${BUILD_DIR}/da_advance_time.exe ${P_DATE} ${TIME_INC} 2>/dev/null)  
   done 
 exit
+#
+# <next few lines under version control, do not edit>
+# $URL$
+# $Id$
+# $Revision$
+# $Date$

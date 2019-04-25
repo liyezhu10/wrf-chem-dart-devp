@@ -1,4 +1,12 @@
 #!/bin/ksh -x
+#
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
+# http://www.image.ucar.edu/DAReS/DART/DART_download
+#
+# $Id$
+#
+
 #########################################################################
 #
 # Purpose: Script to create WRF Namelist 
@@ -208,3 +216,9 @@ fixed_ubc_press                    = ${NL_FIXED_UBC_PRESS},
 fixed_ubc_inname                   = ${NL_FIXED_UBC_INNAME},
 /
 EOF
+#
+# <next few lines under version control, do not edit>
+# $URL$
+# $Id$
+# $Revision$
+# $Date$
