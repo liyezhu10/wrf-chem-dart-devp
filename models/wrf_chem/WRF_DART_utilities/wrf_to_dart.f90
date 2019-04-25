@@ -216,7 +216,7 @@ WRFDomains2 : do id = 1,num_domains
 !
 ! APM: +++
 ! APM: code to take ln(x) transform of CO chemistry field
-         if (use_log_co.eq..TRUE. .and. trim(my_field).eq.'co') then
+         if (use_log_co .and. trim(my_field).eq.'co') then
 !            print *, 'APM: wrf_to_dart 3D CO conversion '
             do jj=1,wrf%var_size(2,ind)
                do ii=1,wrf%var_size(1,ind)
@@ -231,7 +231,7 @@ WRFDomains2 : do id = 1,num_domains
          endif
 !
 ! APM: code to take ln(x) transform of O3 chemistry field
-         if (use_log_o3.eq..TRUE. .and. trim(my_field).eq.'o3') then
+         if (use_log_o3 .and. trim(my_field).eq.'o3') then
 !            print *, 'APM: wrf_to_dart 3D O3 conversion '
             do jj=1,wrf%var_size(2,ind)
                do ii=1,wrf%var_size(1,ind)
@@ -272,7 +272,7 @@ WRFDomains2 : do id = 1,num_domains
 !
 ! APM: +++
 ! APM: code to take ln(x) transform of CO chemistry field
-         if (use_log_co.eq..TRUE. .and. trim(my_field).eq.'co') then
+         if (use_log_co .and. trim(my_field).eq.'co') then
 !            print *, 'APM: wrf_to_dart 2D CO conversion '
             do kk=1,wrf%var_size(3,ind)
                do jj=1,wrf%var_size(2,ind)
@@ -289,7 +289,7 @@ WRFDomains2 : do id = 1,num_domains
          endif
 !
 ! APM: code to take ln(x) transform of O3 chemistry field
-         if (use_log_o3.eq..TRUE. .and. trim(my_field).eq.'o3') then
+         if (use_log_o3 .and. trim(my_field).eq.'o3') then
 !            print *, 'APM: wrf_to_dart 2D O3 conversion '
             do kk=1,wrf%var_size(3,ind)
                do jj=1,wrf%var_size(2,ind)
