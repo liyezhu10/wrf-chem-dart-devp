@@ -7,7 +7,7 @@ function slab = get_hyperslab(varargin)
 % by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id: get_hyperslab.m 11289 2017-03-10 21:56:06Z hendric@ucar.edu $
+% DART $Id$
 
 for i = 1:2:nargin,
    eval(sprintf('pinfo.%s = varargin{i+1};',varargin{i}))
@@ -36,6 +36,6 @@ if (isfield(pinfo,'permute'))
 end
 
 % <next few lines under version control, do not edit>
-% $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/rma_trunk/diagnostics/matlab/private/get_hyperslab.m $
-% $Revision: 11289 $
-% $Date: 2017-03-10 14:56:06 -0700 (Fri, 10 Mar 2017) $
+% $URL$
+% $Revision$
+% $Date$

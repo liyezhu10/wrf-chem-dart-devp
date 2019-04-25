@@ -4,7 +4,7 @@
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# $Id: advance_model.csh 4250 2010-02-03 18:02:11Z nancy $
+# $Id$
 #
 # Shell script to run the WRF model from DART input.
 # where the model advance is executed as a separate process.
@@ -673,7 +673,7 @@ ${REMOVE} $control_file
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: http://subversion.ucar.edu/DAReS/DART/trunk/models/wrf/shell_scripts/advance_model.csh $
-# $Revision: 4250 $
-# $Date: 2010-02-03 11:02:11 -0700 (Wed, 03 Feb 2010) $
+# $URL$
+# $Revision$
+# $Date$
 

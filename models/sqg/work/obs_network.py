@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #
 # This code is not protected by the DART copyright agreement.
-# DART $Id: obs_network.py 6269 2013-06-13 21:40:55Z thoar $
+# DART $Id$
 
 __author__    = "Rahul Mahajan"
 __email__     = "rahul.mahajan@nasa.gov"
@@ -198,8 +198,8 @@ sys.exit(0)
 
 #############################################################
 # <next few lines under version control, do not edit>
-# $URL: https://subversion.ucar.edu/DAReS/DART/trunk/models/sqg/work/obs_network.py $
-# $Revision: 6269 $
-# $Date: 2013-06-13 15:40:55 -0600 (Thu, 13 Jun 2013) $
+# $URL$
+# $Revision$
+# $Date$
 #############################################################
 

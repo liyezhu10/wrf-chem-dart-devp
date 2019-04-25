@@ -6,10 +6,10 @@
 program create_iasi_obs_sequence
 
 ! <next few lines under version control, do not edit>
-! $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/observations/IASI_O3/iasi_ascii_to_obs.f90 $
-! $Id: iasi_ascii_to_obs.f90 12295 2018-01-09 16:32:31Z mizzi@ucar.edu $
-! $Revision: 12295 $
-! $Date: 2018-01-09 09:32:31 -0700 (Tue, 09 Jan 2018) $
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 !
 !=============================================
 ! IASI O3 retrieval obs
@@ -81,9 +81,9 @@ program create_iasi_obs_sequence
 !
 ! version controlled file description for error handling, do not edit                          
   character(len=128), parameter :: &
-   source   = "$URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/observations/IASI_O3/iasi_ascii_to_obs.f90 $", &
-   revision = "$Revision: 12295 $", &
-   revdate  = "$Date: 2018-01-09 09:32:31 -0700 (Tue, 09 Jan 2018) $"
+   source   = "$URL$", &
+   revision = "$Revision$", &
+   revdate  = "$Date$"
 !
 ! add variables AFA
   type(obs_sequence_type) :: seq

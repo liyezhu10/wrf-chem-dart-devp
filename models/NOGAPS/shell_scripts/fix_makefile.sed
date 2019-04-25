@@ -3,7 +3,7 @@
 # This code may (or may not) be part of the NOGAPS distribution,
 # So it is not protected by the DART copyright agreement.
 #
-# DART $Id: fix_makefile.sed 111 2010-06-09 21:55:44Z thoar $
+# DART $Id$
 #
 # Run this on the NOGAPS makefile, e.g.:
 # $ ./fix_makefile.sed < makefile > makefile.lib

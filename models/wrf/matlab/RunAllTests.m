@@ -5,7 +5,7 @@ function RunAllTests(dummy)
 % provided by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id: RunAllTests.m 6265 2013-06-13 19:38:46Z thoar $
+% DART $Id$
 
 if (nargin() > 0)
    interactive = 1;
@@ -270,7 +270,7 @@ end
  fprintf('Finished %s\n','PlotJeffCorrel')
 
 % <next few lines under version control, do not edit>
-% $URL: https://subversion.ucar.edu/DAReS/DART/trunk/models/wrf/matlab/RunAllTests.m $
-% $Revision: 6265 $
-% $Date: 2013-06-13 13:38:46 -0600 (Thu, 13 Jun 2013) $
+% $URL$
+% $Revision$
+% $Date$
 

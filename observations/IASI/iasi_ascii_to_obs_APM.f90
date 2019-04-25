@@ -5,10 +5,10 @@
 program iasi_ascii_to_obs
 !
 ! <next few lines under version control, do not edit>
-! $URL: https://proxy.subversion.ucar.edu/DAReS/DART/trunk/observations/iasi_ascii/iasi_ascii_to_obs.f90 $
-! $Id: iasi_ascii_to_obs.f90 4865 2011-04-18 20:56:25Z nancy $
-! $Revision: 4865 $
-! $Date: 2011-04-18 13:56:25 -0700 (Mon, 18 Apr 2011) $
+! $URL$
+! $Id$
+! $Revision$
+! $Date$
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !

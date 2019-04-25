@@ -4,7 +4,7 @@
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id: quickbuild.csh 6908 2014-04-21 22:29:53Z thoar $
+# DART $Id$
 #
 # compile all converter programs
 
@@ -63,7 +63,7 @@ echo "Success: All ${MODEL} programs compiled."
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: https://subversion.ucar.edu/DAReS/DART/trunk/observations/MODIS/work/quickbuild.csh $
-# $Revision: 6908 $
-# $Date: 2014-04-21 16:29:53 -0600 (Mon, 21 Apr 2014) $
+# $URL$
+# $Revision$
+# $Date$
 

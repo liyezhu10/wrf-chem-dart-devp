@@ -7,7 +7,7 @@ function BgridTotalError( pinfo )
 % by UCAR, "as is", without charge, subject to all terms of use at
 % http://www.image.ucar.edu/DAReS/DART/DART_download
 %
-% DART $Id: BgridTotalError.m 11289 2017-03-10 21:56:06Z hendric@ucar.edu $
+% DART $Id$
 
 for ivar=1:pinfo.num_state_vars,
 
@@ -147,6 +147,6 @@ xlabel(xlabelstring)
 
 
 % <next few lines under version control, do not edit>
-% $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/rma_trunk/diagnostics/matlab/private/BgridTotalError.m $
-% $Revision: 11289 $
-% $Date: 2017-03-10 14:56:06 -0700 (Fri, 10 Mar 2017) $
+% $URL$
+% $Revision$
+% $Date$

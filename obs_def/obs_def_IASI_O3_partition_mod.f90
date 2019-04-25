@@ -2,7 +2,7 @@
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! DART $Id: obs_def_IASI_O3_mod.f90 12019 2017-10-26 17:20:18Z mizzi@ucar.edu $
+! DART $Id$
 
 ! BEGIN DART PREPROCESS KIND LIST
 ! IASI_O3_RETRIEVAL, KIND_O3
@@ -91,9 +91,9 @@ real(r8)                    :: iasi_altitude_ref(IASI_DIM) =(/ &
 !
 ! version controlled file description for error handling, do not edit
 character(len=*), parameter :: source   = &
-   "$URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/obs_def/obs_def_IASI_O3_mod.f90 $"
-character(len=*), parameter :: revision = "$Revision: 12019 $"
-character(len=*), parameter :: revdate  = "$Date: 2017-10-26 11:20:18 -0600 (Thu, 26 Oct 2017) $"
+   "$URL$"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 character(len=512) :: string1, string2
 
@@ -1533,7 +1533,7 @@ end module obs_def_iasi_O3_mod
 ! END DART PREPROCESS MODULE CODE
 
 ! <next few lines under version control, do not edit>
-! $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/obs_def/obs_def_IASI_O3_mod.f90 $
-! $Id: obs_def_IASI_O3_mod.f90 12019 2017-10-26 17:20:18Z mizzi@ucar.edu $
-! $Revision: 12019 $
-! $Date: 2017-10-26 11:20:18 -0600 (Thu, 26 Oct 2017) $
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

@@ -1,7 +1,7 @@
 ! This code may (or may not) be part of the MPAS distribution,
 ! So it is not protected by the DART copyright agreement.
 ! 
-! DART $Id: get_geometry_mod.f90 6256 2013-06-12 16:19:10Z thoar $
+! DART $Id$
 
 module get_geometry_mod
 
@@ -107,7 +107,7 @@ module get_geometry_mod
 end module get_geometry_mod
 
 ! <next few lines under version control, do not edit>
-! $URL: https://subversion.ucar.edu/DAReS/DART/trunk/models/mpas_ocn/get_geometry_mod.f90 $
-! $Id: get_geometry_mod.f90 6256 2013-06-12 16:19:10Z thoar $
-! $Revision: 6256 $
-! $Date: 2013-06-12 10:19:10 -0600 (Wed, 12 Jun 2013) $
+! $URL$
+! $Id$
+! $Revision$
+! $Date$

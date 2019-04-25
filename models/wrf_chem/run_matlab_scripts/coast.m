@@ -7,7 +7,7 @@ function ll = coast
 %  See also COAST.MAT, WORLDLO, USALO, USAHI
 
 % Copyright 1996-2000 Systems Planning and Analysis, Inc. and The MathWorks, Inc.
-% $Revision: 1.4 $  $Date: 2000/01/18 02:02:49 $
+% $Revision$  $Date$
 
 load coast
 ll = [lat,long];
