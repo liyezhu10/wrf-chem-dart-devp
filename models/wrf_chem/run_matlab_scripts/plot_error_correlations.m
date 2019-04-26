@@ -82,6 +82,7 @@ grid_len=get_dist(lat(floor(nx/2),floor(ny/2)),lat(floor(nx/2)+1,floor(ny/2)),lo
    coastlines2(:,2)=lons;
    coastlines2(:,1)=lats;
 %
+
 % in global models, sometimes i need to flip longitudes
    flip=0;
    if (flip==1)
@@ -99,7 +100,10 @@ grid_len=get_dist(lat(floor(nx/2),floor(ny/2)),lat(floor(nx/2)+1,floor(ny/2)),lo
    row_c=find(coastlines(:,2)<-178.5 & coastlines(:,2)>=-180 );
    coastlines(row_c,2)=NaN;
 
-   coastlines0=coast;
+   coasts = load('coast.mat');
+   coastlines0 = [coasts.lat,coasts.long];
+   clear coasts
+
    flip=0;
    if (flip==1)
       coastlin=coastlines0;
