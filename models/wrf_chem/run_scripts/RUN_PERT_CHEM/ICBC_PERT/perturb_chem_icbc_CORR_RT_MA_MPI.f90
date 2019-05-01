@@ -273,7 +273,7 @@
                 call mpi_finalize(ierr)
                 stop
              endif 
-             if(sw_seed) call init_random_seed(rank)
+             if(sw_seed) call init_random_seed()
 !
 ! If using different random field for each species,
 ! the species loop goes here
@@ -926,11 +926,11 @@
              return
           end subroutine put_WRFCHEM_icbc_data
 !
-          subroutine init_random_seed(rank)
+          subroutine init_random_seed()
 !!             use ifport
              implicit none
              integer, allocatable :: aseed(:)
-             integer :: rank, i, n, un, istat, dt(8), pid, t(2), s, ierr
+             integer :: i, n, un, istat, dt(8), pid, t(2), s, ierr
              integer(8) :: count, tms
 !
              call random_seed(size = n)
@@ -958,16 +958,15 @@
              pid = pid + 1099279 ! Add a prime
              s = ieor(s, pid)
              if (n >= 3) then
-                aseed(1) = t(1)*(rank+1) + 36269
-                aseed(2) = t(2)*(rank+1) + 72551
-                aseed(3) = pid*(rank+1)
+                aseed(1) = t(1) + 36269
+                aseed(2) = t(2) + 72551
+                aseed(3) = pid
                 if (n > 3) then
-                   aseed(4:) = s*(rank+1) + 37 * (/ (i, i = 0, n - 4) /)
+                   aseed(4:) = s + 37 * (/ (i, i = 0, n - 4) /)
                 end if
              else
-                aseed = s*(rank+1) + 37 * (/ (i, i = 0, n - 1 ) /)
+                aseed = s + 37 * (/ (i, i = 0, n - 1 ) /)
              end if
-             aseed=rank+1
              call random_seed(put=aseed)
           end subroutine init_random_seed
 !

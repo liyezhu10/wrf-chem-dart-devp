@@ -55,9 +55,9 @@
             character(len=150)                        :: chr_locxd,chr_kind,kind_defn
 !
 ! open graphics
-            call gopks(ier,isz)
-            call gopwk(iwk,lunt,ityp)
-            call gacwk(iwk)
+!            call gopks(ier,isz)
+!            call gopwk(iwk,lunt,ityp)
+!            call gacwk(iwk)
 !
 ! assign constants
             pi=4.*atan(1.)
@@ -648,7 +648,7 @@
             enddo ! mcycle loop
 !
 ! close graphics
-            call gdawk(iwk)
-            call gclwk(iwk)
-            call gclks
+!            call gdawk(iwk)
+!            call gclwk(iwk)
+!            call gclks
          end program main

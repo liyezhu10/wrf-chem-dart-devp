@@ -10,10 +10,10 @@ export FIRST_DART_INFLATE_DATE=2014071406
 export FIRST_EMISS_INV_DATE=2014071406
 #
 # START CYCLE DATE-TIME:
-export CYCLE_STR_DATE=2014071400
+export CYCLE_STR_DATE=2014071406
 #
 # END CYCLE DATE-TIME:
-export CYCLE_END_DATE=2014071400
+export CYCLE_END_DATE=2014071406
 #export CYCLE_END_DATE=${CYCLE_STR_DATE}
 #
 export CYCLE_DATE=${CYCLE_STR_DATE}
@@ -159,6 +159,9 @@ export BUILD_DIR=${WRFDA_DIR}/var/da
 export WRF_DIR=${TRUNK_DIR}/${WRF_VER}
 export HYBRID_SCRIPTS_DIR=${DART_DIR}/models/wrf_chem/hybrid_scripts
 export ADJUST_EMISS_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_EMISS_INV
+export WES_COLDENS_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_WES_COLDENS
+export MEGAN_BIO_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_MEGAN_BIO
+export FINN_FIRE_DIR=${DART_DIR}/models/wrf_chem/run_scripts/RUN_FINN_FIRE
 export EXPERIMENT_DATA_DIR=${INPUT_DATA_DIR}/FRAPPE_REAL_TIME_DATA
 export MOZBC_DATA_DIR=${EXPERIMENT_DATA_DIR}/mozart_forecasts
 export EXPERIMENT_STATIC_FILES=${EXPERIMENT_DATA_DIR}/static_files
@@ -272,31 +275,31 @@ export ASIM_MAX_SEC_GREG=${temp[1]}
 # SELECT COMPONENT RUN OPTIONS:
 if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_GEOGRID=false
-   export RUN_UNGRIB=false
-   export RUN_METGRID=false
-   export RUN_REAL=false
-   export RUN_PERT_WRFCHEM_MET_IC=false
-   export RUN_PERT_WRFCHEM_MET_BC=false
-   export RUN_EXO_COLDENS=false
-   export RUN_SEASON_WES=false
-   export RUN_WRFCHEM_BIO=false
-   export RUN_WRFCHEM_FIRE=false
-   export RUN_WRFCHEM_CHEMI=false
+   export RUN_UNGRIB=true
+   export RUN_METGRID=true
+   export RUN_REAL=true
+   export RUN_PERT_WRFCHEM_MET_IC=true
+   export RUN_PERT_WRFCHEM_MET_BC=true
+   export RUN_EXO_COLDENS=true
+   export RUN_SEASON_WES=true
+   export RUN_WRFCHEM_BIO=true
+   export RUN_WRFCHEM_FIRE=true
+   export RUN_WRFCHEM_CHEMI=true
    export RUN_PERT_WRFCHEM_CHEM_ICBC=true
-   export RUN_PERT_WRFCHEM_CHEM_EMISS=false
-   export RUN_MOPITT_CO_OBS=false
-   export RUN_IASI_CO_OBS=false
+   export RUN_PERT_WRFCHEM_CHEM_EMISS=true
+   export RUN_MOPITT_CO_OBS=true
+   export RUN_IASI_CO_OBS=true
    export RUN_IASI_O3_OBS=false
    export RUN_OMI_NO2_OBS=false
-   export RUN_AIRNOW_O3_OBS=false
-   export RUN_AIRNOW_CO_OBS=false
+   export RUN_AIRNOW_O3_OBS=true
+   export RUN_AIRNOW_CO_OBS=true
    export RUN_PANDA_CO_OBS=false
    export RUN_PANDA_O3_OBS=false
    export RUN_PANDA_PM25_OBS=false
-   export RUN_MODIS_AOD_OBS=false
-   export RUN_MET_OBS=false
-   export RUN_COMBINE_OBS=false
-   export RUN_PREPROCESS_OBS=false
+   export RUN_MODIS_AOD_OBS=true
+   export RUN_MET_OBS=true
+   export RUN_COMBINE_OBS=true
+   export RUN_PREPROCESS_OBS=true
 #
    if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
       export RUN_WRFCHEM_INITIAL=true
@@ -2036,9 +2039,9 @@ if ${RUN_EXO_COLDENS}; then
    export FILE=exo_coldens.nc
    rm -rf ${FILE}
    ln -sf ${EXPERIMENT_COLDENS_DIR}/${FILE} ${FILE}
-   export FILE=exo_coldens
+   export FILE=exo_coldens.exe
    rm -rf ${FILE}
-   ln -sf ${EXPERIMENT_COLDENS_DIR}/${FILE} ${FILE}
+   ln -sf ${WES_COLDENS_DIR}/work/${FILE} ${FILE}
 #
 # CREATE INPUT FILE
    export FILE=exo_coldens.inp
@@ -2050,7 +2053,7 @@ domains = 2,
 EOF
 #
 # RUN exo_coldens
-   ./exo_coldens < exo_coldens.inp
+   ./exo_coldens.exe < exo_coldens.inp
 #
 # TEST WHETHER OUTPUT EXISTS
    export FILE_CR=exo_coldens_d${CR_DOMAIN}
@@ -2087,9 +2090,9 @@ if ${RUN_SEASON_WES}; then
    export FILE=season_wes_usgs.nc
    rm -rf ${FILE}
    ln -sf ${EXPERIMENT_COLDENS_DIR}/${FILE} ${FILE}
-   export FILE=wesely
+   export FILE=wesely.exe
    rm -rf ${FILE}
-   ln -sf ${EXPERIMENT_COLDENS_DIR}/${FILE} ${FILE}
+   ln -sf ${WES_COLDENS_DIR}/work/${FILE} ${FILE}
 #
 # CREATE INPUT FILE
    export FILE=wesely.inp
@@ -2101,7 +2104,7 @@ domains = 2,
 EOF
 #
 # RUN wesely
-   ./wesely < wesely.inp
+   ./wesely.exe < wesely.inp
 #
 # TEST WHETHER OUTPUT EXISTS
    export FILE_CR=wrf_season_wes_usgs_d${CR_DOMAIN}.nc
@@ -2160,9 +2163,9 @@ if ${RUN_WRFCHEM_BIO}; then
       rm -rf shr*.nc
       rm -rf TAS*.nc
       cp ${EXPERIMENT_WRFBIOCHEMI_DIR}/MEGAN-DATA/*.nc ./.
-      export FILE=megan_bio_emiss
+      export FILE=megan_bio_emiss.exe
       rm -rf ${FILE}
-      cp ${EXPERIMENT_WRFBIOCHEMI_DIR}/MEGAN-BIO/${FILE} ${FILE}
+      cp ${MEGAN_BIO_DIR}/work/${FILE} ${FILE}
 #
 # CREATE INPUT FILE
       export FILE=megan_bio_emiss.inp
@@ -2177,7 +2180,7 @@ EOF
 #
       RANDOM=$$
       export JOBRND=${RANDOM}_bio
-      ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${BIO_JOB_CLASS} ${BIO_TIME_LIMIT} ${BIO_NODES} ${BIO_TASKS} "megan_bio_emiss < megan_bio_emiss.inp" SERIAL
+      ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${BIO_JOB_CLASS} ${BIO_TIME_LIMIT} ${BIO_NODES} ${BIO_TASKS} "megan_bio_emiss.exe < megan_bio_emiss.inp" SERIAL
       sbatch -W job.ksh
 #
 # TEST WHETHER OUTPUT EXISTS
@@ -2218,9 +2221,9 @@ if ${RUN_WRFCHEM_FIRE}; then
    ln -sf ${REAL_DIR}/${FILE_FR}_${FILE_DATE} ${FILE_FR}   
    rm -rf GLOBAL*.txt
    ln -sf ${EXPERIMENT_WRFFIRECHEMI_DIR}/GLOBAL*.txt ./.
-   export FILE=fire_emis
+   export FILE=fire_emis.exe
    rm -rf ${FILE}
-   ln -sf ${EXPERIMENT_WRFFIRECHEMI_DIR}/src/${FILE} ${FILE}
+   ln -sf ${FINN_FIRE_DIR}/work/${FILE} ${FILE}
    rm -rf grass_from_img.nc
    rm -rf shrub_from_img.nc
    rm -rf tempfor_from_img.nc
@@ -2255,7 +2258,7 @@ EOF
 #
    RANDOM=$$
    export JOBRND=${RANDOM}_fire
-   ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} "fire_emis < fire_emis.mozc.inp" SERIAL
+   ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} "fire_emis.exe < fire_emis.mozc.inp" SERIAL
    sbatch -W job.ksh
 #
    export L_DATE=${DATE}
@@ -2333,13 +2336,13 @@ if ${RUN_PERT_WRFCHEM_CHEM_ICBC}; then
 #
    cp ${METGRID_DIR}/met_em.d${CR_DOMAIN}.*:00:00.nc ./.
 #   cp ${METGRID_DIR}/met_em.d${FR_DOMAIN}.*:00:00.nc ./.
-   cp ${PERT_CHEM_INPUT_DIR}/perturb_chem_icbc_CORR_RT_MA.exe ./.
-   cp ${PERT_CHEM_INPUT_DIR}/perturb_chem_icbc_CORR_RT_MA_MPI.exe ./.
+   cp ${PERT_CHEM_INPUT_DIR}/work/perturb_chem_icbc_CORR_RT_MA.exe ./.
+   cp ${PERT_CHEM_INPUT_DIR}/work/perturb_chem_icbc_CORR_RT_MA_MPI.exe ./.
+   cp ${PERT_CHEM_INPUT_DIR}/work/mozbc.exe ./mozbc.exe
    cp ${PERT_CHEM_INPUT_DIR}/runICBC_parent_rt_CR.ksh ./.
    cp ${PERT_CHEM_INPUT_DIR}/runICBC_parent_rt_FR.ksh ./.
    cp ${PERT_CHEM_INPUT_DIR}/run_mozbc_rt_CR.csh ./.
    cp ${PERT_CHEM_INPUT_DIR}/run_mozbc_rt_FR.csh ./.
-   cp ${PERT_CHEM_INPUT_DIR}/mozbc-dart/mozbc ./.
    cp ${PERT_CHEM_INPUT_DIR}/set00 ./.
 #
 # SELECT MOZART DATA FILE
@@ -2526,31 +2529,38 @@ if ${RUN_PERT_WRFCHEM_CHEM_EMISS}; then
    fi
 #
 # SET PARAMETERS
-   export NL_SW_CORR_TM=true
-   if [[ ${DATE} -eq ${INITIAL_DATE} ]]; then export NL_SW_CORR_TM=false; fi
-   export EMISS_FREQ=1
+   export NL_EMISS_FREQ=1.0
    export NL_SPREAD_CHEMI=${SPREAD_FAC}
    export NL_SPREAD_FIRE=0.00
    export NL_SPREAD_BIOG=0.00
    export NL_PERT_CHEM=true
    export NL_PERT_FIRE=false
    export NL_PERT_BIO=false
+   export NL_SW_SEED=true
 #
 # COPY PERTURBATION CODE
    rm -rf perturb_chem_emiss_CORR_RT_MA.exe
    rm -rf perturb_chem_emiss_CORR_RT_MA_MPI.exe
-   cp ${PERT_CHEM_EMISS_DIR}/perturb_chem_emiss_CORR_RT_MA.exe ./.
-   cp ${PERT_CHEM_EMISS_DIR}/perturb_chem_emiss_CORR_RT_MA_MPI.exe ./.
+   cp ${PERT_CHEM_EMISS_DIR}/work/perturb_chem_emiss_CORR_RT_MA.exe ./.
+   cp ${PERT_CHEM_EMISS_DIR}/work/perturb_chem_emiss_CORR_RT_MA_MPI.exe ./.
 #
    export L_DATE=${DATE}
    export LE_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} ${FCST_PERIOD} 2>/dev/null)
    while [[ ${L_DATE} -le ${LE_DATE} ]] ; do
-      export NL_SW_SEED=false
-      if [[ ${L_DATE} -eq ${DATE} ]]; then export NL_SW_SEED=true; fi
+      export NL_SW_CORR_TM=true
+      if [[ ${L_DATE} -eq ${INITIAL_DATE} ]]; then export NL_SW_CORR_TM=false; fi
+#
       export L_YYYY=$(echo $L_DATE | cut -c1-4)
       export L_MM=$(echo $L_DATE | cut -c5-6)
       export L_DD=$(echo $L_DATE | cut -c7-8)
       export L_HH=$(echo $L_DATE | cut -c9-10)
+#
+      export NL_PERT_PATH_PR=${RUN_DIR}/${DATE}/wrfchem_chem_emiss
+      export NL_PERT_PATH_PO=${RUN_DIR}/${DATE}/wrfchem_chem_emiss
+      if [[ ${L_HH} -eq 00 ]]; then
+         export NL_PERT_PATH_PR=${RUN_DIR}/${PAST_DATE}/wrfchem_chem_emiss
+         export NL_PERT_PATH_PO=${RUN_DIR}/${DATE}/wrfchem_chem_emiss
+      fi
 #
 # GET COARSE GRID EMISSON FILES
       export WRFCHEMI=wrfchemi_d${CR_DOMAIN}_${L_YYYY}-${L_MM}-${L_DD}_${L_HH}:00:00
@@ -2606,8 +2616,8 @@ nz_chem=${NNZ_CHEM},
 nchem_spcs=${NNCHEM_SPC},
 nfire_spcs=${NNFIRE_SPC},
 nbiog_spcs=${NNBIO_SPC},
-pert_path_pr='${RUN_DIR}/${PAST_DATE}/wrfchem_chem_emiss',
-pert_path_po='${RUN_DIR}/${DATE}/wrfchem_chem_emiss',
+pert_path_pr='${NL_PERT_PATH_PR}',
+pert_path_po='${NL_PERT_PATH_PO}',
 nnum_mem=${NUM_MEMBERS},
 wrfchemi='${WRFCHEMI}',
 wrffirechemi='${WRFFIRECHEMI}',
@@ -2623,7 +2633,7 @@ sw_biog=${NL_PERT_BIO},
 corr_lngth_hz=${NL_HZ_CORR_LNGTH},
 corr_lngth_vt=${NL_VT_CORR_LNGTH},
 corr_lngth_tm=${NL_TM_CORR_LNGTH_BC},
-corr_tm_delt=${CYCLE_PERIOD},
+corr_tm_delt=${NL_EMISS_FREQ},
 /
 EOF
       rm -rf perturb_emiss_chem_spec_nml.nl
@@ -2705,10 +2715,14 @@ EOF
 #/
 #EOF
 #
-#   RANDOM=$$
-#   export JOBRND=${RANDOM}_fr_emiss_pert
-#   ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} perturb_chem_emiss_CORR_RT_CONST.exe SERIAL
-#   sbatch -W job.ksh
+#      RANDOM=$$
+#      export JOBRND=${RANDOM}_fr_emiss_pert
+#      ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} perturb_chem_emiss_CORR_RT_CONST.exe SERIAL
+#      sbatch -W job.ksh
+#
+# SWAP FILE NAMES FOR TEMPORAL DECORRELATION
+       rm -rf pert_chem_emiss_pr
+       mv pert_chem_emiss_po pert_chem_emiss_pr
 #
 # ADVANCE TIME
       export L_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} 1 2>/dev/null)
@@ -2721,11 +2735,6 @@ EOF
    ncra -y rmssdn wrfchemi_d${CR_DOMAIN}_tmp3 wrfchemi_d${CR_DOMAIN}_sprd
    rm -rf wrfchemi_d${CR_DOMAIN}_tmp*
 fi
-
-
-exit
-
-
 #
 #########################################################################
 #
@@ -4787,7 +4796,7 @@ if ${RUN_WRFCHEM_CYCLE_CR}; then
          cp wrfchemi_d${CR_DOMAIN}_${L_FILE_DATE} wrfchemi_d${CR_DOMAIN}
          cp wrffirechemi_d${CR_DOMAIN}_${L_FILE_DATE} wrffirechemi_d${CR_DOMAIN}_prior
          cp wrffirechemi_d${CR_DOMAIN}_${L_FILE_DATE} wrffirechemi_d${CR_DOMAIN}
-         cp ${ADJUST_EMISS_DIR}/adjust_chem_emiss.exe ./.
+         cp ${ADJUST_EMISS_DIR}/work/adjust_chem_emiss.exe ./.
          export L_DATE=$(${BUILD_DIR}/da_advance_time.exe ${START_DATE} +1 2>/dev/null)
          while [[ ${L_DATE} -le ${END_DATE} ]]; do 
             export L_YY=$(echo $L_DATE | cut -c1-4)

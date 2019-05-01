@@ -792,7 +792,7 @@
 !!             use ifport
              implicit none
              integer, allocatable :: aseed(:)
-             integer :: i, n, un, istat, dt(8), pid, t(2), s
+             integer :: i, n, un, istat, dt(8), pid, t(2), s, ierr
              integer(8) :: count, tms
 !
              call random_seed(size = n)
@@ -815,7 +815,8 @@
                 t = transfer(tms, t)
              end if
              s = ieor(t(1), t(2))
-             pid = getpid() + 1099279 ! Add a prime
+!             pid = getpid() + 1099279 ! Add a prime
+             call pxfgetpid(pid,ierr)
              s = ieor(s, pid)
              if (n >= 3) then
                 aseed(1) = t(1) + 36269

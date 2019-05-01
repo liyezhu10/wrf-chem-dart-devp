@@ -66,8 +66,8 @@ endif
 #---------------------------------------
 #  check mozbc for existence
 #---------------------------------------
-if( ! -e mozbc ) then
-  echo "Can not find file mozbc; $prog terminating"
+if( ! -e mozbc.exe ) then
+  echo "Can not find file mozbc.exe; $prog terminating"
   exit -1
 endif
 #---------------------------------------
@@ -280,12 +280,12 @@ foreach file ($files)
     rm -f $outfile
   endif
   if( $bnd_typ == IC || $bnd_typ == BOTH ) then
-    set msg = "Running mozbc for file $file"
+    set msg = "Running mozbc.exe for file $file"
     if( $bnd_typ == BOTH ) then
       set msg = "$msg and $bdy_file"
     endif
   else
-    set msg = "Running mozbc for file $bdy_file"
+    set msg = "Running mozbc.exe for file $bdy_file"
   endif
   echo $msg
 
@@ -296,12 +296,12 @@ foreach file ($files)
 #---------------------------------------
 #  call mozbc utility
 #---------------------------------------
-    ./mozbc < $mozbc_inp > $outfile
+    ./mozbc.exe < $mozbc_inp > $outfile
 #---------------------------------------
 #  check signal file
 #---------------------------------------
   if( ! -e run_mozbc_done ) then
-    echo "There was an error running mozbc, check file $outfile; $prog terminating"
+    echo "There was an error running mozbc.exe, check file $outfile; $prog terminating"
     rm -f wrfbdy_d01
     rm -f wrfinput_d01
     exit -1

@@ -15,7 +15,7 @@
              integer                                  :: jj_str,jj_end,jj_npt,jj_sft
              real                                     :: pi,grav,u_ran_1,u_ran_2,nnum_mem
              real                                     :: sprd_chem,sprd_fire,sprd_biog
-             real                                     :: zdist,zfac
+             real                                     :: zdist,zfac,tmp
              real                                     :: grid_length,vcov
              real                                     :: corr_lngth_hz
              real                                     :: corr_lngth_vt
@@ -430,7 +430,7 @@
                 print *, 'APM ERROR: NOT ENOUGH PROCESSORS num_mem = ',num_mem, ' procs = ',num_procs-1
                 call mpi_finalize(ierr)
                 stop
-             endif   
+             endif
              if(sw_seed) call init_random_seed()
 !
              if(rank.ne.0) then
@@ -496,14 +496,17 @@
                             do kk=1,nz_chem 
                                pert_chem_sum(k)=pert_chem_sum(k)+A_chem(i,j,k,kk)*chem_fac_mem(i,j,kk)
                             enddo
+                             pert_chem_sum(k)=chem_fac_mem(i,j,k)
                          enddo
                          do k=1,nz_chem
-                            chem_fac_mem(i,j,k)=pert_chem_sum(k)
+                             chem_fac_mem(i,j,k)=pert_chem_sum(k)
                          enddo 
                       enddo
                    enddo
                    deallocate(pert_chem_sum)
                    allocate(tmp_arry(nx*ny*nz_chem))
+!                   print *, 'chem_fac send ',rank,chem_fac_mem(1,1,1),chem_fac_mem(nx/2,ny/2,nz_chem/2), &
+!                   chem_fac_mem(nx,ny,nz_chem)
                    call apm_pack(tmp_arry,chem_fac_mem,nx,ny,nz_chem,1)
                    call mpi_send(tmp_arry,nx*ny*nz_chem,MPI_FLOAT,0,30+rank,MPI_COMM_WORLD,ierr)
                    deallocate(tmp_arry)
@@ -662,6 +665,10 @@
                    deallocate(chem_fac_mem)     
                 endif
              endif
+             if(rank.ne.0) then
+                call mpi_finalize(ierr)
+                stop
+             endif
 !
              if (rank.eq.0) then
                 if(sw_chem) then 
@@ -671,6 +678,8 @@
                    do imem=1,num_mem
                       call mpi_recv(tmp_arry,nx*ny*nz_chem,MPI_FLOAT,imem,30+imem,MPI_COMM_WORLD,stat,ierr)
                       call apm_unpack(tmp_arry,chem_fac(:,:,:,imem),nx,ny,nz_chem,1)
+!                      print *, 'chem_fac recv ',chem_fac(1,1,1,imem),chem_fac(nx/2,ny/2,nz_chem/2,imem), &
+!                      chem_fac(nx,ny,nz_chem,imem)
                    enddo
                    deallocate(tmp_arry)
 !
@@ -698,11 +707,11 @@
                    chem_fac_pr(:,:,:,:)=0.
                    unita=30
                    unitb=40
-                   open(unit=unitb,file=trim(pert_path_po)//'/pert_chem_emiss', &
+                   open(unit=unitb,file=trim(pert_path_po)//'/pert_chem_emiss_po', &
                    form='unformatted',status='unknown')
                    wgt=0.
                    if (sw_corr_tm) then
-                      open(unit=unita,file=trim(pert_path_pr)//'/pert_chem_emiss', &
+                      open(unit=unita,file=trim(pert_path_pr)//'/pert_chem_emiss_pr', &
                       form='unformatted',status='unknown')
                       read(unita) chem_fac_pr
                       wgt=1.-corr_tm_delt/corr_lngth_tm
@@ -729,6 +738,7 @@
                          do i=1,nx
                             do j=1,ny
                                do k=1,nz_chem
+                                  tmp=chem_data3d(i,j,k)
                                   chem_data3d(i,j,k)=chem_data3d(i,j,k)*exp(chem_fac(i,j,k,imem))
                                enddo
                             enddo
@@ -1387,6 +1397,7 @@
                 aseed = s + 37 * (/ (i, i = 0, n - 1 ) /)
              end if
              call random_seed(put=aseed)
+    
           end subroutine init_random_seed
 !
           subroutine apm_pack(A_pck,A_unpck,nx,ny,nz,nl)
