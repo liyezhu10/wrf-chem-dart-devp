@@ -68,9 +68,9 @@ endif
 @ n = $n + 1
 echo
 echo "---------------------------------------------------"
-echo "build number $n is mkmf_perturb_chem_icbc_CORR_RT_MA_MPI"
+echo "build number $n is mkmf_perturb_chem_icbc_CORR_RT_MA with MPI"
 
-csh  mkmf_perturb_chem_icbc_CORR_RT_MA_MPI -mpi
+csh  mkmf_perturb_chem_icbc_CORR_RT_MA -mpi
 make || exit $n
 
 \rm -f *.o *.mod input.nml*_default Makefile .cppdefs
