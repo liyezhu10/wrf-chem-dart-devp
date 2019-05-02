@@ -6,10 +6,10 @@
 #
 # DART $Id$
 #
-# usage: mkmf_filter [ -mpi | -nompi ]
+# usage: mkmf_perturb_chem_icbc_CORR_RT_MA [ -mpi | -nompi ]
 #
-# without any args, builds filter without mpi libraries, and it will run
-# as a normal executable. if -mpi is given, it will be compiled with the mpi
+# without any args (or with -nompi), builds without mpi libraries, and it will run
+# as a serial executable. if -mpi is given, it will be compiled with the mpi
 # libraries and can run with multiple cooperating processes.
 
 if ( $#argv > 0 ) then
@@ -18,8 +18,8 @@ if ( $#argv > 0 ) then
   else if ("$argv[1]" == "-nompi") then
     setenv usingmpi 0
   else
-    echo "Unrecognized argument to mkmf_filter: $argv[1]"
-    echo "Usage: mkmf_filter [ -mpi | -nompi ]"
+    echo "Unrecognized argument to mkmf_perturb_chem_icbc_CORR_RT_MA: $argv[1]"
+    echo "Usage: mkmf_perturb_chem_icbc_CORR_RT_MA [ -mpi | -nompi ]"
     echo " default is to generate a Makefile without MPI support."
     exit -1
   endif
@@ -33,7 +33,7 @@ endif
 
 set pathFile = path_names_perturb_chem_icbc_CORR_RT_MA
 
-cp -f ${pathFile} ${pathFile}.back 
+cp -f ${pathFile} ${pathFile}.back
 
 if ( $usingmpi ) then
 
@@ -45,7 +45,6 @@ if ( $usingmpi ) then
 else
 
   echo "Makefile uses serial version of code."
-  rm -f using_mpi_for_filter
   sed -e 's;/perturb_chem_icbc_CORR_RT_MA_MPI;/perturb_chem_icbc_CORR_RT_MA;' ${pathFile}.back >! ${pathFile}
   setenv wrapper_arg ""
   set EXENAME = perturb_chem_icbc_CORR_RT_MA.exe

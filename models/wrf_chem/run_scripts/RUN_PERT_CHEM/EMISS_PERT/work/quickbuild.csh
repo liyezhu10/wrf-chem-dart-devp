@@ -8,16 +8,9 @@
 #
 # This script compiles all executables in this directory.
 
-#----------------------------------------------------------------------
-# 'preprocess' is a program that culls the appropriate sections of the
-# observation module for the observations types in 'input.nml'; the 
-# resulting source file is used by all the remaining programs, 
-# so this MUST be run first.
-#----------------------------------------------------------------------
+\rm -f *.o *.mod Makefile
 
-\rm -f preprocess *.o *.mod
-
-set MODEL = "WRF-Chem/DART run scripts"
+set MODEL = "WRF-Chem EMISS_PERT"
 
 @ n = 0
 
@@ -30,8 +23,7 @@ foreach TARGET ( mkmf_* )
    set PROG = `echo $TARGET | sed -e 's#mkmf_##'`
 
    switch ( $TARGET )
-   case mkmf_preprocess:
-      @ n = $n + 1
+   case mkmf_file_to_skip_goes_here:
       breaksw
    default:
       @ n = $n + 1
@@ -45,37 +37,49 @@ foreach TARGET ( mkmf_* )
    endsw
 end
 
-\rm -f *.o *.mod input.nml*_default
-
-echo "Success: All single task ${MODEL} programs compiled."  
+\rm -f *.o *.mod input.nml*_default Makefile .cppdefs
 
 #----------------------------------------------------------------------
-# Build the MPI-enabled target(s) 
+# exit if not compiling with MPI support
 #----------------------------------------------------------------------
 
-foreach TARGET ( mpi_mkmf_* )
+if ( $#argv == 1 && "$1" == "-mpi" ) then
+  echo "Success: All single task DART programs compiled."  
+  echo "Script now compiling MPI parallel versions of the DART programs."
+else if ( $#argv == 1 && "$1" == "-nompi" ) then
+  echo "Success: All single task DART programs compiled."  
+  echo "Script is exiting without building the MPI version of the DART programs."
+  exit 0
+else
+  echo ""
+  echo "Success: All single task DART programs compiled."  
+  echo "Script now compiling MPI parallel versions of the DART programs."
+  echo "Run the quickbuild.csh script with a -nompi argument or"
+  echo "edit the quickbuild.csh script and add an exit line"
+  echo "to bypass compiling with MPI to run in parallel on multiple cpus."
+  echo ""
+endif
 
-   set PROG = `echo $TARGET | sed -e 's#mpi_mkmf_##'`
+#----------------------------------------------------------------------
+# to disable an MPI version of perturb_chem_emiss_CORR_RT_MA
+# call this script with the -nompi argument.
+#----------------------------------------------------------------------
 
-   switch ( $TARGET )
-   case mpi_mkmf_preprocess:
-      @ n = $n + 1
-      breaksw
-   default:
-      @ n = $n + 1
-      echo
-      echo "---------------------------------------------------"
-      echo "${MODEL} build number ${n} is ${PROG}" 
-      \rm -f ${PROG}
-      csh $TARGET -mpi
-      make        || exit $n
-      breaksw
-   endsw
+foreach TARGET ( mkmf_perturb_chem_emiss_CORR_RT_MA )
+
+   set PROG = `echo $TARGET | sed -e 's#mkmf_##'`
+
+   @ n = $n + 1
+   echo
+   echo "---------------------------------------------------"
+   echo "${MODEL} build number ${n} is ${PROG} with MPI" 
+
+   csh  $TARGET -mpi || exit $n
+   make              || exit $n
+
 end
 
-\rm -f *.o *.mod input.nml*_default
-
-echo "Success: All MPI-enabled ${MODEL} programs compiled."  
+\rm -f *.o *.mod input.nml*_default Makefile .cppdefs
 
 exit 0
 
