@@ -8,7 +8,7 @@
 #
 # This script compiles all executables in this directory.
 
-\rm -f *.o *.mod 
+\rm -f *.o *.mod Makefile
 
 set MODEL = "WRF-Chem/DART run_scripts"
 
@@ -22,34 +22,22 @@ foreach TARGET ( mkmf_* )
 
    set PROG = `echo $TARGET | sed -e 's#mkmf_##'`
 
-   @ n = $n + 1
-   echo
-   echo "---------------------------------------------------"
-   echo "${MODEL} build number ${n} is ${PROG}" 
-   \rm -f ${PROG}
-   csh $TARGET || exit $n
-   make        || exit $n
-
+   switch ( $TARGET )
+   case mkmf_perturb_chem_icbc_CORR_RT_MA_MPI:
+      breaksw
+   default:
+      @ n = $n + 1
+      echo
+      echo "---------------------------------------------------"
+      echo "${MODEL} build number ${n} is ${PROG}" 
+      \rm -f ${PROG}
+      csh $TARGET || exit $n
+      make        || exit $n
+      breaksw
+   endsw
 end
 
-#----------------------------------------------------------------------
-# Build the single-threaded mozbc
-#----------------------------------------------------------------------
-
-cd ../mozbc-dart
-./make_mozbc
-
-cd ../work
-cp ../mozbc-dart/mozbc ./mozbc.exe
-
-if (! -e mozbc.exe) then
-   echo "mozbc did not buid properly"
-   exit 1
-endif
-
-@ n = $n + 1
-
-\rm -f *.o *.mod input.nml*_default
+\rm -f *.o *.mod input.nml*_default Makefile .cppdefs
 
 #----------------------------------------------------------------------
 # exit if not compiling with MPI support
@@ -85,9 +73,7 @@ echo "build number $n is mkmf_perturb_chem_icbc_CORR_RT_MA_MPI"
 csh  mkmf_perturb_chem_icbc_CORR_RT_MA_MPI -mpi
 make || exit $n
 
-\rm -f *.o *.mod 
-\rm -f input.nml*_default
-
+\rm -f *.o *.mod input.nml*_default Makefile .cppdefs
 
 exit 0
 

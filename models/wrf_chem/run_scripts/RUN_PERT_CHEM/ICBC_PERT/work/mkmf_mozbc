@@ -6,9 +6,9 @@
 #
 # DART $Id$
 
-     ../../../../../../mkmf/mkmf -p perturb_chem_icbc_CORR_RT_MA.exe \
+     ../../../../../../mkmf/mkmf -p mozbc.exe \
  -t  ../../../../../../mkmf/mkmf.template \
- -a "../../../../../.." path_names_perturb_chem_icbc_CORR_RT_MA
+ -a "../../../../../../" path_names_mozbc
 
 exit $status
 
