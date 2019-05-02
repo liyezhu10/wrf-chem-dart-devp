@@ -4,7 +4,7 @@
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id: buildall.csh 13123 2019-04-24 17:40:21Z mizzi@ucar.edu $
+# DART $Id$
 
 set SNAME = $0
 set clobber
@@ -41,8 +41,8 @@ end
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/models/wrf_chem/run_scripts/buildall.csh $
-# $Revision: 13123 $
-# $Date: 2019-04-24 11:40:21 -0600 (Wed, 24 Apr 2019) $
+# $URL$
+# $Revision$
+# $Date$
 
 

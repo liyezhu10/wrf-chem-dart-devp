@@ -4,7 +4,7 @@
 # by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id: quickbuild.csh 13126 2019-04-25 01:59:32Z thoar@ucar.edu $
+# DART $Id$
 #
 # This script compiles all executables in this directory.
 
@@ -80,7 +80,7 @@ echo "Success: All MPI-enabled ${MODEL} programs compiled."
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/models/wrf_chem/run_scripts/RUN_PERT_CHEM/EMISS_PERT/work/quickbuild.csh $
-# $Revision: 13126 $
-# $Date: 2019-04-24 19:59:32 -0600 (Wed, 24 Apr 2019) $
+# $URL$
+# $Revision$
+# $Date$
 

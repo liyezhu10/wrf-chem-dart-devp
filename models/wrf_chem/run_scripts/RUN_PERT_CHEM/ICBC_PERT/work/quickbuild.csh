@@ -1,19 +1,12 @@
 #!/bin/csh
 #
-# DART software - Copyright © 2004 - 2010 UCAR. This open source software is
+# DART software - Copyright 2004 - 2013 UCAR. This open source software is
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# $Id: quickbuild.csh 7387 2015-01-16 22:44:50Z mizzi $
+# DART $Id$
 #
 # This script compiles all executables in this directory.
-
-#----------------------------------------------------------------------
-# 'preprocess' is a program that culls the appropriate sections of the
-# observation module for the observations types in 'input.nml'; the 
-# resulting source file is used by all the remaining programs, 
-# so this MUST be run first.
-#----------------------------------------------------------------------
 
 \rm -f *.o *.mod 
 
@@ -29,56 +22,18 @@ foreach TARGET ( mkmf_* )
 
    set PROG = `echo $TARGET | sed -e 's#mkmf_##'`
 
-   switch ( $TARGET )
-   case mkmf_preprocess:
-      @ n = $n + 1
-      breaksw
-   default:
-      @ n = $n + 1
-      echo
-      echo "---------------------------------------------------"
-      echo "${MODEL} build number ${n} is ${PROG}" 
-      \rm -f ${PROG}
-      csh $TARGET || exit $n
-      make        || exit $n
-\      breaksw
-   endsw
+   @ n = $n + 1
+   echo
+   echo "---------------------------------------------------"
+   echo "${MODEL} build number ${n} is ${PROG}" 
+   \rm -f ${PROG}
+   csh $TARGET || exit $n
+   make        || exit $n
+
 end
 
-\rm -f *.o *.mod  input.nml*_default
-
-echo "Success: All ${MODEL} programs compiled."  
-
 #----------------------------------------------------------------------
-# Build the MPI-enabled target(s) 
-#----------------------------------------------------------------------
-
-foreach TARGET ( mpi_mkmf_* )
-
-   set PROG = `echo $TARGET | sed -e 's#mpi_mkmf_##'`
-
-   switch ( $TARGET )
-   case mpi_mkmf_preprocess:
-      @ n = $n + 1
-      breaksw
-   default:
-      @ n = $n + 1
-      echo
-      echo "---------------------------------------------------"
-      echo "${MODEL} build number ${n} is ${PROG}" 
-      \rm -f ${PROG}
-      csh $TARGET -mpi
-      make        || exit $n
-      breaksw
-   endsw
-end
-
-\rm -f *.o *.mod input.nml*_default
-
-echo "Success: All MPI-enabled ${MODEL} programs compiled."  
-
-#----------------------------------------------------------------------
-# Build all the single-threaded mozbc
+# Build the single-threaded mozbc
 #----------------------------------------------------------------------
 
 cd ../mozbc-dart
@@ -88,14 +43,56 @@ cd ../work
 cp ../mozbc-dart/mozbc ./mozbc.exe
 
 if (! -e mozbc.exe) then
-   echo mozbc did not buid properly
+   echo "mozbc did not buid properly"
    exit 1
 endif
+
+@ n = $n + 1
+
+\rm -f *.o *.mod input.nml*_default
+
+#----------------------------------------------------------------------
+# exit if not compiling with MPI support
+#----------------------------------------------------------------------
+
+if ( $#argv == 1 && "$1" == "-mpi" ) then
+  echo "Success: All single task DART programs compiled."  
+  echo "Script now compiling MPI parallel versions of the DART programs."
+else if ( $#argv == 1 && "$1" == "-nompi" ) then
+  echo "Success: All single task DART programs compiled."  
+  echo "Script is exiting without building the MPI version of the DART programs."
+  exit 0
+else
+  echo ""
+  echo "Success: All single task DART programs compiled."  
+  echo "Script now compiling MPI parallel versions of the DART programs."
+  echo "Run the quickbuild.csh script with a -nompi argument or"
+  echo "edit the quickbuild.csh script and add an exit line"
+  echo "to bypass compiling with MPI to run in parallel on multiple cpus."
+  echo ""
+endif
+
+#----------------------------------------------------------------------
+# to disable an MPI version of perturb_chem_icbc_CORR_RT_MA
+# call this script with the -nompi argument.
+#----------------------------------------------------------------------
+
+@ n = $n + 1
+echo
+echo "---------------------------------------------------"
+echo "build number $n is mkmf_perturb_chem_icbc_CORR_RT_MA_MPI"
+
+csh  mkmf_perturb_chem_icbc_CORR_RT_MA_MPI -mpi
+make || exit $n
+
+\rm -f *.o *.mod 
+\rm -f input.nml*_default
+
 
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/models/wrf_chem/run_scripts/RUN_PERT_CHEM/ICBC_PERT/work/quickbuild.csh $
-# $Revision: 7387 $
-# $Date: 2015-01-16 15:44:50 -0700 (Fri, 16 Jan 2015) $
+# $URL$
+# $Revision$
+# $Date$
 

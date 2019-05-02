@@ -4,7 +4,7 @@
 # provided by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# $Id: quickbuild.csh 7387 2015-01-16 22:44:50Z mizzi $
+# DART $Id$
 #
 # compile fix_time_stamp.f90
 
@@ -52,7 +52,7 @@ echo "Success: All ${MODEL} programs compiled."
 exit 0
 
 # <next few lines under version control, do not edit>
-# $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/observations/MOPITT_CO/work/quickbuild.csh $
-# $Revision: 7387 $
-# $Date: 2015-01-16 15:44:50 -0700 (Fri, 16 Jan 2015) $
+# $URL$
+# $Revision$
+# $Date$
 
