@@ -1,38 +1,43 @@
 #!/bin/csh
 #
-# DART software - Copyright © 2004 - 2010 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
 # DART $Id$
 #
 # This script compiles all executables in this directory.
 
+\rm -f *.o *.mod Makefile
+
+set MODEL = "WES_COLDENS"
+
+@ n = 0
+
 #----------------------------------------------------------------------
-# Build all the single-threaded exo_coldens and season_wes files
+# Build all the single-threaded targets
 #----------------------------------------------------------------------
 
-cd ../
-./make_util exo_coldens
+foreach TARGET ( mkmf_* )
 
-./make_util wesely
+   set PROG = `echo $TARGET | sed -e 's#mkmf_##'`
 
-cd work
-rm -rf *.exe *.nc
+   switch ( $TARGET )
+   case mkmf_you_wanna_skip:
+      breaksw
+   default:
+      @ n = $n + 1
+      echo
+      echo "---------------------------------------------------"
+      echo "${MODEL} build number ${n} is ${PROG}" 
+      \rm -f ${PROG}
+      csh $TARGET || exit $n
+      make        || exit $n
+      breaksw
+   endsw
+end
 
-mv ../exo_coldens ./exo_coldens.exe
-
-if (! -e exo_coldens.exe) then
-   echo exo_coldens.exe did not buid properly
-   exit 1
-endif
-
-mv ../wesely ./wesely.exe
-
-if (! -e wesely.exe) then
-   echo wesely.exe did not buid properly
-   exit 1
-endif
+\rm -f *.o *.mod input.nml*_default Makefile .cppdefs
 
 exit 0
 

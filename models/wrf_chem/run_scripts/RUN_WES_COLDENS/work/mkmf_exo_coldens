@@ -6,9 +6,9 @@
 #
 # DART $Id$
 
-     ../../../../../mkmf/mkmf -p ascii_to_stream.exe \
+     ../../../../../mkmf/mkmf -p exo_coldens.exe \
  -t  ../../../../../mkmf/mkmf.template \
- -a "../../../../.." path_names_ascii_to_stream
+ -a "../../../../.." path_names_exo_coldens
 
 exit $status
 

@@ -6,9 +6,9 @@
 #
 # DART $Id$
 
-     ../../../../../mkmf/mkmf -p ascii_to_stream.exe \
+     ../../../../../mkmf/mkmf -p fire_emis.exe \
  -t  ../../../../../mkmf/mkmf.template \
- -a "../../../../.." path_names_ascii_to_stream
+ -a "../../../../.." path_names_fire_emis
 
 exit $status
 

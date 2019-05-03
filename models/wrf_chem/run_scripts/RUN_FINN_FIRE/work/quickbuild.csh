@@ -1,29 +1,43 @@
 #!/bin/csh
 #
-# DART software - Copyright © 2004 - 2010 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
 # DART $Id$
 #
 # This script compiles all executables in this directory.
 
+\rm -f *.o *.mod Makefile
+
+set MODEL = "FINN_FIRE"
+
+@ n = 0
+
 #----------------------------------------------------------------------
-# Build all the single-threaded megan-bio files
+# Build all the single-threaded targets
 #----------------------------------------------------------------------
 
-cd ../
-./make_fire_emis
+foreach TARGET ( mkmf_* )
 
-cd work
-rm -rf *.exe *.nc
+   set PROG = `echo $TARGET | sed -e 's#mkmf_##'`
 
-mv ../fire_emis ./fire_emis.exe
+   switch ( $TARGET )
+   case mkmf_you_wanna_skip:
+      breaksw
+   default:
+      @ n = $n + 1
+      echo
+      echo "---------------------------------------------------"
+      echo "${MODEL} build number ${n} is ${PROG}" 
+      \rm -f ${PROG}
+      csh $TARGET || exit $n
+      make        || exit $n
+      breaksw
+   endsw
+end
 
-if (! -e fire_emis.exe) then
-   echo fire_emis.exe did not buid properly
-   exit 1
-endif
+\rm -f *.o *.mod input.nml*_default Makefile .cppdefs
 
 exit 0
 
