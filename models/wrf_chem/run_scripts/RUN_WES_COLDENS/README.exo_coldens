@@ -1,3 +1,18 @@
+# DART $Id: $
+
+IMPORTANT: The WRF-Chem build mechanism has been replaced by the DART mkmf mechanism.
+           All that is needed to build wesely and exo_coldens is to run
+           quickbuild.csh   in the  RUN_WES_COLDENS/work directory.
+           The environment from the mkmf.template is used, so there is no further
+           customization needed. As per the WRF-Chem/DART developers policy, the
+           executables have a '.exe' extension, which is an addition to the
+           native naming scheme.
+
+           For more information, see https://www2.acom.ucar.edu/wrf-chem/wrf-chem-tools-community
+
+           The original README follows.
+
+        ------------------------------------------------------------------------
 
 	The exo_coldens utility, a single cpu code, reads WRF and Mozart
         input files and produces netcdf files, on a per WRF domain basis,
