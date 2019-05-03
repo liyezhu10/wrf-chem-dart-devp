@@ -1,6 +1,0 @@
-The original data files are in the wrf_chem_data_files.tar file.
-Some of the scripting expects the links to be made in the following way:
-
-lrwxrwxrwx 1 mizzi ncar 37 Sep 19 10:42 GLOB_JAN-APR2008_05062011_MOZ4.txt -> ../GLOB_JAN-APR2008_05062011_MOZ4.txt
-lrwxrwxrwx 1 mizzi ncar 38 Sep 19 10:42 GLOB_MAY-SEPT2008_05062011_MOZ4.txt -> ../GLOB_MAY-SEPT2008_05062011_MOZ4.txt
-lrwxrwxrwx 1 mizzi ncar 37 Sep 19 10:42 GLOB_OCT-DEC2008_05062011_MOZ4.txt -> ../GLOB_OCT-DEC2008_05062011_MOZ4.txt
