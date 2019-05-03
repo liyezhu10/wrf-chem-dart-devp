@@ -1,41 +1,43 @@
 #!/bin/csh
 #
-# DART software - Copyright © 2004 - 2010 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
 # DART $Id$
 #
 # This script compiles all executables in this directory.
 
+\rm -f *.o *.mod Makefile
+
+set MODEL = "MEGAN BIO"
+
+@ n = 0
+
 #----------------------------------------------------------------------
-# Build all the single-threaded megan-bio files
+# Build all the serial megan-bio files
 #----------------------------------------------------------------------
 
-cd ../
-./make_util megan_bio_emiss
-./make_util megan_xform
-./make_util surfdata_xform
+foreach TARGET ( mkmf_* )
 
-cd work
-rm -rf *.exe *.nc
+   set PROG = `echo $TARGET | sed -e 's#mkmf_##'`
 
-mv ../megan_bio_emiss ./megan_bio_emiss.exe
-mv ../megan_xform ./megan_xform.exe
-mv ../surfdata_xform ./surfdata_xform.exe
+   switch ( $TARGET )
+   case mkmf_you_wanna_skip:
+      breaksw
+   default:
+      @ n = $n + 1
+      echo
+      echo "---------------------------------------------------"
+      echo "${MODEL} build number ${n} is ${PROG}" 
+      \rm -f ${PROG}
+      csh $TARGET || exit $n
+      make        || exit $n
+      breaksw
+   endsw
+end
 
-if (! -e megan_bio_emiss.exe) then
-   echo megan_bio_emiss.exe did not buid properly
-   exit 1
-endif
-if (! -e megan_xform.exe) then
-   echo megan_xform.exe did not buid properly
-   exit 1
-endif
-if (! -e surfdata_xform.exe) then
-   echo surfdata_xform.exe did not buid properly
-   exit 1
-endif
+\rm -f *.o *.mod input.nml*_default Makefile .cppdefs
 
 exit 0
 
