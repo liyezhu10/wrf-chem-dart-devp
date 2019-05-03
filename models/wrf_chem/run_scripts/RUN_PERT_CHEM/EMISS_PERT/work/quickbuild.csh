@@ -10,7 +10,7 @@
 
 \rm -f *.o *.mod Makefile
 
-set MODEL = "WRF-Chem EMISS_PERT"
+set MODEL = "WRF-Chem/DART RUN_PERT_CHEM/EMISS_PERT"
 
 @ n = 0
 
@@ -23,7 +23,7 @@ foreach TARGET ( mkmf_* )
    set PROG = `echo $TARGET | sed -e 's#mkmf_##'`
 
    switch ( $TARGET )
-   case mkmf_file_to_skip_goes_here:
+   case mkmf_you_wanna_skip:
       breaksw
    default:
       @ n = $n + 1
@@ -80,6 +80,10 @@ foreach TARGET ( mkmf_perturb_chem_emiss_CORR_RT_MA )
 end
 
 \rm -f *.o *.mod input.nml*_default Makefile .cppdefs
+
+echo
+echo "Success: All ${MODEL} programs compiled."  
+echo
 
 exit 0
 

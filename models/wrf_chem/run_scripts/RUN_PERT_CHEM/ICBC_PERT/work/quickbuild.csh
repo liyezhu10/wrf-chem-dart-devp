@@ -10,7 +10,7 @@
 
 \rm -f *.o *.mod Makefile
 
-set MODEL = "WRF-Chem ICBC_PERT"
+set MODEL = "WRF-Chem/DART RUN_PERT_CHEM/ICBC_PERT"
 
 @ n = 0
 
@@ -80,6 +80,10 @@ foreach TARGET ( mkmf_perturb_chem_icbc_CORR_RT_MA )
 end
 
 \rm -f *.o *.mod input.nml*_default Makefile .cppdefs
+
+echo
+echo "Success: All ${MODEL} programs compiled."  
+echo
 
 exit 0
 

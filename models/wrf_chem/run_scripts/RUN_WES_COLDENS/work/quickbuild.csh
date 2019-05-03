@@ -10,7 +10,7 @@
 
 \rm -f *.o *.mod Makefile
 
-set MODEL = "WES_COLDENS"
+set MODEL = "WRF-Chem/DART RUN_WES_COLDENS"
 
 @ n = 0
 
@@ -38,6 +38,10 @@ foreach TARGET ( mkmf_* )
 end
 
 \rm -f *.o *.mod input.nml*_default Makefile .cppdefs
+
+echo
+echo "Success: All ${MODEL} programs compiled."  
+echo
 
 exit 0
 

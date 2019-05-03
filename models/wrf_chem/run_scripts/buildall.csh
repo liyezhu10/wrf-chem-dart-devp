@@ -1,7 +1,7 @@
 #!/bin/csh
 #
-# DART software - Copyright 2004 - 2013 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
 # DART $Id$
@@ -15,6 +15,12 @@ foreach project ( RUN_CHINA_EPA RUN_CLOSEST_MEMBER RUN_EMISS_INV \
                   RUN_FINN_FIRE RUN_LOCALIZE_OBS_SEQ RUN_MEGAN_BIO \
                   RUN_PERT_CHEM/EMISS_PERT RUN_PERT_CHEM/ICBC_PERT \
                   RUN_TIME_INTERP RUN_WES_COLDENS )
+
+   echo
+   echo "==================================================="
+   echo "Building $project support."
+   echo "==================================================="
+   echo
 
    set dir = $project
    set FAILURE = 0

@@ -6,8 +6,9 @@
 #
 # DART $Id$
 
-../../../../../mkmf/mkmf -p fix_time_stamp.exe -t ../../../../../mkmf/mkmf.template \
- -a "../../../../.." path_names_fix_time_stamp
+     ../../../../../../mkmf/mkmf -p mozbc.exe \
+ -t  ../../../../../../mkmf/mkmf.template \
+ -a "../../../../../../" path_names_mozbc
 
 exit $status
 

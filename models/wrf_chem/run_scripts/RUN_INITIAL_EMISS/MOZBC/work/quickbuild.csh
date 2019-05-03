@@ -10,7 +10,7 @@
 
 \rm -f *.o *.mod Makefile
 
-set MODEL = "WRF-Chem/DART RUN_LOCALIZE_OBS_SEQ"
+set MODEL = "WRF-Chem/DART RUN_INITIAL_EMISS MOZBC"
 
 @ n = 0
 
@@ -39,9 +39,9 @@ end
 
 \rm -f *.o *.mod input.nml*_default Makefile .cppdefs
 
-echo
-echo "Success: All ${MODEL} programs compiled."  
-echo
+echo 
+echo "Success: All ${MODEL} programs compiled."
+echo 
 
 exit 0
 

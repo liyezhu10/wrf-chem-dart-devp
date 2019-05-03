@@ -1,23 +1,16 @@
 #!/bin/csh
 #
-# DART software - Copyright © 2004 - 2010 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
 # DART $Id$
 #
-# compile adjust_chem_emiss.f90
+# This script compiles all executables in this directory.
 
-#----------------------------------------------------------------------
-# 'preprocess' is a program that culls the appropriate sections of the
-# observation module for the observations types in 'input.nml'; the 
-# resulting source file is used by all the remaining programs, 
-# so this MUST be run first.
-#----------------------------------------------------------------------
+\rm -f *.o *.mod Makefile
 
-\rm -f *.o *.mod 
-
-set MODEL = "WRF-Chem/DART run_scripts"
+set MODEL = "WRF-Chem/DART RUN_EMISS_INV"
 
 @ n = 0
 
@@ -30,8 +23,7 @@ foreach TARGET ( mkmf_* )
    set PROG = `echo $TARGET | sed -e 's#mkmf_##'`
 
    switch ( $TARGET )
-   case mkmf_preprocess:
-      @ n = $n + 1
+   case mkmf_you_wanna_skip:
       breaksw
    default:
       @ n = $n + 1
@@ -45,9 +37,11 @@ foreach TARGET ( mkmf_* )
    endsw
 end
 
-\rm -f *.o *.mod  input.nml*_default
+\rm -f *.o *.mod input.nml*_default Makefile .cppdefs
 
+echo 
 echo "Success: All ${MODEL} programs compiled."  
+echo 
 
 exit 0
 
