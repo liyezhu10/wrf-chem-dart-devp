@@ -1,10 +1,10 @@
 #!/bin/csh
 #
-# DART software - Copyright © 2004 - 2010 UCAR. This open source software is
-# provided by UCAR, "as is", without charge, subject to all terms of use at
+# DART software - Copyright UCAR. This open source software is provided
+# by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# $Id$
+# DART $Id$
 #
 # compile all converter programs
 
@@ -19,7 +19,7 @@
 \rm -f ../../../obs_def/obs_def_mod.f90
 \rm -f ../../../obs_kind/obs_kind_mod.f90
 
-set MODEL = "text converters"
+set MODEL = "MOPITT_CO"
 
 @ n = 1
 
