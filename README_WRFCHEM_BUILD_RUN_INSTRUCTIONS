@@ -9,7 +9,7 @@ libraries, and ksh scripts to your local system will be necessary. At present,
 the Intel compiler has been tested and there are some routines that require the
 Intel Math Kernel Libraries.
 
-Since it is my working directory, the distribution includes code that works and
+Since it is my working directory the distribution includes code that works and
 is tested, code that runs but has not been tested, and code that simply does
 not work yet. Once you have the test case running and want to test other features 
 of WRF-Chem/DART you should contact me at mizzi@ucar.edu to find out the 
@@ -39,7 +39,7 @@ running on your system.
 "mkmf.template.compiler_type.etc" into "mkmf.template", and modify/adapt
 "mkmf.template" to your system.
 
-3. Go to "../models/wrf_chem/work" and run "./quickbuild.csh." If this
+3. Go to "../models/wrf_chem/work" and run "./quickbuild.csh". If this
 step completes successfully, you should have some 30 WRF-Chem/DART
 executables in this "work" directory.
 
@@ -75,7 +75,7 @@ The is the test case run script.  You will need to edit:
  (ii) "ROOT DIRECTORIES" variables to match the root paths on your system.  
       You should not need to change the "DEPENDENT INPUT DATA DIRECTORIES" variables; 
  (iii) For now, you should not need to change the "SELECT COMPONENT RUN OPTIONS" variables, 
-       but remembers this section because these switches control the various job
+       but remember this section because these switches control the various job
        submission tasks in WRF-Chem/DART; 
  (iv) You may need to change the "COMPUTER PARAMETERS" to match the options 
       you set in "job_script_summit.ksh" for your particular scheduler/load manager; 
@@ -86,7 +86,7 @@ The is the test case run script.  You will need to edit:
 
 8. You are now ready to run the first two cycles of the WRF-Chem/DART test
 case called "real_PANDA_RETR_VARLOC_RELEASE_TEST".  The first cycle is call
-the "Initial Cycle," and the second is called the "First Assimilation Cycle".
+the "Initial Cycle" and the second is called the "First Assimilation Cycle".
 There is no data assimilation in the "Initial Cycle". This cycle sets up the
 initial ensemble and generates the initial forecast ensemble.  The "First
 Assimilaton Cycle" generates an input ensemble to get the lateral boundary
@@ -97,10 +97,10 @@ changes to the data assimilation, and generates the forecast ensemble.
 That completes the first two cycles.
 
 9. The date-time string for the Initial Cycle is "2014071418" - that means
-July 14, 2014 at 18:00 UTC.  To run the "Initial Cycle", you should not need
-to make changes to the CYCLE_STR_DATE or the CYCLE_END_DATE variables.  Also,
-you should not need to change any of the "SELECT COMPONENT RUN OPITION"
-variables.  To run the "First Assimilation Cycle," you will need to change
+July 14, 2014 at 18:00 UTC.  To run the "Initial Cycle" you should not need
+to make changes to the CYCLE_STR_DATE or the CYCLE_END_DATE variables.  
+Also you should not need to change any of the "SELECT COMPONENT RUN OPTIONS"
+variables.  To run the "First Assimilation Cycle" you will need to change
 the "CYCLE_STR_DATE" and "CYCLE_END_DATE" to "2014071500" and set
 "RUN_GEOGRID" to "false".
 
@@ -108,15 +108,15 @@ the "CYCLE_STR_DATE" and "CYCLE_END_DATE" to "2014071500" and set
 ${SCRATCH_DIR}/real_PANDA_RETR_VARLOC_RELEASE directory. Inside that
 directory, you should see the following directories: "2014072418" and
 "geogrid".  The 2014072418 directory contains the runtime output for the
-"First Assimilation Cycle," and "geogrid" contains data for creating the WRF
-input files.  At completing of the "First Assimilation Cycle", this directory
+"First Assimilation Cycle" and "geogrid" contains data for creating the WRF
+input files.  After completing the "First Assimilation Cycle" this directory
 with also have the "pert_file_emiss" and "pert_file_icbc" files.  These files
 contain perturbation information for the emission and initial/boundary
 condition perturbations.
 
 11. If the "Initial Cycle" completes successfully, you should make the changes 
 described in Step 9 to run the First Assimilation Cycle.  If your runs are successful, 
-the output should resemble to output in test case output data files.
+the output should resemble the output in the test case output data files.
 
 Thank you for using WRF-Chem/DART.  Good luck!  
 And please don't hesitate to contact me with questions.
