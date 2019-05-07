@@ -292,9 +292,9 @@
 ! Perturb the members
                    print *, 'perturb the chemi EMISSs'
                    do imem=1,num_mem
-                      if(imem.ge.0.and.imem.lt.10) write(cmem,"('.e00',i1)"),imem
-                      if(imem.ge.10.and.imem.lt.100) write(cmem,"('.e0',i2)"),imem
-                      if(imem.ge.100.and.imem.lt.1000) write(cmem,"('.e',i3)"),imem
+                      if(imem.ge.0.and.imem.lt.10) write(cmem,"('.e00',i1)") imem
+                      if(imem.ge.10.and.imem.lt.100) write(cmem,"('.e0',i2)") imem
+                      if(imem.ge.100.and.imem.lt.1000) write(cmem,"('.e',i3)") imem
                       wrfchem_file=trim(wrfchemi)//trim(cmem)
                       call get_WRFCHEM_emiss_data(wrfchem_file,ch_chem_spc(isp),chem_data3d,nx,ny,nz_chem)
                       do i=1,nx
@@ -412,9 +412,9 @@
 ! Perturb the members
                    print *, 'perturb the fire EMISSs'
                    do imem=1,num_mem
-                      if(imem.ge.0.and.imem.lt.10) write(cmem,"('.e00',i1)"),imem
-                      if(imem.ge.10.and.imem.lt.100) write(cmem,"('.e0',i2)"),imem
-                      if(imem.ge.100.and.imem.lt.1000) write(cmem,"('.e',i3)"),imem
+                      if(imem.ge.0.and.imem.lt.10) write(cmem,"('.e00',i1)") imem
+                      if(imem.ge.10.and.imem.lt.100) write(cmem,"('.e0',i2)") imem
+                      if(imem.ge.100.and.imem.lt.1000) write(cmem,"('.e',i3)") imem
                       wrffire_file=trim(wrffirechemi)//trim(cmem)
                       call get_WRFCHEM_emiss_data(wrffire_file,ch_fire_spc(isp),chem_data3d,nx,ny,nz_fire)
                       do i=1,nx
@@ -532,9 +532,9 @@
 ! Perturb the members
                    print *, 'perturb the biog EMISSs'
                    do imem=1,num_mem
-                      if(imem.ge.0.and.imem.lt.10) write(cmem,"('.e00',i1)"),imem
-                      if(imem.ge.10.and.imem.lt.100) write(cmem,"('.e0',i2)"),imem
-                      if(imem.ge.100.and.imem.lt.1000) write(cmem,"('.e',i3)"),imem
+                      if(imem.ge.0.and.imem.lt.10) write(cmem,"('.e00',i1)") imem
+                      if(imem.ge.10.and.imem.lt.100) write(cmem,"('.e0',i2)") imem
+                      if(imem.ge.100.and.imem.lt.1000) write(cmem,"('.e',i3)") imem
                       wrfbiog_file=trim(wrfbiochemi)//trim(cmem)
                       call get_WRFCHEM_emiss_data(wrfbiog_file,ch_biog_spc(isp),chem_data3d,nx,ny,nz_biog)
                       do i=1,nx
@@ -766,9 +766,9 @@
 ! Loop through members to find ensemble mean geo_ht
              geo_ht(:,:,:)=0.
              do imem=1,nmem
-                if(imem.ge.0.and.imem.lt.10) write(cmem,"('.e00',i1)"),imem
-                if(imem.ge.10.and.imem.lt.100) write(cmem,"('.e0',i2)"),imem
-                if(imem.ge.100.and.imem.lt.1000) write(cmem,"('.e',i3)"),imem
+                if(imem.ge.0.and.imem.lt.10) write(cmem,"('.e00',i1)") imem
+                if(imem.ge.10.and.imem.lt.100) write(cmem,"('.e0',i2)") imem
+                if(imem.ge.100.and.imem.lt.1000) write(cmem,"('.e',i3)") imem
 !
 ! open netcdf file
 
@@ -1036,7 +1036,7 @@
              end if
              s = ieor(t(1), t(2))
 !             pid = getpid() + 1099279 ! Add a prime
-             call pxfgetpid(pid,ierr)
+             call pxfgetpid(pid,ierr)  ! pxfgetpid is an Intel routine
              s = ieor(s, pid)
              if (n >= 3) then
                 aseed(1) = t(1) + 36269

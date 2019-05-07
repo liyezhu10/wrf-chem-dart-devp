@@ -128,20 +128,20 @@
       logical                      :: use_log_co, use_log_o3
 
       real                         :: pi,err_frac,ran1,ran2,zfac
-!
+
+      namelist /create_airnow_obs_nml/year0,month0,day0,hour0,beg_year,beg_mon,beg_day, &
+      beg_hour,beg_min,beg_sec,end_year,end_mon,end_day,end_hour,end_min,end_sec, &
+      file_in,lat_mn,lat_mx,lon_mn,lon_mx,use_log_co,use_log_o3 
+
 !============================================================
 !obs sequence extra variables
 !============================================================
-!
-!============================================================
+
       pi=4.*atan(1.0)
       fac=1.0
       err_frac=0.4
       obs_qc(1)=0.
-      namelist /create_airnow_obs_nml/year0,month0,day0,hour0,beg_year,beg_mon,beg_day, &
-      beg_hour,beg_min,beg_sec,end_year,end_mon,end_day,end_hour,end_min,end_sec, &
-      file_in,lat_mn,lat_mx,lon_mn,lon_mx,use_log_co,use_log_o3
-!
+
       save_greg_sec=-9999                                                 
 ! Record the current time, date, etc. to the logfile                                       
       call initialize_utilities('create_obs_sequence')

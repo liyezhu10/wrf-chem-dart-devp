@@ -943,7 +943,7 @@ fac=fac_obs_error
         endif
 !
 ! Truncate the number of CPSR modes
-        if(use_cpsr_co_trunc.eq..TRUE. .and. nlvls_fix.gt.cpsr_co_trunc_lim) then
+        if(use_cpsr_co_trunc .and. nlvls_fix.gt.cpsr_co_trunc_lim) then
            print *,'APM change limit ', nlvls_fix,cpsr_co_trunc_lim
            nlvls_fix=cpsr_co_trunc_lim
         endif
@@ -1394,19 +1394,22 @@ end program create_iasi_obs_sequence
       calc_greg_sec=calc_greg_sec+sec
    end function calc_greg_sec
 !
-   subroutine vertical_locate(prs_loc,prs,avgk,nlvp,nlvk)
+   subroutine vertical_locate(prs_loc,kmax,prs,avgk,nlvp,nlvk)
 !
 ! This subroutine is attache to mopitt_ascii_to_obs.f90 to identify to vertical
 ! location for vertical localization 
 ! 
       implicit none
+
+      real,    intent(out)  :: prs_loc
+      integer, intent(out)  :: kmax
+      real,    intent(in)  :: prs(nlvp)
+      real,    intent(in)  :: avgk(nlvk)
+      integer, intent(in)  :: nlvp,nlvk
+
       integer,parameter           :: nlv=19
-      integer                     :: nlvp,nlvk
-      integer                     :: k,kk,kk_st,kk_nd,kmax
+      integer                     :: k,kk,kk_st,kk_nd
       real                        :: wt_ctr,wt_end,zmax,sum
-      real                        :: prs_loc
-      real,dimension(nlvp)        :: prs
-      real,dimension(nlvk)        :: avgk
       real,dimension(nlv)         :: avgk_sm
 !
 ! apply vertical smoother
