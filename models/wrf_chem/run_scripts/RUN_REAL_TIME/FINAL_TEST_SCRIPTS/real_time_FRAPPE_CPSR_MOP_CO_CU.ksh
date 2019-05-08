@@ -19,8 +19,8 @@ export CYCLE_END_DATE=2014071412
 export CYCLE_DATE=${CYCLE_STR_DATE}
 export NL_FAC_OBS_ERROR_MOPITT=1.00
 export NL_FAC_OBS_ERROR_IASI=1.00
-export RETRIEVAL_TYPE_MOPITT=RETR
-export RETRIEVAL_TYPE_IASI=RAWR
+export RETRIEVAL_TYPE_MOPITT=CPSR
+export RETRIEVAL_TYPE_IASI=CPSR
 #
 # NOTE: the BC temporal adjustment is setup for 6-hr cycling (BCs at 3hr and 6hr).
 # km
@@ -57,7 +57,7 @@ fi
    export NL_CPSR_O3_TRUNC_LIM=4
 #
 # Vertical localizaton flag (0 - retrieval locations; 1 - averaging kernel locations)
-   export NL_MOPITT_CO_VLOC=0
+   export NL_MOPITT_CO_VLOC=1
    export NL_IASI_CO_VLOC=0
    export NL_IASI_O3_VLOC=0
 #
@@ -148,7 +148,7 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
 #
 # DEPENDENT INPUT DATA DIRECTORIES:
    export EXPERIMENT_DIR=${SCRATCH_DIR}
-   export RUN_DIR=${EXPERIMENT_DIR}/real_FRAPPE_RETR_MOP_CO
+   export RUN_DIR=${EXPERIMENT_DIR}/real_FRAPPE_CPSR_MOP_CO
    export TRUNK_DIR=${WORK_DIR}/TRUNK
    export WPS_DIR=${TRUNK_DIR}/${WPS_VER}
    export WPS_GEOG_DIR=${INPUT_DATA_DIR}/${WPS_GEOG_VER}
@@ -981,6 +981,7 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
    export NL_SPECIAL_LOCALIZATION_OBS_TYPES="'IASI_CO_RETRIEVAL','MOPITT_CO_RETRIEVAL'"
    export NL_SAMPLING_ERROR_CORRECTION=.true.
 # original cutoff
+#   export NL_SPECIAL_LOCALIZATION_CUTOFFS=0.05,0.05
    export NL_SPECIAL_LOCALIZATION_CUTOFFS=0.1,0.1
    export NL_ADAPTIVE_LOCALIZATION_THRESHOLD=2000
 #

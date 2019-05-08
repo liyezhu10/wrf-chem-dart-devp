@@ -10,10 +10,10 @@ export FIRST_DART_INFLATE_DATE=2014071406
 export FIRST_EMISS_INV_DATE=2014071406
 #
 # START CYCLE DATE-TIME:
-export CYCLE_STR_DATE=2014071412
+export CYCLE_STR_DATE=2014071406
 #
 # END CYCLE DATE-TIME:
-export CYCLE_END_DATE=2014071412
+export CYCLE_END_DATE=2014071406
 #export CYCLE_END_DATE=${CYCLE_STR_DATE}
 #
 export CYCLE_DATE=${CYCLE_STR_DATE}
@@ -148,7 +148,7 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
 #
 # DEPENDENT INPUT DATA DIRECTORIES:
    export EXPERIMENT_DIR=${SCRATCH_DIR}
-   export RUN_DIR=${EXPERIMENT_DIR}/real_FRAPPE_RETR_MOP_CO
+   export RUN_DIR=${EXPERIMENT_DIR}/real_FRAPPE_CONTROL
    export TRUNK_DIR=${WORK_DIR}/TRUNK
    export WPS_DIR=${TRUNK_DIR}/${WPS_VER}
    export WPS_GEOG_DIR=${INPUT_DATA_DIR}/${WPS_GEOG_VER}
@@ -981,6 +981,7 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
    export NL_SPECIAL_LOCALIZATION_OBS_TYPES="'IASI_CO_RETRIEVAL','MOPITT_CO_RETRIEVAL'"
    export NL_SAMPLING_ERROR_CORRECTION=.true.
 # original cutoff
+#   export NL_SPECIAL_LOCALIZATION_CUTOFFS=0.05,0.05
    export NL_SPECIAL_LOCALIZATION_CUTOFFS=0.1,0.1
    export NL_ADAPTIVE_LOCALIZATION_THRESHOLD=2000
 #
@@ -1205,8 +1206,8 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
                                    'AIRCRAFT_V_WIND_COMPONENT',
                                    'AIRCRAFT_TEMPERATURE',
                                    'SAT_U_WIND_COMPONENT',
-                                   'SAT_V_WIND_COMPONENT',
-                                   'MOPITT_CO_RETRIEVAL'"
+                                   'SAT_V_WIND_COMPONENT'"
+#                                      'MOPITT_CO_RETRIEVAL'"
 #                                      'AIRNOW_CO'"
 #                                      'IASI_CO_RETRIEVAL',
 #                                      'IASI_O3_RETRIEVAL',
@@ -1216,7 +1217,8 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
 #                                      'PANDA_O3',
 #                                      'PANDA_PM25',
 #                                      'OMI_NO2_COLUMN'"
-   export NL_EVALUATE_THESE_OBS_TYPES="'IASI_CO_RETRIEVAL',
+   export NL_EVALUATE_THESE_OBS_TYPES="'MOPITT_CO_RETRIEVAL',
+                                    'IASI_CO_RETRIEVAL',
                                     'AIRNOW_CO',
                                     'AIRNOW_O3',
                                     'MODIS_AOD_RETRIEVAL'"

@@ -11,9 +11,11 @@ export FIRST_EMISS_INV_DATE=2014072500
 #
 # START CYCLE DATE-TIME:
 export CYCLE_STR_DATE=2014072418
+#export CYCLE_STR_DATE=2014072500
 #
 # END CYCLE DATE-TIME:
 export CYCLE_END_DATE=2014072418
+#export CYCLE_END_DATE=2014072500
 #export CYCLE_END_DATE=${CYCLE_STR_DATE}
 #
 export CYCLE_DATE=${CYCLE_STR_DATE}
@@ -267,7 +269,7 @@ export ASIM_MAX_SEC_GREG=${temp[1]}
 #
 # SELECT COMPONENT RUN OPTIONS:
 if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
-   export RUN_GEOGRID=false
+   export RUN_GEOGRID=true
    export RUN_UNGRIB=true
    export RUN_METGRID=true
    export RUN_REAL=true
@@ -286,9 +288,9 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_OMI_NO2_OBS=false
    export RUN_AIRNOW_O3_OBS=false
    export RUN_AIRNOW_CO_OBS=false
-   export RUN_PANDA_CO_OBS=true
-   export RUN_PANDA_O3_OBS=true
-   export RUN_PANDA_PM25_OBS=true
+   export RUN_PANDA_CO_OBS=false
+   export RUN_PANDA_O3_OBS=false
+   export RUN_PANDA_PM25_OBS=false
    export RUN_MODIS_AOD_OBS=false
    export RUN_MET_OBS=true
    export RUN_COMBINE_OBS=true
