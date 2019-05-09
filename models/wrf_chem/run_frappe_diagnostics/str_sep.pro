@@ -1,4 +1,6 @@
- $Id: str_sep.pro,v 1.9 1998/01/15 18:44:14 scottm Exp $
+function STR_SEP, str, separator, REMOVE_ALL = remove_all, TRIM = trim, ESC=esc
+
+; Id: str_sep.pro,v 1.9 1998/01/15 18:44:14 scottm Exp
 ;
 ; Copyright (c) 1992-1998, CreaSo Creative Software Systems GmbH,
 ;	and Research Systems, Inc.  All rights reserved.
@@ -48,8 +50,6 @@
 ; MODIFICATION HISTORY:
 ;	July 1992, AH,	CreaSo		Created.
 ;	December, 1994, DMS, RSI	Added TRIM and REMOVE_ALL.
-;-
-function STR_SEP, str, separator, REMOVE_ALL = remove_all, TRIM = trim, ESC=esc
 
 
 ON_ERROR, 2

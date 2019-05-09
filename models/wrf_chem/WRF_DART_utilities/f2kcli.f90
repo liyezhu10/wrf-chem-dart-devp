@@ -1,4 +1,3 @@
-! This code is not protected by the DART copyright agreement.
 ! DART $Id$
 
 ! F2KCLI : Fortran 200x Command Line Interface

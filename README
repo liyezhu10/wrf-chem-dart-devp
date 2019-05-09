@@ -18,7 +18,6 @@ of PDF presentations, along with hands-on Matlab exercises.  This starts
 with a very basic introduction to data assimilation, and covers several
 fundamental algorithms in the system.
 
-
 A slightly more advanced tutorial in PDF format is in the tutorial
 subdirectory.  Start with the index file which explains what each
 subsection covers.
@@ -47,6 +46,7 @@ Thank you -
 The DART Development Team.
 dart at ucar.edu
 
+-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 Quick-start for the impatient:
 
@@ -73,21 +73,29 @@ first compile the Lorenz 63 model without MPI and then try to build
 filter with MPI.  *The 'mpif90' command you use must have been built
 with the same version of the compiler as you are using.*
 
-
-
 If any of these steps fail or you don't know how to do them, go to the
 DART project web page listed above for very detailed instructions that
 should get you over any bumps in the process.
 
+After you get this working, you should be able to follow 
+README_WRFCHEM_BUILD_RUN_INSTRUCTIONS
+
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
-TJH: Wed Jan 18 13:34:06 MST 2017
+ACKNOWLEDGMENT
 
-All the (large-ish) data files have been removed from version control and stored
-in a tar file in /glade/p/image/DART_test_cases/wrf_chem/wrf_chem_data_files.tar
-As long as you are in the same directory as this README, you should be able
-to simply
-tar -xvf /glade/p/image/DART_test_cases/wrf_chem/wrf_chem_data_files.tar
-and be up and running.
+The WRF-Chem/DART project began in mid-2012 as a cooperative effort at the 
+National Center for Atmospheric Research (NCAR) between the Data Assimilation 
+Research Section (DAReS) and the Atmospheric Chemistry Observations and 
+Modeling Laboratory (ACOM) based on funding from the National Science 
+Foundation and the National Aeronautics and Space Administration (NASA).
+In mid-2017, ACOM's support for this project ceased.
 
+Currently, WRF-Chem/DART is supported by the Colorado Department of Public Health 
+and Environment/Air Pollution Control Division (CDPHE/APCD), 
+the University of Colorado Departments of Mechanical Engineering (CUME) 
+and Research Computing (CURC), and DAReS.  In addition WRF-Chem/DART 
+contributions have been made by the: York University, 
+University of California at Berkeley, Nanjing University, 
+University of Colorado, and University of Arizona.
 

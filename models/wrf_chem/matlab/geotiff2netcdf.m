@@ -204,9 +204,7 @@ end
 % 
 %       getConstantNames - Return list of constants known to netCDF library.
 %       getConstant      - Return numeric value of named constant
-%  
-%    Please read the files netcdfcopyright.txt and mexnccopyright.txt for 
-%    more information.
+
 
 x     = geotiffread(fname);
 bob   = geotiffinfo(fname);
