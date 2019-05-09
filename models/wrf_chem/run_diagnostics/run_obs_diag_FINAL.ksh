@@ -19,31 +19,12 @@ export START_DATE=2014071406
 export END_DATE=2014071406
 #
 # Define EXPERIMENT path
-#export DIR_NAME=real_FRAPPE_RETR_CONTROL
-export DIR_NAME=real_FRAPPE_RETR_MOP_CO
-#export DIR_NAME=real_FRAPPE_RETR_MOP_AIR_CO
-#export DIR_NAME=real_FRAPPE_CPSR_MOP_CO_VLOC
-#export DIR_NAME=real_FRAPPE_CPSR_MOP_AIR_CO
-#export DIR_NAME=real_FRAPPE_CPSR_MOP_CO_NOVLOC
+export DIR_NAME=real_FRAPPE_CONTROL
+#export DIR_NAME=real_FRAPPE_RETR_MOP_CO
+#export DIR_NAME=real_FRAPPE_CPSR_MOP_CO
 #
 # Define FILTER path
 export DART_FILTER=dart_filter
-#
-#export DART_FILTER=/NOVLOC_HORZ_1p5_CUT_p10/dart_filter
-#export DART_FILTER=/NOVLOC_NOHORZ_0p5_CUT_p05/dart_filter
-#export DART_FILTER=/NOVLOC_NOHORZ_0p5_CUT_p10/dart_filter
-#export DART_FILTER=/NOVLOC_NOHORZ_1p0_CUT_p05/dart_filter
-#export DART_FILTER=/NOVLOC_NOHORZ_1p0_CUT_p10/dart_filter
-#export DART_FILTER=/NOVLOC_NOHORZ_1p5_CUT_p05/dart_filter
-#export DART_FILTER=/NOVLOC_NOHORZ_1p5_CUT_p10/dart_filter
-#
-#export DART_FILTER=/VLOC_HORZ_1p5/dart_filter
-#export DART_FILTER=/VLOC_NOHORZ_0p5_CUT_p05/dart_filter
-#export DART_FILTER=/VLOC_NOHORZ_0p5_CUT_p10/dart_filter
-#export DART_FILTER=/VLOC_NOHORZ_1p0_CUT_p05/dart_filter
-#export DART_FILTER=/VLOC_NOHORZ_1p0_CUT_p10/dart_filter
-#export DART_FILTER=/VLOC_NOHORZ_1p5_CUT_p05/dart_filter
-#export DART_FILTER=/VLOC_NOHORZ_1p5_CUT_p10/dart_filter
 #
 export DELETE_FLG=true
 export DOMAIN=01

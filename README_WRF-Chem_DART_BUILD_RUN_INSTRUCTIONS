@@ -1,4 +1,5 @@
-This file contains instructions for building and running the WRF-Chem/DART release and test case.
+This file contains instructions for building and running the WRF-Chem/DART 
+release and test case.
 
 INTRODUCTION:
 
@@ -29,8 +30,22 @@ experiments.  Here again, I suggest you discuss your intended modifications
 and experiments with me in advance.  This is an unfortunate result of not
 having a Users Guide, but it has worked well for the existing users.
 
+FUNDING/SUPPORT:
+
+The WRF-Chem/DART project began in mid-2012 as a cooperative effort at the 
+National Center for Atmospheric Research (NCAR) between the Data Assimilation 
+Research Section (DAReS) and the Atmospheric Chemistry Observations and Modeling 
+Laboratory (ACOM) based on funding from the National Science Foundation (NSF) and 
+the National Aeronautics and Space Administration (NASA).  In mid-2017, ACOM's 
+support for this project ceased.  Currently, WRF-Chem/DART is supported by the 
+Colorado Department of Public Health and Environment/Air Pollution Control Division 
+(CDPHE/APCD), the University of Colorado Department of Mechanical Engineering (CUME) 
+and Research Computing Program (CURC), and DAReS.  In addition WRF-Chem/DART 
+contributions have been made by the: York University, University of California at 
+Berkeley, Nanjing University, University of Colorado, and University of Arizona.
 
 BUILD INSTRUCTIONS:
+
 1. In this discussion "../" will refers to your DART home directory.
 Also, it assumes that you have DART, WRF-Chem, WPS, and WRFDA built and
 running on your system.

@@ -4,22 +4,14 @@ export NUM_MEMBERS=30
 export WRFDA_VERSION=WRFDAv3.9.1.1_dmpar
 export BUILD_DIR=/projects/mizzi/TRUNK/${WRFDA_VERSION}/var/build
 #
-#export EXP=/real_FRAPPE_RETR_CONTROL
+export EXP=/real_FRAPPE_CONTROL
 export EXP=/real_FRAPPE_RETR_MOP_CO
-#export EXP=/real_FRAPPE_RETR_MOP_AIR_CO
-export EXP=/real_FRAPPE_CPSR_MOP_CO_VLOC
-#export EXP=/real_FRAPPE_CPSR_MOP_AIR_CO
-#export EXP=/real_FRAPPE_CPSR_MOP_CO_NOVLOC
-#export EXP=/real_FRAPPE_RETR_IAS_CO
-#export EXP=/real_FRAPPE_CPSR_IAS_CO
-#export EXP=/real_FRAPPE_RETR_AIR_CO
-#export EXP=/real_FRAPPE_RETR_AIR_O3
-#export EXP=/real_FRAPPE_RETR_MOD_AOD
+export EXP=/real_FRAPPE_CPSR_MOP_CO
 #
 export SOURCE_PATH=/scratch/summit/mizzi${EXP}
 #
-export DATE_STR=2014071706
-export DATE_END=2014071800
+export DATE_STR=2014071400
+export DATE_END=2014071400
 
 export CYCLE_PERIOD=6
 #
@@ -27,6 +19,8 @@ export CYCLE_PERIOD=6
 export L_DATE=${DATE_STR}
 #
 # KEEP PARTS OF THE FOLLOWING
+# wrfchem_chem_icbc
+# wrfchem_chem_emiss
 # dart_filter
 # ensemble_mean_input
 # ensemble_mean_output
@@ -73,8 +67,28 @@ while [[ ${L_DATE} -le ${DATE_END} ]] ; do
    rm -rf wrfchem_bio
    rm -rf wrfchem_fire
    rm -rf wrfchem_chemi
-   rm -rf wrfchem_chem_icbc
-   rm -rf wrfchem_chem_emiss
+   cd ${SOURCE_PATH}/${L_DATE}/wrfchem_chem_icbc
+      rm -rf *_cr_icbc_pert.log
+      rm -rf job*
+      rm -rf met_em*
+      rm -rf mozbc*
+      rm -rf perturb_chem*
+      rm -rf run*
+      rm -rf set*
+      rm -rf SUCCESS
+      rm -rf wrfbdy*
+      rm -rf wrfinput*
+   cd ${SOURCE_PATH}/${L_DATE}/wrfchem_chem_emiss
+      rm -rf *_cr_emiss_pert.log
+      rm -rf job*
+      rm -rf perturb_chem*
+      rm -rf perturb_emiss*
+      rm -rf SUCCESS
+      rm -rf wrfbiochemi*
+      rm -rf wrfchemi*
+      rm -rf wrffirechemi*
+      rm -rf wrfinput*
+   cd ${SOURCE_PATH}/${L_DATE}
    rm -rf mopitt_co_obs
    rm -rf iasi_co_obs
    rm -rf iasi_o3_obs

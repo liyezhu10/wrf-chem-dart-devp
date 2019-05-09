@@ -10,10 +10,10 @@ export FIRST_DART_INFLATE_DATE=2014071406
 export FIRST_EMISS_INV_DATE=2014071406
 #
 # START CYCLE DATE-TIME:
-export CYCLE_STR_DATE=2014071406
+export CYCLE_STR_DATE=2014071412
 #
 # END CYCLE DATE-TIME:
-export CYCLE_END_DATE=2014071406
+export CYCLE_END_DATE=2014071412
 #export CYCLE_END_DATE=${CYCLE_STR_DATE}
 #
 export CYCLE_DATE=${CYCLE_STR_DATE}
@@ -2556,7 +2556,7 @@ EOF
 #
          export NL_PERT_PATH_PR=${RUN_DIR}/${DATE}/wrfchem_chem_emiss
          export NL_PERT_PATH_PO=${RUN_DIR}/${DATE}/wrfchem_chem_emiss
-         if [[ ${L_HH} -eq 00 ]]; then
+         if [[ ${L_DATE} -eq ${DATE} || ${L_HH} -eq 00 ]]; then
             export NL_PERT_PATH_PR=${RUN_DIR}/${PAST_DATE}/wrfchem_chem_emiss
             export NL_PERT_PATH_PO=${RUN_DIR}/${DATE}/wrfchem_chem_emiss
          fi

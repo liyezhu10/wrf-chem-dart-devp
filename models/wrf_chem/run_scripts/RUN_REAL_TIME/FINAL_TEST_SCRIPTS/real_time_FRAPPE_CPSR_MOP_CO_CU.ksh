@@ -2555,7 +2555,7 @@ EOF
 #
          export NL_PERT_PATH_PR=${RUN_DIR}/${DATE}/wrfchem_chem_emiss
          export NL_PERT_PATH_PO=${RUN_DIR}/${DATE}/wrfchem_chem_emiss
-         if [[ ${L_HH} -eq 00 ]]; then
+         if [[ ${L_DATE} -eq ${DATE} || ${L_HH} -eq 00 ]]; then
             export NL_PERT_PATH_PR=${RUN_DIR}/${PAST_DATE}/wrfchem_chem_emiss
             export NL_PERT_PATH_PO=${RUN_DIR}/${DATE}/wrfchem_chem_emiss
          fi
