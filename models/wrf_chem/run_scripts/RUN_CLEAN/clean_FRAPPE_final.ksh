@@ -10,8 +10,8 @@ export EXP=/real_FRAPPE_CPSR_MOP_CO
 #
 export SOURCE_PATH=/scratch/summit/mizzi${EXP}
 #
-export DATE_STR=2014071400
-export DATE_END=2014071400
+export DATE_STR=2014071406
+export DATE_END=2014071406
 
 export CYCLE_PERIOD=6
 #

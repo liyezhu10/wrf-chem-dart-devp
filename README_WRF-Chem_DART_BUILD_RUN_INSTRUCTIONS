@@ -44,6 +44,27 @@ and Research Computing Program (CURC), and DAReS.  In addition WRF-Chem/DART
 contributions have been made by the: York University, University of California at 
 Berkeley, Nanjing University, University of Colorado, and University of Arizona.
 
+TEST CASE DATA:
+
+The test case data for WRF-Chem/DART can be retrieved using the Globus data service. 
+If you do not have Globus, you can go here to sign up: https://www.globusid.org.  Once
+you are logged into Globus, the files you want are here:
+
+Host Endpoint: NCAR Data Sharing Service
+Host Path:     /glade/datashare/nancy/WRF_CHEM_DART_DATA_FILES
+
+There are two files in this directory.  The input files are in PANDA_REAL_TIME_DATA.tgz, 
+and the output files are in real_PANDA_RETR_VARLOC_RELEASE_TST.tgz.  These files should 
+be readable by anyone, but be forewarned, they are very large.  The input files 67 GB, and
+the output files are 99 GB (tarred and compressed). 
+
+The test case domain is eastern Asia.  It runs the Initial Cycle on 18 UTC July 24, 2014 
+and the First Assimilation Cycle on 00 UTC July, 25, 2014.  It assimilates conventional 
+meteorological observations and MOPITT CO retrieval profiles as raw retrievals.  The script
+for running the test case is described in Step 7 of the BUILD INSTRUCTIONS.  For questions 
+about accessing the data, please contact dart@ucar,edu.  For questions about the data, please 
+contact me at mizzi@ucar.edu.   
+
 BUILD INSTRUCTIONS:
 
 1. In this discussion "../" will refers to your DART home directory.
