@@ -4,6 +4,24 @@
 !
 ! $Id$
 
+!>@todo FIXME:  issues with converting to a sequential filter:
+!> the code only supports a single window open at a time.  we only need
+!> the ensemble mean for the vertical conversion (true?) so if we force
+!> all vertical converts up front we don't need the mean during assim?
+!> otherwise we need to open the ensemble window each time.
+!>
+!> we have been assuming the window data is read-only.  in a sequential
+!> filter we'll be changing the states.  do we make it read/write or do
+!> we put it up and take it down each time?
+!>
+!> need to precompute get_close info.  does adaptive localization affect
+!> this as well?  
+!>
+!> how slow is it to call the whole filter_assim each time?  if we pull
+!> the get_close setup out, how fast is it to setup and take down the
+!> windows?  
+!>
+
 !>  A variety of operations required by assimilation.
 module assim_tools_mod
 
@@ -305,7 +323,7 @@ end subroutine assim_tools_init
 
 !-------------------------------------------------------------
 
-subroutine filter_assim(ens_handle, obs_ens_handle, obs_seq, keys,           &
+subroutine filter_assim_init(ens_handle, obs_ens_handle, obs_seq, keys,      &
    ens_size, num_groups, obs_val_index, inflate, ENS_MEAN_COPY, ENS_SD_COPY, &
    ENS_INF_COPY, ENS_INF_SD_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY,          &
    OBS_PRIOR_MEAN_START, OBS_PRIOR_MEAN_END, OBS_PRIOR_VAR_START,            &
@@ -591,6 +609,107 @@ allow_missing_in_state = get_missing_ok_status()
 
 ! timing
 if (my_task_id() == 0 .and. timing) allocate(elapse_array(obs_ens_handle%num_vars))
+
+end subroutine filter_assim_init
+
+
+!-------------------------------------------------------------
+!-------------------------------------------------------------
+
+subroutine filter_assim(ens_handle, obs_ens_handle, obs_seq, keys,           &
+   ens_size, num_groups, obs_val_index, inflate, ENS_MEAN_COPY, ENS_SD_COPY, &
+   ENS_INF_COPY, ENS_INF_SD_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY,          &
+   OBS_PRIOR_MEAN_START, OBS_PRIOR_MEAN_END, OBS_PRIOR_VAR_START,            &
+   OBS_PRIOR_VAR_END, inflate_only)
+
+type(ensemble_type),         intent(inout) :: ens_handle, obs_ens_handle
+type(obs_sequence_type),     intent(in)    :: obs_seq
+integer,                     intent(in)    :: keys(:)
+integer,                     intent(in)    :: ens_size, num_groups, obs_val_index
+type(adaptive_inflate_type), intent(inout) :: inflate
+integer,                     intent(in)    :: ENS_MEAN_COPY, ENS_SD_COPY, ENS_INF_COPY
+integer,                     intent(in)    :: ENS_INF_SD_COPY
+integer,                     intent(in)    :: OBS_KEY_COPY, OBS_GLOBAL_QC_COPY
+integer,                     intent(in)    :: OBS_PRIOR_MEAN_START, OBS_PRIOR_MEAN_END
+integer,                     intent(in)    :: OBS_PRIOR_VAR_START, OBS_PRIOR_VAR_END
+logical,                     intent(in)    :: inflate_only
+
+!>@todo FIXME this routine has a huge amount of local/stack storage.
+!>at some point does it need to be allocated instead?  this routine isn't
+!>called frequently so doing allocate/deallocate isn't a timing issue.  
+!>putting arrays on the stack is fast, but risks running out of stack space 
+!>and dying with strange errors.
+
+real(r8) :: obs_prior(ens_size), obs_inc(ens_size), increment(ens_size)
+real(r8) :: reg_factor, impact_factor
+real(r8) :: net_a(num_groups), reg_coef(num_groups), correl(num_groups)
+real(r8) :: cov_factor, obs(1), obs_err_var, my_inflate, my_inflate_sd
+real(r8) :: varying_ss_inflate, varying_ss_inflate_sd
+real(r8) :: ss_inflate_base, obs_qc, cutoff_rev, cutoff_orig
+real(r8) :: gamma, ens_obs_mean, ens_obs_var, ens_var_deflate
+real(r8) :: r_mean, r_var
+real(r8) :: orig_obs_prior_mean(num_groups), orig_obs_prior_var(num_groups)
+real(r8) :: obs_prior_mean(num_groups), obs_prior_var(num_groups)
+real(r8) :: close_obs_dist(obs_ens_handle%my_num_vars)
+real(r8) :: close_state_dist(ens_handle%my_num_vars)
+real(r8) :: last_close_obs_dist(obs_ens_handle%my_num_vars)
+real(r8) :: last_close_state_dist(ens_handle%my_num_vars)
+real(r8) :: diff_sd, outlier_ratio
+
+integer(i8) :: state_index
+integer(i8) :: my_state_indx(ens_handle%my_num_vars)
+integer(i8) :: my_obs_indx(obs_ens_handle%my_num_vars)
+
+integer  :: my_num_obs, i, j, owner, owners_index, my_num_state
+integer  :: this_obs_key, obs_mean_index, obs_var_index
+integer  :: grp_beg(num_groups), grp_end(num_groups), grp_size, grp_bot, grp_top, group
+integer  :: close_obs_ind(obs_ens_handle%my_num_vars)
+integer  :: close_state_ind(ens_handle%my_num_vars)
+integer  :: last_close_obs_ind(obs_ens_handle%my_num_vars)
+integer  :: last_close_state_ind(ens_handle%my_num_vars)
+integer  :: num_close_obs, obs_index, num_close_states
+integer  :: total_num_close_obs, last_num_close_obs, last_num_close_states
+integer  :: base_obs_kind, base_obs_type, my_obs_kind(obs_ens_handle%my_num_vars)
+integer  :: my_obs_type(obs_ens_handle%my_num_vars)
+integer  :: my_state_kind(ens_handle%my_num_vars), nth_obs
+integer  :: num_close_obs_cached, num_close_states_cached
+integer  :: num_close_obs_calls_made, num_close_states_calls_made
+! GSR add new count for only the 'assimilate' type close obs in the tile
+integer  :: localization_unit, secs, days, rev_num_close_obs
+character(len = 200)  :: base_loc_text   ! longer than longest location formatting possible
+
+type(location_type)  :: my_obs_loc(obs_ens_handle%my_num_vars)
+type(location_type)  :: base_obs_loc, last_base_obs_loc, last_base_states_loc
+type(location_type)  :: my_state_loc(ens_handle%my_num_vars), dummyloc
+type(get_close_type) :: gc_obs, gc_state
+type(obs_type)       :: observation
+type(obs_def_type)   :: obs_def
+type(time_type)      :: obs_time, this_obs_time
+
+logical :: do_adapt_inf_update
+logical :: allow_missing_in_state
+! for performance, local copies 
+logical :: local_single_ss_inflate
+logical :: local_varying_ss_inflate
+logical :: local_obs_inflate
+
+! HK observation location conversion
+real(r8) :: vertvalue_obs_in_localization_coord
+integer  :: whichvert_obs_in_localization_coord
+real(r8) :: whichvert_real
+type(location_type) :: lc(1)
+integer             :: kd(1)
+
+! timing - set one or both of the parameters to true
+! to get timing info printed out.
+real(digits12) :: base, elapsed, base2
+logical, parameter :: timing = .false.
+logical, parameter :: timing1 = .false.
+real(digits12), allocatable :: elapse_array(:)
+
+integer :: istatus 
+integer :: vstatus(obs_ens_handle%my_num_vars) !< for vertical conversion status.
+
 
 ! Loop through all the (global) observations sequentially
 SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
@@ -1096,78 +1215,108 @@ SEQUENTIAL_OBS: do i = 1, obs_ens_handle%num_vars
 
    !------------------------------------------------------
 
-   ! Now everybody updates their obs priors (only ones after this one)
-   if (timing .and. i < 1000) call start_mpi_timer(base)
-   OBS_UPDATE: do j = 1, num_close_obs
-      obs_index = close_obs_ind(j)
-
-      ! Only have to update obs that have not yet been used
-      if(my_obs_indx(obs_index) > i) then
-
-         ! If the forward observation operator failed, no need to 
-         ! update the unassimilated observations 
-         if (any(obs_ens_handle%copies(1:ens_size, obs_index) == MISSING_R8)) cycle OBS_UPDATE
-
-         ! Compute the distance and the covar_factor
-         cov_factor = comp_cov_factor(close_obs_dist(j), cutoff_rev, &
-            base_obs_loc, base_obs_type, my_obs_loc(obs_index), my_obs_kind(obs_index))
-
-         ! if external impact factors supplied, factor them in here
-         ! FIXME: this would execute faster for 0.0 impact factors if
-         ! we check for that before calling comp_cov_factor.  but it makes
-         ! the logic more complicated - this is simpler if we do it after.
-         if (adjust_obs_impact) then
-            impact_factor = obs_impact_table(base_obs_type, my_obs_kind(obs_index))
-            cov_factor = cov_factor * impact_factor
-         endif
-
-         if(cov_factor <= 0.0_r8) cycle OBS_UPDATE
-
-         ! Loop through and update ensemble members in each group
-         do group = 1, num_groups
-            grp_bot = grp_beg(group)
-            grp_top = grp_end(group)
-            call update_from_obs_inc(obs_prior(grp_bot:grp_top), obs_prior_mean(group), &
-               obs_prior_var(group), obs_inc(grp_bot:grp_top), &
-                obs_ens_handle%copies(grp_bot:grp_top, obs_index), grp_size, &
-                increment(grp_bot:grp_top), reg_coef(group), net_a(group))
-         end do
-
-         ! FIXME: could we move the if test for inflate only to here?
-
-         ! Compute an information factor for impact of this observation on this state
-         if(num_groups == 1) then
-             reg_factor = 1.0_r8
-         else
-            ! Pass the time along with the index for possible diagnostic output
-            ! Compute regression factor for this obs-state pair
-            ! Negative indicates that this is an observation index
-            reg_factor = comp_reg_factor(num_groups, reg_coef, obs_time, i, -1*my_obs_indx(obs_index))
-         endif
-
-         ! Final weight is min of group and localization factors
-         reg_factor = min(reg_factor, cov_factor)
-
-         ! Only update state if indicated (otherwise just getting inflation)
-         if(.not. inflate_only) then
-            obs_ens_handle%copies(1:ens_size, obs_index) = &
-              obs_ens_handle%copies(1:ens_size, obs_index) + reg_factor * increment
-         endif
-      endif
-   end do OBS_UPDATE
-   if (timing .and. i < 1000) then
-      elapsed = read_mpi_timer(base)
-      print*, 'obs_update time :', elapsed, 'rank ', my_task_id()
-   endif
-
-   !call test_state_copies(ens_handle, 'after_obs_updates')
-
-
-   if (my_task_id() == 0 .and. timing) then
-      elapse_array(i) = read_mpi_timer(base2)
-      if (timing1) print*, 'outer sequential obs time :', elapsed, ' obs ', i, ' rank ', my_task_id()
-   endif
 end do SEQUENTIAL_OBS
+
+end subroutine filter_assim
+
+!-------------------------------------------------------------
+!-------------------------------------------------------------
+
+subroutine filter_assim_finalize(ens_handle, obs_ens_handle, obs_seq, keys,  &
+   ens_size, num_groups, obs_val_index, inflate, ENS_MEAN_COPY, ENS_SD_COPY, &
+   ENS_INF_COPY, ENS_INF_SD_COPY, OBS_KEY_COPY, OBS_GLOBAL_QC_COPY,          &
+   OBS_PRIOR_MEAN_START, OBS_PRIOR_MEAN_END, OBS_PRIOR_VAR_START,            &
+   OBS_PRIOR_VAR_END, inflate_only)
+
+type(ensemble_type),         intent(inout) :: ens_handle, obs_ens_handle
+type(obs_sequence_type),     intent(in)    :: obs_seq
+integer,                     intent(in)    :: keys(:)
+integer,                     intent(in)    :: ens_size, num_groups, obs_val_index
+type(adaptive_inflate_type), intent(inout) :: inflate
+integer,                     intent(in)    :: ENS_MEAN_COPY, ENS_SD_COPY, ENS_INF_COPY
+integer,                     intent(in)    :: ENS_INF_SD_COPY
+integer,                     intent(in)    :: OBS_KEY_COPY, OBS_GLOBAL_QC_COPY
+integer,                     intent(in)    :: OBS_PRIOR_MEAN_START, OBS_PRIOR_MEAN_END
+integer,                     intent(in)    :: OBS_PRIOR_VAR_START, OBS_PRIOR_VAR_END
+logical,                     intent(in)    :: inflate_only
+
+!>@todo FIXME this routine has a huge amount of local/stack storage.
+!>at some point does it need to be allocated instead?  this routine isn't
+!>called frequently so doing allocate/deallocate isn't a timing issue.  
+!>putting arrays on the stack is fast, but risks running out of stack space 
+!>and dying with strange errors.
+
+real(r8) :: obs_prior(ens_size), obs_inc(ens_size), increment(ens_size)
+real(r8) :: reg_factor, impact_factor
+real(r8) :: net_a(num_groups), reg_coef(num_groups), correl(num_groups)
+real(r8) :: cov_factor, obs(1), obs_err_var, my_inflate, my_inflate_sd
+real(r8) :: varying_ss_inflate, varying_ss_inflate_sd
+real(r8) :: ss_inflate_base, obs_qc, cutoff_rev, cutoff_orig
+real(r8) :: gamma, ens_obs_mean, ens_obs_var, ens_var_deflate
+real(r8) :: r_mean, r_var
+real(r8) :: orig_obs_prior_mean(num_groups), orig_obs_prior_var(num_groups)
+real(r8) :: obs_prior_mean(num_groups), obs_prior_var(num_groups)
+real(r8) :: close_obs_dist(obs_ens_handle%my_num_vars)
+real(r8) :: close_state_dist(ens_handle%my_num_vars)
+real(r8) :: last_close_obs_dist(obs_ens_handle%my_num_vars)
+real(r8) :: last_close_state_dist(ens_handle%my_num_vars)
+real(r8) :: diff_sd, outlier_ratio
+
+integer(i8) :: state_index
+integer(i8) :: my_state_indx(ens_handle%my_num_vars)
+integer(i8) :: my_obs_indx(obs_ens_handle%my_num_vars)
+
+integer  :: my_num_obs, i, j, owner, owners_index, my_num_state
+integer  :: this_obs_key, obs_mean_index, obs_var_index
+integer  :: grp_beg(num_groups), grp_end(num_groups), grp_size, grp_bot, grp_top, group
+integer  :: close_obs_ind(obs_ens_handle%my_num_vars)
+integer  :: close_state_ind(ens_handle%my_num_vars)
+integer  :: last_close_obs_ind(obs_ens_handle%my_num_vars)
+integer  :: last_close_state_ind(ens_handle%my_num_vars)
+integer  :: num_close_obs, obs_index, num_close_states
+integer  :: total_num_close_obs, last_num_close_obs, last_num_close_states
+integer  :: base_obs_kind, base_obs_type, my_obs_kind(obs_ens_handle%my_num_vars)
+integer  :: my_obs_type(obs_ens_handle%my_num_vars)
+integer  :: my_state_kind(ens_handle%my_num_vars), nth_obs
+integer  :: num_close_obs_cached, num_close_states_cached
+integer  :: num_close_obs_calls_made, num_close_states_calls_made
+! GSR add new count for only the 'assimilate' type close obs in the tile
+integer  :: localization_unit, secs, days, rev_num_close_obs
+character(len = 200)  :: base_loc_text   ! longer than longest location formatting possible
+
+type(location_type)  :: my_obs_loc(obs_ens_handle%my_num_vars)
+type(location_type)  :: base_obs_loc, last_base_obs_loc, last_base_states_loc
+type(location_type)  :: my_state_loc(ens_handle%my_num_vars), dummyloc
+type(get_close_type) :: gc_obs, gc_state
+type(obs_type)       :: observation
+type(obs_def_type)   :: obs_def
+type(time_type)      :: obs_time, this_obs_time
+
+logical :: do_adapt_inf_update
+logical :: allow_missing_in_state
+! for performance, local copies 
+logical :: local_single_ss_inflate
+logical :: local_varying_ss_inflate
+logical :: local_obs_inflate
+
+! HK observation location conversion
+real(r8) :: vertvalue_obs_in_localization_coord
+integer  :: whichvert_obs_in_localization_coord
+real(r8) :: whichvert_real
+type(location_type) :: lc(1)
+integer             :: kd(1)
+
+! timing - set one or both of the parameters to true
+! to get timing info printed out.
+real(digits12) :: base, elapsed, base2
+logical, parameter :: timing = .false.
+logical, parameter :: timing1 = .false.
+real(digits12), allocatable :: elapse_array(:)
+
+integer :: istatus 
+integer :: vstatus(obs_ens_handle%my_num_vars) !< for vertical conversion status.
+
+
 
 ! Every pe needs to get the current my_inflate and my_inflate_sd back
 if(local_single_ss_inflate) then
@@ -1227,7 +1376,7 @@ end if
 ! get rid of mpi window
 call free_mean_window()
 
-end subroutine filter_assim
+end subroutine filter_assim_finalize
 
 !-------------------------------------------------------------
 
