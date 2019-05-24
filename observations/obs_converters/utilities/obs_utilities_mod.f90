@@ -35,6 +35,7 @@ public :: create_3d_obs,    &
           getvar_real,      &
           getvar_int,       &
           getvar_char,      &
+          get_2Dshort_as_r8,  &
           get_short_as_r8,  &
           get_int_as_r8,    &
           get_or_fill_real, &
@@ -484,6 +485,95 @@ else
 endif
 
 end subroutine get_short_as_r8
+
+
+!--------------------------------------------------------------------
+!>   get_2Dshort_as_r8 - subroutine that inquires, gets the variable, and fills 
+!>            in the missing value attribute if that arg is present.
+!>            gets the entire array, no start or count specified.
+!>
+!> FIXME: this code handles scale and offset ok, but like most of the other
+!> routines here it doesn't check for 'missing_value' which many obs files
+!> have either in addition to the _FillValue or instead of it.
+!> e.g. a dump from a MADIS mesonet file:
+!>
+!> double observationTime ( recNum )
+!>  long_name : time of observation
+!>  units : seconds since 1970-1-1 00:00:00.0
+!>  _FillValue : 3.40282346e+38
+!>  missing_value : -9999
+!>  standard_name : time 
+!> 
+!> i've most commonly encountered the "missing_value" in the actual data 
+!> for obs files, not the fill value.  we need a routine that looks for missing, 
+!> then fill, and decides what to do if there are both.  or use the routine
+!> that was already here 'set_missing_value' and the calling code tells us
+!> which attribute name this particular netcdf file is using.
+!>
+!>  ncid    - open netcdf file handle
+!>  varname - string name of netcdf variable
+!>  darray  - output array.  real(r8)
+!>  dmiss   - value that signals a missing value   real(r8), optional
+
+subroutine get_2Dshort_as_r8(ncid, varname, darray, dmiss)
+
+integer,            intent(in)  :: ncid
+character(len=*),   intent(in)  :: varname
+real(r8),           intent(out) :: darray(:,:)
+real(r8), optional, intent(out) :: dmiss
+
+integer     :: varid
+integer(i2), allocatable :: shortarray(:,:)
+integer(i2) :: FillValue
+real(r8)    :: scale_factor, add_offset
+integer     :: offset_exists, scaling_exists, fill_exists
+!>@todo FIXME need missing_exists or something
+
+allocate(shortarray(size(darray,1),size(darray,2)))
+
+! read the data for the requested array, and get the fill value
+call nc_check( nf90_inq_varid(ncid, varname, varid), &
+               'get_2Dshort_as_r8', 'inquire var "'// trim(varname)//'"')
+
+ offset_exists = nf90_get_att(ncid, varid, 'add_offset',   add_offset)
+scaling_exists = nf90_get_att(ncid, varid, 'scale_factor', scale_factor)
+   fill_exists = nf90_get_att(ncid, varid, '_FillValue',   FillValue)
+!  miss_exists = nf90_get_att(ncid, varid, 'missing_value', miss_value)
+
+call nc_check( nf90_get_var(ncid, varid, shortarray), &
+               'get_2Dshort_as_r8', 'getting var '// trim(varname))
+
+darray = real(shortarray,r8)
+
+if (fill_exists == NF90_NOERR) then ! FillValue exists
+
+   if ( (offset_exists == NF90_NOERR) .and. (scaling_exists == NF90_NOERR) ) then
+      where (shortarray /= FillValue) darray = darray * scale_factor + add_offset
+   elseif (offset_exists == NF90_NOERR) then
+      where (darray /= FillValue) darray = darray * scale_factor
+   elseif (scaling_exists == NF90_NOERR) then
+      where (darray /= FillValue) darray = darray + add_offset
+   endif
+
+   if (present(dmiss)) dmiss = real(FillValue,r8)
+
+else
+
+   if ( (offset_exists == NF90_NOERR) .and. (scaling_exists == NF90_NOERR) ) then
+      darray = darray * scale_factor + add_offset
+   elseif (offset_exists == NF90_NOERR) then
+      darray = darray * scale_factor
+   elseif (scaling_exists == NF90_NOERR) then
+      darray = darray + add_offset
+   endif
+
+   if (present(dmiss)) dmiss = MISSING_R8
+
+endif
+
+deallocate(shortarray)
+
+end subroutine get_2Dshort_as_r8
 
 
 !--------------------------------------------------------------------
