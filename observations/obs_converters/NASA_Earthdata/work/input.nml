@@ -9,7 +9,7 @@
    /
 
 &obs_kind_nml
-   assimilate_these_obs_types = 'SOIL_MOISTURE'
+   assimilate_these_obs_types = 'null'
    evaluate_these_obs_types   = 'null'
    /
 

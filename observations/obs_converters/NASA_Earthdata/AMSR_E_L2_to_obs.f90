@@ -227,33 +227,32 @@ fileloop: do      ! until out of files
       oerr  = sm_c_error(i,j) + amsre_rep_error  ! units of standard deviation
       vertvalue  = 0.005_r8  ! 5mm depth for C band
 
-      if (soil_moisture_c(i,j) /= smc_fill .and. &
-               sm_c_error(i,j) /= smce_fill ) then
+      if ((soil_moisture_c(i,j) /= smc_fill) .and. &
+               (sm_c_error(i,j) /= smce_fill) ) then
            call create_3d_obs(lat, lon, vertvalue, VERTISHEIGHT, &
                    soil_moisture_c(i,j), c_observation_kind, &
                    oerr, day, seconds, qc, obs)
-      endif
 
-      write(*,*)'obs_num, day, seconds', obs_num, day, seconds
+         ! first one, insert with no prev.  otherwise, since all times are the
+         ! same for this column, insert with the prev obs as the starting point.
+         ! (the first insert with no prev means it will search for the right
+         ! time ordered starting point.)
+         if (first_obs) then
+            call insert_obs_in_seq(obs_seq, obs)
+            first_obs = .false.
+         else
+           call insert_obs_in_seq(obs_seq, obs, prev_obs)
+         endif
+         obs_num = obs_num+1
+         prev_obs = obs
 
-      ! first one, insert with no prev.  otherwise, since all times are the
-      ! same for this column, insert with the prev obs as the starting point.
-      ! (the first insert with no prev means it will search for the right
-      ! time ordered starting point.)
-      if (first_obs) then
-         call insert_obs_in_seq(obs_seq, obs)
-         first_obs = .false.
-      else
-        call insert_obs_in_seq(obs_seq, obs, prev_obs)
-      endif
-      obs_num = obs_num+1
-      prev_obs = obs
- 
-      if (obs_num > num_new_obs) then
-         write(string1,*)'reached maximum number of observations while'
-         write(string2,*)'reading file # ',filenum,' "'//trim(next_infile)//'"'
-         call error_handler(E_ERR, 'AMSR_E_L2_to_obs', string1, &
-                    source, revision, revdate, text2=string2)
+         if (obs_num > num_new_obs) then
+            write(string1,*)'reached maximum number of observations while'
+            write(string2,*)'reading file # ',filenum,' "'//trim(next_infile)//'"'
+            call error_handler(E_ERR, 'AMSR_E_L2_to_obs', string1, &
+                       source, revision, revdate, text2=string2)
+         endif
+
       endif
 
       !------------------------------------------------------------------
@@ -263,31 +262,32 @@ fileloop: do      ! until out of files
       oerr  = sm_x_error(i,j) + amsre_rep_error
       vertvalue  = 0.005_r8  ! 5mm depth for X band
 
-      if (soil_moisture_x(i,j) /= smx_fill .and. &
-               sm_x_error(i,j) /= smxe_fill ) then
+      if ((soil_moisture_x(i,j) /= smx_fill) .and. &
+               (sm_x_error(i,j) /= smxe_fill) ) then
            call create_3d_obs(lat, lon, vertvalue, VERTISHEIGHT, &
                    soil_moisture_x(i,j), x_observation_kind, &
                    oerr, day, seconds, qc, obs)
-      endif
 
-      ! first one, insert with no prev.  otherwise, since all times are the
-      ! same for this column, insert with the prev obs as the starting point.
-      ! (the first insert with no prev means it will search for the right
-      ! time ordered starting point.)
-      if (first_obs) then
-         call insert_obs_in_seq(obs_seq, obs)
-         first_obs = .false.
-      else
-        call insert_obs_in_seq(obs_seq, obs, prev_obs)
-      endif
-      obs_num = obs_num+1
-      prev_obs = obs
+         ! first one, insert with no prev.  otherwise, since all times are the
+         ! same for this column, insert with the prev obs as the starting point.
+         ! (the first insert with no prev means it will search for the right
+         ! time ordered starting point.)
+         if (first_obs) then
+            call insert_obs_in_seq(obs_seq, obs)
+            first_obs = .false.
+         else
+           call insert_obs_in_seq(obs_seq, obs, prev_obs)
+         endif
+         obs_num = obs_num+1
+         prev_obs = obs
+   
+         if (obs_num > num_new_obs) then
+            write(string1,*)'reached maximum number of observations while'
+            write(string2,*)'reading file # ',filenum,' "'//trim(next_infile)//'"'
+            call error_handler(E_ERR, 'AMSR_E_L2_to_obs', string1, &
+                      source, revision, revdate, text2=string2)
+         endif
 
-      if (obs_num > num_new_obs) then
-         write(string1,*)'reached maximum number of observations while'
-         write(string2,*)'reading file # ',filenum,' "'//trim(next_infile)//'"'
-         call error_handler(E_ERR, 'AMSR_E_L2_to_obs', string1, &
-                   source, revision, revdate, text2=string2)
       endif
 
    enddo pixloop
@@ -314,7 +314,6 @@ if (obs_num > 0) then
       call write_obs_seq(obs_seq, output_file)
 
    call destroy_obs(obs)
-   !call destroy_obs(prev_obs)   ! is this identical to obs?
    if (get_num_obs(obs_seq) > 0) call destroy_obs_sequence(obs_seq)
 else
    call error_handler(E_ERR,'AMSR_E_L2_to_obs','no obs converted', &
@@ -391,15 +390,9 @@ endif
 indx1 = indx + 6 ! need to know where '_V002_' ends
 indx2 = indx1 + 13 
 
-write(*,*)'"'//fname(indx1:indx2)//'"'
-
 read(fname(indx1:indx2),'(i4,5(i2))')year,month,day,hours,minutes,seconds
 
-write(*,*)'Hope the time portion is ',fname(indx1:indx2)
-
 get_time_from_name = set_date(year,month,day,hours,minutes,seconds)
-
-call print_date(get_time_from_name,'hopefully')
 
 end function get_time_from_name
 
