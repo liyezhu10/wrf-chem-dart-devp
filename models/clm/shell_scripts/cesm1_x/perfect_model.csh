@@ -21,7 +21,7 @@ switch ("`hostname`")
    case be*:
       # NCAR "bluefire"
       set   MOVE = '/usr/local/bin/mv -fv'
-      set   COPY = '/usr/local/bin/cp -fv --preserve=timestamps'
+      set   COPY = '/usr/local/bin/cp -v --preserve=timestamps'
       set   LINK = '/usr/local/bin/ln -vs'
       set REMOVE = '/usr/local/bin/rm -fr'
 
@@ -31,7 +31,7 @@ switch ("`hostname`")
    case ys*:
       # NCAR "yellowstone"
       set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
+      set   COPY = 'cp -v --preserve=timestamps'
       set   LINK = 'ln -vs'
       set REMOVE = 'rm -fr'
       set TASKS_PER_NODE = `echo $LSB_SUB_RES_REQ | sed -ne '/ptile/s#.*\[ptile=\([0-9][0-9]*\)]#\1#p'`
@@ -43,7 +43,7 @@ switch ("`hostname`")
    case lone*:
       # UT lonestar
       set   MOVE = '/bin/mv -fv'
-      set   COPY = '/bin/cp -fv --preserve=timestamps'
+      set   COPY = '/bin/cp -v --preserve=timestamps'
       set   LINK = '/bin/ln -vs'
       set REMOVE = '/bin/rm -fr'
 
@@ -53,7 +53,7 @@ switch ("`hostname`")
    case la*:
       # LBNL "lawrencium"
       set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
+      set   COPY = 'cp -v --preserve=timestamps'
       set   LINK = 'ln -vs'
       set REMOVE = 'rm -fr'
       set TASKS_PER_NODE = $MAX_TASKS_PER_NODE
@@ -62,9 +62,9 @@ switch ("`hostname`")
    breaksw
 
    default:
-      # NERSC "hopper"
+      # all others
       set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
+      set   COPY = 'cp -v --preserve=timestamps'
       set   LINK = 'ln -fvs'
       set REMOVE = 'rm -fr'
 
@@ -116,11 +116,11 @@ endif
 set OBS_FILE = ${BASEOBSDIR}/${OBSDIR}/obs_seq.${LND_DATE_EXT}
 
 if (  -e   ${OBS_FILE} ) then
-   ${LINK} ${OBS_FILE} obs_seq.in
+   ${LINK} ${OBS_FILE} obs_seq.in || exit 2
 else
    echo "ERROR ... no observation file $OBS_FILE"
    echo "ERROR ... no observation file $OBS_FILE"
-   exit -1
+   exit 2
 endif
 
 #-----------------------------------------------------------------------------
@@ -131,12 +131,14 @@ endif
 # &model_nml: clm_vector_history_filename = 'clm_vector_history.nc' [OPTIONAL]
 #-----------------------------------------------------------------------------
 
+${REMOVE} input.nml
+
 if (  -e   ${CASEROOT}/input.nml ) then
-   ${COPY} ${CASEROOT}/input.nml .
+   ${COPY} ${CASEROOT}/input.nml . || exit 3
 else
    echo "ERROR ... DART required file ${CASEROOT}/input.nml not found ... ERROR"
    echo "ERROR ... DART required file ${CASEROOT}/input.nml not found ... ERROR"
-   exit -2
+   exit 3
 endif
 
 # DART/CLM routines all need a clm_restart.nc, clm_history.nc, etc.
@@ -152,14 +154,14 @@ set     OBS2_HISTORY_FILENAME = ${CASE}.clm2_0001.h1.${LND_DATE_EXT}.nc
 # remove any potentially pre-existing linked files 
 ${REMOVE} clm_restart.nc clm_history.nc clm_vector_history.nc ${OBS2_HISTORY_FILENAME}
 
-${LINK} $LND_RESTART_FILENAME clm_restart.nc || exit 4
-${LINK} $LND_HISTORY_FILENAME clm_history.nc || exit 4
+${LINK} $LND_RESTART_FILENAME clm_restart.nc || exit 3
+${LINK} $LND_HISTORY_FILENAME clm_history.nc || exit 3
 
 if (  -e   $OBS1_HISTORY_FILENAME) then
-   ${LINK} $OBS1_HISTORY_FILENAME $OBS2_HISTORY_FILENAME || exit 4
+   ${LINK} $OBS1_HISTORY_FILENAME $OBS2_HISTORY_FILENAME || exit 3
 endif
 if (  -e   $LND_VEC_HISTORY_FILENAME) then
-   ${LINK} $LND_VEC_HISTORY_FILENAME clm_vector_history.nc || exit 4
+   ${LINK} $LND_VEC_HISTORY_FILENAME clm_vector_history.nc || exit 3
 endif
 
 #-----------------------------------------------------------------------------
@@ -177,7 +179,7 @@ ${MPI_RUN_COMMAND} ${EXEROOT}/perfect_model_obs
 if ($status != 0) then
    echo "ERROR ... DART died in 'perfect_model_obs' ... ERROR"
    echo "ERROR ... DART died in 'perfect_model_obs' ... ERROR"
-   exit -4
+   exit 4
 endif
 
 ${MOVE} true_state.nc    clm_true_state.${LND_DATE_EXT}.nc

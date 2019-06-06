@@ -21,7 +21,7 @@ switch ("`hostname`")
    case be*:
       # NCAR "bluefire"
       set   MOVE = '/usr/local/bin/mv -fv'
-      set   COPY = '/usr/local/bin/cp -fv --preserve=timestamps'
+      set   COPY = '/usr/local/bin/cp -v --preserve=timestamps'
       set   LINK = '/usr/local/bin/ln -vs'
       set REMOVE = '/usr/local/bin/rm -fr'
 
@@ -31,7 +31,7 @@ switch ("`hostname`")
    case ys*:
       # NCAR "yellowstone"
       set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
+      set   COPY = 'cp -v --preserve=timestamps'
       set   LINK = 'ln -vs'
       set REMOVE = 'rm -fr'
       set TASKS_PER_NODE = `echo $LSB_SUB_RES_REQ | sed -ne '/ptile/s#.*\[ptile=\([0-9][0-9]*\)]#\1#p'`
@@ -43,7 +43,7 @@ switch ("`hostname`")
    case lone*:
       # UT lonestar
       set   MOVE = '/bin/mv -fv'
-      set   COPY = '/bin/cp -fv --preserve=timestamps'
+      set   COPY = '/bin/cp -v --preserve=timestamps'
       set   LINK = '/bin/ln -vs'
       set REMOVE = '/bin/rm -fr'
 
@@ -53,7 +53,7 @@ switch ("`hostname`")
    case la*:
       # LBNL "lawrencium"
       set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
+      set   COPY = 'cp -v --preserve=timestamps'
       set   LINK = 'ln -vs'
       set REMOVE = 'rm -fr'
       set TASKS_PER_NODE = $MAX_TASKS_PER_NODE
@@ -62,9 +62,9 @@ switch ("`hostname`")
    breaksw
 
    default:
-      # NERSC "hopper"
+      # all others
       set   MOVE = 'mv -fv'
-      set   COPY = 'cp -fv --preserve=timestamps'
+      set   COPY = 'cp -v --preserve=timestamps'
       set   LINK = 'ln -fvs'
       set REMOVE = 'rm -fr'
 
@@ -132,12 +132,14 @@ endif
 
 echo "`date` -- BEGIN COPY BLOCK"
 
+${REMOVE} input.nml input.nml.$$
+
 if (  -e   ${CASEROOT}/input.nml ) then
-   ${COPY} ${CASEROOT}/input.nml .
+   ${COPY} ${CASEROOT}/input.nml . || exit 3
 else
    echo "ERROR ... DART required file ${CASEROOT}/input.nml not found ... ERROR"
    echo "ERROR ... DART required file ${CASEROOT}/input.nml not found ... ERROR"
-   exit -2
+   exit 3
 endif
 
 echo "`date` -- END COPY BLOCK"
@@ -205,14 +207,6 @@ set  MYSTRING = `echo $MYSTRING | sed -e "s#[=,'\.]# #g"`
 set  PRIOR_TF = `echo $MYSTRING[2] | tr '[:upper:]' '[:lower:]'`
 set  POSTE_TF = `echo $MYSTRING[3] | tr '[:upper:]' '[:lower:]'`
 
-# its a little tricky to remove both styles of quotes from the string.
-
-set  MYSTRING = `grep inf_in_file_name input.nml`
-set  MYSTRING = `echo $MYSTRING | sed -e "s#[=,'\.]# #g"`
-set  MYSTRING = `echo $MYSTRING | sed -e 's#"# #g'`
-set  PRIOR_INF_IFNAME = $MYSTRING[2]
-set  POSTE_INF_IFNAME = $MYSTRING[3]
-
 # IFF we want PRIOR inflation:
 
 if ( $PRIOR_INF > 0 ) then
@@ -221,7 +215,7 @@ if ( $PRIOR_INF > 0 ) then
       # we are not using an existing inflation file.
       echo "inf_flavor(1) = $PRIOR_INF, using namelist values."
 
-   else if ( -e ../clm_inflation_cookie ) then
+   else if ( -e clm_inflation_cookie ) then
       # We want to use an existing inflation file, but this is
       # the first assimilation so there is no existing inflation
       # file. This is the signal we need to to coerce the namelist
@@ -278,7 +272,7 @@ if ( $POSTE_INF > 0 ) then
       # we are not using an existing inflation file.
       echo "inf_flavor(2) = $POSTE_INF, using namelist values."
 
-   else if ( -e ../clm_inflation_cookie ) then
+   else if ( -e clm_inflation_cookie ) then
       # We want to use an existing inflation file, but this is
       # the first assimilation so there is no existing inflation
       # file. This is the signal we need to to coerce the namelist
@@ -386,10 +380,10 @@ set LND_VEC_HISTORY_FILENAME = ${CASE}.clm2_0001.h2.${LND_DATE_EXT}.nc
 # remove any potentiall pre-existing linked files
 ${REMOVE} clm_restart.nc clm_history.nc clm_vector_history.nc
 
-${LINK} ${LND_RESTART_FILENAME} clm_restart.nc || exit 4
-${LINK} ${LND_HISTORY_FILENAME} clm_history.nc || exit 4
+${LINK} ${LND_RESTART_FILENAME} clm_restart.nc || exit 6
+${LINK} ${LND_HISTORY_FILENAME} clm_history.nc || exit 6
 if (  -s   ${LND_VEC_HISTORY_FILENAME} ) then
-   ${LINK} ${LND_VEC_HISTORY_FILENAME} clm_vector_history.nc || exit 4
+   ${LINK} ${LND_VEC_HISTORY_FILENAME} clm_vector_history.nc || exit 6
 endif
 
 echo "`date` -- BEGIN FILTER"
