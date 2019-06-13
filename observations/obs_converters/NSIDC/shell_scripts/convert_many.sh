@@ -33,22 +33,22 @@
 # month and year boundaries now!   note that for the first day
 # you need the previous day data available.
 
-let start_year=2015
-let start_month=7
-let start_day=7
+let start_year=2017
+let start_month=1
+let start_day=1
 
-let end_year=2015
-let end_month=7
-let end_day=10
+let end_year=2017
+let end_month=6
+let end_day=30
 
 EXEDIR='../work'
-DATDIR='../data'
+DATDIR='../data/iowa'
 OUTDIR=/glade/scratch/${USER}/SMAP_obs
 
 # The actual dates in the observation files need to be replaced
-# with the similar dates from 2005.
+# with the similar dates from 2005. Or not.
 
-MODEL_YEAR=2005
+MODEL_YEAR=2017
 
 # end of things you should have to set in this script
 
@@ -137,6 +137,8 @@ while (( d <= totaldays)) ; do
   # do the extract here
   # SMAP_L2_to_obs  reads in a list of files, writes out 'obs_seq.out'
   # obs_sequence_tool  reads in a 'obs_seq.out', writes 'obs_seq.0Z'
+  # since we are not using the obs_sequence tool this time, ... just rename
+  # file to expected name for the remainder of the processing
 
   previous=(`echo ${cyear}${cmonth}${cday} -1d | ${EXEDIR}/advance_time`)
   yesterday=${previous:0:8}
@@ -145,7 +147,10 @@ while (( d <= totaldays)) ; do
   ls -1 ${DATDIR}/${yyyymm}/*_D_${today}*     >> file_list.txt
 
   ${EXEDIR}/SMAP_L2_to_obs
-  ${EXEDIR}/obs_sequence_tool
+#  ${EXEDIR}/obs_sequence_tool
+  if [ -f obs_seq.out ]; then
+     mv   obs_seq.out obs_seq.0Z
+  fi
 
   # sometimes there are no observations for this time 
 
