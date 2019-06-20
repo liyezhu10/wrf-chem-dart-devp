@@ -12,6 +12,10 @@
 !       H2OSOI_LIQ:long_name = "liquid water" ;
 !       H2OSOI_LIQ:units = "kg/m2" ;
 
+!SMOS_A_SOIL_MOISTURE,         volumetric soil moisture  percent
+!SMOS_D_SOIL_MOISTURE,         volumetric soil moisture  percent
+!SMAP_A_SOIL_MOISTURE,         volumetric soil moisture  percent
+!SMAP_D_SOIL_MOISTURE,         volumetric soil moisture  percent
 !SSMI_A_SOIL_MOISTURE,         volumetric soil moisture  percent
 !SSMI_D_SOIL_MOISTURE,         volumetric soil moisture  percent
 !AMSRE_A_SOIL_MOISTURE_X,      volumetric soil moisture  percent
@@ -24,6 +28,10 @@
 
 ! BEGIN DART PREPROCESS KIND LIST
 !LPRM_SOIL_MOISTURE,           QTY_SOIL_MOISTURE,      COMMON_CODE
+!SMOS_A_SOIL_MOISTURE,         QTY_SOIL_MOISTURE,      COMMON_CODE
+!SMOS_D_SOIL_MOISTURE,         QTY_SOIL_MOISTURE,      COMMON_CODE
+!SMAP_A_SOIL_MOISTURE,         QTY_SOIL_MOISTURE,      COMMON_CODE
+!SMAP_D_SOIL_MOISTURE,         QTY_SOIL_MOISTURE,      COMMON_CODE
 !SSMI_A_SOIL_MOISTURE,         QTY_SOIL_MOISTURE,      COMMON_CODE
 !SSMI_D_SOIL_MOISTURE,         QTY_SOIL_MOISTURE,      COMMON_CODE
 !AMSRE_A_SOIL_MOISTURE_X,      QTY_SOIL_MOISTURE,      COMMON_CODE
