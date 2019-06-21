@@ -841,21 +841,16 @@ VARIABLES : do ivar=1,get_num_variables(idom)
 
    elseif (rank == 3) then
  
-      ! restart file variables never have 3 dimensions
-      ! vector_history variables   may have 3 dimensions [time, lat, lon]
-      ! history file variables always have 3 dimensions [time, lat, lon]
-      !     exception is float H2OSOI(time, levgrnd, lat, lon) ... but we
-      !     float       H2OSOI(time, levsoi, lat, lon) ;
-      !     float        HR_vr(time, levsoi, lat, lon) ;
-      !     float    LITR2C_vr(time, levsoi, lat, lon) ;
+      ! restart file   variables  never have 3 dimensions
+      ! vector_history variables    may have 3 dimensions [time, lat, lon]
+      ! history file   variables always have 3 dimensions [time, lat, lon]
+      !     float      H2OSOI(time, levgrnd, lat, lon) ;
+      !     float    TSOI_ICE(time, levgrnd, lat, lon) ;
       !     float PCT_GLC_MEC(time, glc_nec, lat, lon) ;
       !     float  PCT_LANDUNIT(time, ltype, lat, lon) ;
       !     float  PCT_NAT_PFT(time, natpft, lat, lon) ;
       !     float        TLAKE(time, levlak, lat, lon) ;
-      !     float    TSOI_ICE(time, levgrnd, lat, lon) ;
       !     float       VEGWP(time, nvegwcs, lat, lon) ;
-
-      !     have access to restart file h2osoi_[liq,ice]
 
       if ((debug > 8) .and. do_output()) then
          write(*,*)
@@ -878,9 +873,22 @@ VARIABLES : do ivar=1,get_num_variables(idom)
                  source, revision, revdate, text2=string2)
       endif
 
+      !>@todo  extend fill_levels to support all the vertical levels
+
+      SELECT CASE ( trim(dimnames(3)) )
+         CASE ("levgrnd")
+            levtot(1:dimlens(3)) = LEVGRND;
+         CASE DEFAULT
+            write(string1,*)'(3d) unsupported vertical dimension name "'//trim(dimnames(3))//'"'
+            write(string2,*)' while trying to create metadata for "'//trim(varname)//'"'
+            call error_handler(E_ERR, routine, string1, &
+                       source, revision, revdate, text2=string2)
+      END SELECT
+
       do k = 1, dimlens(3)
          do j = 1, dimlens(2)
             do i = 1, dimlens(1)
+               levels(  indx) = levtot(k)
                lonixy(  indx) = i
                latjxy(  indx) = j
                landarea(indx) = AREA2D(i,j) * LANDFRAC2D(i,j)
@@ -1767,6 +1775,20 @@ select case( obs_kind )
 
    case ( QTY_SOIL_MOISTURE )
 
+      ! only clm (history) variable 'H2OSOI' is actually soil moisture.
+      ! If this is part of the state - get it, if not, construct it from
+      ! QTY_SOIL_LIQUID_WATER and QTY_SOIL_ICE ... beware units.
+      ! In the history file, the units are mm3/mm3
+      ! In the restart file, the units are kg/m2 ... thanks ...
+
+      call get_grid_vertval(state_handle, ens_size, location, QTY_SOIL_MOISTURE, interp_val_liq, istatus)
+      if (any(istatus == 0)) then
+         where(istatus == 0) expected_obs = interp_val_liq
+         return
+      endif
+
+      istatus = 0
+
       ! TJH FIXME : make sure this is consistent with the COSMOS operator
       ! This is terrible ... the COSMOS operator wants m3/m3 ... CLM is kg/m2
       call get_grid_vertval(state_handle, ens_size, location, QTY_SOIL_LIQUID_WATER, interp_val_liq, istatus_liq)
@@ -2147,6 +2169,8 @@ above         = 0.0_r8
 below         = 0.0_r8
 area_below    = 0.0_r8
 area_above    = 0.0_r8
+value_above   = MISSING_R8
+value_below   = MISSING_R8
 
 ELEMENTS : do indexi = index1, indexN
 
@@ -2199,7 +2223,7 @@ if ( any(counter_above /= counter_below) ) then
    write(string1, *)'Variable '//trim(varname)//' has peculiar interpolation problems.'
    write(string2, *)'uneven number of values "above" and "below"'
    write(string3, *)'counter_above == ',counter_above,' /= ',counter_below,' == counter_below'
-   call error_handler(E_MSG,routine, string1, &
+   call error_handler(E_ERR,routine, string1, &
                   text2=string2,text3=string3)
    deallocate(counter_above, counter_below, above, below, area_above, area_below)
    istatus = 22
@@ -2216,11 +2240,13 @@ do imem = 1, ens_size
       area_above(imem, :) = area_above(imem, :) / total_area(imem)
       value_above(imem) = sum(above(imem, :) * area_above(imem, :))
    else
-      write(string1, *)'Variable '//trim(varname)//' had no viable data above'
-      write(string2, *)'at gridcell lon/lat/level = (',gridloni,',',gridlatj,',',levelabove,')'
-      call write_location(0,location,charstring=string3)
-      call error_handler(E_ERR,routine, string1, &
-                  source, revision, revdate, text2=string2,text3=string3)
+      if (debug > 0) then
+         write(string1, *)'Variable '//trim(varname)//' had no viable data above'
+         write(string2, *)'at gridcell lon/lat/level = (',gridloni,',',gridlatj,',',levelabove,')'
+         call write_location(0,location,charstring=string3)
+         call error_handler(E_ALLMSG,routine, string1, &
+                     source, revision, revdate, text2=string2,text3=string3)
+      endif
    endif
 
    ! Determine the value for the level below the depth of interest.
@@ -2231,11 +2257,13 @@ do imem = 1, ens_size
       area_below(imem, :) = area_below(imem, :) / total_area(imem)
       value_below(imem) = sum(below(imem, :) * area_below(imem, :))
    else
-      write(string1, *)'Variable '//trim(varname)//' had no viable data below'
-      write(string2, *)'at gridcell lon/lat/lev = (',gridloni,',',gridlatj,',',levelbelow,')'
-      call write_location(0,location,charstring=string3)
-      call error_handler(E_ERR,routine, string1, &
-                  source, revision, revdate, text2=string2,text3=string3)
+      if (debug > 0) then
+         write(string1, *)'Variable '//trim(varname)//' had no viable data below'
+         write(string2, *)'at gridcell lon/lat/lev = (',gridloni,',',gridlatj,',',levelbelow,')'
+         call write_location(0,location,charstring=string3)
+         call error_handler(E_ALLMSG,routine, string1, &
+                     source, revision, revdate, text2=string2,text3=string3)
+      endif
    endif
 
 enddo
@@ -2248,11 +2276,17 @@ else
    botwght = (loc_lev - depthabove) / (depthbelow - depthabove)
 endif
 
-where ( istatus == 0 ) 
-   interp_val = value_above*topwght + value_below*botwght
-elsewhere
-   interp_val = MISSING_R8
-endwhere
+!>@todo The istatus should be poor if the state was missing to begin with
+do imem = 1, ens_size
+   if (istatus(imem)     == 0          .and. &
+       value_above(imem) /= MISSING_R8 .and. &
+       value_below(imem) /= MISSING_R8) then
+      interp_val(imem) = value_above(imem)*topwght + value_below(imem)*botwght
+   else
+      istatus(imem) = 23
+      interp_val(imem) = MISSING_R8
+   endif
+enddo
 
 deallocate(counter_above, counter_below, above, below, area_above, area_below)
 
