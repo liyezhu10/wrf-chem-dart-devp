@@ -77,7 +77,7 @@ character(len=512) :: string1, string2, string3
 
 logical, save :: module_initialized = .false.
 
-integer  :: debug = 0   ! turn up for more and more debug messages
+integer  :: debug = 0               ! turn up for more and more debug messages
 integer  :: interpolation_type = 1  ! add cases for different strategies
 logical  :: do_rotate = .false.     ! rotate edge from pts 1,2 to horizontal before interp
 
@@ -105,8 +105,7 @@ integer, parameter :: QUAD_LOCATED_LON_EDGES     =   2
 integer, parameter :: QUAD_LOCATED_LAT_EDGES     =   3
 integer, parameter :: QUAD_LOCATED_CELL_CORNERS  =   4
 
-! data struct question - does this go directly into handle?
-! right now it's in each option.
+! options that control how the interpolation handles specific cases
 type quad_grid_options
    private
 
@@ -119,11 +118,34 @@ type quad_grid_options
    ! if not, either or both could still be true but we can't assume.
    logical :: global_grid = .false.
 
-   ! does the grid cross the 360 -> 0 boundary?
-   logical :: spans_lon_zero = .false.   ! true if any lon(:,1) > lon(:,nlons)
+   ! separate out the single logical 'spans' flag into two cases?
+   ! case 1:  the longitude grid is cyclic; either a global grid or a band between 
+   !  two latitude lines that circles the globe.  all longitude values are valid.
+   ! case 2: a regional grid that crosses the prime meridian.
+   !  this will contain a discontinuity around 360 -> 0 that should be a valid region.
+   ! can a single flag handle both of these cases?  
+
+   ! are there valid values between array(N) and array(1) that should be interpolated?
+   ! always true for global grids. 
+   logical :: lon_cyclic = .false.  
+
+   ! are there valid values between array(X) and array(X+1) in the interior of
+   ! the longitude array where a(X) > a(X+1) (e.g. around where a(X) is near 360 
+   ! and a(X+1) is near 0) that should be interpolated?
+
+   ! always true for global grids. 
+   ! for partially regular grids (1D lon and 1D lat arrays) this can be
+   ! true if a regional grid crosses the prime meridian.
+   ! for irregular grids (2D lons and 2D lats) this is true if 
+   ! any lon(:,1) > lon(:,nlons)
+   logical :: spans_lon_zero = .false.   
 
    ! do we handle wrap over the poles?
    logical :: pole_wrap = .false.
+
+   ! are the latitudes specified from smallest (south) to largest (north)
+   ! or largest (north) to smallest (south)?
+   logical :: north_to_south = .false.
 
    ! i don't want to know this, but apparently we might
    ! have to know if the points given are cell-centered or
@@ -348,6 +370,14 @@ select case (grid_type)
                interp_handle%ir%lons_1D(num_lons))
       interp_handle%ir%lats_1D(num_lats) = MISSING_R8
       interp_handle%ir%lons_1D(num_lons) = MISSING_R8
+      if (debug > 10) then
+         write(string1, *) 'nlats, nlons: ', num_lats, num_lons
+         call log_it(string1)
+         write(string1, *) 'first lat: ', interp_handle%ir%lats_1D(1)
+         call log_it(string1)
+         write(string1, *) 'first lon: ', interp_handle%ir%lons_1D(1)
+         call log_it(string1)
+      endif
 
    case(GRID_QUAD_FULLY_IRREGULAR)
       allocate(interp_handle%ii%lats_2D(num_lons, num_lats), &
@@ -560,8 +590,46 @@ if (size(lats) /= interp_handle%nlat) then
                       source, revision, revdate)
 endif
 
+! lons and lats are declared intent(in).  any code that just needs to
+! test values can use them.  any code that is going to modify values
+! has to use the xxx_1D arrays in the structures.
+
 interp_handle%ir%lons_1D(:) = lons
 interp_handle%ir%lats_1D(:) = lats
+
+! inverted order for latitudes?
+if (lats(1) > lats(interp_handle%nlat)) then
+   interp_handle%opt%north_to_south = .true.
+endif
+
+! -180 to 180 instead of 0 to 360?  add 360, which makes all
+! the values valid (we require longitudes to be between 0 and 360)
+! but it also makes a partially regular grid start at 180, go up
+! to 360, then back to 0, then up to 180.  set the 'spans 0' flag.
+if (any(lons < 0.0_r8)) then
+  where(interp_handle%ir%lons_1D < 0.0_r8) &
+     interp_handle%ir%lons_1D = interp_handle%ir%lons_1D + 360.0_r8
+     interp_handle%opt%spans_lon_zero = .true. 
+endif
+
+! validate ranges 
+if (any(interp_handle%ir%lats_1D < -90.0_r8) .or. any(interp_handle%ir%lats_1D > 90.0_r8)) then
+   write(string1, *) 'latitude values must be between -90 and 90.', &
+                       ' out of range values found in latitude array. '
+   write(string2, *) 'min, max values: ', minval(interp_handle%ir%lats_1D), &
+                                          maxval(interp_handle%ir%lats_1D)
+   call error_handler(E_ERR, 'set_irregspaced_quad_coords', string1, &
+                      source, revision, revdate, text2=string2)
+endif
+
+if (any(interp_handle%ir%lons_1D < 0.0_r8) .or. any(interp_handle%ir%lons_1D > 360.0_r8)) then
+   write(string1, *) 'longitude values must be between 0 and 360, or -180 and 180.', &
+                       ' out of range values found in longitude array. '
+   write(string2, *) 'min, max values: ', minval(interp_handle%ir%lons_1D), &
+                                          maxval(interp_handle%ir%lons_1D)
+   call error_handler(E_ERR, 'set_irregspaced_quad_coords', string1, &
+                      source, revision, revdate, text2=string2)
+endif
 
 !>@todo FIXME i would like to put something like this to check
 !>for degenerate grids, but i don't know how to avoid throwing
@@ -1416,6 +1484,7 @@ nx = interp_handle%nlon
 ny = interp_handle%nlat
 cyclic = interp_handle%opt%spans_lon_zero
 
+!print *, trim(routine), ' ', nx, ny, cyclic 
 select case (interp_handle%grid_type)
 
  case (GRID_QUAD_FULLY_IRREGULAR)
@@ -1426,6 +1495,7 @@ select case (interp_handle%grid_type)
    ! This is an irregular grid (irregular == spacing; still completely orthogonal)
    call get_semireg_box(lon, lat, nx, ny, &
          interp_handle%ir%lons_1d, interp_handle%ir%lats_1d, &
+         interp_handle%opt%north_to_south, &
          lon_bot, lat_bot, lon_fract, lat_fract, istatus)
 
  case (GRID_QUAD_FULLY_REGULAR)
@@ -1503,8 +1573,8 @@ integer  :: lat_status, lon_top, lat_top
 istatus = 0
 
 ! Get latitude box boundaries and fraction
-! FIXME: is .false. for the pole??
-call lat_bounds(lat, ny, lat_array(1,:), .false., &
+! FIXME: .false. is for grids that span the pole and north_to_south
+call lat_bounds(lat, ny, lat_array(1,:), .false., .false., &
                 found_y, lat_top, lat_fract, lat_status)
 
 ! Check for error on the latitude interpolation
@@ -1551,7 +1621,8 @@ do i=1, ny
 enddo
 
 ! Get latitude box boundaries
-call lat_bounds(lat, ny, lat_array, .false., found_y, lat_top, lat_fract, lat_status)
+call lat_bounds(lat, ny, lat_array, .false., .false., &
+                found_y, lat_top, lat_fract, lat_status)
 
 ! Check for error on the latitude interpolation
 if(lat_status /= 0) then
@@ -1571,12 +1642,13 @@ end subroutine get_reg_box
 !> that contains the point and the fractions along each direction
 !> for interpolation.
 
-subroutine get_semireg_box(lon, lat, nx, ny, lon_array, lat_array, &
+subroutine get_semireg_box(lon, lat, nx, ny, lon_array, lat_array, invert_lat, &
                            found_x, found_y, lon_fract, lat_fract, istatus)
 
-real(r8),   intent(in) :: lon, lat
-integer,    intent(in) :: nx, ny
-real(r8),   intent(in) :: lon_array(:), lat_array(:)
+real(r8),  intent(in)  :: lon, lat
+integer,   intent(in)  :: nx, ny
+real(r8),  intent(in)  :: lon_array(:), lat_array(:)
+logical,   intent(in)  :: invert_lat
 integer,   intent(out) :: found_x, found_y
 real(r8),  intent(out) :: lon_fract, lat_fract
 integer,   intent(out) :: istatus
@@ -1589,7 +1661,8 @@ istatus = 0
 
 ! Get latitude box boundaries
 !>@todo FIXME check on the pole wrap and cyclic flags
-call lat_bounds(lat, ny, lat_array, .false., found_y, lat_top, lat_fract, lat_status)
+call lat_bounds(lat, ny, lat_array, .false., invert_lat, &
+                found_y, lat_top, lat_fract, lat_status)
 
 ! Check for error on the latitude interpolation
 if(lat_status /= 0) then
@@ -1648,7 +1721,8 @@ endif
 do i = 2, nlons
    dist_bot = lon_dist(lon, lon_array(i - 1))
    dist_top = lon_dist(lon, lon_array(i))
-   if (debug > 3) print *, 'lon: i, bot, top: ', i, dist_bot, dist_top
+   if (debug > 3) print *, 'lon: i, lon_array(i-1), lon_array(i), bot, top: ', &
+                            i, lon_array(i-1), lon_array(i), dist_bot, dist_top
    if(dist_bot <= 0.0_r8 .and. dist_top > 0.0_r8) then
       bot = i - 1
       top = i
@@ -1694,39 +1768,62 @@ end subroutine lon_bounds
 !> northernmost (2 returned). If one really had lots of polar obs would
 !> want to worry about interpolating around poles.
 
-subroutine lat_bounds(lat, nlats, lat_array, polar, bot, top, fract, istatus)
+subroutine lat_bounds(lat, nlats, lat_array, polar, invert_lat, bot, top, fract, istatus)
 
 real(r8),  intent(in)  :: lat
 integer,   intent(in)  :: nlats
 real(r8),  intent(in)  :: lat_array(nlats)
 logical,   intent(in)  :: polar
+logical,   intent(in)  :: invert_lat
 integer,   intent(out) :: bot, top
 real(r8),  intent(out) :: fract
 integer,   intent(out) :: istatus
 
 ! Local storage
-integer :: i
+integer :: i, north, south, start, end, increment
 
 ! Success should return 0, failure a positive number.
 istatus = 0
 
 ! FIXME: polar is for future expansion, ignored for now
 
+! normally grids start at -90 and go to 90 (south to north).
+! but some grids start at 90 and go to -90 (north to south).
+! try to handle both with a minimum of replicated code.
+if (invert_lat) then
+  north = lat_array(1)
+  south = lat_array(nlats)
+  start = nlats - 1
+  end = 1
+  increment = -1
+else
+  north = lat_array(nlats)
+  south = lat_array(1)
+  start = 2
+  end = nlats
+  increment = 1
+endif
+
 ! Check for too far south or north
-if(lat < lat_array(1)) then
+if(lat < south) then
    istatus = 1
    return
-else if(lat > lat_array(nlats)) then
+else if(lat > north) then
    istatus = 2
    return
 endif
 
 ! In the middle, search through
-do i = 2, nlats
+do i = start, end, increment
    if (debug > 3) print *, 'lat: i, lat, lat(i): ', i, lat, lat_array(i)
    if(lat <= lat_array(i)) then
-      bot = i - 1
-      top = i
+      if (invert_lat) then
+         bot = i
+         top = i + 1
+      else
+         bot = i - 1
+         top = i
+      endif
       if (lat_array(top) - lat_array(bot) == 0.0_r8) then
          istatus = 2
          return
