@@ -1673,7 +1673,11 @@ call all_copies_to_all_vars(obs_fwd_op_ens_handle)
 
 ! allocate temp space for sending data only on the task that will
 ! write the obs_seq.final file
-if (my_task == io_task) allocate(obs_temp(num_obs_in_set))
+if (my_task == io_task) then
+   allocate(obs_temp(num_obs_in_set))
+else
+   allocate(obs_temp(1))
+endif
 
 
 ! Update the ensemble mean
@@ -1720,7 +1724,8 @@ if(my_task == io_task) then
    end do
 endif
 
-if (my_task == io_task) deallocate(obs_temp)
+! if (my_task == io_task) deallocate(obs_temp)
+deallocate(obs_temp)
 
 end subroutine obs_space_diagnostics
 
