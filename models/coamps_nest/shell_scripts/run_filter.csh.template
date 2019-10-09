@@ -4,7 +4,7 @@
 # by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# DART $Id: run_filter.csh.template 11611 2017-05-05 23:10:55Z thoar@ucar.edu $
+# DART $Id$
 #
 # This script performs an assimilation on a collection of coamp hdf5 files.
 # This script presumes/requires that coamps has exactly two nests and that
@@ -231,7 +231,7 @@ end
 ls -1 instance_*/dart_vector_???_${CDTG}.nc  >! file_list_domain_1.txt
 ls -1 instance_*/dart_vector_???_${CDTG}.nc  >! file_list_domain_2.txt
 
-# filter needs files to read variables sizes, etc.
+# filter needs a template file to read variables sizes, etc.
 
 \rm -f coamps.hdf5 dart_vector.nc
 \ln -s instance_001/coamps_001_${CDTG}.hdf5    coamps.hdf5    || exit 4
@@ -297,7 +297,3 @@ echo "${JOBNAME} ($JOBID) finished at "`date`
 
 exit 0
 
-# <next few lines under version control, do not edit>
-# $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/coamps/models/coamps/shell_scripts/run_filter.csh.template $
-# $Revision: 11611 $
-# $Date: 2017-05-05 16:10:55 -0700 (Fri, 05 May 2017) $

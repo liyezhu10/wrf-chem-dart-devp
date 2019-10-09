@@ -3,18 +3,18 @@
 &perfect_model_obs_nml
    read_input_state_from_file  = .true.
    single_file_in              = .false.
-   input_state_files           = "dart_vector.nc", "dart_vector.nc"
+   input_state_files           = 'dart_vector.nc', 'dart_vector.nc'
 
    write_output_state_to_file = .true.
    single_file_out            = .false.
-   output_state_files         = "perfect_domain1.nc", "perfect_domain2.nc"
+   output_state_files         = 'perfect_domain1.nc', 'perfect_domain2.nc'
    output_interval            = 1
 
    async                      = 4
-   adv_ens_command            = "no_DART_model_advance.csh"
+   adv_ens_command            = 'no_DART_model_advance.csh'
 
-   obs_seq_in_file_name       = "obs_seq.one"
-   obs_seq_out_file_name      = "obs_seq.out"
+   obs_seq_in_file_name       = 'obs_seq.2obs.in'
+   obs_seq_out_file_name      = 'obs_seq.out'
    init_time_days             = -1
    init_time_seconds          = -1
    first_obs_days             = -1
@@ -32,14 +32,14 @@
 
 &filter_nml
    single_file_in               = .false.
-   input_state_files            = ''
-   input_state_file_list        = 'input_list_domain_1.txt', 'input_list_domain_2.txt'
+   input_state_files            = '', ''
+   input_state_file_list        = 'file_list_domain_1.txt', 'file_list_domain_2.txt'
 
    stages_to_write  = 'preassim', 'analysis', 'output'
 
    single_file_out              = .false.
-   output_state_files           = ''
-   output_state_file_list       = 'input_list_domain_1.txt', 'input_list_domain_2.txt'
+   output_state_files           = '', ''
+   output_state_file_list       = 'file_list_domain_1.txt', 'file_list_domain_2.txt'
    output_interval              = 1
    output_members               = .true.
    num_output_state_members     = 0
@@ -54,10 +54,10 @@
    distributed_state            = .true.
 
    async                        = 4
-   adv_ens_command              = "./advance_wrapper.csh"
+   adv_ens_command              = './advance_wrapper.csh'
 
-   obs_sequence_in_name         = "obs_seq.subset"
-   obs_sequence_out_name        = "obs_seq.final"
+   obs_sequence_in_name         = 'obs_seq.out'
+   obs_sequence_out_name        = 'obs_seq.final'
    num_output_obs_members       = 40
    init_time_days               = -1
    init_time_seconds            = -1
@@ -79,8 +79,8 @@
 
    trace_execution              = .true
    output_timestamps            = .false.
-   output_forward_op_errors     = .true.
-   silence                      = .false.
+   output_forward_op_errors     = .false.
+   silence                      = .true.
   /
 
 
@@ -97,7 +97,6 @@
    y_bound_skip                = 4
    assimilation_period_days    = 0
    assimilation_period_seconds = 21600
-   vertical_localization_coord = 'SCALEHEIGHT'
    need_mean                   = .true.
    output_interpolation        = .true.
    debug                       = 1
@@ -116,15 +115,15 @@
 
 &assim_tools_nml
    filter_kind                       = 1
-   cutoff                            = 0.0004
+   cutoff                            = 0.004
    sort_obs_inc                      = .false.
    spread_restoration                = .false.
    sampling_error_correction         = .true.
    adaptive_localization_threshold   = -1
    output_localization_diagnostics   = .false.
    localization_diagnostics_file     = 'localization_diagnostics'
-   convert_all_state_verticals_first = .true.
-   convert_all_obs_verticals_first   = .true.
+   convert_all_state_verticals_first = .false.
+   convert_all_obs_verticals_first   = .false.
    print_every_nth_obs               = 0
    print_every_nth_obs               = 0
   /
@@ -142,7 +141,7 @@
    input_state_files = 'dart_vector.nc', 'dart_vector.nc'
    single_file       = .false.
    verbose           = .false.
-   /
+  /
 
 
 &cov_cutoff_nml
@@ -157,8 +156,8 @@
 
 &obs_sequence_tool_nml
    num_input_files   = 1
-   filename_seq      = 'obs_seq.out'
-   filename_out      = 'obs_seq.processed'
+   filename_seq      = 'obs_seq_2018051700.out.navdas'
+   filename_out      = 'obs_seq.subsetted'
    first_obs_days    = -1
    first_obs_seconds = -1
    last_obs_days     = -1
@@ -183,7 +182,7 @@
    max_lat           = 60.0
    min_lon           = 200.0
    max_lon           = 260.0
-   /
+  /
 
 # P_SFC_* observations generate forward op errors of 915 (see get_expected_altimeter())
 
@@ -213,12 +212,13 @@
    evaluate_these_obs_types   = ''
   /
 
+
 # Notes for obs_def_radar_mod_nml:
 # (1) Reflectivity limit can be applied to observations and/or state (forward operator).
 # (2) Default lowest_reflectivity values DART will use (if apply_reflectivity_limit = .true.)
 #     is missing_r8. If you want to use the default, delete the line of respective
 #     lowest_reflectivity.
-# (3) As it is not clear how to assimilate Z (for now), "convert_to_dbz" is reset to .true.
+# (3) As it is not clear how to assimilate Z (for now), 'convert_to_dbz' is reset to .true.
 #     even if you set it to .false. here in the namelist.
 
 &obs_def_radar_mod_nml
@@ -232,40 +232,20 @@
    lowest_reflectivity_state =     0.0
   /
 
-#WRF VALUES : &obs_def_radar_mod_nml
-#WRF VALUES :    apply_ref_limit_to_obs      =   .false.
-#WRF VALUES :    reflectivity_limit_obs      =  -10.0
-#WRF VALUES :    lowest_reflectivity_obs     =  -10.0
-#WRF VALUES :    apply_ref_limit_to_fwd_op   =   .false.
-#WRF VALUES :    reflectivity_limit_fwd_op   =  -10.0
-#WRF VALUES :    lowest_reflectivity_fwd_op  =  -10.0
-#WRF VALUES :    max_radial_vel_obs          =   1000000
-#WRF VALUES :    allow_wet_graupel           =   .false.
-#WRF VALUES :    microphysics_type           =       2
-#WRF VALUES :    allow_dbztowt_conv          =   .false.
-#WRF VALUES :    dielectric_factor           =  0.224
-#WRF VALUES :    n0_rain                     =  8.0e6
-#WRF VALUES :    n0_graupel                  =  4.0e6
-#WRF VALUES :    n0_snow                     =  3.0e6
-#WRF VALUES :    rho_rain                    = 1000.0
-#WRF VALUES :    rho_graupel                 =  400.0
-#WRF VALUES :    rho_snow                    =  100.0
-#WRF VALUES :   /
 
 &assim_model_nml
    write_binary_restart_files = .true.
   /
 
-# Notes for model_nml:
-# (1) vert_localization_coord must be one of:
-#     1 = model level
-#     2 = pressure
-#     3 = height
+
+# Notes for model_nml when horiz_dist_only is FALSE:
+# * vert_localization_coord IS sigma levels for coamps
+# therefore, the 'vert_normalization_level' is the scale
+# factor to convert the difference in the sigma values
+# to 'radians' for the distance calculation.
 
 &location_nml
    horiz_dist_only             = .true.
-   vert_normalization_pressure = 6666666.7
-   vert_normalization_height   = 5000000.0
    vert_normalization_level    = 2666.7
    approximate_distance        = .false.
    nlon                        = 71
@@ -288,14 +268,14 @@
 
 &state_vector_io_nml
    single_precision_output    = .true.
-   /
+  /
 
 
 &reg_factor_nml
    select_regression    = 1
-   input_reg_file       = "time_mean_reg"
+   input_reg_file       = 'time_mean_reg'
    save_reg_diagnostics = .false.
-   reg_diagnostics_file = "reg_diagnostics"
+   reg_diagnostics_file = 'reg_diagnostics'
   /
 
 
@@ -310,6 +290,7 @@
    filename_seq    = 'obs_seq.one', 'obs_seq.two'
    filename_out    = 'obs_seq.merged'
   /
+
 
 # The times in the namelist for the obs_diag program are vectors
 # that follow the following sequence:
@@ -342,6 +323,7 @@
    verbose               = .false.
   /
 
+
 &schedule_nml
    calendar        = 'Gregorian'
    first_bin_start =  1601,  1,  1,  0,  0,  0
@@ -352,6 +334,7 @@
    max_num_bins         = 1000
    print_table          = .true.
   /
+
 
 &obs_seq_to_netcdf_nml
    obs_sequence_name = 'obs_seq.final'
@@ -364,6 +347,7 @@
    verbose    = .false.
    /
 
+
 &smoother_nml
    num_lags              = 0
    start_from_restart    = .false.
@@ -371,6 +355,7 @@
    restart_in_file_name  = 'smoother_ics'
    restart_out_file_name = 'smoother_restart'
   /
+
 
 &navdas_innov_nml
    innov_file_name = 'innov.out'
@@ -381,61 +366,24 @@
   /
 
 
-#  all_metadata_file     = 'metadata_file.txt'
-#  all_metadata_file     = 'null'
 &model_mod_check_nml
    input_state_files     = 'dart_vector.nc','dart_vector.nc'
    output_state_files    = 'check_me1.nc', 'check_me2.nc'
    all_metadata_file     = 'null'
    verbose               = .TRUE.
    test1thru             = 0
-   run_tests             = 1, 2, 3, 4, 5
-   loc_of_interest       = 243.72386169, 52.78578186, 10.0
-   x_ind                 = 12666739
-   quantity_of_interest  = 'QTY_POTENTIAL_TEMPERATURE'
+   run_tests             = 1, 2, 3, 4
+   loc_of_interest       = 217.51985613, 26.49996007, 50000.0
+   x_ind                 = 38420576
+   quantity_of_interest  = 'QTY_U_WIND_COMPONENT'
    interp_test_lonrange  = 220.0, 260.0
    interp_test_dlon      = 1.0
    interp_test_latrange  = 30.0, 40.0
    interp_test_dlat      = 1.0
    interp_test_vertrange = 58.0, 60.0
    interp_test_dvert     = 0.25
-   interp_test_vertcoord = 'VERTISLEVEL'
+   interp_test_vertcoord = 'VERTISPRESSURE'
   /
-
-   loc_of_interest       = 260.0, 30.0, 10.0 clearly in domain 1
-   loc_of_interest       = 230.0, 40.0, 10.0 clearly in domain 2
-
-#  QTY_POTENTIAL_TEMPERATURE at  100   50   60 domain  1
-   loc_of_interest       = 234.600585937500, 18.5735168457031, 10.0
-   x_ind                 = 2429185
-
-#  QTY_POTENTIAL_TEMPERATURE at 200  203   60 domain  1
-   loc_of_interest       = 324.97738647, 55.56023407, 10.0
-   x_ind                 = 4920278
-
-#  QTY_POTENTIAL_TEMPERATURE at 210  210   60 domain  2
-   loc_of_interest       = 244.40650940, 52.73881912, 10.0
-   x_ind                 = 12666742
-
-#  QTY_POTENTIAL_TEMPERATURE at 212  216   60 domain  2
-   loc_of_interest       = 245.03234863, 53.52990341, 10.
-   x_ind                 = 12668028
-
- read_geographic_data lon/lat (  1,  1) is    204.473480224609       -4.56199932098389
- read_geographic_data lon/lat ( nx, ny) is    325.946136474609        55.3632431030273
-
-# These are just notes to help use model_mod_check
-# The mass points are defined (in Fortran) as nx-ny-nz, with nx (longitude)
-# varying fastest.
-# x= 1, y= 1 is the southwest
-# x=nx, y=ny is the northeast
-# z=1 is the top of atmosphere
-
-#  4920278 i,j,k  200  203   60 domain  1  QTY_POTENTIAL_TEMPERATURE Lon/Lat(deg): 324.97738647  55.56023407  10.   ! simply fails
-# 12666742 i,j,k  210  210   60 domain  2  QTY_POTENTIAL_TEMPERATURE Lon/Lat(deg): 244.40650940  52.73881912  10.   ! in wrong domain
-# 12668028 i,j,k  212  216   60 domain  2  QTY_POTENTIAL_TEMPERATURE Lon/Lat(deg): 245.03234863  53.52990341  10.
-
-   12666739 i,j,k  207  210   60 domain  2   23         QTY_POTENTIAL_TEMPERATURE Lon/Lat(deg): 243.72386169  52.78578186  Vert:   10.        level
 
 
 &obs_keep_a_few_nml

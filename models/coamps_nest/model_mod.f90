@@ -254,12 +254,10 @@ logical           :: output_interpolation = .false.
 integer           :: debug                = 0            ! increase for debug messages
 integer           :: assimilation_period_days = 0
 integer           :: assimilation_period_seconds = 216000
-character(len=32) :: vertical_localization_coord = 'PRESSURE'
 
 namelist /model_nml/ cdtg, y_bound_skip, x_bound_skip, need_mean, &
                      output_interpolation, debug, &
-                     assimilation_period_days, assimilation_period_seconds, &
-                     vertical_localization_coord
+                     assimilation_period_days, assimilation_period_seconds
 
 ! Locations of state variables
 integer, dimension(:), allocatable :: all_vars
@@ -318,10 +316,6 @@ module_initialized = .true.
 call set_calendar_type('Gregorian')
 call read_model_namelist()
 call set_debug_level(debug)
-
-! convert from string in namelist to integer (e.g. VERTISxxx)
-! and tell the dart code which vertical type we want to localize in.
-call set_vert_localization(vertical_localization_coord)
 
 ! the domain information is reported upon initialization
 call initialize_domain(HDF5_FILE_NAME, cdtg, domain)
@@ -894,6 +888,10 @@ end subroutine pert_model_copies
     end subroutine get_state_meta_data
 
 
+!--------------------------------------------------------------------
+! Seems like the strategy is to localize using sigma levels. If that is
+! mandatory, then convert_vertical_obs must convert pressure,height, etc to
+! sigma levels.
 
 subroutine convert_vertical_obs(ens_handle, num, locs, loc_qtys, loc_types, &
                                 which_vert, status)
@@ -912,7 +910,11 @@ call error_handler(E_ERR,'convert_vertical_obs','routine not written')
 
 end subroutine convert_vertical_obs
 
+
 !--------------------------------------------------------------------
+! Seems like the strategy is to localize using sigma levels. If that is
+! mandatory, then convert_vertical_state does nothing since the coamps state is
+! already on sigma levels.
 
 subroutine convert_vertical_state(ens_handle, num, locs, loc_qtys, loc_indx, &
                                   which_vert, istatus)
@@ -927,11 +929,9 @@ integer,             intent(out)   :: istatus
 
 istatus = 0
 
-call error_handler(E_ERR,'convert_vertical_state','routine not written')
+! nothing to do
 
 end subroutine convert_vertical_state
-
-
 
 
 !--------------------------------------------------------------------
@@ -1177,46 +1177,6 @@ end subroutine write_model_time
       call check_dealloc_status(dealloc_status, routine, source, revision, revdate, 'kernal')
 
     end subroutine kernal_smoother
-
-
-!-----------------------------------------------------------------------
-! Convert all state and obs to this vertical coordinate if vertical 
-! localization is enabled. Needed when get_close() is called to compute
-! the distance between items. 
-
-subroutine set_vert_localization(typename)
-character(len=*), intent(in)  :: typename
-
-character(len=*), parameter :: routine = 'set_vert_localization'
-character(len=32) :: ucasename
-integer :: vcoord
-
-ucasename = typename
-call to_upper(ucasename)
-
-! convert from string to integer
-
-select case (ucasename)
-  case ("PRESSURE")
-     vcoord = VERTISPRESSURE
-  case ("HEIGHT")
-     vcoord = VERTISHEIGHT
-  case ("SCALEHEIGHT", "SCALE_HEIGHT", "SCALE HEIGHT")
-     vcoord = VERTISSCALEHEIGHT
-  case ("LEVEL", "MODEL_LEVEL", "MODEL LEVEL")
-     vcoord = VERTISLEVEL
-  case default
-     write(string1,*)'unrecognized vertical localization coordinate: "'//trim(typename)//'"'
-     write(string2,*)'valid values are: PRESSURE, HEIGHT, SCALEHEIGHT, LEVEL'
-     call error_handler(E_ERR,routine,string1,source,revision,revdate,text2=string2)
-end select
-
-call set_vertical_localization_coord(vcoord)
-
-! save in module global for later use.
-vertical_localization_type = vcoord
-
-end subroutine set_vert_localization
 
     !------------------------------
     ! END PRIVATE ROUTINES

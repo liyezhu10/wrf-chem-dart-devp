@@ -260,158 +260,157 @@ module coamps_interp_mod
 
 contains
 
-    !------------------------------
-    ! BEGIN PUBLIC ROUTINES
-    !------------------------------
+!------------------------------
+! BEGIN PUBLIC ROUTINES
+!------------------------------
 
-    ! interpolate
-    ! -----------
-    ! Driver for interpolation calculation
-    !  PARAMETERS
-    !   IN  state             big ol' DART state vector
-    ! NOW: state_handle       handle to entire ensemble of state
-    !   IN  ens_size          ensemble size
-    !   IN  ens_num           ensemble_number - FIXME: doing one at a time
-    !   IN  domain            COAMPS domain to interpolate on
-    !   IN  state_def         COAMPS state vector definition
-    !   IN  obs_loc           DART location structure to interpolate to
-    !   IN  obs_kind          integer version of raw variable type
-    !   OUT obs_value         result of interpolation
-    !   OUT interp_worked       0 if interpolation was successful
-    !                         901 if the location is not in domain or on an unsupported level type
-    !                         902 if there are not enough vertical levels
-    !                         903 if the location is too high or too low (extrapolation)
-    !                         904 unable to interpolate to a single level
-    subroutine interpolate(state_handle, ens_size, ens_num, domain, state_def, obs_loc, obs_kind, &
-                           obs_value, interp_worked)
-        type(ensemble_type),         intent(in)  :: state_handle
-        integer,                     intent(in)  :: ens_size
-        integer,                     intent(in)  :: ens_num
-        type(coamps_domain),         intent(in)  :: domain
-        type(state_vector),          intent(in)  :: state_def
-        type(location_type),         intent(in)  :: obs_loc
-        integer,                     intent(in)  :: obs_kind
-        real(kind=r8),               intent(out) :: obs_value
-        integer,                     intent(out) :: interp_worked
+! interpolate
+! -----------
+! Driver for interpolation calculation
+! PARAMETERS
+! IN  state_handle   handle to entire ensemble of state
+! IN  ens_size       ensemble size
+! IN  ens_num        ensemble_number - FIXME: doing one at a time
+! IN  domain         COAMPS domain to interpolate on
+! IN  state_def      COAMPS state vector definition
+! IN  obs_loc        DART location structure to interpolate to
+! IN  obs_kind       integer version of raw variable type
+! OUT obs_value      result of interpolation
+! OUT interp_worked  0 if interpolation was successful
+!                    800 unknown failure
+!                    901 if location is not in domain or on an unsupported level type
+!                    902 if not enough vertical levels
+!                    903 if the location is too high or too low (extrapolation)
+!                    904 unable to interpolate to a single level
 
-        type(coamps_interpolator) :: interpolator
-        logical :: is_success
+subroutine interpolate(state_handle, ens_size, ens_num, domain, state_def, &
+                       obs_loc, obs_kind, obs_value, interp_worked)
 
-        if (.not. module_initialized) call initialize_module(domain)
+type(ensemble_type),  intent(in)  :: state_handle
+integer,              intent(in)  :: ens_size
+integer,              intent(in)  :: ens_num
+type(coamps_domain),  intent(in)  :: domain
+type(state_vector),   intent(in)  :: state_def
+type(location_type),  intent(in)  :: obs_loc
+integer,              intent(in)  :: obs_kind
+real(kind=r8),        intent(out) :: obs_value
+integer,              intent(out) :: interp_worked
 
-        call initialize_interpolator(interpolator, state_handle, ens_size, ens_num, domain, state_def)
+type(coamps_interpolator) :: interpolator
+logical :: is_success
 
-        call set_interpolation_location(interpolator, obs_loc)
+if (.not. module_initialized) call initialize_module(domain)
 
-        obs_value = MISSING_R8   ! failure until proven otherwise
-        interp_worked = 800
+call initialize_interpolator(interpolator, state_handle, ens_size, ens_num, &
+                             domain, state_def)
 
-        call write_location(0,obs_loc,charstring=message)
-        write(*,*)'TJH '//trim(message)
+call set_interpolation_location(interpolator, obs_loc)
 
-        if (.not. has_valid_location(interpolator)) then
-            interp_worked = 901
-            call finalize_interpolator(interpolator)
-            return
-        end if
+obs_value = MISSING_R8   ! failure until proven otherwise
+interp_worked = 800
 
-        ! Figure out which points out of an entire field need to be read 
-        call get_nearest_neighbors(interpolator) 
+if (.not. has_valid_location(interpolator)) then
+    interp_worked = 901
+    call finalize_interpolator(interpolator)
+    return
+end if
 
-        ! The target variable is defined by the observation type and the
-        ! coordinate variables are defined by the observation location's 
-        ! vertical level type
-        call reset_availability_index()
-        call initialize_availability_data(interpolator)
+! Figure out which points out of an entire field need to be read 
+call get_nearest_neighbors(interpolator) 
 
-        ! Weights for bilinear horizontal interpolation
-        call calculate_interp_weights(interpolator)
+! The target variable is defined by the observation type and the
+! coordinate variables are defined by the observation location's 
+! vertical level type
+call reset_availability_index()
+call initialize_availability_data(interpolator)
 
-        select case (obs_kind)
-        case (QTY_SURFACE_PRESSURE)
-          call calculate_surface_pressure(interpolator)
+! Weights for bilinear horizontal interpolation
+call calculate_interp_weights(interpolator)
 
-        case (QTY_SURFACE_ELEVATION)
-          call calculate_surface_heights(interpolator)
+select case (obs_kind)
+case (QTY_SURFACE_PRESSURE)
+  call calculate_surface_pressure(interpolator)
 
-        case default
-         
-          is_success = .false.  ! unless proven otherwise
+case (QTY_SURFACE_ELEVATION)
+  call calculate_surface_heights(interpolator)
 
-          ! Try to find if the state variable is defined on the same level 
-          ! as the observation.  If it is not, interpolate in the vertical. 
-          if( is_vertical(obs_loc, 'HEIGHT') ) then
-             call calculate_height_level_var(interpolator, obs_kind, &
-                     query_location(obs_loc, 'VLOC'), is_success)
+case default
+ 
+  is_success = .false.  ! unless proven otherwise
 
-          !elseif( is_vertical(obs_loc, 'PRESSURE') ) then
-          !elseif( is_vertical(obs_loc, 'SURFACE') ) then
-          !elseif( is_vertical(obs_loc, 'LEVEL') ) then
+  ! Try to find if the state variable is defined on the same level 
+  ! as the observation.  If it is not, interpolate in the vertical. 
+  if( is_vertical(obs_loc, 'HEIGHT') ) then
+     call calculate_height_level_var(interpolator, obs_kind, &
+             query_location(obs_loc, 'VLOC'), is_success)
 
-          elseif( is_vertical(obs_loc, 'UNDEFINED') ) then
-             call calculate_undef_level_var(interpolator, obs_kind, &
-                     query_location(obs_loc, 'VLOC'), is_success)
-          endif 
+  !elseif( is_vertical(obs_loc, 'PRESSURE') ) then
+  !elseif( is_vertical(obs_loc, 'SURFACE') ) then
+  !elseif( is_vertical(obs_loc, 'LEVEL') ) then
 
-          write(*,*)'TJH is_success is ',is_success
+  elseif( is_vertical(obs_loc, 'UNDEFINED') ) then
+     call calculate_undef_level_var(interpolator, obs_kind, &
+             query_location(obs_loc, 'VLOC'), is_success)
+  endif 
 
-          if( .not. is_success) then
+  if( .not. is_success) then
 
-             call get_target_var(interpolator, obs_kind)
-             call get_coordinate_vars(interpolator)
+     call get_target_var(interpolator, obs_kind)
+     call get_coordinate_vars(interpolator)
 
-             ! Interpolation is spotty if there aren't enough vertical levels,
-             ! so declare failure rather than returning a (probably bad) result
+     ! Interpolation is spotty if there aren't enough vertical levels,
+     ! so declare failure rather than returning a (probably bad) result
 
-          write(*,*)'TJH is_success is ',is_success
+     call calculate_available_levels(interpolator)
+     if (.not. enough_levels_available(interpolator)) then
+       interp_worked = 902
+       call finalize_interpolator(interpolator)
+       return
+     end if
 
-             call calculate_available_levels(interpolator)
-             if (.not. enough_levels_available(interpolator)) then
-               interp_worked = 902
-               call finalize_interpolator(interpolator)
-               return
-             end if
+     call initialize_available_values(interpolator)
+     call collect_available_values(interpolator)
 
-             call initialize_available_values(interpolator)
-             call collect_available_values(interpolator)
+     ! Avoid extrapolation and only interpolate values at vertical levels
+     ! bounded by the available levels
+     if (.not. interp_level_in_available_range(interpolator)) then
+       interp_worked = 903
+       call finalize_interpolator(interpolator)
+       return
+     end if
 
-             ! Avoid extrapolation and only interpolate values at vertical levels
-             ! bounded by the available levels
-             if (.not. interp_level_in_available_range(interpolator)) then
-               interp_worked = 903
-               call finalize_interpolator(interpolator)
-               return
-             end if
+     ! Interpolate everything to a single level...
+     call interpolate_to_level(interpolator)
+     if (.not. no_missing_values(interpolator)) then
+       interp_worked = 904
+       call finalize_interpolator(interpolator)
+       return
+     end if
+  end if
 
-             ! Interpolate everything to a single level...
-             call interpolate_to_level(interpolator)
-             if (.not. no_missing_values(interpolator)) then
-               interp_worked = 904
-               call finalize_interpolator(interpolator)
-               return
-             end if
-          end if
+end select
 
-        end select
+! ... then interpolate neighbors to an array of single points
+obs_value = interpolate_to_point(interpolator)
 
-        ! ... then interpolate neighbors to an array of single points
-        obs_value = interpolate_to_point(interpolator)
+interp_worked = 0 ! finally - success ...
 
-        interp_worked = 0 ! finally - success ...
+if(output_interpolation) &
+call print_interpolation_diagnostics(interpolator, obs_kind, obs_value)
 
-        if(output_interpolation) &
-        call print_interpolation_diagnostics(interpolator, obs_kind, obs_value)
+end subroutine interpolate
 
-    end subroutine interpolate
+! set_interp_diag
+! ---------------
+! Sets flag to output interpolation diagnostics
+! IN  flag to output interpolation diagnostics
 
-  ! set_interp_diag
-  ! ---------------
-  ! Sets flag to output interpolation diagnostics
-  ! IN  flag to output interpolation diagnostics
-  subroutine set_interp_diag(interp_diag)
-    logical, intent(in) :: interp_diag
-    output_interpolation=interp_diag
-  end subroutine set_interp_diag
+subroutine set_interp_diag(interp_diag)
+logical, intent(in) :: interp_diag
+
+output_interpolation=interp_diag
+
+end subroutine set_interp_diag
 
     !------------------------------
     ! END PUBLIC ROUTINES
@@ -448,11 +447,6 @@ contains
     function has_valid_location(interpolator)
         type(coamps_interpolator), intent(in)  :: interpolator
         logical                                :: has_valid_location
-
-        write(*,*)'TJH has_valid_location: ', &
-                        interpolator%interp_level_type, &
-        is_valid_level_type(interpolator%interp_level_type), &
-            in_this_nest(interpolator%interp_point)
 
         ! Need to check the horizontal and vertical components separately
         if (is_valid_level_type(interpolator%interp_level_type) .and. &
@@ -1229,11 +1223,6 @@ contains
         real(kind=r8), parameter :: P00 = real(1000.0, kind=r8)
 
         ncalls = ncalls + 1
-!TJH    write(message,*) ncalls, shape(mean_exner_values), &
-!TJH                             minval(mean_exner_values), &
-!TJH                             minval(pert_exner_values)
-!TJH    call error_handler(E_MSG, routine, message)
-
         pressure = ((mean_exner_values + pert_exner_values) ** (Cp/R)) * P00
 
         ! That will calculate even if we have junk data - make sure
@@ -1642,8 +1631,6 @@ contains
     subroutine calculate_available_levels(interpolator)
         type(coamps_interpolator), intent(inout) :: interpolator
 
-        write(*,*)'TJH calculate_available_levels: vars_available',interpolator%vars_available
-
         ! A level is defined as available if every variable required
         ! for the interpolation is available at that level
         interpolator%levels_available(:) = all(interpolator%vars_available, &
@@ -1859,8 +1846,6 @@ contains
         else
             scaled_level = interpolator%interp_level
         end if
-
-        write(*,*)'TJH interp_level_in_available_range:',min_maxlevel_available, scaled_level, max_minlevel_available
 
         ! We're OK if the level is below the highest available and
         ! higher than the lowest available

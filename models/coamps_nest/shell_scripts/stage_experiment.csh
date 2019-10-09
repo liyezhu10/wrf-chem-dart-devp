@@ -61,9 +61,9 @@ switch ("`hostname`")
       set COPY = '/bin/cp --preserve=timestamps -v'
       breaksw
    case ch*
-      set DARTDIR = /glade/p/work/${USER}/DART/rma_coamps
-      set COAMPSDIR = /glade/p/work/${USER}/COAMPS
-      set ENSEMBLEDIR = /glade/p/work/${USER}/COAMPS_hdf5_files/Ensemble
+      set DARTDIR = /glade/work/${USER}/DART/rma_coamps
+      set COAMPSDIR = /glade/work/${USER}/COAMPS
+      set ENSEMBLEDIR = /glade/work/${USER}/COAMPS_hdf5_files/Ensemble2018
       set EXPERIMENTDIR = /glade/scratch/${USER}/COAMPS_cycling_test
       set COPY = '/bin/cp --preserve=timestamps -v'
       breaksw

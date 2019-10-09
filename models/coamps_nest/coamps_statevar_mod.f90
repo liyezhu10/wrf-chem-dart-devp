@@ -466,6 +466,11 @@ contains
           var_kind_name = 'QTY_EXNER_FUNCTION'
       end select
 
+      ! TJH: DART has to convert the HDF5 files to/from netcdf. 
+      ! There is a dependency when using inflation that requires
+      ! the mean state variables to be updated in the netCDF world.
+      ! The netCDF to HDF5 conversion is where the no-update must happen.
+
       var = new_state_variable(nest_number,                               &
                                var_kind_num_from_name(var_kind_name),     &
                                is_mean_field,                             &
