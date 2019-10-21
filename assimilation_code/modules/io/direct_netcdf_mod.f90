@@ -129,10 +129,9 @@ public :: read_transpose,            &
           nc_get_num_times
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = "$URL$"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 ! only a single MPI Task reads and writes reads the state variable,
 ! when using single_file_{input,output} = .true.
@@ -2027,7 +2026,7 @@ do ivar = 1,get_num_variables(domid)
      clamp_val = get_io_clamping_minval(domid, ivar)
      if ( clamp_val /= MISSING_R8 ) write(clamp_min,*)  clamp_val
     
-     write(msgstring,'(''min_val = '',A15,'' , max val = '',A15)') trim(clamp_min), trim(clamp_max)
+     write(msgstring,'(''min_val = '',A,'' , max val = '',A)') trim(clamp_min), trim(clamp_max)
      write(att_name,'(2A)')  'DART_clamp_', trim(get_variable_name(domid, ivar))
      call nc_check(nf90_put_att(ncFileID,NF90_GLOBAL,att_name, msgstring), &
                 'nc_write_global_att_clamping','DART_clamping_range')
@@ -3165,8 +3164,3 @@ end function find_start_point
 !> @}
 end module direct_netcdf_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
