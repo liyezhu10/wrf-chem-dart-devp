@@ -45,8 +45,7 @@ use netcdf
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=*), parameter :: source   = &
-   '$URL$'
+character(len=*), parameter :: source   = '$URL$'
 character(len=*), parameter :: revision = '$Revision$'
 character(len=*), parameter :: revdate  = '$Date$'
 
@@ -86,11 +85,11 @@ real(r8)           :: lon_bounds(2)   = (/   0.0_r8, 360.0_r8 /)
 real(r8)           :: lat_bounds(2)   = (/ -90.0_r8,  90.0_r8 /)
 
 ! representation error, which depends on model/data grid size, 
-real(r8) :: amsre_rep_error = 0.3  ! representativeness error, in percent
+real(r8) :: lprm_rep_error = 0.1  ! representativeness error variance
 
 namelist /LPRM_L3_to_obs_nml/ input_file, &
                           input_file_list, output_file, &
-                          debug, amsre_rep_error, &
+                          debug, lprm_rep_error, &
                           lon_bounds, lat_bounds
 
 ! start of executable code
@@ -174,15 +173,14 @@ fileloop: do      ! until out of files
  
    allocate(Latitude(       num_Latitudes))
    allocate(Longitude(      num_Longitudes))
-   allocate(soil_moisture_x(num_Latitudes,num_Longitudes))
-   allocate(sm_x_error(     num_Latitudes,num_Longitudes))
+   allocate(soil_moisture_x(num_Latitudes, num_Longitudes))
+   allocate(sm_x_error(     num_Latitudes, num_Longitudes))
 
    call getvar_real(ncid, 'Longitude', Longitude)
    call getvar_real(ncid, 'Latitude',  Latitude)
    call get_2Dshort_as_r8(ncid, 'soil_moisture_x', soil_moisture_x, smx_fill)
    call get_2Dshort_as_r8(ncid, 'sm_x_error',      sm_x_error,      smxe_fill)
    call nc_close_file(ncid)
-
 
    ! Daniel wants to convert from 
    !   soil_moisture_x:long_name = "Volumetric Soil Moisture from X-band" ;
@@ -218,7 +216,7 @@ fileloop: do      ! until out of files
       !------------------------------------------------------------------
       ! observation error is instrument plus representativeness
 
-      oerr  = sm_x_error(j,i) + amsre_rep_error
+      oerr  = sm_x_error(j,i) + lprm_rep_error
       vertvalue  = 0.005_r8  ! 5mm depth for X band
 
       if (soil_moisture_x(j,i) == smx_fill)  cycle LATLOOP
@@ -226,7 +224,7 @@ fileloop: do      ! until out of files
 
       ! If you want to geographically subset, do it here.
 
-        call create_3d_obs(lat, lon, vertvalue, VERTISHEIGHT, &
+      call create_3d_obs(lat, lon, vertvalue, VERTISHEIGHT, &
                 soil_moisture_x(j,i), LPRM_SOIL_MOISTURE, &
                 oerr, day, seconds, qc, obs)
 
@@ -318,11 +316,5 @@ get_time_from_name = set_date(year,month,day,hours,minutes,seconds)
 end function get_time_from_name
 
 
-
 end program LPRM_L3_to_obs
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

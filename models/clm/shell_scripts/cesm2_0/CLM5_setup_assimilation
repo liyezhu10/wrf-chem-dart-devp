@@ -116,6 +116,7 @@ endif
 ./xmlchange REST_N=${stop_n}
 
 ./xmlchange CALENDAR=GREGORIAN
+./xmlchange CIME_OUTPUT_ROOT=${cime_output_root}
 ./xmlchange EXEROOT=${exeroot}
 ./xmlchange RUNDIR=${rundir}
 
@@ -550,7 +551,3 @@ cat CESM_instructions.txt
 
 exit 0
 
-# <next few lines under version control, do not edit>
-# $URL$
-# $Revision$
-# $Date$

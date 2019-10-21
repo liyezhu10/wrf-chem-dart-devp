@@ -269,6 +269,10 @@
    first_obs_seconds = DART1S,
    last_obs_days     = DARTND,
    last_obs_seconds  = DARTNS,
+   min_lon           = 75
+   max_lon           = 105
+   min_lat           = 30
+   max_lat           = 45
    edit_qc_metadata  = .true.,
    new_qc_metadata   = 'Original QC',
 /

@@ -9,18 +9,14 @@
 # many times, the HDF libs and the NETCDF libs are in the same place ...
 
 set    HDFDIR = ${NETCDF}
+set    HDFDIR = /Users/thoar/intel_19.0.3
 set HDFINCDIR = "-I${HDFDIR}/include"
 set HDFLIBDIR = "-L${HDFDIR}/lib"
-set   HDFLIBS = "-lhdf5_hl -lhdf5 -lhdf5hl_fortran -lhdf5_fortran"
+set   HDFLIBS = "-lhdf5 -lhdf5_fortran -lhdf5_hl -lhdf5hl_fortran"
 
 ../../../../build_templates/mkmf -p SMAP_L2_to_obs -t ../../../../build_templates/mkmf.template \
  -l "${HDFINCDIR} ${HDFLIBDIR} ${HDFLIBS}" \
  -a "../../../.." path_names_SMAP_L2_to_obs
 
 exit $status
-
-# <next few lines under version control, do not edit>
-# $URL$
-# $Revision$
-# $Date$
 

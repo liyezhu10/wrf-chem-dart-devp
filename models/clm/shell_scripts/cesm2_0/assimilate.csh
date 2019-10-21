@@ -64,10 +64,9 @@ echo "valid time of model is $LND_YEAR $LND_MONTH $LND_DAY $LND_SECONDS (seconds
 echo "valid time of model is $LND_YEAR $LND_MONTH $LND_DAY $LND_HOUR (hours)"
 
 #=========================================================================
-# Block 2: Populate a run-time directory with the input needed to run DART.
+# Block 2: Get observation sequence file ... or die right away.
 #=========================================================================
 
-# Get observation sequence file ... or die right away.
 # The observation file names have a time that matches the stopping time of CLM.
 #
 # The CLM observations are stored in two sets of directories.
@@ -142,7 +141,7 @@ endif
 # I am not going to worry about posterior inflation files.
 
 # Should the setup script just create input inflation files so we don't 
-# have to screw with changing the namelist after the first execution
+# have to mess with changing the namelist after the first execution
 # (which traditionally reads from the namelist, not the file)
 
 # If the file exists, just link to the new expected name.
@@ -246,7 +245,7 @@ if (  -s   ${LND_VEC_HISTORY_FILENAME} ) then
 endif
 
 echo "`date` -- BEGIN FILTER"
-${LAUNCHCMD} ${EXEROOT}/filter || exit 6
+${MPI_RUN_COMMAND} ${EXEROOT}/filter || exit 6
 echo "`date` -- END FILTER"
 
 # Tag the output with the valid time of the model state.
@@ -280,9 +279,4 @@ ${MOVE} dart_log.out     clm_dart_log.${LND_DATE_EXT}.out
 echo "`date` -- END CLM_ASSIMILATE"
 
 exit 0
-
-# <next few lines under version control, do not edit>
-# $URL$
-# $Revision$
-# $Date$
 

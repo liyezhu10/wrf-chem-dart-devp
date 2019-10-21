@@ -23,7 +23,7 @@ use     mpi_utilities_mod, only : initialize_mpi_utilities, finalize_mpi_utiliti
 use          location_mod, only : location_type, set_location, write_location, &
                                   VERTISHEIGHT
 
-use          obs_kind_mod, only : get_name_for_quantity
+use          obs_kind_mod, only : get_name_for_quantity, get_index_for_quantity
 
 use      obs_sequence_mod, only : static_init_obs_sequence
 
@@ -58,10 +58,9 @@ use  test_interpolate_mod, only : test_interpolate_single, &
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = "$URL$"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 integer, parameter :: MAX_TESTS = 10
 
@@ -915,8 +914,3 @@ end subroutine left_just_i8
 
 end program model_mod_check
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

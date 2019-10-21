@@ -93,9 +93,10 @@ setenv SourceModDir   ~/${cesmtag}/SourceMods
 setenv cesmdata     /glade/p/cesmdata/cseg/inputdata
 setenv cesmroot     /glade/work/${USER}/CESM/$cesmtag
 setenv caseroot     /glade/work/${USER}/cases/$cesmtag/${CASE}
-setenv rundir       /glade/scratch/${USER}/$cesmtag/${CASE}/run
-setenv exeroot      /glade/scratch/${USER}/$cesmtag/${CASE}/bld
-setenv archdir      /glade/scratch/${USER}/$cesmtag/${CASE}/archive
+setenv cime_output_root /glade/scratch/${USER}/$cesmtag/${CASE}
+setenv rundir       ${cime_output_root}/run
+setenv exeroot      ${cime_output_root}/bld
+setenv archdir      ${cime_output_root}/archive
 
 # ==============================================================================
 # Set the variables needed for the DART configuration.
@@ -215,7 +216,3 @@ set REMOVE = 'rm -rf'
 
 exit 0
 
-# <next few lines under version control, do not edit>
-# $URL$
-# $Revision$
-# $Date$

@@ -93,13 +93,11 @@ if ( verLessThan('matlab','8.4') )
 else
     htrans = hgtransform;
     htrans.Matrix = makehgtform('translate',[0 0 zlevel]);
-    [~,h] = contourf(x,y,elev+cmin,[cmin cmin],'k-','Parent',htrans);
+%     [~,h] = contourf(x,y,elev+cmin,[cmin cmin],'k-','Parent',htrans);
+    [~,h] = contour(x,y,elev+cmin,[cmin cmin],'k-','Parent',htrans);
+    
     set(gca,'CLim',clim)
 end
     
 if (orgholdstate == 0), hold off; end;
 
-% <next few lines under version control, do not edit>
-% $URL$
-% $Revision$
-% $Date$

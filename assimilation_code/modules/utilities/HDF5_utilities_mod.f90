@@ -11,6 +11,7 @@ use    utilities_mod, only : register_module, E_MSG, E_ERR, error_handler
 use time_manager_mod, only : time_type, operator(>=), set_time, get_time
 
 use HDF5
+# or maybe .... include HDF5
 
 implicit none
 private
@@ -27,8 +28,7 @@ public :: h5_open, H5_CRTDAT, H5_RDWT, &
 !end interface
 
 ! version controlled file description for error handling, do not edit
-character(len=*), parameter :: source   = &
-   "$URL$"
+character(len=*), parameter :: source   = "$URL$"
 character(len=*), parameter :: revision = "$Revision$"
 character(len=*), parameter :: revdate  = "$Date$"
 
@@ -330,11 +330,5 @@ call h5close_f(error)
 end subroutine H5_RDWT
 
 
-
 end module HDF5_utilities_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
