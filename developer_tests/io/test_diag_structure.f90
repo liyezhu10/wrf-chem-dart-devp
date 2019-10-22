@@ -18,6 +18,7 @@
 !>   * Test that you can call create and destroy multiple times without error.
 !>   * Check that you can add_domains until you read max_num_domains then the code
 !>     should error out (so you can't overwrite the diagnostic domain).
+
 program test_diag_structure
 
 use types_mod,           only : i8

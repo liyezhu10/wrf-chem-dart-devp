@@ -4,8 +4,6 @@
 !
 ! DART $Id$
 
-<<<<<<< HEAD
-=======
 !> program intended to create a set of observations located on
 !> a regular grid.  obs have no data values - the output obs_seq
 !> (suggested name obs_seq.in) must go through a program like
@@ -14,21 +12,11 @@
 !> this code doesn't look like it was very polished; seems
 !> quick and dirty.
 
->>>>>>> master
 program create_obs_grid
 
 use    utilities_mod, only : register_module, open_file, close_file, &
                              initialize_utilities, finalize_utilities
 use obs_sequence_mod, only : obs_sequence_type, interactive_obs, write_obs_seq, &
-<<<<<<< HEAD
-                             static_init_obs_sequence
-use  assim_model_mod, only : static_init_assim_model
-use location_mod
-use obs_def_mod
-use obs_kind_mod
-use obs_sequence_mod
-use time_manager_mod
-=======
                              static_init_obs_sequence, obs_type, init_obs_sequence, &
                              set_copy_meta_data, init_obs, destroy_obs
 use  assim_model_mod, only : static_init_assim_model
@@ -37,7 +25,6 @@ use     location_mod, only : location_type, interactive_location
 
 use obs_def_mod
 use obs_kind_mod
->>>>>>> master
 
 implicit none
 
@@ -176,12 +163,3 @@ end function create_grid
 
 end program create_obs_grid
 
-<<<<<<< HEAD
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
-
-=======
->>>>>>> master

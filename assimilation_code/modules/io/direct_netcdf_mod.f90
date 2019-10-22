@@ -74,6 +74,9 @@ use utilities_mod,        only : error_handler, file_to_text, &
                                  find_textfile_dims, file_exist, &
                                  E_MSG, E_ALLMSG, E_ERR, E_DBG, E_WARN
 
+!>@todo FIXME Fully implement the rest of the routines in netcdf_utilities_mod.
+! This will change all the error messages.
+
 use netcdf_utilities_mod, only : nc_check
 
 use mpi_utilities_mod,    only : task_count, send_to, receive_from, my_task_id, &
@@ -101,10 +104,6 @@ use io_filenames_mod,     only : get_restart_filename, inherit_copy_units, &
                                  query_write_copy, force_copy_back, file_info_type, &
                                  netcdf_file_type, READ_COPY, WRITE_COPY, &
                                  noutput_state_variables
-
-!>@todo use more of the netcdf_utilities. This will require extending some of
-!>      the routines ... nc_create_file will have to accept a 'mode', for example.
-use netcdf_utilities_mod, only : nc_check
 
 use assim_model_mod,      only : get_model_size, read_model_time, write_model_time
 
@@ -293,22 +292,22 @@ if (my_task_id() == 0) then
    fname          = get_restart_filename(file_handle%stage_metadata, 1, 1)
    ncFileID%fname = fname
    call nc_check(nf90_create(path=fname, cmode=createmode, ncid=ncFileID%ncid), &
-                 'initialize_single_file_io', 'create',fname)
+                 'initialize_single_file_io', 'create '//trim(fname))
 
    ncFileID%ncid = ncFileID%ncid
    
    ! Define the dimensions
    call nc_check(nf90_def_dim(ncid=ncFileID%ncid, &
                  name="metadatalength", len=metadata_length, dimid=MetaDataDimID), &
-                 'initialize_single_file_io', 'def_dim metadatalength', fname)
+                 'initialize_single_file_io', 'def_dim metadatalength '//trim(fname))
    
    call nc_check(nf90_def_dim(ncid=ncFileID%ncid, &
                  name="member", len=num_output_ens, dimid=MemberDimID), &
-                 'initialize_single_file_io', 'def_dim member', fname)
+                 'initialize_single_file_io', 'def_dim member '//trim(fname))
    
    call nc_check(nf90_def_dim(ncid=ncFileID%ncid, name="time", &
                  len=nf90_unlimited, dimid=TimeDimID), &
-                 'initialize_single_file_io', 'def_dim time ',fname)
+                 'initialize_single_file_io', 'def_dim time '//trim(fname))
 
    !----------------------------------------------------------------------------
    ! Find dimensions of namelist file ... will save it as a variable.
@@ -328,7 +327,7 @@ if (my_task_id() == 0) then
    
    call nc_check(nf90_def_dim(ncid=ncFileID%ncid, &
                  name="NMLlinelen", len=LEN(textblock(1)), dimid=linelenDimID), &
-                 'initialize_single_file_io', 'def_dim NMLlinelen',fname)
+                 'initialize_single_file_io', 'def_dim NMLlinelen '//trim(fname))
    
    call nc_check(nf90_def_dim(ncid=ncFileID%ncid, &
                  name="NMLnlines", len=nlines, dimid=nlinesDimID), &

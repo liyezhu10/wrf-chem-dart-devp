@@ -160,8 +160,10 @@ foreach quickb ( `find . -name quickbuild.csh -print` )
          # read from /dev/null so it errors out and doesn't just sit there waiting for input
          if ( -f ../work/${PROG}.in ) then
            ( ./$PROG < ../work/${PROG}.in > ${LOGDIR}/runlog.${project}.out ) || set FAILURE = 1
+           echo
          else
            ( ./$PROG < /dev/null > ${LOGDIR}/runlog.${project}.out ) || set FAILURE = 1
+           echo
          endif
          if ( $FAILURE ) then
             echo "ERROR - unsuccessful run of $PROG at "`date`

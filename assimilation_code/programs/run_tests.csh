@@ -4,21 +4,12 @@
 # by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-<<<<<<< HEAD
-# DART $Id$
-#
-=======
->>>>>>> master
 # build and test all the programs given in the list.
 #
 # usage: [ -mpi | -nompi ] [ -mpicmd name_of_mpi_launch_command ]
 #
 #----------------------------------------------------------------------
 
-<<<<<<< HEAD
-
-=======
->>>>>>> master
 set usingmpi=no
 set MPICMD=""
 set LOGDIR=`pwd`/testing_logs
@@ -90,11 +81,7 @@ echo "Running DART programs test on $host"
 
 #----------------------------------------------------------------------
 
-<<<<<<< HEAD
-set programdir = `pwd`
-=======
 set PARENTDIR = `pwd`
->>>>>>> master
 
 # set the list of programs to include here
 
@@ -125,21 +112,13 @@ set PARENTDIR = `pwd`
 
 
 # expand these tests.
-<<<<<<< HEAD
-set DO_THESE_PROGRAMS = ( \
-=======
 set DO_THESE_DIRECTORIES = ( \
->>>>>>> master
   compare_states \
   system_simulation \
 )
 
 #----------------------------------------------------------------------
-<<<<<<< HEAD
-# Compile all executables for each program.
-=======
 # Compile all executables for each directory.
->>>>>>> master
 #----------------------------------------------------------------------
 
 echo
@@ -152,41 +131,21 @@ echo
 
 mkdir -p $LOGDIR
 \rm -f $LOGDIR/*
-<<<<<<< HEAD
-echo putting build and run logs in $LOGDIR
-
-@ programnum = 0
-
-foreach PROGRAM ( $DO_THESE_PROGRAMS ) 
-=======
 echo "build and run logs are in: $LOGDIR"
 
 
 @ counter = 0
 
 foreach PROGRAMDIRECTORY ( $DO_THESE_DIRECTORIES ) 
->>>>>>> master
     
     echo
     echo
     echo "=================================================================="
-<<<<<<< HEAD
-    echo "Compiling $PROGRAM starting at "`date`
-=======
     echo "Compiling $PROGRAMDIRECTORY starting at "`date`
->>>>>>> master
     echo "=================================================================="
     echo
     echo
 
-<<<<<<< HEAD
-    cd ${programdir}/${PROGRAM}/work 
-    set FAILURE = 0
-
-    ( ./quickbuild.csh ${QUICKBUILD_ARG} > ${LOGDIR}/buildlog.$PROGRAM.out ) || set FAILURE = 1
-
-    @ programnum = $programnum + 1
-=======
     cd ${PARENTDIR}/${PROGRAMDIRECTORY}/work 
     set FAILURE = 0
 
@@ -194,15 +153,11 @@ foreach PROGRAMDIRECTORY ( $DO_THESE_DIRECTORIES )
     echo
 
     @ counter = $counter + 1
->>>>>>> master
 
     echo
     echo
     if ( $FAILURE ) then
       echo "=================================================================="
-<<<<<<< HEAD
-      echo "ERROR - unsuccessful build of $PROGRAM at "`date`
-=======
       echo "ERROR - unsuccessful build of $PROGRAMDIRECTORY at "`date`
       switch ( $PROGRAMDIRECTORY )
          case system_simulation
@@ -215,18 +170,13 @@ foreach PROGRAMDIRECTORY ( $DO_THESE_DIRECTORIES )
             echo "unexpected error"
          breaksw
       endsw
->>>>>>> master
       echo "=================================================================="
       echo
       echo
       continue
     else
       echo "=================================================================="
-<<<<<<< HEAD
-      echo "End of successful build of $PROGRAM at "`date`
-=======
       echo "End of successful build of $PROGRAMDIRECTORY at "`date`
->>>>>>> master
       echo "=================================================================="
       echo
       echo
@@ -236,11 +186,7 @@ foreach PROGRAMDIRECTORY ( $DO_THESE_DIRECTORIES )
 #      echo
 #      echo
 #      echo "=================================================================="
-<<<<<<< HEAD
-#      echo "Running tests for $PROGRAM starting at "`date`
-=======
 #      echo "Running tests for $PROGRAMDIRECTORY starting at "`date`
->>>>>>> master
 #      echo "=================================================================="
 #      echo
 #      echo
@@ -250,13 +196,6 @@ foreach PROGRAMDIRECTORY ( $DO_THESE_DIRECTORIES )
 #           \rm -f *.o *.mod
 #           \rm -f Makefile input.nml.*_default .cppdefs
 #
-<<<<<<< HEAD
-            set FAILURE = 0
-#           set PROG = `echo $TARGET | sed -e 's#mkmf_##'`
-#           echo "++++++++++++++++++"
-#           echo Starting $PROG
-#           ( ${MPICMD} ./$PROG  > ${LOGDIR}/runlog.$PROG.out ) || set FAILURE = 1
-=======
 #           set FAILURE = 0
 #           set PROG = `echo $TARGET | sed -e 's#mkmf_##'`
 #           echo "++++++++++++++++++"
@@ -266,7 +205,6 @@ foreach PROGRAMDIRECTORY ( $DO_THESE_DIRECTORIES )
 #           else
 #              (           ./$PROG  > ${LOGDIR}/runlog.$PROG.out ) || set FAILURE = 1
 #           endif
->>>>>>> master
 #           echo Finished $PROG
 #           echo "++++++++++++++++++"
 #           echo
@@ -278,11 +216,7 @@ foreach PROGRAMDIRECTORY ( $DO_THESE_DIRECTORIES )
 #      echo
 #      echo
 #      echo "=================================================================="
-<<<<<<< HEAD
-#      echo "Done with tests of $PROGRAM at "`date`
-=======
 #      echo "Done with tests of $PROGRAMDIRECTORY at "`date`
->>>>>>> master
 #      echo "=================================================================="
 #      echo
 #      echo
@@ -293,11 +227,7 @@ foreach PROGRAMDIRECTORY ( $DO_THESE_DIRECTORIES )
 end
 
 echo
-<<<<<<< HEAD
-echo $programnum programs built.
-=======
 echo "$counter directories built."
->>>>>>> master
 echo
 
 echo
@@ -309,10 +239,3 @@ echo
 echo
 exit 0
 
-<<<<<<< HEAD
-# <next few lines under version control, do not edit>
-# $URL$
-# $Revision$
-# $Date$
-=======
->>>>>>> master
