@@ -539,11 +539,6 @@ integer, parameter, public :: &
   QTY_CWP_PATH                      = 463, &
   QTY_CWP_PATH_ZERO                 = 464
 
-! WACCM
-integer, parameter, public :: &
-  QTY_ION_O_MIXING_RATIO            = 365, &
-  QTY_ATOMIC_H_MIXING_RATIO         = 366
-
 ! max_defined_quantities is private to this module.  see comment below near the max_obs_specific
 ! declaration for more info about publics and private values.
 

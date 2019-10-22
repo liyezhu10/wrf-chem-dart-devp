@@ -101,13 +101,12 @@ public :: filter_sync_keys_time, &
           filter_main
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = "$URL$"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 ! Some convenient global storage items
-character(len=512)      :: msgstring
+character(len=512) :: msgstring, string2, string3
 
 integer :: trace_level, timestamp_level
 
@@ -400,9 +399,9 @@ ds = do_smoothing()
 if (allow_missing_clm) then
    write(msgstring,*) '&filter_nml "allow_missing_clm" is deprecated.'
    write(string2,*) 'Please specify desired behavior directly in the model_mod'
-   write(string2,*) 'by calling "options_mod:set_missing_ok_status()".'
+   write(string3,*) 'by calling "options_mod:set_missing_ok_status()".'
    call error_handler(E_MSG,'filter_main:', msgstring, &
-              source, revision, revdate, text2=string2)
+              source, revision, revdate, text2=string2, text3=string3)
 endif
 
 call set_missing_ok_status(allow_missing_clm)
@@ -2754,8 +2753,3 @@ end subroutine test_obs_copies
 !-------------------------------------------------------------------
 end module filter_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
