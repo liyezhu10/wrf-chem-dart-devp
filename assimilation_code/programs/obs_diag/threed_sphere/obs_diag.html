@@ -178,78 +178,60 @@ ncdump -f F -v CopyMetaData obs_diag_output.nc
 </div>
 <br />
 <br />
-<table width="95%">
+<table width="90%">
 <tr><td valign="top"><b>Nposs</b></td>
-    <td colspan=2>The number of observations available to be assimilated.</td></tr>
+    <td>The number of observations available to be assimilated.</td></tr>
 <tr><td valign="top"><b>Nused</b></td>
-    <td colspan=2>The number of observations that were assimilated.</td></tr>
+    <td>The number of observations that were assimilated.</td></tr>
 <tr><td valign="top"><b>NbadUV</b></td>
-    <td colspan=2>the number of velocity observations that had a matching component
+    <td>the number of velocity observations that had a matching component
         that was not assimilated;</td></tr>
 <tr><td valign="top"><b>NbadLV</b></td>
-    <td colspan=2>the number of observations that were above or below the highest
+    <td>the number of observations that were above or below the highest
         or lowest model level, respectively;</td></tr>
 <tr><td valign="top"><b>rmse</b></td>
-    <td colspan=2>The root-mean-squared error (the horizontal wind components
+    <td>The root-mean-squared error (the horizontal wind components
         are also used to calculate the vector wind velocity
         and its RMS error).</td></tr>
 <tr><td valign="top"><b>bias</b></td>
-    <td colspan=2>The simple sum of forecast - observation. The bias of the
+    <td>The simple sum of forecast - observation. The bias of the
         horizontal wind speed (not velocity) is also computed.</td></tr>
 <tr><td valign="top"><b>spread</b></td>
-    <td colspan=2>The standard deviation of the univariate obs.
+    <td>The standard deviation of the univariate obs.
         DART does not exploit the bivariate nature of U,V winds
         and so the spread of the horizontal wind is defined as
         the sum of the spreads of the U and V components.</td></tr>
 <tr><td valign="top"><b>totalspread&nbsp;&nbsp;&nbsp;</b></td>
-    <td colspan=2>The total standard deviation of the estimate. We pool the
+    <td>The total standard deviation of the estimate. We pool the
         ensemble variance of the observation plus the observation error
         variance and take the square root.</td></tr>
 <tr><td valign="top"><b>NbadDARTQC&nbsp;&nbsp;&nbsp;</b></td>
-    <td colspan=2>the number of observations that had a DART QC value
+    <td>the number of observations that had a DART QC value
         (&gt; 1 for a prior, &gt; 3 for a posterior)</td></tr>
 <tr><td valign="top"><b>observation</b></td>
-    <td colspan=2>the mean of the observation values</td></tr>
+    <td>the mean of the observation values</td></tr>
 <tr><td valign="top"><b>ens_mean</b></td>
-    <td colspan=2>the ensemble mean of the model estimates of the observation values</td></tr>
+    <td>the ensemble mean of the model estimates of the observation values</td></tr>
 <tr><td valign="top"><b>N_trusted</b></td>
-    <td colspan=2>the number of implicitly trusted observations, regardless of DART QC</td></tr>
-
+    <td>the number of implicitly trusted observations, regardless of DART QC</td></tr>
 <tr><td valign="top"><b>N_DARTqc_0</b></td>
-    <td>number of observations that had a DART QC value of 0</td>
-    <td>observation assimilated</td></tr>
-
+    <td>the number of observations that had a DART QC value of 0</td></tr>
 <tr><td valign="top"><b>N_DARTqc_1</b></td>
-    <td>number of observations that had a DART QC value of 1</td>
-    <td>observation evaluated only (because of namelist settings)</td></tr>
-
+    <td>the number of observations that had a DART QC value of 1</td></tr>
 <tr><td valign="top"><b>N_DARTqc_2</b></td>
-    <td>number of observations that had a DART QC value of 2</td>
-    <td>assimilated, but the posterior forward operator failed</td></tr>
-
+    <td>the number of observations that had a DART QC value of 2</td></tr>
 <tr><td valign="top"><b>N_DARTqc_3</b></td>
-    <td>number of observations that had a DART QC value of 3</td>
-    <td>evaluated only, but the posterior forward operator failed</td></tr>
-
+    <td>the number of observations that had a DART QC value of 3</td></tr>
 <tr><td valign="top"><b>N_DARTqc_4</b></td>
-    <td>number of observations that had a DART QC value of 4</td>
-    <td>prior forward operator failed</td></tr>
-
+    <td>the number of observations that had a DART QC value of 4</td></tr>
 <tr><td valign="top"><b>N_DARTqc_5</b></td>
-    <td>number of observations that had a DART QC value of 5</td>
-    <td>not used because observation type not listed in namelist</td></tr>
-
+    <td>the number of observations that had a DART QC value of 5</td></tr>
 <tr><td valign="top"><b>N_DARTqc_6</b></td>
-    <td>number of observations that had a DART QC value of 6</td>
-    <td>rejected because incoming observation QC too large</td></tr>
-
+    <td>the number of observations that had a DART QC value of 6</td></tr>
 <tr><td valign="top"><b>N_DARTqc_7</b></td>
-    <td>number of observations that had a DART QC value of 7</td>
-    <td>rejected because of a failed outlier threshold test</td></tr>
-
+    <td>the number of observations that had a DART QC value of 7</td></tr>
 <tr><td valign="top"><b>N_DARTqc_8</b></td>
-    <td>number of observations that had a DART QC value of 8</td>
-    <td>vertical conversion failed</td></tr>
+    <td>the number of observations that had a DART QC value of 8</td></tr>
 </table>
 
 <P>
@@ -579,10 +561,10 @@ If you'd like to change that see the routine <em class="routine">Rmidpoints2edge
 <TR><TD> lonlim2 </TD>
     <TD> real, dimension(50) </TD>
     <TD>Easternmost longitudes of each of the regions.
-        If any of these values is <b>less than</b> the
+        <em class="new">If any of these values is <b>less than</b> the
 	westernmost values, it defines a region that spans the prime meridian.
-	e.g. a specification of <em class=code>lonlim1 = 330 , lonlim2 = 50</em> 
-        could identify a region like "Africa".
+	</em> e.g. a specification of <em class=code>lonlim1 = 330 ,
+	lonlim2 = 50</em> could identify a region like "Africa".
 </TD></TR>
 
 <TR><TD> latlim1 </TD>

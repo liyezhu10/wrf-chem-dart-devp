@@ -285,8 +285,12 @@ integer, parameter, public :: &
     QTY_STEM_NITROGEN               = 126, &
     QTY_LEAF_NITROGEN               = 127, &
     QTY_WATER_TABLE_DEPTH           = 128, &
-    QTY_FRAC_PHOTO_AVAIL_RADIATION  = 129, &   ! generic "FPAR"
-    QTY_TOTAL_WATER_STORAGE         = 130
+    QTY_FRAC_PHOTO_AVAIL_RADIATION  = 129, &
+    QTY_TOTAL_WATER_STORAGE         = 130, &
+    QTY_SNOW_TEMPERATURE            = 131, &
+    QTY_SURFACE_RUNOFF              = 132, &
+    QTY_UNDER_RUNOFF                = 133, &
+    QTY_AQUIFER_WATER               = 134
 
 integer, parameter, public :: &
     QTY_NEUTRON_INTENSITY           = 140, &
@@ -388,13 +392,20 @@ integer, parameter, public :: &
   QTY_VELOCITY_VERTICAL_N4S         = 283, &
   QTY_VELOCITY_VERTICAL_NO          = 284, &
   QTY_GND_GPS_VTEC                  = 285, &
-  QTY_DENSITY_ION_OP                = 286
+  QTY_DENSITY_ION_OP                = 286, &
+  QTY_TOTAL_ELECTRON_COUNT          = 287
 
-! WRF-Hydro (James McCreight)
+!! WRF_Hydro specific observations/states
 integer, parameter, public :: &
-  QTY_STREAMFLOW                    = 290, &
-  QTY_SURFACE_HEAD                  = 291
-
+  QTY_STREAM_FLOW                   = 290, &
+  QTY_SURFACE_HEAD                  = 291, &
+  QTY_DEEP_GROUNDWATER_LEVEL        = 292, &
+  QTY_STREAM_HEIGHT                 = 293, &
+  QTY_GROUND_SURF_TEMPERATURE       = 294, &
+  QTY_CANOPY_TEMPERATURE            = 295, &
+  QTY_BUCKET_MULTIPLIER             = 296, &
+  QTY_RUNOFF_MULTIPLIER             = 297
+ 
 ! more land kinds
 integer, parameter, public :: &
   QTY_BRIGHTNESS_TEMPERATURE        = 300, &
@@ -460,7 +471,7 @@ integer, parameter, public :: &
   QTY_SNOW_DEPTH                    = 355, &
   QTY_SOLAR_INDUCED_FLUORESCENCE    = 356
 
-! WACCAM
+! WACCM
 integer, parameter, public :: &
   QTY_ION_O_MIXING_RATIO            = 365, &
   QTY_ATOMIC_H_MIXING_RATIO         = 366
@@ -527,6 +538,11 @@ integer, parameter, public :: &
 integer, parameter, public :: &
   QTY_CWP_PATH                      = 463, &
   QTY_CWP_PATH_ZERO                 = 464
+
+! WACCM
+integer, parameter, public :: &
+  QTY_ION_O_MIXING_RATIO            = 365, &
+  QTY_ATOMIC_H_MIXING_RATIO         = 366
 
 ! max_defined_quantities is private to this module.  see comment below near the max_obs_specific
 ! declaration for more info about publics and private values.
@@ -792,6 +808,10 @@ obs_kind_names(127) = obs_kind_type(QTY_LEAF_NITROGEN         ,'QTY_LEAF_NITROGE
 obs_kind_names(128) = obs_kind_type(QTY_WATER_TABLE_DEPTH     ,'QTY_WATER_TABLE_DEPTH')
 obs_kind_names(129) = obs_kind_type(QTY_FRAC_PHOTO_AVAIL_RADIATION,'QTY_FRAC_PHOTO_AVAIL_RADIATION')
 obs_kind_names(130) = obs_kind_type(QTY_TOTAL_WATER_STORAGE   ,'QTY_TOTAL_WATER_STORAGE')
+obs_kind_names(131) = obs_kind_type(QTY_SNOW_TEMPERATURE      ,'QTY_SNOW_TEMPERATURE')
+obs_kind_names(132) = obs_kind_type(QTY_SURFACE_RUNOFF        ,'QTY_SURFACE_RUNOFF')
+obs_kind_names(133) = obs_kind_type(QTY_UNDER_RUNOFF          ,'QTY_UNDER_RUNOFF')
+obs_kind_names(134) = obs_kind_type(QTY_AQUIFER_WATER         ,'QTY_AQUIFER_WATER')
 
 obs_kind_names(140) = obs_kind_type(QTY_NEUTRON_INTENSITY     ,'QTY_NEUTRON_INTENSITY')
 obs_kind_names(141) = obs_kind_type(QTY_CANOPY_WATER          ,'QTY_CANOPY_WATER')
@@ -873,6 +893,16 @@ obs_kind_names(283) = obs_kind_type(QTY_VELOCITY_VERTICAL_N4S ,'QTY_VELOCITY_VER
 obs_kind_names(284) = obs_kind_type(QTY_VELOCITY_VERTICAL_NO  ,'QTY_VELOCITY_VERTICAL_NO')
 obs_kind_names(285) = obs_kind_type(QTY_GND_GPS_VTEC          ,'QTY_GND_GPS_VTEC')
 obs_kind_names(286) = obs_kind_type(QTY_DENSITY_ION_OP        ,'QTY_DENSITY_ION_OP')
+obs_kind_names(287) = obs_kind_type(QTY_TOTAL_ELECTRON_COUNT  ,'QTY_TOTAL_ELECTRON_COUNT')
+
+obs_kind_names(290) = obs_kind_type(QTY_STREAM_FLOW             ,'QTY_STREAM_FLOW')
+obs_kind_names(291) = obs_kind_type(QTY_SURFACE_HEAD            ,'QTY_SURFACE_HEAD')
+obs_kind_names(292) = obs_kind_type(QTY_DEEP_GROUNDWATER_LEVEL  ,'QTY_DEEP_GROUNDWATER_LEVEL')
+obs_kind_names(293) = obs_kind_type(QTY_STREAM_HEIGHT           ,'QTY_STREAM_HEIGHT')
+obs_kind_names(294) = obs_kind_type(QTY_GROUND_SURF_TEMPERATURE ,'QTY_GROUND_SURF_TEMPERATURE')
+obs_kind_names(295) = obs_kind_type(QTY_CANOPY_TEMPERATURE      ,'QTY_CANOPY_TEMPERATURE')
+obs_kind_names(296) = obs_kind_type(QTY_BUCKET_MULTIPLIER       ,'QTY_BUCKET_MULTIPLIER')
+obs_kind_names(297) = obs_kind_type(QTY_RUNOFF_MULTIPLIER       ,'QTY_RUNOFF_MULTIPLIER')
 
 obs_kind_names(300) = obs_kind_type(QTY_BRIGHTNESS_TEMPERATURE     ,'QTY_BRIGHTNESS_TEMPERATURE')
 obs_kind_names(301) = obs_kind_type(QTY_VEGETATION_TEMPERATURE     ,'QTY_VEGETATION_TEMPERATURE')
@@ -1024,7 +1054,7 @@ endif
 
 if (do_output() .and. (num_kind_assimilate          > 0 .or. &
                        num_kind_evaluate            > 0 .or.  &
-                       num_kind_use_precomputed_FOs > 0 )) then
+                       num_kind_use_precomputed_FOs > 0 )) then  
 
    write(*, *)
    write(*, *) '--------------------------------------------------------'

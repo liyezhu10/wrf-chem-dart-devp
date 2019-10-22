@@ -672,8 +672,11 @@ end subroutine handle_filenames
 !---------------------------------------------------------------------
 end program obs_info
 
+<<<<<<< HEAD
 ! <next few lines under version control, do not edit>
 ! $URL$
 ! $Id$
 ! $Revision$
 ! $Date$
+=======
+>>>>>>> master

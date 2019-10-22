@@ -2,6 +2,7 @@
 ! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 
+<<<<<<< HEAD
 program obs_total_error
 
 ! you can get more info by running the obs_diag program, but this
@@ -10,6 +11,15 @@ program obs_total_error
 ! through both perfect_model_obs and filter, so it has both a copy
 ! of the 'truth' as well as 'ensemble mean' and 'ensemble spread'.
 
+=======
+!> Prints out a quick summary number of the total error in the mean
+!> and spread.  This should be run on an obs_seq file which has been
+!> through both perfect_model_obs and filter, so it has both a copy
+!> of the 'truth' as well as 'ensemble mean' and 'ensemble spread'.
+!> You can get more info by running the obs_diag program 
+
+program obs_total_error
+>>>>>>> master
 
 use        types_mod, only : r8, missing_r8, metadatalength, obstypelength
 use    utilities_mod, only : register_module, initialize_utilities,            &
@@ -46,7 +56,11 @@ use obs_sequence_mod, only : obs_sequence_type, obs_type, write_obs_seq,       &
 implicit none
 
 ! version controlled file description for error handling, do not edit
+<<<<<<< HEAD
 character(len=128), parameter :: &
+=======
+character(len=*), parameter :: &
+>>>>>>> master
    source   = "$URL$", &
    revision = "$Revision$", &
    revdate  = "$Date$"
@@ -603,9 +617,12 @@ end function get_dartcopy_index
 !---------------------------------------------------------------------
 end program obs_total_error
 
+<<<<<<< HEAD
 ! <next few lines under version control, do not edit>
 ! $URL$
 ! $Id$
 ! $Revision$
 ! $Date$
 
+=======
+>>>>>>> master

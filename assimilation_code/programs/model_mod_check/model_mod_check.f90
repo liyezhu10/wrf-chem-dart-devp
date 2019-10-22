@@ -4,11 +4,10 @@
 !
 ! $Id$
 
-!----------------------------------------------------------------------
-!> purpose: test model_mod routines.  this version works for models
-!> with any location type.  depends on a location-specific module
+!> Tests model_mod routines. Very useful when adding a new model.
+!> This version works for models with any location type.
+!> Depends on a location-specific module
 !> for test_interpolate_single and test_interpolate_range.
-!----------------------------------------------------------------------
 
 program model_mod_check
 
@@ -48,6 +47,7 @@ use distributed_state_mod, only : create_state_window, free_state_window
 
 use             model_mod, only : get_model_size, get_state_meta_data
 
+! These additional model_mod components are strictly for clm.
 use             model_mod, only : compute_gridcell_value, gridcell_components, &
                                   get_grid_vertval
 
@@ -222,6 +222,7 @@ if (tests_to_run(2)) then
 
    call print_model_time(model_time)
 
+ 
    call print_test_message('TEST 2', ending=.true.)
 
 endif

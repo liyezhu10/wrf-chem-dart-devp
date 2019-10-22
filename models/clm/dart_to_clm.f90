@@ -39,7 +39,13 @@ character(len=256) :: clm_file_to_update = 'clm_restart_file.nc'
 
 namelist /dart_to_clm_nml/ input_dart_file, clm_file_to_update
 
-!======================================================================
+!----------------------------------------------------------------------
+
+character(len=256) :: clm_restart_filename
+integer            :: iunit, io
+type(time_type)    :: model_time, adv_to_time
+
+!----------------------------------------------------------------------
 
 call initialize_utilities(progname='dart_to_clm')
 

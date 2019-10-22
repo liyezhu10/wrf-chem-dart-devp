@@ -34,19 +34,28 @@ module io_filenames_mod
 !> @{
 
 use types_mod,            only : r4, r8, MISSING_R8, MAX_NUM_DOMS, digits12
-use utilities_mod,        only : file_exist, E_ERR, E_MSG, E_WARN, error_handler, &
+use utilities_mod,        only : file_exist, E_ERR, E_MSG, E_WARN, error_handler,&
                                  open_file, close_file, find_textfile_dims, &
                                  do_output
 use time_manager_mod,     only : time_type
 use mpi_utilities_mod,    only : my_task_id
-use state_structure_mod,  only : get_num_domains, get_dim_length, get_dim_name, &
-                                 get_num_dims, get_io_num_dims, get_num_variables, &
+use state_structure_mod,  only : get_num_domains, &
+                                 get_dim_length, &
+                                 get_dim_name, &
+                                 get_num_dims, &
+                                 get_io_num_dims, &
+                                 get_num_variables, &
                                  get_variable_name, &
-                                 get_units, get_long_name, get_short_name, &
+                                 get_units, &
+                                 get_long_name, &
+                                 get_short_name, &
                                  get_missing_value, &
-                                 get_FillValue, get_xtype, get_add_offset, &
+                                 get_FillValue, &
+                                 get_xtype, &
+                                 get_add_offset, &
                                  get_scale_factor, &
-                                 get_has_missing_value, do_io_update
+                                 get_has_missing_value, &
+                                 do_io_update
 use ensemble_manager_mod, only : ensemble_type
 use netcdf_utilities_mod, only : nc_check
 
@@ -196,6 +205,7 @@ contains
 !> Test whether file_info_type has been initialized
 !> Error out if not, giving the name of the calling routine.
 
+
 subroutine assert_file_info_initialized(file_info, routine_name)
 
 type(file_info_type), intent(in) :: file_info
@@ -208,11 +218,11 @@ endif
 
 end subroutine assert_file_info_initialized
 
-
 !-------------------------------------------------------------------------------
 !> Test whether file_info_type has been initialized for routines that only
 !> have access the %restart_files(in/out/prior)
 !> Error out if not, giving the name of the calling routine.
+
 
 subroutine assert_restart_names_initialized(restart_names, routine_name)
 
@@ -231,6 +241,7 @@ end subroutine assert_restart_names_initialized
 !-------------------------------------------------------------------------------
 !> Accessor function for file_info_type
 
+
 function get_cycling(file_info)
 
 type(file_info_type), intent(in) :: file_info
@@ -244,6 +255,7 @@ end function get_cycling
 !-------------------------------------------------------------------------------
 !> Accessor function for file_info_type
 
+
 function get_single_file(file_info)
 
 type(file_info_type), intent(in) :: file_info
@@ -256,6 +268,7 @@ end function get_single_file
 
 !-------------------------------------------------------------------------------
 !> Initialize file_info type
+
 
 subroutine io_filenames_init(file_info, ncopies, cycling, single_file, &
                              restart_files, root_name, check_output_compatibility)
@@ -315,6 +328,7 @@ end subroutine io_filenames_init
 !> Check that the netcdf files variables have the correct shape
 !> to prevevent overwriting unwanted files
 
+
 subroutine check_file_info_variable_shape(file_info, ens_handle)
 
 type(file_info_type),  intent(inout) :: file_info
@@ -339,6 +353,7 @@ end subroutine check_file_info_variable_shape
 
 !-------------------------------------------------------
 !> read file list names
+
 
 subroutine set_member_file_metadata(file_info, ens_size, my_copy_start)
 
@@ -526,6 +541,7 @@ end subroutine set_stage_file_metadata
 !>     - each variable (matched by name)
 !>     - correct dimensions for each variable (matched by name and size)
 
+
 subroutine check_correct_variables(netcdf_filename, dom)
 
 character(len=*), intent(in) :: netcdf_filename
@@ -609,6 +625,7 @@ end subroutine check_correct_variables
 !--------------------------------------------------------------------
 !> check that cf-convention attributes are consistent across restarts
 
+
 subroutine check_attributes(ncFile, filename, ncVarId, domid, varid)
 
 integer,          intent(in) :: ncFile
@@ -661,6 +678,7 @@ end subroutine check_attributes
 !--------------------------------------------------------------------
 !> check integer values are the same
 
+
 subroutine check_attribute_value_int(ncFile, filename, ncVarID, att_string, spvalINT)
 
 integer,          intent(in) :: ncFile
@@ -685,6 +703,7 @@ end subroutine check_attribute_value_int
 
 !--------------------------------------------------------------------
 !> check r4 values are the same
+
 
 subroutine check_attribute_value_r4(ncFile, filename, ncVarID, att_string, spvalR4)
 
@@ -711,6 +730,7 @@ end subroutine check_attribute_value_r4
 !--------------------------------------------------------------------
 !> check r8 values are the same
 
+
 subroutine check_attribute_value_r8(ncFile, filename, ncVarID, att_string, spvalR8)
 
 integer,          intent(in) :: ncFile
@@ -735,6 +755,7 @@ end subroutine check_attribute_value_r8
 
 !--------------------------------------------------------------------
 !> check attribute name is consistent across restarts
+
 
 subroutine check_attributes_name(ncFile, filename, ncVarId, att_string, comp_string)
 
@@ -762,6 +783,7 @@ end subroutine check_attributes_name
 
 !--------------------------------------------------------------------
 !> construct restart file name for reading
+
 
 function construct_file_names(file_info, ens_size, copy, domain)
 
@@ -791,6 +813,7 @@ end function construct_file_names
 !----------------------------------
 !> Return the appropriate input file for copy and domain
 
+
 function get_restart_filename(name_handle, copy, domain)
 
 type(stage_metadata_type), intent(in) :: name_handle
@@ -806,6 +829,7 @@ end function get_restart_filename
 
 !----------------------------------
 !> Return whether the file is an input, output or prior files
+
 
 function get_file_description(name_handle, copy, domain)
 
@@ -823,6 +847,7 @@ end function get_file_description
 !----------------------------------
 !> Return stage metadata from file handle
 
+
 function get_stage_metadata(file_info)
 
 type(file_info_type), intent(in) :: file_info
@@ -837,6 +862,7 @@ end function get_stage_metadata
 !----------------------------------
 !> Destroy module storage
 !>@todo FIXME should be called somewhere
+
 
 subroutine io_filenames_finalize(file_info)
 
@@ -905,9 +931,9 @@ enddo
 
 end subroutine file_info_dump
 
-
 !----------------------------------
 !> Combine multiple file_info_type into a single file_info
+
 
 function combine_file_info(file_info_array) result(file_info_out)
 
@@ -946,7 +972,6 @@ file_info_out%initialized = .true.
 
 end function combine_file_info
 
-
 !-------------------------------------------------------
 !> Set whether a copy should be read/written for a range
 !> of copies c1->c2.  Optional argument to set if the
@@ -954,6 +979,7 @@ end function combine_file_info
 !> clamped.  If this information is available it grabs
 !> it from the state structure and stores it in files
 !> created from scratch.
+
 
 subroutine set_io_copy_flag_range(file_info, c1, c2, io_flag, num_output_ens, &
                                   inherit_units, clamp_vars, force_copy_back)
@@ -989,7 +1015,6 @@ enddo
 
 end subroutine set_io_copy_flag_range
 
-
 !-------------------------------------------------------
 !> Set whether a copy should be read/written for a single
 !> copy cnum.  Optional argument to set if the
@@ -997,6 +1022,7 @@ end subroutine set_io_copy_flag_range
 !> clamped.  If this information is available it grabs
 !> it from the state structure and stores it in files
 !> created from scratch.
+
 
 subroutine set_io_copy_flag_single(file_info, cnum, io_flag, inherit_units, &
                                    clamp_vars, force_copy_back)
@@ -1026,6 +1052,7 @@ end subroutine set_io_copy_flag_single
 !> Determine whether a copy could potentially have units.
 !> Copies such as Spread and Inflation never have units.
 
+
 function inherit_copy_units(name_handle, copy)
 type(stage_metadata_type), intent(in) :: name_handle
 integer,                   intent(in) :: copy
@@ -1037,11 +1064,11 @@ inherit_copy_units = name_handle%inherit_units(copy)
 
 end function inherit_copy_units
 
-
 !----------------------------------
 !> Determine if a variable should be clamped or not. If
-!> clamping information is stored in the state structure
+!> clapming information is stored in the state structure
 !> clamping will be applied accordingly
+
 
 function copy_is_clamped(name_handle, copy)
 type(stage_metadata_type), intent(in) :: name_handle
@@ -1053,7 +1080,6 @@ if (copy <= 0) return
 copy_is_clamped = name_handle%clamp_vars(copy)
 
 end function copy_is_clamped
-
 
 !----------------------------------
 !>
@@ -1069,9 +1095,9 @@ force_copy_back = name_handle%force_copy_back(copy)
 
 end function force_copy_back
 
-
 !-------------------------------------------------------
 !> returns true/false depending on whether you should read this copy
+
 
 function query_read_copy(name_handle, c)
 
@@ -1094,6 +1120,7 @@ end function query_read_copy
 !-------------------------------------------------------
 !> returns true/false depending on whether you should write this copy
 
+
 function query_write_copy(name_handle, c)
 
 type(stage_metadata_type), intent(in) :: name_handle !< stage name handle
@@ -1115,6 +1142,7 @@ end function query_write_copy
 !------------------------------------------------------------------
 !> Test whether a copy is part of the ensemble
 
+
 function query_copy_present(copy)
 
 integer, intent(in) :: copy
@@ -1131,6 +1159,7 @@ end function
 
 !------------------------------------------------------------------
 !> set netcdf file type
+
 
 function get_copy_name(file_handle, cnum)
 
@@ -1262,7 +1291,6 @@ end function single_file_initialized
 !> Number of output ensemble members
 !>@todo need to change the name to represent that this relates to the number of
 !>      copies to write.
-
 function noutput_state_variables(file_handle)
 type(file_info_type), intent(in) :: file_handle !< file information handle
 integer :: noutput_state_variables
@@ -1288,7 +1316,6 @@ valid_copy = .false.
 if(copy <= size_fnames .and. copy > 0) valid_copy = .true.
 
 end function assert_valid_copy
-
 
 !----------------------------------
 end module io_filenames_mod

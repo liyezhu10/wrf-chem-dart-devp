@@ -4,13 +4,21 @@
 !
 ! $Id$
 
+<<<<<<< HEAD
 program obs_keep_a_few
 
+=======
+>>>>>>> master
 !> open an obs_seq file and copy over the first N of each obs type to
 !> the output file. the value of N is namelist-settable.  intended
 !> to subset a large obs_seq file for testing or other purposes but
 !> still keep examples of each type of obs from the input.
 
+<<<<<<< HEAD
+=======
+program obs_keep_a_few
+
+>>>>>>> master
 use        types_mod, only : r8, missing_r8, metadatalength
 use    utilities_mod, only : register_module, initialize_utilities,            &
                              find_namelist_in_file, check_namelist_read,       &
@@ -581,8 +589,11 @@ end subroutine print_metadata
 !---------------------------------------------------------------------
 end program obs_keep_a_few
 
+<<<<<<< HEAD
 ! <next few lines under version control, do not edit>
 ! $URL$
 ! $Id$
 ! $Revision$
 ! $Date$
+=======
+>>>>>>> master

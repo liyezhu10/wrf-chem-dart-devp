@@ -3,16 +3,27 @@
 # DART software - Copyright UCAR. This open source software is provided
 # by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
+<<<<<<< HEAD
 #
 # DART $Id$
+=======
+>>>>>>> master
 
 # this script builds and  runs the location test code for each of the
 # possible location modules.
 
+<<<<<<< HEAD
 set LOGDIR = `pwd'/testing_logs
 mkdir -p $LOGDIR
 \rm -f $LOGDIR/*
 echo putting build and run logs in $LOGDIR
+=======
+set LOGDIR = `pwd`/testing_logs
+mkdir -p $LOGDIR
+\rm -f $LOGDIR/*
+echo "build and run logs are in: $LOGDIR"
+
+>>>>>>> master
 
 echo
 echo
@@ -23,10 +34,16 @@ echo
 echo
 
 
+<<<<<<< HEAD
 set LOCLIST = 'annulus channel column oned threed \
                threed_cartesian threed_sphere \
                twod twod_annulus twod_sphere'
 
+=======
+set LOCLIST = ( annulus channel column oned threed \
+                threed_cartesian threed_sphere \
+                twod twod_annulus twod_sphere )
+>>>>>>> master
 
 foreach i ( $LOCLIST )
 
@@ -90,8 +107,11 @@ echo
 
 exit 0
 
+<<<<<<< HEAD
 # <next few lines under version control, do not edit>
 # $URL$
 # $Revision$
 # $Date$
 
+=======
+>>>>>>> master

@@ -161,6 +161,7 @@
 # The definitions for most of the DART kinds are in obs_def_tower_mod.f90
 
 &model_nml
+<<<<<<< HEAD
    clm_restart_filename         = 'clm_restart.nc'
    clm_history_filename         = 'clm_history.nc'
    assimilation_period_days     = 1
@@ -169,6 +170,16 @@
    output_state_vector          = .false.
    calendar                     = 'Gregorian'
    debug                        = 0
+=======
+   clm_restart_filename         = 'clm_restart.nc',
+   clm_history_filename         = 'clm_history.nc',
+   assimilation_period_days     = 1,
+   assimilation_period_seconds  = 0,
+   model_perturbation_amplitude = 0.2,
+   output_state_vector          = .false.,
+   calendar                     = 'Gregorian',
+   debug                        = 0,
+>>>>>>> master
    clm_state_variables          = 'frac_sno',    'QTY_SNOWCOVER_FRAC',
                                   'H2OSNO',      'QTY_SNOW_WATER',
                                   'H2OSOI_LIQ',  'QTY_SOIL_MOISTURE',
@@ -317,7 +328,11 @@
    loc_of_interest       = 254.727854, 39.9768545, 0.35
    quantity_of_interest  = 'QTY_LEAF_CARBON'
    interp_test_vertcoord = 'VERTISHEIGHT'
+<<<<<<< HEAD
    interp_test_lonrange  = 320.0, 90.0
+=======
+   interp_test_lonrange  = 320.0, 90.0 
+>>>>>>> master
    interp_test_dlon      = 1.0
    interp_test_latrange  = 0.0, 75.0
    interp_test_dlat      = 1.0

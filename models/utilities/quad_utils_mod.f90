@@ -4,6 +4,7 @@
 !
 ! DART $Id$
 
+<<<<<<< HEAD
 !> Search and interpolation routines for grids which are logically rectangular
 !> but may have irregular spacings along each axis, or may be warped so that
 !> the corners of each grid location must be specified.
@@ -33,6 +34,50 @@ module quad_utils_mod
 
 ! This code will interpolate in a logically rectangular but deformed lat/lon grid.
 
+=======
+!> Interpolation routines for longitude/latitude grids which are logically 
+!> rectangular and either fully regular, partially regular or fully deformed.
+!>
+!> This module includes initialization, search, interpolation, and finalization 
+!> routines. 
+!> 
+!> The size of the grid is specified by a count of the longitudes and latitudes.
+!>
+!> The actual coordinates of the grid can be specified in one of 3 ways:
+!>
+!>    fully regular grid, evenly spaced and fully orthogonal:
+!>     (origin, delta) each for lon and lat.
+!>
+!>    fully orthogonal but possibly irregularly spaced along the axes:
+!>     1D array(counts) each for lon and lat.
+!>
+!>    logically rectangular but corners of quads are fully irregular:
+!>     2D array(lon counts, lat counts) each for lon and lat.
+!>
+!> To search for a given location and return the (i,j) indices of the
+!> corners of the enclosing quad:
+!>
+!>    for the fully regular grid the enclosing quad is found by computing
+!>    the corresponding (i,j) indices.
+!>
+!>    for the irregularly spaced grid, the enclosing quad is found by searching
+!>    each of the 1D arrays for the enclosing (i,j) indices.
+!>
+!>    For the fully irregular grid, the enclosing quad is found by this process:
+!>     At setup time:
+!>     1) create a coarse fully regular grid.
+!>     2) compute the intersection of each regular grid box with the target grid quads
+!>     3) keep a list of which target grid quads overlap for each regular grid box.
+!>     At search time:
+!>     4) find the location in the fully regular grid (which can be done quickly)
+!>     5) do an exhaustive search of the target grid quads which overlap that 
+!>        regular grid box, returning when one of the target grid quads encloses 
+!>        the given location.
+!>
+
+module quad_utils_mod
+
+>>>>>>> master
 use        types_mod, only : r8, i8, MISSING_R8, PI, deg2rad
 
 use     location_mod, only : location_type, get_location
@@ -43,6 +88,7 @@ use    utilities_mod, only : register_module, error_handler,         &
                              find_namelist_in_file, check_namelist_read, &
                              log_it, array_dump
 
+<<<<<<< HEAD
 implicit none
 private
 
@@ -52,6 +98,19 @@ public :: quad_interp_handle,              & ! type - will need one for T grid, 
           set_quad_coords,                 & ! overload these 3: set_reg_xx, set_1d_xx, set_2d_xx
           quad_lon_lat_locate,             & ! given lat,lon return above and below Is and Js
           quad_lon_lat_evaluate,           & !given i,j and all 4 corner values, return interp val
+=======
+use      options_mod, only : get_missing_ok_status
+
+implicit none
+private
+
+public :: quad_interp_handle,              & ! derived type which holds the grid and option info
+          init_quad_interp,                & ! pass in grid type and counts here
+          finalize_quad_interp,            & ! release storage 
+          set_quad_coords,                 & ! overload these 3: set_reg_xx, set_1d_xx, set_2d_xx
+          quad_lon_lat_locate,             & ! given lat,lon return above and below Is and Js
+          quad_lon_lat_evaluate,           & ! given i,j and all 4 corner values, return interp val
+>>>>>>> master
           GRID_QUAD_FULLY_REGULAR,         &
           GRID_QUAD_IRREG_SPACED_REGULAR,  &
           GRID_QUAD_FULLY_IRREGULAR,       &
@@ -77,13 +136,23 @@ character(len=512) :: string1, string2, string3
 
 logical, save :: module_initialized = .false.
 
+<<<<<<< HEAD
 integer  :: debug = 0   ! turn up for more and more debug messages
+=======
+logical :: missing_ok_in_state
+
+integer  :: debug = 0               ! turn up for more and more debug messages
+>>>>>>> master
 integer  :: interpolation_type = 1  ! add cases for different strategies
 logical  :: do_rotate = .false.     ! rotate edge from pts 1,2 to horizontal before interp
 
 namelist /quad_interpolate_nml/ do_rotate, debug
 
+<<<<<<< HEAD
 !> @todo FIXME internal routines should use h for the handle; externally callable
+=======
+!> @todo FIXME internal routines could use h for the handle; externally callable
+>>>>>>> master
 !> routines should use interp_handle for clarity in the interface.
 
 ! the grid must always be logically rectangular, so knowing the i and j of a
@@ -105,6 +174,7 @@ integer, parameter :: QUAD_LOCATED_LON_EDGES     =   2
 integer, parameter :: QUAD_LOCATED_LAT_EDGES     =   3
 integer, parameter :: QUAD_LOCATED_CELL_CORNERS  =   4
 
+<<<<<<< HEAD
 ! data struct question - does this go directly into handle?
 ! right now it's in each option.
 type quad_grid_options
@@ -112,6 +182,13 @@ type quad_grid_options
 
    ! not sure if this is a good idea or not
    ! if any part of the mask is false, fail to find the location.
+=======
+! options that control how the interpolation handles specific cases
+type quad_grid_options
+   private
+
+   ! if any corner of the cell is masked to false, fail to find the location.
+>>>>>>> master
    logical :: uses_mask = .false.
    logical, allocatable :: grid_mask(:,:)
 
@@ -119,12 +196,45 @@ type quad_grid_options
    ! if not, either or both could still be true but we can't assume.
    logical :: global_grid = .false.
 
+<<<<<<< HEAD
    ! does the grid cross the 360 -> 0 boundary?
    logical :: spans_lon_zero = .false.   ! true if any lon(:,1) > lon(:,nlons)
 
    ! do we handle wrap over the poles?
    logical :: pole_wrap = .false.
 
+=======
+   ! separate out the single logical 'spans' flag into two cases?
+   ! case 1:  the longitude grid is cyclic; either a global grid or a band between 
+   !  two latitude lines that circles the globe.  all longitude values are valid.
+   ! case 2: a regional grid that crosses the prime meridian.
+   !  this will contain a discontinuity around 360 -> 0 that should be a valid region.
+   ! can a single flag handle both of these cases?  
+
+   ! are there valid values between array(N) and array(1) that should be interpolated?
+   ! always true for global grids. 
+   logical :: lon_cyclic = .false.  
+
+   ! are there valid values between array(X) and array(X+1) in the interior of
+   ! the longitude array where a(X) > a(X+1) (e.g. around where a(X) is near 360 
+   ! and a(X+1) is near 0) that should be interpolated?
+
+   ! always true for global grids. 
+   ! for partially regular grids (1D lon and 1D lat arrays) this can be
+   ! true if a regional grid crosses the prime meridian.
+   ! for irregular grids (2D lons and 2D lats) this is true if 
+   ! any lon(:,1) > lon(:,nlons)
+   logical :: spans_lon_zero = .false.   
+
+   ! do we handle wrap over the poles?  
+   ! (complicated for interpolating vector values.)
+   logical :: pole_wrap = .false.
+
+   ! are the latitudes specified from smallest (south) to largest (north)
+   ! or largest (north) to smallest (south)?
+   logical :: north_to_south = .false.
+
+>>>>>>> master
    ! i don't want to know this, but apparently we might
    ! have to know if the points given are cell-centered or
    ! on the edges.  (god forbid we need to know U stagger vs V stagger!)
@@ -299,6 +409,12 @@ call check_namelist_read(iunit, io, 'quad_interpolate_nml')
 if (do_nml_file()) write(nmlfileunit, nml=quad_interpolate_nml)
 if (do_nml_term()) write(     *     , nml=quad_interpolate_nml)
 
+<<<<<<< HEAD
+=======
+! are MISSING_R8 values possible in the model state?
+missing_ok_in_state = get_missing_ok_status()
+
+>>>>>>> master
 end subroutine initialize_module
 
 !------------------------------------------------------------------
@@ -348,6 +464,17 @@ select case (grid_type)
                interp_handle%ir%lons_1D(num_lons))
       interp_handle%ir%lats_1D(num_lats) = MISSING_R8
       interp_handle%ir%lons_1D(num_lons) = MISSING_R8
+<<<<<<< HEAD
+=======
+      if (debug > 10) then
+         write(string1, *) 'nlats, nlons: ', num_lats, num_lons
+         call log_it(string1)
+         write(string1, *) 'first lat: ', interp_handle%ir%lats_1D(1)
+         call log_it(string1)
+         write(string1, *) 'first lon: ', interp_handle%ir%lons_1D(1)
+         call log_it(string1)
+      endif
+>>>>>>> master
 
    case(GRID_QUAD_FULLY_IRREGULAR)
       allocate(interp_handle%ii%lats_2D(num_lons, num_lats), &
@@ -364,7 +491,11 @@ select case (grid_type)
       if (num_lats * num_lons > 6 * 1000 * 1000) then  ! ~1/10th degree
          interp_handle%ii%num_reg_x = 900
          interp_handle%ii%num_reg_y = 900
+<<<<<<< HEAD
          interp_handle%ii%max_reg_list_num = 800   !>@todo  what is good val?
+=======
+         interp_handle%ii%max_reg_list_num = 800   !todo  what is good val?
+>>>>>>> master
          if(debug > 10) then
             write(string1, *) 'case 1: ', interp_handle%ii%num_reg_x, interp_handle%ii%num_reg_y, &
                                interp_handle%ii%max_reg_list_num
@@ -560,9 +691,53 @@ if (size(lats) /= interp_handle%nlat) then
                       source, revision, revdate)
 endif
 
+<<<<<<< HEAD
 interp_handle%ir%lons_1D(:) = lons
 interp_handle%ir%lats_1D(:) = lats
 
+=======
+! lons and lats are declared intent(in).  any code that just needs to
+! test values can use them.  any code that is going to modify values
+! has to use the xxx_1D arrays in the structures.
+
+interp_handle%ir%lons_1D(:) = lons
+interp_handle%ir%lats_1D(:) = lats
+
+! inverted order for latitudes?
+if (lats(1) > lats(interp_handle%nlat)) then
+   interp_handle%opt%north_to_south = .true.
+endif
+
+! -180 to 180 instead of 0 to 360?  add 360, which makes all
+! the values valid (we require longitudes to be between 0 and 360)
+! but it also makes a partially regular grid start at 180, go up
+! to 360, then back to 0, then up to 180.  set the 'spans 0' flag.
+if (any(lons < 0.0_r8)) then
+  where(interp_handle%ir%lons_1D < 0.0_r8) &
+     interp_handle%ir%lons_1D = interp_handle%ir%lons_1D + 360.0_r8
+     interp_handle%opt%spans_lon_zero = .true. 
+endif
+
+! validate ranges 
+if (any(interp_handle%ir%lats_1D < -90.0_r8) .or. any(interp_handle%ir%lats_1D > 90.0_r8)) then
+   write(string1, *) 'latitude values must be between -90 and 90.', &
+                       ' out of range values found in latitude array. '
+   write(string2, *) 'min, max values: ', minval(interp_handle%ir%lats_1D), &
+                                          maxval(interp_handle%ir%lats_1D)
+   call error_handler(E_ERR, 'set_irregspaced_quad_coords', string1, &
+                      source, revision, revdate, text2=string2)
+endif
+
+if (any(interp_handle%ir%lons_1D < 0.0_r8) .or. any(interp_handle%ir%lons_1D > 360.0_r8)) then
+   write(string1, *) 'longitude values must be between 0 and 360, or -180 and 180.', &
+                       ' out of range values found in longitude array. '
+   write(string2, *) 'min, max values: ', minval(interp_handle%ir%lons_1D), &
+                                          maxval(interp_handle%ir%lons_1D)
+   call error_handler(E_ERR, 'set_irregspaced_quad_coords', string1, &
+                      source, revision, revdate, text2=string2)
+endif
+
+>>>>>>> master
 !>@todo FIXME i would like to put something like this to check
 !>for degenerate grids, but i don't know how to avoid throwing
 !>an error at the poles, for example.  i'm leaving this here
@@ -657,7 +832,11 @@ integer, allocatable :: reg_list_lat(:,:,:)
 real(r8) :: u_c_lons(4), u_c_lats(4), pole_row_lon
 integer  :: i, j, k, pindex, nx, ny, nrx, nry, istatus
 integer  :: reg_lon_ind(2), reg_lat_ind(2), u_total, u_index
+<<<<<<< HEAD
 logical  :: cyclic
+=======
+logical  :: cyclic, pole
+>>>>>>> master
 integer  :: xlim
 
 allocate(reg_list_lon(h%ii%num_reg_x, h%ii%num_reg_y, h%ii%max_reg_list_num))
@@ -665,6 +844,10 @@ allocate(reg_list_lat(h%ii%num_reg_x, h%ii%num_reg_y, h%ii%max_reg_list_num))
 
 ! poles?  span?
 cyclic = h%opt%spans_lon_zero
+<<<<<<< HEAD
+=======
+pole   = h%opt%pole_wrap
+>>>>>>> master
 nx  = h%nlon
 ny  = h%nlat
 nrx = h%ii%num_reg_x
@@ -739,10 +922,17 @@ do i = 1, xlim
  !>@todo is istatus /= 0 a failure condition
 
          ! Set up array of lons and lats for the corners of these u quads
+<<<<<<< HEAD
          call get_quad_corners(h%ii%lons_2d, i, j, cyclic, nx, ny, u_c_lons, istatus)
          if (istatus /= 0) print *, 'get_quad_corners for lons returns failure'
 
          call get_quad_corners(h%ii%lats_2d, i, j, cyclic, nx, ny, u_c_lats, istatus)
+=======
+         call get_quad_corners(h%ii%lons_2d, i, j, cyclic, pole, nx, ny, u_c_lons, istatus)
+         if (istatus /= 0) print *, 'get_quad_corners for lons returns failure'
+
+         call get_quad_corners(h%ii%lats_2d, i, j, cyclic, pole, nx, ny, u_c_lats, istatus)
+>>>>>>> master
          if (istatus /= 0) print *, 'get_quad_corners for lats returns failure'
 
          !print *, 'get_quad_corners returns ', u_c_lons, u_c_lats, ' for ', &
@@ -1012,7 +1202,10 @@ type(quad_interp_handle), intent(in)  :: h
 real(r8),                 intent(in)  :: lon
 integer,                  intent(out) :: x_ind
 
+<<<<<<< HEAD
 !>@todo FIXME: IS THIS RIGHT?
+=======
+>>>>>>> master
 x_ind = int(h%ii%num_reg_x * (lon - h%ii%min_lon) / h%ii%lon_width) + 1
 !print *, 'get_reg_lon_box: ', h%ii%num_reg_x, lon, h%ii%min_lon, h%ii%lon_width, ((lon - h%ii%min_lon) / h%ii%lon_width), x_ind
 
@@ -1040,7 +1233,11 @@ end subroutine get_reg_lat_box
 
 !------------------------------------------------------------
 !> Find a set of regular lat lon boxes that covers all of the area covered by
+<<<<<<< HEAD
 !> a dipole grid qaud whose corners are given by the dimension four x_corners
+=======
+!> a distorted grid quad whose corners are given by the dimension four x_corners
+>>>>>>> master
 !> and y_corners arrays.
 
 subroutine reg_box_overlap(h, x_corners, y_corners, is_pole, &
@@ -1121,6 +1318,7 @@ end subroutine reg_box_overlap
 !> Grabs the corners for a given quadrilateral from the global array of lower
 !> right corners. Note that corners go counterclockwise around the quad.
 
+<<<<<<< HEAD
 !>@todo FIXME: is this part of the default module or the dart state module?
 
 subroutine get_quad_corners(x, i, j, cyclic, nx, ny, corners, istatus)
@@ -1128,6 +1326,13 @@ subroutine get_quad_corners(x, i, j, cyclic, nx, ny, corners, istatus)
 real(r8), intent(in)  :: x(:, :)
 integer,  intent(in)  :: i, j
 logical,  intent(in)  :: cyclic
+=======
+subroutine get_quad_corners(x, i, j, cyclic, pole, nx, ny, corners, istatus)
+
+real(r8), intent(in)  :: x(:, :)
+integer,  intent(in)  :: i, j
+logical,  intent(in)  :: cyclic, pole
+>>>>>>> master
 integer,  intent(in)  :: nx, ny
 real(r8), intent(out) :: corners(4)
 integer,  intent(out) :: istatus
@@ -1139,6 +1344,7 @@ integer :: ip1, jp1
 istatus = 1
 corners(:) = MISSING_R8
 
+<<<<<<< HEAD
 ! longitude
 ip1 = i + 1
 if (ip1 > nx) then
@@ -1163,6 +1369,15 @@ endif
 
 !print *, 'get_quad_corners: ', i, j, cyclic, nx, i, ip1, ny, j, jp1
 
+=======
+! find the other indices for this quad, respecting cyclic and pole settings.
+call quad_index_neighbors(i, j, nx, ny, cyclic, pole, ip1, jp1)
+if (ip1 < 0 .or. jp1 < 0) then
+   istatus = -1
+   return
+endif
+
+>>>>>>> master
 corners(1) = x(i,   j  )
 corners(2) = x(ip1, j  )
 corners(3) = x(ip1, jp1)
@@ -1172,6 +1387,55 @@ istatus = 0
 
 end subroutine get_quad_corners
 
+<<<<<<< HEAD
+=======
+!-----------------------------------------------------------------------
+!> given lon/lat indices, add one to lon and lat.
+!> check for wraparound in lon, and pole for lat.
+
+subroutine quad_index_neighbors(lon_index, lat_index, nx, ny, cyclic, pole, &
+                                next_lon, next_lat)
+integer, intent(in)  :: lon_index
+integer, intent(in)  :: lat_index
+integer, intent(in)  :: nx, ny
+logical, intent(in)  :: cyclic, pole
+integer, intent(out) :: next_lon
+integer, intent(out) :: next_lat
+
+! if cyclic, wrap back to 1
+next_lon = lon_index+1
+if (next_lon > nx) then
+   if (cyclic) then
+      next_lon = 1
+   else
+      ! FIXME: is this expected for a regional grid?
+      ! or have we already bounds checked the edges?
+      write(string1, *) ' next_lon > nx and not cyclic', &
+                          lon_index, lat_index, cyclic, nx, next_lon
+      call error_handler(E_MSG, 'quad_index_neighbors', string1)
+      next_lon = -1
+   endif
+endif
+
+! if over poles, subtract one to continue down the other side
+next_lat = lat_index+1
+if (next_lat > ny) then
+   if (pole) then
+      next_lat = ny - 1
+   else
+      ! FIXME: is this expected for a regional grid?
+      ! or have we already bounds checked the edges?
+      write(string1, *) ' next_lat > ny and not polar', &
+                          lon_index, lat_index, pole, ny, next_lat
+      call error_handler(E_MSG, 'quad_index_neighbors', string1)
+      next_lat = -1
+   endif
+endif
+
+end subroutine quad_index_neighbors
+
+
+>>>>>>> master
 !------------------------------------------------------------
 !> Updates the data structure listing dipole quads that are in a given regular box
 
@@ -1237,6 +1501,7 @@ enddo
 end subroutine update_reg_list
 
 !------------------------------------------------------------------
+<<<<<<< HEAD
 !> Subroutine to interpolate to a lon lat location given the state vector
 !> for that level, x. This works just on one horizontal slice.
 !> This routine works for either the dipole or a regular lat-lon grid.
@@ -1276,11 +1541,35 @@ integer,                  intent(out) :: istatus
 ! compiler/platform setups. Might want to pass in the entire array with a base
 ! offset value instead of the section if this is an issue.
 
+=======
+!> Subroutine to locate the given lon lat location and return the
+!> longitude/latitude indices for the 4 corners.  This routine is
+!> for irregular grids only.
+!>
+!> Two different types of grids are used here. The irregular grid
+!> regions are referred to as quads (short for quadrilateral).
+!> The lon/lat regular grid regions are called boxes.
+!> All grids are referenced by the index of the lower left corner
+!> of the quad or box.
+!>
+
+subroutine quad_lon_lat_locate_ii(interp_handle, lon, lat, &
+                                  four_lon_indices, four_lat_indices, istatus)
+type(quad_interp_handle), intent(in)  :: interp_handle
+real(r8),                 intent(in)  :: lon, lat
+integer,                  intent(out) :: four_lon_indices(4), four_lat_indices(4)
+integer,                  intent(out) :: istatus
+
+>>>>>>> master
 ! Local storage
 integer  :: num_inds, start_ind
 integer  :: x_ind, y_ind, nx, ny
 integer  :: lon_bot, lat_bot, lon_top, lat_top
+<<<<<<< HEAD
 logical  :: cyclic
+=======
+logical  :: cyclic, pole
+>>>>>>> master
 real(r8) :: x_corners(4), y_corners(4)
 
 character(len=*), parameter :: routine = 'quad_lon_lat_locate:quad_lon_lat_locate_ii'
@@ -1292,6 +1581,10 @@ istatus = 0
 nx = interp_handle%nlon
 ny = interp_handle%nlat
 cyclic = interp_handle%opt%spans_lon_zero
+<<<<<<< HEAD
+=======
+pole   = interp_handle%opt%pole_wrap
+>>>>>>> master
 
 select case (interp_handle%grid_type)
 
@@ -1312,6 +1605,7 @@ select case (interp_handle%grid_type)
    ! Search the list of quads to see if (lon, lat) is in one
    call get_grid_quad(lon, lat, interp_handle%ii%lons_2d, interp_handle%ii%lats_2d, &
                       num_inds, start_ind, interp_handle%ii%grid_lon_list, &
+<<<<<<< HEAD
                       interp_handle%ii%grid_lat_list, cyclic, nx, ny, &
                       lon_bot, lat_bot, istatus)
 if (debug > 10) print *, 'get_grid_quad returns lon/lat bot: ', lon_bot, lat_bot
@@ -1325,6 +1619,21 @@ if (debug > 10) print *, 'get_quad_corners returns x_corners: ', x_corners
    call get_quad_corners(interp_handle%ii%lats_2d, lon_bot, lat_bot, cyclic, &
                          nx, ny, y_corners, istatus)
 if (debug > 10) print *, 'get_quad_corners returns y_corners: ', y_corners
+=======
+                      interp_handle%ii%grid_lat_list, cyclic, pole, nx, ny, &
+                      lon_bot, lat_bot, istatus)
+   if (debug > 10) print *, 'get_grid_quad returns lon/lat bot: ', lon_bot, lat_bot
+   if (istatus /= 0) return
+
+   ! Getting corners for accurate interpolation
+   call get_quad_corners(interp_handle%ii%lons_2d, lon_bot, lat_bot, cyclic, pole, &
+                         nx, ny, x_corners, istatus)
+   if (debug > 10) print *, 'get_quad_corners returns x_corners: ', x_corners
+   if (istatus /= 0) return
+   call get_quad_corners(interp_handle%ii%lats_2d, lon_bot, lat_bot, cyclic, pole, &
+                         nx, ny, y_corners, istatus)
+   if (debug > 10) print *, 'get_quad_corners returns y_corners: ', y_corners
+>>>>>>> master
    if (istatus /= 0) return
 
    ! this test shouldn't be needed
@@ -1337,8 +1646,13 @@ if (debug > 10) print *, 'get_quad_corners returns y_corners: ', y_corners
 
    ! Fail if point is in one of the U boxes that go through the
    ! pole (this could be fixed up if necessary)
+<<<<<<< HEAD
    if(lat_bot == u_pole_y .and. (lon_bot == pole_x -1 .or. &
       lon_bot == pole_x)) then
+=======
+   if (lat_bot == u_pole_y .and. &
+      (lon_bot == pole_x -1 .or. lon_bot == pole_x)) then
+>>>>>>> master
       istatus = 4
       return
    endif
@@ -1353,13 +1667,21 @@ if (debug > 10) print *, 'get_quad_corners returns y_corners: ', y_corners
                       source, revision, revdate)
 end select
 
+<<<<<<< HEAD
 ! Find the indices to get the values for interpolating
 lat_top = lat_bot + 1
 if(lat_top > ny) then
+=======
+call quad_index_neighbors(lon_bot, lat_bot, nx, ny, cyclic, pole, &
+                          lon_top, lat_top)
+
+if (lon_top < 0 .or. lat_top < 0) then
+>>>>>>> master
    istatus = 2
    return
 endif
 
+<<<<<<< HEAD
 ! Watch for wraparound in longitude
 lon_top = lon_bot + 1
 if(lon_top > nx) then
@@ -1381,6 +1703,36 @@ four_lats(1) = lat_bot
 four_lats(2) = lat_bot
 four_lats(3) = lat_top
 four_lats(4) = lat_top
+=======
+!! Find the indices to get the values for interpolating
+!lat_top = lat_bot + 1
+!if(lat_top > ny) then
+!   istatus = 2
+!   return
+!endif
+!
+!! Watch for wraparound in longitude
+!lon_top = lon_bot + 1
+!if(lon_top > nx) then
+!   if (cyclic) then
+!      lon_top = 1
+!   else
+!      istatus = 2
+!      return
+!   endif
+!endif
+
+! the 4 return values set here are:  lon_bot, lat_bot, lon_top, lat_top
+four_lon_indices(1) = lon_bot
+four_lon_indices(2) = lon_top
+four_lon_indices(3) = lon_top
+four_lon_indices(4) = lon_bot
+
+four_lat_indices(1) = lat_bot
+four_lat_indices(2) = lat_bot
+four_lat_indices(3) = lat_top
+four_lat_indices(4) = lat_top
+>>>>>>> master
 
 end subroutine quad_lon_lat_locate_ii
 
@@ -1426,6 +1778,10 @@ select case (interp_handle%grid_type)
    ! This is an irregular grid (irregular == spacing; still completely orthogonal)
    call get_semireg_box(lon, lat, nx, ny, &
          interp_handle%ir%lons_1d, interp_handle%ir%lats_1d, &
+<<<<<<< HEAD
+=======
+         interp_handle%opt%north_to_south, &
+>>>>>>> master
          lon_bot, lat_bot, lon_fract, lat_fract, istatus)
 
  case (GRID_QUAD_FULLY_REGULAR)
@@ -1503,8 +1859,16 @@ integer  :: lat_status, lon_top, lat_top
 istatus = 0
 
 ! Get latitude box boundaries and fraction
+<<<<<<< HEAD
 ! FIXME: is .false. for the pole??
 call lat_bounds(lat, ny, lat_array(1,:), .false., &
+=======
+! lat_bounds() is called for both the fully irregular case and for
+! the partially regular case.  for irreg, we don't need the options
+! for covering the poles or inverted latitude arrays, so hardcode
+! those to false.
+call lat_bounds(lat, ny, lat_array(1,:), .false., .false., &
+>>>>>>> master
                 found_y, lat_top, lat_fract, lat_status)
 
 ! Check for error on the latitude interpolation
@@ -1551,7 +1915,12 @@ do i=1, ny
 enddo
 
 ! Get latitude box boundaries
+<<<<<<< HEAD
 call lat_bounds(lat, ny, lat_array, .false., found_y, lat_top, lat_fract, lat_status)
+=======
+call lat_bounds(lat, ny, lat_array, .false., .false., &
+                found_y, lat_top, lat_fract, lat_status)
+>>>>>>> master
 
 ! Check for error on the latitude interpolation
 if(lat_status /= 0) then
@@ -1571,12 +1940,22 @@ end subroutine get_reg_box
 !> that contains the point and the fractions along each direction
 !> for interpolation.
 
+<<<<<<< HEAD
 subroutine get_semireg_box(lon, lat, nx, ny, lon_array, lat_array, &
                            found_x, found_y, lon_fract, lat_fract, istatus)
 
 real(r8),   intent(in) :: lon, lat
 integer,    intent(in) :: nx, ny
 real(r8),   intent(in) :: lon_array(:), lat_array(:)
+=======
+subroutine get_semireg_box(lon, lat, nx, ny, lon_array, lat_array, invert_lat, &
+                           found_x, found_y, lon_fract, lat_fract, istatus)
+
+real(r8),  intent(in)  :: lon, lat
+integer,   intent(in)  :: nx, ny
+real(r8),  intent(in)  :: lon_array(:), lat_array(:)
+logical,   intent(in)  :: invert_lat
+>>>>>>> master
 integer,   intent(out) :: found_x, found_y
 real(r8),  intent(out) :: lon_fract, lat_fract
 integer,   intent(out) :: istatus
@@ -1589,7 +1968,12 @@ istatus = 0
 
 ! Get latitude box boundaries
 !>@todo FIXME check on the pole wrap and cyclic flags
+<<<<<<< HEAD
 call lat_bounds(lat, ny, lat_array, .false., found_y, lat_top, lat_fract, lat_status)
+=======
+call lat_bounds(lat, ny, lat_array, .false., invert_lat, &
+                found_y, lat_top, lat_fract, lat_status)
+>>>>>>> master
 
 ! Check for error on the latitude interpolation
 if(lat_status /= 0) then
@@ -1648,7 +2032,12 @@ endif
 do i = 2, nlons
    dist_bot = lon_dist(lon, lon_array(i - 1))
    dist_top = lon_dist(lon, lon_array(i))
+<<<<<<< HEAD
    if (debug > 3) print *, 'lon: i, bot, top: ', i, dist_bot, dist_top
+=======
+   if (debug > 3) print *, 'lon: i, lon_array(i-1), lon_array(i), bot, top: ', &
+                            i, lon_array(i-1), lon_array(i), dist_bot, dist_top
+>>>>>>> master
    if(dist_bot <= 0.0_r8 .and. dist_top > 0.0_r8) then
       bot = i - 1
       top = i
@@ -1694,39 +2083,89 @@ end subroutine lon_bounds
 !> northernmost (2 returned). If one really had lots of polar obs would
 !> want to worry about interpolating around poles.
 
+<<<<<<< HEAD
 subroutine lat_bounds(lat, nlats, lat_array, polar, bot, top, fract, istatus)
+=======
+subroutine lat_bounds(lat, nlats, lat_array, polar, invert_lat, bot, top, fract, istatus)
+>>>>>>> master
 
 real(r8),  intent(in)  :: lat
 integer,   intent(in)  :: nlats
 real(r8),  intent(in)  :: lat_array(nlats)
 logical,   intent(in)  :: polar
+<<<<<<< HEAD
+=======
+logical,   intent(in)  :: invert_lat
+>>>>>>> master
 integer,   intent(out) :: bot, top
 real(r8),  intent(out) :: fract
 integer,   intent(out) :: istatus
 
 ! Local storage
+<<<<<<< HEAD
 integer :: i
+=======
+integer :: i, north, south, start, end, increment
+>>>>>>> master
 
 ! Success should return 0, failure a positive number.
 istatus = 0
 
 ! FIXME: polar is for future expansion, ignored for now
 
+<<<<<<< HEAD
 ! Check for too far south or north
 if(lat < lat_array(1)) then
    istatus = 1
    return
 else if(lat > lat_array(nlats)) then
+=======
+! normally grids start at -90 and go to 90 (south to north).
+! but some grids start at 90 and go to -90 (north to south).
+! try to handle both with a minimum of replicated code.
+if (invert_lat) then
+  north = lat_array(1)
+  south = lat_array(nlats)
+  start = nlats - 1
+  end = 1
+  increment = -1
+else
+  north = lat_array(nlats)
+  south = lat_array(1)
+  start = 2
+  end = nlats
+  increment = 1
+endif
+
+! Check for too far south or north
+if(lat < south) then
+   istatus = 1
+   return
+else if(lat > north) then
+>>>>>>> master
    istatus = 2
    return
 endif
 
 ! In the middle, search through
+<<<<<<< HEAD
 do i = 2, nlats
    if (debug > 3) print *, 'lat: i, lat, lat(i): ', i, lat, lat_array(i)
    if(lat <= lat_array(i)) then
       bot = i - 1
       top = i
+=======
+do i = start, end, increment
+   if (debug > 3) print *, 'lat: i, lat, lat(i): ', i, lat, lat_array(i)
+   if(lat <= lat_array(i)) then
+      if (invert_lat) then
+         bot = i
+         top = i + 1
+      else
+         bot = i - 1
+         top = i
+      endif
+>>>>>>> master
       if (lat_array(top) - lat_array(bot) == 0.0_r8) then
          istatus = 2
          return
@@ -1773,11 +2212,19 @@ end function lon_dist
 !> well and 1 if the point was not found to be in any of the quads.
 
 subroutine get_grid_quad(lon, lat, qlons, qlats, num_inds, start_ind, &
+<<<<<<< HEAD
                          x_inds, y_inds, cyclic, nx, ny, found_x, found_y, istatus)
 
 real(r8), intent(in)  :: lon, lat, qlons(:, :), qlats(:, :)
 integer,  intent(in)  :: num_inds, start_ind, x_inds(:), y_inds(:)
 logical,  intent(in)  :: cyclic
+=======
+                         x_inds, y_inds, cyclic, pole, nx, ny, found_x, found_y, istatus)
+
+real(r8), intent(in)  :: lon, lat, qlons(:, :), qlats(:, :)
+integer,  intent(in)  :: num_inds, start_ind, x_inds(:), y_inds(:)
+logical,  intent(in)  :: cyclic, pole
+>>>>>>> master
 integer,  intent(in)  :: nx, ny
 integer,  intent(out) :: found_x, found_y, istatus
 
@@ -1789,11 +2236,19 @@ real(r8) :: x_corners(4), y_corners(4)
 do i = 1, num_inds
    my_index = start_ind + i - 1
    call get_quad_corners(qlons, x_inds(my_index), y_inds(my_index), &
+<<<<<<< HEAD
                          cyclic, nx, ny, x_corners, istatus)
    if (istatus /= 0) return
 
    call get_quad_corners(qlats, x_inds(my_index), y_inds(my_index), &
                          cyclic, nx, ny, y_corners, istatus)
+=======
+                         cyclic, pole, nx, ny, x_corners, istatus)
+   if (istatus /= 0) return
+
+   call get_quad_corners(qlats, x_inds(my_index), y_inds(my_index), &
+                         cyclic, pole, nx, ny, y_corners, istatus)
+>>>>>>> master
    if (istatus /= 0) return
 
    ! Ssearch in this individual quad
@@ -1970,6 +2425,7 @@ endif
 end subroutine line_intercept
 
 !------------------------------------------------------------
+<<<<<<< HEAD
 
 subroutine quad_bilinear_interp(lon_in, lat_in, x_corners_in, y_corners_in, cyclic, &
                                 p, expected_obs)
@@ -1979,6 +2435,9 @@ logical,   intent(in) :: cyclic
 real(r8), intent(out) :: expected_obs
 
 ! Given a longitude and latitude (lon_in, lat), the longitude and
+=======
+! Given a longitude and latitude (lon_in, lat_in), the longitude and
+>>>>>>> master
 ! latitude of the 4 corners of a quadrilateral and the values at the
 ! four corners, interpolates to (lon_in, lat) which is assumed to
 ! be in the quad. This is done by bilinear interpolation, fitting
@@ -1990,6 +2449,16 @@ real(r8), intent(out) :: expected_obs
 ! about the numerical stability of this implementation. Implementation
 ! checks showed accuracy to seven decimal places on all tests.
 
+<<<<<<< HEAD
+=======
+subroutine quad_bilinear_interp(lon_in, lat_in, x_corners_in, y_corners_in, cyclic, &
+                                p, expected_obs)
+
+real(r8),  intent(in) :: lon_in, lat_in, x_corners_in(4), y_corners_in(4), p(4)
+logical,   intent(in) :: cyclic
+real(r8), intent(out) :: expected_obs
+
+>>>>>>> master
 integer :: i
 real(r8) :: m(3, 3), v(3), r(3), a, b(2), c(2), d
 real(r8) :: x_corners(4), lon, y_corners(4), lat
@@ -2360,6 +2829,7 @@ if(interp_handle%grid_type == GRID_QUAD_FULLY_IRREGULAR) then
    ! lons and lats are integer indices.  x_corners and y_corners are the real*8 locations.
    ! Get corner grid locations for accurate interpolation
    call get_quad_corners(interp_handle%ii%lons_2D, four_lons(1), four_lats(1), &
+<<<<<<< HEAD
                          interp_handle%opt%spans_lon_zero, interp_handle%nlon, &
                          interp_handle%nlat, x_corners, istatus)
    if (istatus /= 0) return
@@ -2372,11 +2842,30 @@ if (debug > 10) write(*,'(A,8F12.3)') 'evaluate: x_corners = ', x_corners
 if (debug > 10) write(*,'(A,8F12.3)') 'evaluate: y_corners = ', y_corners
 
 if (debug > 10) write(*,'(A,8F12.3)') 'evaluate: invals ens1 = ', invals(:, 1)
+=======
+                         interp_handle%opt%spans_lon_zero, interp_handle%opt%pole_wrap, &
+                         interp_handle%nlon, interp_handle%nlat, x_corners, istatus)
+   if (istatus /= 0) return
+
+   call get_quad_corners(interp_handle%ii%lats_2D, four_lons(1), four_lats(1), &
+                         interp_handle%opt%spans_lon_zero, interp_handle%opt%pole_wrap, &
+                         interp_handle%nlon, interp_handle%nlat, y_corners, istatus)
+   if (istatus /= 0) return
+
+   if (debug > 10) write(*,'(A,8F12.3)') 'evaluate: x_corners = ', x_corners
+   if (debug > 10) write(*,'(A,8F12.3)') 'evaluate: y_corners = ', y_corners
+
+   if (debug > 10) write(*,'(A,8F12.3)') 'evaluate: invals ens1 = ', invals(:, 1)
+>>>>>>> master
    do e = 1, nitems
       call quad_bilinear_interp(lon, lat, x_corners, y_corners, &
                         interp_handle%opt%spans_lon_zero, invals(:,e), outvals(e))
    enddo
+<<<<<<< HEAD
 if (debug > 10) write(*,'(A,8F12.3)') 'evaluate: outvals ens1 = ', outvals(1)
+=======
+   if (debug > 10) write(*,'(A,8F12.3)') 'evaluate: outvals ens1 = ', outvals(1)
+>>>>>>> master
 else
    string1 = 'wrong interface for this grid'
    write(string2,*)'grid type is ',interp_handle%grid_type
@@ -2449,7 +2938,11 @@ endif
 !> not needed.  should it call allow_missing_in_state() on init and
 !> key off that?  (i think yes.)
 
+<<<<<<< HEAD
 if (.false.) then
+=======
+if (missing_ok_in_state) then
+>>>>>>> master
 
    ! have to do the items individually because some items might
    ! have missing and others not.

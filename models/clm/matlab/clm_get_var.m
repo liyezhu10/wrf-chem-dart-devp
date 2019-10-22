@@ -7,6 +7,21 @@ function x = clm_get_var(fname,varname,levelindex,timeindex,varargin)
 % levelindex = 1;
 % timeindex  = 1;
 % x          = clm_get_var(fname,varname,levelindex,timeindex);
+% copystring = 'ensemble member 3';
+% x          = clm_get_var(fname,varname,copystring,levelindex,timeindex);
+%
+% EXAMPLE 2: as above, compare to comparable field in CLM history file.
+% clmfname   = '/glade/scratch/thoar/enstest_0907/enstest_0907.clm2_0003.r.2000-01-05-00000.nc';
+% x          = clm_get_var(fname,varname,copystring,levelindex,timeindex,clmfname);
+%
+% fname      = 'Prior_Diag.2000-01-06-00000.nc';
+% clmfname   = '../clmruns/enstest_0906.clm2_0006.r.2000-01-06-00000.nc';
+%
+% % 'frac_sno',    'QTY_SNOWCOVER_FRAC',
+% % 'DZSNO',       'QTY_SNOW_THICKNESS',
+% % 'H2OSOI_LIQ',  'QTY_LIQUID_WATER',
+% % 'H2OSOI_ICE',  'QTY_ICE',
+% % 'T_SOISNO',    'QTY_SOIL_TEMPERATURE',
 %
 % 'frac_sno',    'QTY_SNOWCOVER_FRAC',
 % 'DZSNO',       'QTY_SNOW_THICKNESS',

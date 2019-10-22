@@ -340,6 +340,7 @@
 #  loc_of_interest       = 255.0, -88.11518, 0.035  is 205,3 has 2 columns
 
 &model_mod_check_nml
+<<<<<<< HEAD
    num_ens               = 1
    input_state_files     = 'clm_restart.nc', 'clm_history.nc', 'clm_vector_history.nc'
    output_state_files    = 'mmc_output1.nc', 'mmc_output2.nc', 'mmc_output3.nc'
@@ -356,6 +357,23 @@
    interp_test_vertrange = 0.0, 0.2
    interp_test_dvert     = 0.1
    verbose               = .true.
+=======
+   input_state_files     = 'clm_restart.nc', 'clm_history.nc', 'clm_vector_history.nc'
+   output_state_files    = 'mmc_output1.nc', 'mmc_output2.nc', 'mmc_output3.nc'
+   test1thru             = 0
+   run_tests             = 1, 2, 3, 4, 7
+   x_ind                 = 720
+   loc_of_interest       = 254.727854, 39.9768545, 0.35
+   quantity_of_interest  = 'QTY_LEAF_CARBON'
+   interp_test_vertcoord = 'VERTISHEIGHT'
+   interp_test_lonrange  = 320.0, 90.0 
+   interp_test_dlon      = 1.0
+   interp_test_latrange  = 0.0, 75.0
+   interp_test_dlat      = 1.0
+   interp_test_vertrange = 1.0, 2.0
+   interp_test_dvert     = 1.0
+   verbose               = .false.
+>>>>>>> master
   /
 
 &state_vector_io_nml
