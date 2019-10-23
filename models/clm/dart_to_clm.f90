@@ -22,12 +22,10 @@ use        model_mod, only : static_init_model
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=*), parameter :: source   = &
-   "$URL$"
+character(len=*), parameter :: source   = "dart_to_clm"
 character(len=*), parameter :: revision = "$Revision$"
 character(len=*), parameter :: revdate  = "$Date$"
 
-integer            :: iunit, io
 character(len=512) :: string1, string2, string3
 
 !------------------------------------------------------------------
@@ -41,13 +39,11 @@ namelist /dart_to_clm_nml/ input_dart_file, clm_file_to_update
 
 !----------------------------------------------------------------------
 
-character(len=256) :: clm_restart_filename
-integer            :: iunit, io
-type(time_type)    :: model_time, adv_to_time
+integer :: iunit, io
 
 !----------------------------------------------------------------------
 
-call initialize_utilities(progname='dart_to_clm')
+call initialize_utilities(source)
 
 call static_init_model()
 
@@ -57,12 +53,12 @@ call check_namelist_read(iunit, io, "dart_to_clm_nml")
 
 write(string1,*)'converting DART file "'//trim(input_dart_file)//'"'
 write(string2,*)'to clm restart file "'//trim(clm_file_to_update)//'"'
-call error_handler(E_MSG,'dart_to_clm',string1,text2=string2)
+call error_handler(E_MSG,source,string1,text2=string2)
 
 ! this is where something useful might happen ... like rebalancing the
 ! SWE into snow layers or making the soil temperature and moisture compatible ...
 
-call finalize_utilities('dart_to_clm')
+call finalize_utilities(source)
 
 end program dart_to_clm
 

@@ -9,7 +9,7 @@ module filter_mod
 !------------------------------------------------------------------------------
 use types_mod,             only : r8, i8, missing_r8, metadatalength, MAX_NUM_DOMS, MAX_FILES
 
-use options_mod,           only : get_missing_ok_status, set_missing_ok_status
+use options_mod,           only : get_missing_ok_status
 
 use obs_sequence_mod,      only : read_obs_seq, obs_type, obs_sequence_type,                  &
                                   get_obs_from_key, set_copy_meta_data, get_copy_meta_data,   &
@@ -101,7 +101,7 @@ public :: filter_sync_keys_time, &
           filter_main
 
 ! version controlled file description for error handling, do not edit
-character(len=*), parameter :: source   = "$URL$"
+character(len=*), parameter :: source   = "filter_mod"
 character(len=*), parameter :: revision = "$Revision$"
 character(len=*), parameter :: revdate  = "$Date$"
 
@@ -250,13 +250,11 @@ real(r8) :: inf_lower_bound(2)             = 1.0_r8
 real(r8) :: inf_upper_bound(2)             = 1000000.0_r8
 real(r8) :: inf_sd_lower_bound(2)          = 0.0_r8
 
-!>@todo so I put 'allow_missing_in_clm in the model_nml'
 ! Some models are allowed to have MISSING_R8 values in the DART state vector.
 ! If they are encountered, it is not necessarily a FATAL error.
-! Most of the time, if a MISSING_R8 is encountered, DART should die.
-! CLM should have allow_missing_clm = .true.
-logical  :: allow_missing_clm = .false.
+! The model is responsible for calling options_mod:set_missing_ok_status()
 
+logical  :: allow_missing_clm = .false.
 
 namelist /filter_nml/ async,     &
    adv_ens_command,              &
@@ -360,7 +358,9 @@ logical :: ds, all_gone, allow_missing
 ! real(r8), allocatable   :: temp_ens(:) ! for smoother
 real(r8), allocatable   :: prior_qc_copy(:)
 
-call filter_initialize_modules_used() ! static_init_model called in here
+! static_init_model called by filter_initialize_modules_used
+! static_init_model should be responsible for setting 'allow_missing'
+call filter_initialize_modules_used()
 
 ! Read the namelist entry
 call find_namelist_in_file("input.nml", "filter_nml", iunit)
@@ -392,19 +392,15 @@ call error_handler(E_MSG,'filter_main:', msgstring, source, revision, revdate)
 ! See if smoothing is turned on
 ds = do_smoothing()
 
-!>@todo deprecate 'allow_missing_clm'.
-!> Is there a better way to determine if someone is specifying 'allow_missing_clm'.
-!> If they are specifying the default value, they will never see this message.
-
+! Remove support for 'allow_missing_clm' ... must now be specified by model.
 if (allow_missing_clm) then
-   write(msgstring,*) '&filter_nml "allow_missing_clm" is deprecated.'
+   write(msgstring,*) '&filter_nml "allow_missing_clm" is UNSUPPORTED.'
    write(string2,*) 'Please specify desired behavior directly in the model_mod'
    write(string3,*) 'by calling "options_mod:set_missing_ok_status()".'
-   call error_handler(E_MSG,'filter_main:', msgstring, &
+   call error_handler(E_ERR,'filter_main:', msgstring, &
               source, revision, revdate, text2=string2, text3=string3)
 endif
 
-call set_missing_ok_status(allow_missing_clm)
 allow_missing = get_missing_ok_status()
 
 call trace_message('Before initializing inflation')
@@ -2736,17 +2732,18 @@ character(len=*),    intent(in) :: information
 
 character(len=20)  :: task_str !! string to hold the task number
 character(len=129) :: file_obscopies !! output file name
-integer :: i
+integer :: i, iunit
 
 write(task_str, '(i10)') obs_fwd_op_ens_handle%my_pe
 file_obscopies = TRIM('obscopies_' // TRIM(ADJUSTL(information)) // TRIM(ADJUSTL(task_str)))
-open(15, file=file_obscopies, status ='unknown')
+
+iunit = open_file(file_obscopies, 'formatted', 'append')
 
 do i = 1, obs_fwd_op_ens_handle%num_copies - 4
-   write(15, *) obs_fwd_op_ens_handle%copies(i,:)
+   write(iunit, *) obs_fwd_op_ens_handle%copies(i,:)
 enddo
 
-close(15)
+close(iunit)
 
 end subroutine test_obs_copies
 
