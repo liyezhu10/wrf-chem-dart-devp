@@ -11,8 +11,8 @@
    output_interval            =  1
    single_file_in             = .false.
    single_file_out            = .false.
-   input_state_files          = 'clm_restart.nc', 'clm_history.nc', 'clm_vector_history.nc'
-   output_state_files         = 'restart_out.nc', 'history_out.nc', 'vector_history_out.nc'
+   input_state_files          = 'clm_restart.nc', 'clm_history.nc'
+   output_state_files         = 'restart_out.nc', 'history_out.nc'
    obs_seq_in_file_name       = "obs_seq.in"
    obs_seq_out_file_name      = "obs_seq.out"
    adv_ens_command            = "no_advance_script"
@@ -33,9 +33,9 @@
    input_state_file_list    = "restart_files.txt",
                               "history_files.txt",
                               "history_vector_files.txt" 
-   output_state_file_list   = "restart_files.txt",
-                              "history_files.txt",
-                              "history_vector_files.txt" 
+   output_state_file_list   = "restart_files_out.txt",
+                              "history_files_out.txt",
+                              "history_vector_files_out.txt"
    init_time_days           = -1
    init_time_seconds        = -1
    first_obs_days           = -1
@@ -53,7 +53,7 @@
    trace_execution          = .true.
    silence                  = .false.
 
-   stages_to_write          = 'input', 'preassim', 'output'
+   stages_to_write          = 'preassim', 'output'
    output_members           = .true.
    output_mean              = .true.
    output_sd                = .true.
@@ -189,14 +189,19 @@
    assimilation_period_seconds  = 3600
    calendar                     = 'Gregorian'
    debug                        = 0
-   clm_variables = 'H2OSOI_LIQ',  'QTY_SOIL_LIQUID_WATER',          '0.0', 'NA', 'restart', 'UPDATE',
-                   'H2OSOI_ICE',  'QTY_SOIL_ICE',                   '0.0', 'NA', 'restart', 'UPDATE',
-                   'T_SOISNO',    'QTY_SOIL_TEMPERATURE',           'NA' , 'NA', 'restart', 'UPDATE',
-                   'leafn',       'QTY_LEAF_NITROGEN',              '0.0', 'NA', 'restart', 'UPDATE',
-                   'leafc',       'QTY_LEAF_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
-                   'LAI240_VALUE','QTY_LEAF_AREA_INDEX',            '0.0', 'NA', 'restart', 'NO_COPY_BACK',
-                   'EFLX_LH_TOT', 'QTY_LATENT_HEAT_FLUX',           'NA',  'NA', 'history', 'NO_COPY_BACK',
-                   'FSIF',        'QTY_SOLAR_INDUCED_FLUORESCENCE', '0.0', 'NA', 'history', 'NO_COPY_BACK',
+   clm_variables  = 'leafc',       'QTY_LEAF_CARBON',            '0.0', '500.0',   'restart', 'UPDATE',
+                    'livestemc',   'QTY_LIVE_STEM_CARBON',       '0.0', '250.0',   'restart', 'UPDATE',
+                    'deadstemc',   'QTY_DEAD_STEM_CARBON',       '0.0', '15000.0', 'restart', 'UPDATE',
+                    'TLAI',        'QTY_LEAF_AREA_INDEX',        '0.0', '10.0',    'history', 'UPDATE',
+		    'frootc',      'QTY_ROOT_CARBON',            '0.0', 'NA',      'restart', 'UPDATE',
+		    'livecrootc',  'QTY_ROOT_CARBON',            '0.0', 'NA',      'restart', 'UPDATE',
+                    'deadcrootc',  'QTY_ROOT_CARBON',            '0.0', 'NA',      'restart', 'UPDATE',
+		    'leafn',       'QTY_LEAF_NITROGEN',          '0.0', 'NA',      'restart', 'UPDATE',
+		    'frootn',      'QTY_ROOT_NITROGEN',          '0.0', 'NA',      'restart', 'UPDATE',
+                    'livecrootn',  'QTY_ROOT_NITROGEN',          '0.0', 'NA',      'restart', 'UPDATE',
+                    'deadcrootn',  'QTY_ROOT_NITROGEN',          '0.0', 'NA',      'restart', 'UPDATE',
+                    'livestemn',   'QTY_STEM_NITROGEN',          '0.0', 'NA',      'restart', 'UPDATE',
+                    'deadstemn',   'QTY_STEM_NITROGEN',          '0.0', 'NA',      'restart', 'UPDATE',
    /
 
 #  clm_variables = 'frootc',      'QTY_ROOT_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
@@ -340,15 +345,14 @@
 #  loc_of_interest       = 255.0, -88.11518, 0.035  is 205,3 has 2 columns
 
 &model_mod_check_nml
-<<<<<<< HEAD
    num_ens               = 1
-   input_state_files     = 'clm_restart.nc', 'clm_history.nc', 'clm_vector_history.nc'
-   output_state_files    = 'mmc_output1.nc', 'mmc_output2.nc', 'mmc_output3.nc'
+   input_state_files     = 'clm_restart.nc', 'clm_history.nc'
+   output_state_files    = 'mmc_output1.nc', 'mmc_output2.nc'
    test1thru             = 0
-   run_tests             = 1,2,3,4 
+   run_tests             = 1,2,3,4,7
    x_ind                 = 6691574
    loc_of_interest       = 254.724947, 39.978080, 0.039
-   quantity_of_interest  = 'QTY_SOLAR_INDUCED_FLUORESCENCE'
+   quantity_of_interest  = 'QTY_LEAF_CARBON'
    interp_test_vertcoord = 'VERTISHEIGHT'
    interp_test_lonrange  = 0.0, 180.0
    interp_test_dlon      = 1.0
@@ -357,23 +361,6 @@
    interp_test_vertrange = 0.0, 0.2
    interp_test_dvert     = 0.1
    verbose               = .true.
-=======
-   input_state_files     = 'clm_restart.nc', 'clm_history.nc', 'clm_vector_history.nc'
-   output_state_files    = 'mmc_output1.nc', 'mmc_output2.nc', 'mmc_output3.nc'
-   test1thru             = 0
-   run_tests             = 1, 2, 3, 4, 7
-   x_ind                 = 720
-   loc_of_interest       = 254.727854, 39.9768545, 0.35
-   quantity_of_interest  = 'QTY_LEAF_CARBON'
-   interp_test_vertcoord = 'VERTISHEIGHT'
-   interp_test_lonrange  = 320.0, 90.0 
-   interp_test_dlon      = 1.0
-   interp_test_latrange  = 0.0, 75.0
-   interp_test_dlat      = 1.0
-   interp_test_vertrange = 1.0, 2.0
-   interp_test_dvert     = 1.0
-   verbose               = .false.
->>>>>>> master
   /
 
 &state_vector_io_nml

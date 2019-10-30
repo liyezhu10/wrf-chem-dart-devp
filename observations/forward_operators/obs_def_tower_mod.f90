@@ -170,18 +170,17 @@ public :: get_scalar_from_history, &
           calculate_biomass
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = "obs_def_tower_mod.f90"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 logical            :: module_initialized = .false.
 logical            :: unstructured = .false.
-character(len=129) :: string1, string2, string3
+character(len=512) :: string1, string2, string3
 integer            :: nlon, nlat, ntime, ens_size
 type(time_type)    :: initialization_time
 
-character(len=129), allocatable, dimension(:) :: fname
+character(len=256), allocatable, dimension(:) :: fname
 integer,            allocatable, dimension(:) :: ncid
 real(r8),           allocatable, dimension(:) :: lon, lat, area
 real(digits12),     allocatable, dimension(:) :: rtime
@@ -308,12 +307,11 @@ enddo ENSEMBLESIZE
 
 if (ens_size < 2) then
 
-   write(string1,100) trim(casename),1,year,month,day,second
-   write(string2,*)'cannot find files to use for observation operator.'
-   write(string3,*)'trying files with names like "',trim(string1),'" -or-'
    write(string1,110) trim(casename),year,month,day,second
+   write(string2,*)'cannot find files to use for observation operator.'
+   write(string3,*)'trying files with names like "',trim(string1),'"'
    call error_handler(E_ERR, 'obs_def_tower.initialize_routine', string2, &
-                  source, revision, revdate, text2=string3,text3='"'//trim(string1)//'"')
+                  source, revision, revdate, text2=string3)
 
 elseif (ens_size >= 200) then
 
