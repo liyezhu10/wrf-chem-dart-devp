@@ -115,9 +115,9 @@ end interface
 logical :: standalone = .false.
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = "utilities_mod.f90"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 character(len=512) :: msgstring1, msgstring2, msgstring3
 
@@ -731,7 +731,7 @@ select case(level)
       ! and should be removed from the calls.  in the meantime, to ease the transition
       ! don't print values like $URL$, etc.
       !call log_it('')
-      !if (present(src))   call log_it('   source file: '//trim(src))
+       if (present(src))   call log_it('   source file: '//trim(src))
       !if (present(rev))   call log_it(' file revision: '//trim(rev))
       !if (present(rdate)) call log_it(' revision date: '//trim(rdate))
       !if (present(aut))   call log_it('   last editor: '//trim(aut))
@@ -2823,8 +2823,3 @@ end subroutine output_unit_attribs
 
 end module utilities_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

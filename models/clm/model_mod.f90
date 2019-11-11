@@ -302,7 +302,8 @@ real(r8), allocatable, dimension(:)  :: land1d_wtxy    ! landunit weight relativ
 real(r8), allocatable, dimension(:)  :: cols1d_wtxy    ! column   weight relative to corresponding gridcell
 real(r8), allocatable, dimension(:)  :: pfts1d_wtxy    ! pft      weight relative to corresponding gridcell
 real(r8), allocatable, dimension(:)  :: levtot
-real(r8), allocatable, dimension(:,:):: zsno           ! (column,levsno) ... snow layer midpoint
+real(r8), allocatable, dimension(:,:):: zsno   ! (column,levsno) ... snow layer midpoint
+real(r8), allocatable, dimension(:,:):: zisno  ! (column,LEVSNO) yes, levsno ... snow layer tops
 integer,  allocatable, dimension(:)  :: cols1d_ityplun ! columntype ... lake, forest, city ...
 
 !------------------------------------------------------------------------------
@@ -441,17 +442,12 @@ character(len=*), parameter :: routine = 'static_init_model'
 
 integer                      :: dimlens(NF90_MAX_VAR_DIMS)
 character(len=obstypelength) :: dimnames(NF90_MAX_VAR_DIMS)
-character(len=obstypelength) :: dimname
 
-integer :: ncid, TimeDimID, VarID, dimlen
+integer :: ncid
 integer :: iunit, io, idom, ivar
 integer :: i, j, k, xi, xj, rank
 integer(i8) :: indx
 integer :: ss, dd
-
-integer  :: spvalINT
-real(r4) :: spvalR4
-real(r8) :: spvalR8
 
 integer :: nvars
 character(len=obstypelength) :: var_names(max_state_variables)
@@ -530,7 +526,11 @@ allocate(cols1d_ixy(ncolumn),   cols1d_jxy(ncolumn))
 allocate(cols1d_wtxy(ncolumn),  cols1d_ityplun(ncolumn))
 allocate(pfts1d_ixy(npft),      pfts1d_jxy(npft)     , pfts1d_wtxy(npft))
 allocate(levtot(nlevtot))
-if (nlevsno > 0) allocate(zsno(nlevsno,ncolumn))
+
+if (nlevsno > 0) then
+   allocate( zsno(nlevsno,ncolumn))
+   allocate(zisno(nlevsno1,ncolumn))
+endif
 
 call get_sparse_geog(ncid, clm_restart_filename, 'close')
 
@@ -773,7 +773,7 @@ VARIABLES : do ivar=1,get_num_variables(idom)
 
             LANDCOLUMN : do j = 1, dimlens(2)
 
-               call fill_levels(dimnames(1),j,dimlens(1),levtot)
+               call fill_levels(varname,dimnames(1),j,dimlens(1),levtot)
 
                xi = cols1d_ixy(j)
                xj = cols1d_jxy(j) ! nnnnn_jxy(:) always 1 if unstructured
@@ -2652,6 +2652,8 @@ character(len=*), parameter :: routine = 'get_sparse_geog'
 
 integer  :: VarID, io
 
+real(r8), allocatable :: temp2d(:,:)
+
 if (ncid == 0) ncid = nc_open_file_readonly(fname, routine)
 
 ! Make sure the variables are the right size ...
@@ -2693,15 +2695,32 @@ call nc_get_variable(ncid, 'pfts1d_jxy',     pfts1d_jxy,     routine)
 call nc_get_variable(ncid, 'pfts1d_wtxy',    pfts1d_wtxy,    routine)
 
 ! zsno is NOT optional ... so it IS a fatal error if it is not present (for now, anyway).
-! as read into fortran ... zsno(:,1) is the level closest to the sun.
-! as read into fortran ... zsno(:,5) is the level closest to the ground.
+! as read into fortran ... zsno(1,:) is the level closest to the sun.
+! as read into fortran ... zsno(N,:) is the level closest to the ground.
+!
+! ZSNO and ZISNO are dimensioned identically. 
+! Here is example when SNLSNO = -10:
+!            DZSNO     ZSNO                  ZISNO    
+! ( 1,11345) 0,        0,                    0,
+! ( 2,11345) 0,        0,                    0,
+! ( 3,11345) 0.02,     -22.9724115403977,    -22.9824115403977
+! ( 4,11345) 0.05,     -22.9374115403977,    -22.9624115403977
+! ( 5,11345) 0.11,     -22.8574115403977,    -22.9124115403977
+! ( 6,11345) 0.23,     -22.6874115403977,    -22.8024115403977
+! ( 7,11345) 0.47,     -22.3374115403977,    -22.5724115403977
+! ( 8,11345) 0.95,     -21.6274115403977,    -22.1024115403977
+! ( 9,11345) 1.91,     -20.1974115403977,    -21.1524115403977
+! (10,11345) 3.83,     -17.3274115403977,    -19.2424115403977
+! (11,11345) 7.67,     -11.5774115403977,    -15.4124115403977
+! (12,11345) 7.74+,    -3.87120577019883,    -7.74241154039766
 
 if (nlevsno > 0 ) then
-   io = nf90_inq_varid(ncid, 'ZSNO', VarID)
-   call nc_check(io, routine, 'inq_varid ZSNO', ncid=ncid)
-
-   io = nf90_get_var(ncid, VarID, zsno)
-   call nc_check(io, routine, 'get_var ZSNO', ncid=ncid)
+   call nc_get_variable(ncid, 'ZSNO',  zsno,  routine)
+   allocate(temp2d(nlevsno,ncolumn))
+   call nc_get_variable(ncid, 'ZISNO', temp2D, routine)
+   zisno(1:nlevsno,:) = temp2D;
+   zisno( nlevsno1,:) = 0.0_r8;
+   deallocate(temp2D)
 else
    write(string1,*) 'levsno must be in restart file'
    call error_handler(E_ERR,routine,string1,source,revision,revdate)
@@ -2733,7 +2752,8 @@ if ((debug > 7) .and. do_output()) then
    write(logfileunit,*)'pfts1d_ixy     range ',minval(pfts1d_ixy),    maxval(pfts1d_ixy)
    write(logfileunit,*)'pfts1d_jxy     range ',minval(pfts1d_jxy),    maxval(pfts1d_jxy)
    write(logfileunit,*)'pfts1d_wtxy    range ',minval(pfts1d_wtxy),   maxval(pfts1d_wtxy)
-   if (nlevsno > 0) write(logfileunit,*)'zsno           range ',minval(zsno),maxval(zsno)
+   if (nlevsno > 0) write(logfileunit,*)'zsno           range ',minval(zsno), maxval(zsno)
+   if (nlevsno > 0) write(logfileunit,*)'zisno          range ',minval(zisno),maxval(zisno)
 
    write(     *     ,*)
    write(     *     ,*)'Raw lat/lon information as read ...'
@@ -2752,7 +2772,8 @@ if ((debug > 7) .and. do_output()) then
    write(     *     ,*)'pfts1d_ixy     range ',minval(pfts1d_ixy),    maxval(pfts1d_ixy)
    write(     *     ,*)'pfts1d_jxy     range ',minval(pfts1d_jxy),    maxval(pfts1d_jxy)
    write(     *     ,*)'pfts1d_wtxy    range ',minval(pfts1d_wtxy),   maxval(pfts1d_wtxy)
-   if (nlevsno > 0) write(     *     ,*)'zsno           range ',minval(zsno),maxval(zsno)
+   if (nlevsno > 0) write(     *     ,*)'zsno           range ',minval(zsno), maxval(zsno)
+   if (nlevsno > 0) write(     *     ,*)'zisno          range ',minval(zisno),maxval(zisno)
 
 endif
 
@@ -2938,8 +2959,6 @@ end subroutine parse_variable_table
 
 
 !------------------------------------------------------------------
-!> subroutine fill_levels(dimname,icol,enlevels,levtot)
-!>
 !> dimname         ... is it dimensioned 'levgrnd' or 'levsno' or 'levtot' ...
 !> icol            ... which CLM 'column' are we in
 !> enlevels        ... the expected number of levels ... varshape
@@ -2980,27 +2999,40 @@ end subroutine parse_variable_table
 !> figure(5); plot3(lon,lat,h2o(:,5),'x'); hold on; worldmap; view(0,90)
 !> figure(6); plot3(lon,lat,h2o(:,6),'x'); hold on; worldmap; view(0,90)
 
-subroutine fill_levels(dimname,icol,enlevels,levtot)
+subroutine fill_levels(varname,dimname,icol,enlevels,levtot)
 
-character(len=*),          intent(in) :: dimname
-integer,                   intent(in) :: icol
-integer,                   intent(in) :: enlevels
-real(r8), dimension(:), intent(inout) :: levtot
+character(len=*), intent(in)    :: varname
+character(len=*), intent(in)    :: dimname
+integer,          intent(in)    :: icol
+integer,          intent(in)    :: enlevels
+real(r8),         intent(inout) :: levtot(:)
+
+integer :: j
 
 if     (dimname == 'levsno') then
 
    if (nlevsno /= enlevels) then
-      write(string1,*) 'dimension ', trim(dimname),' has declared length ',enlevels
+      write(string1,*) trim(varname),' dimension ', trim(dimname),' has declared length ',enlevels
       write(string2,*) 'not the known number of snow levels ',nlevsno
       call error_handler(E_ERR,'fill_levels', string1, &
                              source, revision, revdate, text2=string2)
    endif
    levtot(1:nlevsno) = zsno(1:nlevsno,icol)
 
+elseif (dimname == 'levsno1') then
+
+   if (nlevsno1 /= enlevels) then
+      write(string1,*) trim(varname),' dimension ', trim(dimname),' has declared length ',enlevels
+      write(string2,*) 'not the known number of snow interfaces ',nlevsno1
+      call error_handler(E_ERR,'fill_levels', string1, &
+                             source, revision, revdate, text2=string2)
+   endif
+   levtot(1:nlevsno1) = zisno(1:nlevsno1,icol)
+
 elseif (dimname == 'levgrnd') then
 
    if (nlevgrnd /= enlevels) then
-      write(string1,*) 'dimension ', trim(dimname),' has declared length ',enlevels
+      write(string1,*) trim(varname),' dimension ', trim(dimname),' has declared length ',enlevels
       write(string2,*) 'not the known number of soil levels ',nlevgrnd
       call error_handler(E_ERR,'fill_levels', string1, &
                              source, revision, revdate, text2=string2)
@@ -3013,14 +3045,14 @@ elseif (dimname == 'levtot') then
    ! followed by nlevgrnd levels. Dunno what to do with lake stuff ...
 
    if (nlevtot /= enlevels) then
-      write(string1,*) 'dimension ', trim(dimname),' has declared length ',enlevels
+      write(string1,*) trim(varname),' dimension ', trim(dimname),' has declared length ',enlevels
       write(string2,*) 'not the known number of total levels ',nlevtot
       call error_handler(E_ERR,'fill_levels', string1, &
                              source, revision, revdate, text2=string2)
    endif
 
    if (nlevtot /= nlevgrnd + nlevsno) then
-      write(string1,*) 'nlevtot ', nlevtot,' is not equal to nlevgrnd + nlevsno'
+      write(string1,*) trim(varname),' nlevtot ', nlevtot,' is not equal to nlevgrnd + nlevsno'
       write(string2,*) 'nlevgrnd is ',nlevgrnd,' nlevsno is ',nlevsno,' total of ',nlevgrnd+nlevsno
       call error_handler(E_ERR,'fill_levels', string1, &
                              source, revision, revdate, text2=string2)
@@ -3029,11 +3061,22 @@ elseif (dimname == 'levtot') then
    levtot(1:nlevsno) = zsno(1:nlevsno,icol)
    levtot(nlevsno+1:nlevsno+nlevgrnd) = LEVGRND
 
+elseif (dimname == 'numrad') then
+
+   if (nnumrad /= enlevels) then
+      write(string1,*) trim(varname),' dimension ', trim(dimname),' has declared length ',enlevels
+      write(string2,*) 'not the known number of radiation levels ',nnumrad
+      call error_handler(E_ERR,'fill_levels', string1, &
+                             source, revision, revdate, text2=string2)
+   endif
+   levtot(1:nnumrad) = (/ (j,j=1,nnumrad) /)
+
 else
    write(string1,*) 'Unable to determine vertical coordinate for column ',icol
-   write(string2,*) 'unknown dimension name: ',trim(dimname)
+   write(string2,*) 'Variable in question is: "',trim(varname),'"'
+   write(string3,*) 'unknown dimension name: "',trim(dimname),'"'
    call error_handler(E_ERR,'fill_levels', string1, &
-                             source, revision, revdate, text2=string2)
+                             source, revision, revdate, text2=string2, text3=string3)
 endif
 
 

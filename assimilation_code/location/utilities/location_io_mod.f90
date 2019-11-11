@@ -42,10 +42,9 @@ public :: nc_write_location_atts, nc_get_location_varids, &
           nc_add_location_atts
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = "location_io_mod.f90"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 ! should import these but they don't exist in low order locations mods
 !>@todo define them all here and replicate in the ones which use them.
@@ -380,8 +379,3 @@ end subroutine nc_write_multiple_locations
 
 end module location_io_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

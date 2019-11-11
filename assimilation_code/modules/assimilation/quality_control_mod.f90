@@ -42,8 +42,7 @@ public :: initialize_qc, input_qc_ok, get_dart_qc, check_outlier_threshold, &
 
 !------------------------------------------------------------------------------
 ! version controlled file description for error handling, do not edit
-character(len=*), parameter :: source   = &
-   "$URL$"
+character(len=*), parameter :: source   = "quality_control_mod.f90"
 character(len=*), parameter :: revision = "$Revision$"
 character(len=*), parameter :: revdate  = "$Date$"
 !------------------------------------------------------------------------------
@@ -401,8 +400,3 @@ end function good_dart_qc
 !------------------------------------------------------------------------------
 end module quality_control_mod
 
-! <next few lines under version control, do not edit>o
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

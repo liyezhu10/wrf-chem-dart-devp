@@ -55,7 +55,7 @@ public :: static_init_assim_model, &
 !>@todo FIXME ... the documentation for this module is out of date.
 
 ! version controlled file description for error handling, do not edit
-character(len=*), parameter :: source   = "$URL$"
+character(len=*), parameter :: source   = "assim_model_mod.f90"
 character(len=*), parameter :: revision = "$Revision$"
 character(len=*), parameter :: revdate  = "$Date$"
 
@@ -155,8 +155,3 @@ end subroutine end_assim_model
 !
 end module assim_model_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

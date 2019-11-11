@@ -35,10 +35,9 @@ private
 public :: move_ahead, advance_state, set_obs_model_trace, have_members
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = "obs_model_mod.f90"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 logical :: module_initialized  = .false.
 integer :: print_timestamps    = 0
@@ -631,8 +630,3 @@ end function have_members
 
 end module obs_model_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

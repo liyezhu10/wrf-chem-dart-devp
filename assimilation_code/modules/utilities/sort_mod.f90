@@ -39,7 +39,7 @@ public :: sort, index_sort, insertion_sort, index_insertion_sort
 !public :: simple_sort, simple_index_sort  
 
 ! version controlled file description for error handling, do not edit
-character(len=*), parameter :: source   = "$URL:$"
+character(len=*), parameter :: source   = "sort_mod.f90"
 character(len=*), parameter :: revision = "$Revision:$"
 character(len=*), parameter :: revdate  = "$Date:$"
 

@@ -79,10 +79,9 @@ public :: obs_type, init_obs, destroy_obs, get_obs_def, set_obs_def, &
 public :: obs_cov_type
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = "obs_sequence_mod.f90"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 type obs_sequence_type
    private
@@ -2755,8 +2754,3 @@ end function get_num_key_range
 
 end module obs_sequence_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

@@ -101,7 +101,7 @@ public :: filter_sync_keys_time, &
           filter_main
 
 ! version controlled file description for error handling, do not edit
-character(len=*), parameter :: source   = "filter_mod"
+character(len=*), parameter :: source   = "filter_mod.f90"
 character(len=*), parameter :: revision = "$Revision$"
 character(len=*), parameter :: revdate  = "$Date$"
 

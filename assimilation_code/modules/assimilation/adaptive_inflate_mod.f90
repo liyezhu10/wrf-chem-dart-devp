@@ -36,10 +36,9 @@ public :: update_inflation,                                 do_obs_inflate,     
 
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = "adaptive_inflate_mod.f90"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 ! Manages both observation space and state space inflation
 ! Handles initial values and restarts, diagnostic output, and computations
@@ -1334,8 +1333,3 @@ end function get_inflation_sd_copy
 
 end module adaptive_inflate_mod
 
-! <next few lines under version control, do not edit>
-! $URL$ 
-! $Id$ 
-! $Revision$ 
-! $Date$ 

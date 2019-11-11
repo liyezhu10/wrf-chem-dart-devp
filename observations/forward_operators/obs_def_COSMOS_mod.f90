@@ -91,10 +91,9 @@ public ::            set_cosmos_metadata, &
           get_expected_neutron_intensity
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = "obs_def_COSMOS_mod.f90"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 character(len=256) :: string1, string2
 logical, save      :: module_initialized = .false.
@@ -795,8 +794,3 @@ end module obs_def_COSMOS_mod
 
 ! END DART PREPROCESS MODULE CODE
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
