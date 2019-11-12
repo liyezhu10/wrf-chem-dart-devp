@@ -82,7 +82,6 @@ LD = pgf90
 # Pick one that works with the netCDF installation you have.
 
 HDF5 = /auto/soft/hdf5/CentOS_6_pgi
-
 INCS = -I$(NETCDF)/include -I$(HDF5)/include
 LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf -lhdf5hl_fortran -lhdf5_fortran
 
