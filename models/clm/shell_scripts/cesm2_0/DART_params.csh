@@ -27,10 +27,10 @@
 # incorporate any needed changes into this script.
 # ==============================================================================
 
-setenv cesmtag        ctsm
+setenv cesmtag        clm5.0
 setenv resolution     f09_f09_mg17
 setenv compset        2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
-setenv num_instances  10
+setenv num_instances  3
 
 # Since this example was tested while assimilating solar induced fluorescence,
 # we are using 'SIF' in the CASE. FYI only.
@@ -107,7 +107,7 @@ setenv archdir      ${cime_output_root}/archive
 #              month. 'baseobsdir' will be inserted into the appropriate scripts.
 # ==============================================================================
 
-setenv dartroot     /glade/work/${USER}/DART/cesm_clm
+setenv dartroot     /glade/work/${USER}/git/DART_CLM
 setenv baseobsdir   /glade/p/cisl/dares/Observations/land/pmo
 setenv pmo_input_baseobsdir   /glade/p/cisl/dares/Observations/land/pmo/input
 setenv pmo_output_baseobsdir  /glade/p/cisl/dares/Observations/land/pmo/output

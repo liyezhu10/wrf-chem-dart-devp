@@ -77,6 +77,7 @@ use     obs_kind_mod, only : QTY_SOIL_TEMPERATURE,       &
                              QTY_GEOPOTENTIAL_HEIGHT,    &
                              QTY_VEGETATION_TEMPERATURE, &
                              QTY_FRAC_PHOTO_AVAIL_RADIATION, &
+                             QTY_FRACTION_ABSORBED_PAR,  &
                              QTY_FPAR_SUNLIT_DIRECT,     &
                              QTY_FPAR_SUNLIT_DIFFUSE,    &
                              QTY_FPAR_SHADED_DIRECT,     &
@@ -401,8 +402,7 @@ if (present(var_type)) then
    if( var_type == MISSING_I ) then
       write(string1,*) 'Cannot find DART QTY  for indx ', indx
       write(string2,*) 'variable "'//trim(get_variable_name(dom_id, var_id))//'"'
-      call error_handler(E_ERR, 'get_state_meta_data', string1, &
-                 source, revision, revdate, text2=string2)
+      call error_handler(E_ERR,'get_state_meta_data',string1,source,text2=string2)
    endif
 
 endif
@@ -490,7 +490,7 @@ model_timestep = set_model_time_step()
 call get_time(model_timestep,ss,dd) ! set_time() assures the seconds [0,86400)
 
 write(string1,*)'assimilation period is ',dd,' days ',ss,' seconds'
-call error_handler(E_MSG,routine,string1)
+call error_handler(E_MSG,routine,string1,source)
 
 !---------------------------------------------------------------
 ! The CLM history file (h0?) has the 'superset' of information.
@@ -694,8 +694,7 @@ VARIABLES : do ivar=1,get_num_variables(idom)
          CASE DEFAULT
             write(string1,*)'(1d) unknown Dimension name "'//trim(dimnames(1))//'"'
             write(string2,*)' while trying to create metadata for "'//trim(varname)//'"'
-            call error_handler(E_ERR, routine, string1, &
-                       source, revision, revdate, text2=string2)
+            call error_handler(E_ERR,routine,string1,source,text2=string2)
 
       END SELECT
 
@@ -818,8 +817,7 @@ VARIABLES : do ivar=1,get_num_variables(idom)
                      lonixy(  indx) = i
                      latjxy(  indx) = i
                      landarea(indx) = AREA1D(xi) * LANDFRAC1D(xi)
-                     call error_handler(E_ERR,routine,'section untested', &
-                                source, revision, revdate)
+                     call error_handler(E_ERR,routine,'section untested',source)
                   else
                      lonixy(  indx) = i
                      latjxy(  indx) = j
@@ -832,8 +830,7 @@ VARIABLES : do ivar=1,get_num_variables(idom)
          CASE DEFAULT
             write(string1,*)'(2d) unknown Dimension name "'//trim(dimnames(2))//'"'
             write(string2,*)' while trying to create metadata for "'//trim(varname)//'"'
-            call error_handler(E_ERR, routine, string1, &
-                       source, revision, revdate, text2=string2)
+            call error_handler(E_ERR,routine,string1,source,text2=string2)
 
       END SELECT
 
@@ -868,8 +865,7 @@ VARIABLES : do ivar=1,get_num_variables(idom)
            trim(dimnames(3)), ' ', &
            trim(dimnames(2)), ' ', &
            trim(dimnames(1))
-         call error_handler(E_ERR,routine, string1, &
-                 source, revision, revdate, text2=string2)
+         call error_handler(E_ERR,routine,string1,source,text2=string2)
       endif
 
       !>@todo  extend fill_levels to support all the vertical levels
@@ -880,8 +876,7 @@ VARIABLES : do ivar=1,get_num_variables(idom)
          CASE DEFAULT
             write(string1,*)'(3d) unsupported vertical dimension name "'//trim(dimnames(3))//'"'
             write(string2,*)' while trying to create metadata for "'//trim(varname)//'"'
-            call error_handler(E_ERR, routine, string1, &
-                       source, revision, revdate, text2=string2)
+            call error_handler(E_ERR,routine,string1,source,text2=string2)
       END SELECT
 
       do k = 1, dimlens(3)
@@ -900,8 +895,7 @@ VARIABLES : do ivar=1,get_num_variables(idom)
 
       write(string1,*)'variables of rank ',rank,' are unsupported.'
       write(string2,*)trim(varname),' is dimensioned ', dimlens(1:rank)
-      call error_handler(E_ERR, routine, string1, &
-                 source, revision, revdate, text2=string2)
+      call error_handler(E_ERR,routine,string1,source,text2=string2)
 
    endif
 
@@ -913,8 +907,7 @@ enddo DOMAINS
 if (indx /= model_size) then
    write(string1,*)'FAILURE: model size     is ',model_size
    write(string2,*)'metadata arrays are length ',indx
-   call error_handler(E_ERR,routine, string1, source, revision, &
-                      revdate, text2=string2)
+   call error_handler(E_ERR,routine,string1,source,text2=string2)
 endif
 end subroutine static_init_model
 
@@ -1304,7 +1297,7 @@ if ( .not. module_initialized ) call static_init_model
 
 call error_handler(E_ERR,'pert_model_copies', &
                   'CLM cannot be started from a single vector', &
-                  source, revision, revdate, &
+                  source, &
                   text2='see comments in clm/model_mod.f90::pert_model_copies()')
 
 interf_provided = .true.
@@ -1326,7 +1319,7 @@ if ( .not. module_initialized ) call static_init_model
 
 if ( .not. file_exist(filename) ) then
    write(string1,*) 'cannot open file ', trim(filename),' for reading.'
-   call error_handler(E_ERR,'read_model_time',string1,source,revision,revdate)
+   call error_handler(E_ERR,'read_model_time',string1,source)
 endif
 
 ncid = nc_open_file_readonly(filename,'read_model_time')
@@ -1454,7 +1447,7 @@ character     (len=NF90_MAX_NAME)     :: varname
 if ( .not. module_initialized ) call static_init_model()
 
 !>@todo CHECKME ... this may not be needed for CLM4.5, CLM5 (CESM2.0)
-call error_handler(E_ERR,routine,'routine not needed - maybe')
+call error_handler(E_ERR,routine,'routine not needed - maybe',source)
 
 ! Must check anything with a dimension of 'levtot' or 'levsno' and manually
 ! set the values to DART missing. If only it were that easy ...
@@ -1524,8 +1517,7 @@ do ivar=1, numvars
                         ' does not match derived type knowledge'
       write(string2, *) 'netCDF rank is ',ncNdims, &
                         ' expected ',get_num_dims(dom_restart,ivar)
-      call error_handler(E_ERR,routine, string1, &
-                        source,revision,revdate,text2=string2)
+      call error_handler(E_ERR,routine,string1,source,text2=string2)
    endif
 
    ! Check the shape of the variable
@@ -1542,7 +1534,7 @@ do ivar=1, numvars
       if ( dimlen /= get_dim_length(dom_restart,ivar,i)) then
          write(string1,*) trim(string3),' dim/dimlen ',i,dimlen, &
                               ' not ', get_dim_length(dom_restart,ivar,i)
-         call error_handler(E_ERR,routine,string1,source,revision,revdate)
+         call error_handler(E_ERR,routine,string1,source)
       endif
 
    enddo
@@ -1654,21 +1646,19 @@ do ivar=1, numvars
          deallocate(data_3d_array)
       else
 
-         write(string1, *) '3D variable unexpected shape -- only support nlon, nlat, time(=1)'
-         write(string2, *) 'variable [',trim(varname),']'
-         write(string3, *) 'file [',trim(clm_file),']'
-         call error_handler(E_ERR,routine, string1, &
-                           source, revision, revdate, text2=string2, text3=string3)
+         write(string1,*) '3D variable unexpected shape -- only support nlon, nlat, time(=1)'
+         write(string2,*) 'variable [',trim(varname),']'
+         write(string3,*) 'file [',trim(clm_file),']'
+         call error_handler(E_ERR,routine,string1,source,text2=string2,text3=string3)
 
       endif
 
    else
 
-      write(string1, *) 'no support for data array of dimension ', ncNdims
-      write(string2, *) 'variable [',trim(varname),']'
-      write(string3, *) 'file [',trim(clm_file),']'
-      call error_handler(E_ERR,routine, string1, &
-                        source, revision, revdate, text2=string2, text3=string3)
+      write(string1,*) 'no support for data array of dimension ', ncNdims
+      write(string2,*) 'variable [',trim(varname),']'
+      write(string3,*) 'file [',trim(clm_file),']'
+      call error_handler(E_ERR,routine,string1,source,text2=string2,text3=string3)
    endif
 
 enddo
@@ -1745,10 +1735,10 @@ llat      = loc_array(2)
 lheight   = loc_array(3)
 
 call write_location(0,location,charstring=string2)
-if ((debug > 6) .and. do_output()) then
+if (debug > 6) then
    write (string3,'(3(2x,f18.12))') llon, llat, lheight
-   call error_handler(E_MSG, routine, 'requesting interpolation at', &
-                      text2=string2, text3=string3)
+   call error_handler(E_ALLMSG,routine,'requesting interpolation at',source, &
+                      text2=string2,text3=string3)
 endif
 
 ! Some applications just need to know the number of vertical levels.
@@ -1806,7 +1796,7 @@ select case( obs_kind )
 
    case ( QTY_SNOWCOVER_FRAC, QTY_LEAF_AREA_INDEX, QTY_LEAF_CARBON, &
           QTY_WATER_TABLE_DEPTH, QTY_VEGETATION_TEMPERATURE, &
-          QTY_FRAC_PHOTO_AVAIL_RADIATION, &
+          QTY_FRAC_PHOTO_AVAIL_RADIATION, QTY_FRACTION_ABSORBED_PAR, &
           QTY_FPAR_SUNLIT_DIRECT, QTY_FPAR_SUNLIT_DIFFUSE, &
           QTY_FPAR_SHADED_DIRECT, QTY_FPAR_SHADED_DIFFUSE, &
           QTY_LIVE_STEM_CARBON,   QTY_DEAD_STEM_CARBON, &
@@ -1821,8 +1811,7 @@ select case( obs_kind )
 
       write(string1,*)'not written for (integer) kind ',obs_kind
       write(string2,*)'AKA '//trim(qty_string)
-      call error_handler(E_ERR, routine, string1, &
-             source, revision, revdate, text2=string2)
+      call error_handler(E_ERR,routine,string1,source,text2=string2)
       expected_obs = MISSING_R8
       istatus = 5
 
@@ -1858,7 +1847,7 @@ integer,             intent(in)  :: qty_index    ! QTY in DART state needed for 
 real(r8),            intent(out) :: interp_val(ens_size)   ! area-weighted result
 integer,             intent(out) :: istatus(ens_size)      ! error code (0 == good)
 
-character(len=*), parameter :: routine = 'compute_gridcell_value'
+character(len=*), parameter :: routine = 'compute_gridcell_value:'
 
 ! Local storage
 integer  :: domain, varid, counter(ens_size)
@@ -1905,11 +1894,11 @@ loninds  = minloc(abs(LON - loc_lon))   ! these return 'arrays' ...
 gridlatj = latinds(1)
 gridloni = loninds(1)
 
-if ((debug > 0) .and. do_output()) then
-   write(*,*)'compute_gridcell_value:targetlon, lon, lon index is ',&
-                  loc_lon,LON(gridloni),gridloni
-   write(*,*)'compute_gridcell_value:targetlat, lat, lat index is ',&
-                  loc_lat,LAT(gridlatj),gridlatj
+if (debug > 0) then
+   write(string1,*)'Working on "',trim(varname),'"'
+   write(string2,*)'targetlon, lon, lon index is ',loc_lon,LON(gridloni),gridloni
+   write(string3,*)'targetlat, lat, lat index is ',loc_lat,LAT(gridlatj),gridlatj
+   call error_handler(E_ALLMSG,routine,string1,source,text2=string2,text3=string3)
 endif
 
 !>@todo simplify ... check for dimensionality, etc.
@@ -1976,12 +1965,11 @@ do imem = 1,ens_size
 enddo
 
 !# if( any(istatus == 32) ) then
-!#    if ((debug > 4) .and. do_output()) then
+!#    if (debug > 4) then
 !#       write(string1, *)'Variable '//trim(varname)//' had no viable data'
 !#       write(string2, *)'at gridcell ilon/jlat = (',gridloni,',',gridlatj,')'
 !#       write(string3, *)'obs lon/lat = (',loc_lon,',',loc_lat,')'
-!#       call error_handler(E_MSG,routine, string1, &
-!#                      text2=string2,text3=string3)
+!#       call error_handler(E_ALLMSG,routine,string1,source,text2=string2,text3=string3)
 !#    endif
 !# endif
 
@@ -1990,7 +1978,7 @@ enddo
 !# if ((debug > 99)) then
 !#    write(string1,*)'counter, total_area', counter(1), total_area(1)
 !#    write(string2,*)'interp_val, istatus', interp_val(1), istatus(1)
-!#    call error_handler(E_MSG, routine, string1, text2=string2)
+!#    call error_handler(E_ALLMSG,routine,string1,source,text2=string2)
 !# endif
 
 end subroutine compute_gridcell_value
@@ -2010,7 +1998,7 @@ integer,             intent(in)  :: qty_index    ! QTY in DART state needed for 
 real(r8),            intent(out) :: interp_val(ens_size)   ! area-weighted result
 integer,             intent(out) :: istatus(ens_size)      ! error code (0 == good)
 
-character(len=*), parameter :: routine = 'get_grid_vertval'
+character(len=*), parameter :: routine = 'get_grid_vertval:'
 
 ! Local storage
 integer  :: domain, ivar, index1, indexN, counter1, counter2
@@ -2055,8 +2043,7 @@ if ( loc_lev < 0.0_r8 ) then
    write(string1,*)'Cannot support above-ground vertical interpolation.'
    write(string2,*)'requested a value at a depth of ',loc_lev
    write(string3,*)'CLM has negative depths to indicate above-ground values.'
-   call error_handler(E_ERR,routine, string1, &
-      source, revision, revdate, text2=string2, text3=string3)
+   call error_handler(E_ERR,routine,string1,source,text2=string2,text3=string3)
 endif
 
 ! determine the portion of interest of the state vector
@@ -2073,8 +2060,7 @@ indexN = get_index_end(  domain, varname)
 !if ( variable does not have levels ) then
 !   write(string1, *)'Variable '//trim(varstring)//' should not use this routine.'
 !   write(string2, *)'use compute_gridcell_value() instead.'
-!   call error_handler(E_ERR,routine, string1, &
-!                  source, revision, revdate, text2=string2)
+!   call error_handler(E_ERR,routine,string1,source,text2=string2)
 !endif
 
 ! determine the grid cell for the location
@@ -2083,11 +2069,11 @@ loninds  = minloc(abs(LON - loc_lon))   ! these return 'arrays' ...
 gridlatj = latinds(1)
 gridloni = loninds(1)
 
-if ((debug > 4) .and. do_output()) then
-   write(*,*)'get_grid_vertval:targetlon, lon, lon index, level is ', &
-              loc_lon,LON(gridloni),gridloni,loc_lev
-   write(*,*)'get_grid_vertval:targetlat, lat, lat index, level is ', &
-              loc_lat,LAT(gridlatj),gridlatj,loc_lev
+if (debug > 4) then
+   write(string1,*)'Working on "',trim(varname),'" at level ',loc_lev
+   write(string2,*)'targetlon, lon, lon index is ',loc_lon,LON(gridloni),gridloni
+   write(string3,*)'targetlat, lat, lat index is ',loc_lat,LAT(gridlatj),gridlatj
+   call error_handler(E_ALLMSG,routine,string1,source,text2=string2,text3=string3)
 endif
 
 ! Determine the level 'above' and 'below' the desired vertical
@@ -2118,11 +2104,11 @@ else
    enddo LAYERS
 endif
 
-if ((debug > 4) .and. do_output()) then
-   write(*,'(3(A,1x,f18.12,1x))')'get_grid_vertval:depthbelow', depthbelow, &
-                              '>= loc_lev', loc_lev, &
-                              '>= depthabove', depthabove
-   write(*,*)'get_grid_vertval:level below ', levelbelow, 'level above', levelabove
+if (debug > 4) then
+   write(string1,*)'..  depth       above ',depthabove, 'level above', levelabove
+   write(string2,*)'depth of interest ',loc_lev
+   write(string3,*)'depth       below ',depthbelow, 'level below', levelbelow
+   call error_handler(E_ALLMSG,routine,string1,source,text2=string2,text3=string3)
 endif
 
 ! Determine how many elements can contribute to the gridcell value.
@@ -2147,14 +2133,14 @@ enddo GRIDCELL
 
 counter = max(counter1, counter2)
 
+if (debug > 1) then
+   write(string1, *)'"'//trim(varname)//'" had ',counter,' viable data'
+   write(string2, *)'at gridcell lon/lat = (',gridloni,',',gridlatj,')'
+   call write_location(0,location,charstring=string3)
+   call error_handler(E_ALLMSG,routine,string1,source,text2=string2,text3=string3)
+endif
+
 if ( counter == 0 ) then
-   if ((debug > 0) .and. do_output()) then
-      write(string1, *)'statevector variable '//trim(varname)//' had no viable data'
-      write(string2, *)'at gridcell lon/lat = (',gridloni,',',gridlatj,')'
-      call write_location(0,location,charstring=string3)
-      call error_handler(E_ALLMSG,routine, string1, &
-                     text2=string2,text3=string3)
-   endif
    istatus = 21
    return
 endif
@@ -2203,13 +2189,13 @@ ELEMENTS : do indexi = index1, indexN
          matched = .true.
       endif
 
-      if ((debug > 99) .and. do_output() .and. matched) then
-         write(*,*)
-         write(*,*)'gridcell location match at statevector index',indexi
-         write(*,*)'area is ',landarea(indexi), ' depth is  ',levels(indexi)
-         write(*,*)'LON index is     ',lonixy(indexi),' LON is ',LON(gridloni)
-         write(*,*)'LAT index is     ',latjxy(indexi),' LAT is ',LAT(gridlatj)
-         write(*,*)'statevector value is (',state(imem),')'
+      if (debug > 99 .and. do_output() .and. matched) then
+         write(*,*)routine,'Variable "'//trim(varname)//'" matched ',matched
+         write(*,*)routine,'gridcell location match at statevector index',indexi
+         write(*,*)routine,'area is ',landarea(indexi), ' depth is  ',levels(indexi)
+         write(*,*)routine,'LON index is     ',lonixy(indexi),' LON is ',LON(gridloni)
+         write(*,*)routine,'LAT index is     ',latjxy(indexi),' LAT is ',LAT(gridlatj)
+         write(*,*)routine,'state value is (',state(imem),')'
       endif
 
    enddo MEMBERS
@@ -2219,11 +2205,10 @@ enddo ELEMENTS
 ! could arise if the above or below was 'missing' ... but the mate was not.
 
 if ( any(counter_above /= counter_below) ) then
-   write(string1, *)'Variable '//trim(varname)//' has peculiar interpolation problems.'
+   write(string1, *)'Variable "'//trim(varname)//'" has peculiar interpolation problems.'
    write(string2, *)'uneven number of values "above" and "below"'
    write(string3, *)'counter_above == ',counter_above,' /= ',counter_below,' == counter_below'
-   call error_handler(E_ERR,routine, string1, &
-                  text2=string2,text3=string3)
+   call error_handler(E_ERR,routine,string1,source,text2=string2,text3=string3)
    deallocate(counter_above, counter_below, above, below, area_above, area_below)
    istatus = 22
    return
@@ -2239,12 +2224,11 @@ do imem = 1, ens_size
       area_above(imem, :) = area_above(imem, :) / total_area(imem)
       value_above(imem) = sum(above(imem, :) * area_above(imem, :))
    else
-      if (debug > 0) then
+      if (debug > 1) then
          write(string1, *)'Variable '//trim(varname)//' had no viable data above'
          write(string2, *)'at gridcell lon/lat/level = (',gridloni,',',gridlatj,',',levelabove,')'
          call write_location(0,location,charstring=string3)
-         call error_handler(E_ALLMSG,routine, string1, &
-                     source, revision, revdate, text2=string2,text3=string3)
+         call error_handler(E_ALLMSG,routine,string1,source,text2=string2,text3=string3)
       endif
    endif
 
@@ -2256,12 +2240,11 @@ do imem = 1, ens_size
       area_below(imem, :) = area_below(imem, :) / total_area(imem)
       value_below(imem) = sum(below(imem, :) * area_below(imem, :))
    else
-      if (debug > 0) then
+      if (debug > 1) then
          write(string1, *)'Variable '//trim(varname)//' had no viable data below'
          write(string2, *)'at gridcell lon/lat/lev = (',gridloni,',',gridlatj,',',levelbelow,')'
          call write_location(0,location,charstring=string3)
-         call error_handler(E_ALLMSG,routine, string1, &
-                     source, revision, revdate, text2=string2,text3=string3)
+         call error_handler(E_ALLMSG,routine,string1,source,text2=string2,text3=string3)
       endif
    endif
 
@@ -2445,7 +2428,7 @@ where (LON > 360.0_r8) LON = LON - 360.0_r8
 
 if (any(LON < 0.0_r8)) then
    write(string1,*)'longitudes in history file variable "lon" still negative.'
-   call error_handler(E_ERR,routine,string1,source,revision,revdate)
+   call error_handler(E_ERR,routine,string1,source)
 endif
 
 where (LAT < -90.0_r8) LAT = -90.0_r8
@@ -2537,7 +2520,7 @@ call nc_check(nf90_inquire_dimension(ncid, dimid, len=mylevgrnd), &
 if (mylevgrnd /= nlevgrnd) then
    write(string1,*)'Number of ground levels in restart file is',mylevgrnd
    write(string2,*)'Number of ground levels in history file is', nlevgrnd
-   call error_handler(E_ERR,routine,string1,source,revision,revdate,text2=string2)
+   call error_handler(E_ERR,routine,string1,source,text2=string2)
 endif
 
 call nc_check(nf90_inq_dimid(ncid, 'levlak', dimid), &
@@ -2650,8 +2633,6 @@ character(len=*), intent(in)    :: cstat
 
 character(len=*), parameter :: routine = 'get_sparse_geog'
 
-integer  :: VarID, io
-
 real(r8), allocatable :: temp2d(:,:)
 
 if (ncid == 0) ncid = nc_open_file_readonly(fname, routine)
@@ -2661,22 +2642,22 @@ if (ncid == 0) ncid = nc_open_file_readonly(fname, routine)
 
 if ( ngridcell < 0 ) then
    write(string1,*)'Unable to read the number of gridcells.'
-   call error_handler(E_ERR,routine,string1,source,revision,revdate)
+   call error_handler(E_ERR,routine,string1,source)
 endif
 
 if ( nlandunit < 0 ) then
    write(string1,*)'Unable to read the number of land units.'
-   call error_handler(E_ERR,routine,string1,source,revision,revdate)
+   call error_handler(E_ERR,routine,string1,source)
 endif
 
 if ( ncolumn < 0 ) then
    write(string1,*)'Unable to read the number of columns.'
-   call error_handler(E_ERR,routine,string1,source,revision,revdate)
+   call error_handler(E_ERR,routine,string1,source)
 endif
 
 if ( npft < 0 ) then
    write(string1,*)'Unable to read the number of pfts.'
-   call error_handler(E_ERR,routine,string1,source,revision,revdate)
+   call error_handler(E_ERR,routine,string1,source)
 endif
 
 ! Read the netcdf file data
@@ -2723,7 +2704,7 @@ if (nlevsno > 0 ) then
    deallocate(temp2D)
 else
    write(string1,*) 'levsno must be in restart file'
-   call error_handler(E_ERR,routine,string1,source,revision,revdate)
+   call error_handler(E_ERR,routine,string1,source)
 endif
 
 if (cstat == 'close') then
@@ -2922,15 +2903,14 @@ MyLoop : do i = 1, nrows
       string1 = 'input.nml &model_nml:clm_variables not fully specified'
       string2 = 'must be 6 entries per variable. Last known variable name is'
       string3 = '['//trim(table(i,1))//'] ... (without the [], naturally)'
-      call error_handler(E_ERR, routine, string1, &
-         source, revision, revdate, text2=string2, text3=string3)
+      call error_handler(E_ERR,routine,string1,source,text2=string2,text3=string3)
    endif
 
    ! Make sure DART kind is valid
 
    if( get_index_for_quantity(dartstr) < 0 ) then
       write(string1,'(''there is no obs_kind <'',a,''> in obs_kind_mod.f90'')') trim(dartstr)
-      call error_handler(E_ERR,routine,string1,source,revision,revdate)
+      call error_handler(E_ERR,routine,string1,source)
    endif
 
    ! Record the contents of the DART state vector
@@ -2950,7 +2930,7 @@ enddo MyLoop
 if (ngood == nrows) then
    string1 = 'WARNING: There is a possibility you need to increase ''max_state_variables'''
    write(string2,'(''WARNING: you have specified at least '',i4,'' perhaps more.'')')ngood
-   call error_handler(E_MSG,routine,string1,text2=string2)
+   call error_handler(E_ALLMSG,routine,string1,source,text2=string2)
 endif
 
 ! Check to see if zsno is part of the requested variables
@@ -3014,8 +2994,7 @@ if     (dimname == 'levsno') then
    if (nlevsno /= enlevels) then
       write(string1,*) trim(varname),' dimension ', trim(dimname),' has declared length ',enlevels
       write(string2,*) 'not the known number of snow levels ',nlevsno
-      call error_handler(E_ERR,'fill_levels', string1, &
-                             source, revision, revdate, text2=string2)
+      call error_handler(E_ERR,'fill_levels',string1,source,text2=string2)
    endif
    levtot(1:nlevsno) = zsno(1:nlevsno,icol)
 
@@ -3024,8 +3003,7 @@ elseif (dimname == 'levsno1') then
    if (nlevsno1 /= enlevels) then
       write(string1,*) trim(varname),' dimension ', trim(dimname),' has declared length ',enlevels
       write(string2,*) 'not the known number of snow interfaces ',nlevsno1
-      call error_handler(E_ERR,'fill_levels', string1, &
-                             source, revision, revdate, text2=string2)
+      call error_handler(E_ERR,'fill_levels',string1,source,text2=string2)
    endif
    levtot(1:nlevsno1) = zisno(1:nlevsno1,icol)
 
@@ -3034,8 +3012,7 @@ elseif (dimname == 'levgrnd') then
    if (nlevgrnd /= enlevels) then
       write(string1,*) trim(varname),' dimension ', trim(dimname),' has declared length ',enlevels
       write(string2,*) 'not the known number of soil levels ',nlevgrnd
-      call error_handler(E_ERR,'fill_levels', string1, &
-                             source, revision, revdate, text2=string2)
+      call error_handler(E_ERR,'fill_levels',string1,source,text2=string2)
    endif
    levtot(1:nlevgrnd) = LEVGRND
 
@@ -3047,15 +3024,13 @@ elseif (dimname == 'levtot') then
    if (nlevtot /= enlevels) then
       write(string1,*) trim(varname),' dimension ', trim(dimname),' has declared length ',enlevels
       write(string2,*) 'not the known number of total levels ',nlevtot
-      call error_handler(E_ERR,'fill_levels', string1, &
-                             source, revision, revdate, text2=string2)
+      call error_handler(E_ERR,'fill_levels',string1,source,text2=string2)
    endif
 
    if (nlevtot /= nlevgrnd + nlevsno) then
       write(string1,*) trim(varname),' nlevtot ', nlevtot,' is not equal to nlevgrnd + nlevsno'
       write(string2,*) 'nlevgrnd is ',nlevgrnd,' nlevsno is ',nlevsno,' total of ',nlevgrnd+nlevsno
-      call error_handler(E_ERR,'fill_levels', string1, &
-                             source, revision, revdate, text2=string2)
+      call error_handler(E_ERR,'fill_levels',string1,source,text2=string2)
    endif
 
    levtot(1:nlevsno) = zsno(1:nlevsno,icol)
@@ -3066,8 +3041,7 @@ elseif (dimname == 'numrad') then
    if (nnumrad /= enlevels) then
       write(string1,*) trim(varname),' dimension ', trim(dimname),' has declared length ',enlevels
       write(string2,*) 'not the known number of radiation levels ',nnumrad
-      call error_handler(E_ERR,'fill_levels', string1, &
-                             source, revision, revdate, text2=string2)
+      call error_handler(E_ERR,'fill_levels',string1,source,text2=string2)
    endif
    levtot(1:nnumrad) = (/ (j,j=1,nnumrad) /)
 
@@ -3075,8 +3049,7 @@ else
    write(string1,*) 'Unable to determine vertical coordinate for column ',icol
    write(string2,*) 'Variable in question is: "',trim(varname),'"'
    write(string3,*) 'unknown dimension name: "',trim(dimname),'"'
-   call error_handler(E_ERR,'fill_levels', string1, &
-                             source, revision, revdate, text2=string2, text3=string3)
+   call error_handler(E_ERR,'fill_levels',string1,source,text2=string2,text3=string3)
 endif
 
 
@@ -3205,7 +3178,7 @@ call nc_check(nf90_inquire_dimension(ncid, dimIDs(1), len=dimlens(1)), &
 
 if ((numdims /= 1) .or. (size(var1d) /= dimlens(1)) ) then
    write(string1,*) trim(varname)//' is not the expected shape/length of ', size(var1d)
-   call error_handler(E_ERR,'get_var_1d',string1,source,revision,revdate)
+   call error_handler(E_ERR,'get_var_1d',string1,source)
 endif
 
 ncstart = 1
@@ -3234,17 +3207,17 @@ if (xtype == NF90_INT) then
    var1d = intarray  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalINT)
-   if (  io1 == NF90_NOERR) where (intarray == spvalINT) var1d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() ) then
+   if (io1 == NF90_NOERR) where (intarray == spvalINT) var1d = MISSING_R8
+   if (io1 == NF90_NOERR .and. do_output()) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalINT,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_1d',string1)
+      call error_handler(E_MSG,'get_var_1d',string1,source)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalINT)
-   if (  io2 == NF90_NOERR) where (intarray == spvalINT) var1d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() ) then
+   if (io2 == NF90_NOERR) where (intarray == spvalINT) var1d = MISSING_R8
+   if (io2 == NF90_NOERR .and. do_output()) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalINT,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_1d',string1)
+      call error_handler(E_MSG,'get_var_1d',string1,source)
    endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
@@ -3269,17 +3242,17 @@ elseif (xtype == NF90_FLOAT) then
    var1d = r4array  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR4)
-   if (  io1 == NF90_NOERR) where (r4array == spvalR4) var1d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() ) then
+   if (io1 == NF90_NOERR) where (r4array == spvalR4) var1d = MISSING_R8
+   if (io1 == NF90_NOERR .and. do_output()) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalR4,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_1d',string1)
+      call error_handler(E_MSG,'get_var_1d',string1,source)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR4)
-   if (  io2 == NF90_NOERR) where (r4array == spvalR4) var1d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() ) then
+   if (io2 == NF90_NOERR) where (r4array == spvalR4) var1d = MISSING_R8
+   if (io2 == NF90_NOERR .and. do_output()) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalR4,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_1d',string1)
+      call error_handler(E_MSG,'get_var_1d',string1,source)
    endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
@@ -3302,17 +3275,17 @@ elseif (xtype == NF90_DOUBLE) then
            'get_var_1d', 'get_var '//varname)
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR8)
-   if (  io1 == NF90_NOERR) where (var1d == spvalR8) var1d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() ) then
+   if (io1 == NF90_NOERR) where (var1d == spvalR8) var1d = MISSING_R8
+   if (io1 == NF90_NOERR .and. do_output()) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalR8,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_1d',string1)
+      call error_handler(E_MSG,'get_var_1d',string1,source)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR8)
-   if (  io2 == NF90_NOERR) where (var1d == spvalR8) var1d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() ) then
+   if (io2 == NF90_NOERR) where (var1d == spvalR8) var1d = MISSING_R8
+   if (io2 == NF90_NOERR .and. do_output()) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalR8,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_1d',string1)
+      call error_handler(E_MSG,'get_var_1d',string1,source)
    endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
@@ -3328,7 +3301,7 @@ elseif (xtype == NF90_DOUBLE) then
 
 else
    write(string1,*) trim(varname)//' has unsupported (by DART) xtype of', xtype
-   call error_handler(E_ERR,'get_var_1d',string1,source,revision,revdate)
+   call error_handler(E_ERR,'get_var_1d',string1,source,source)
 endif
 
 end subroutine get_var_1d
@@ -3393,7 +3366,7 @@ call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims, 
 
 if ( (numdims /= 2)  ) then
    write(string1,*) trim(varname)//' is not a 2D variable as expected.'
-   call error_handler(E_ERR,'get_var_2d',string1,source,revision,revdate)
+   call error_handler(E_ERR,'get_var_2d',string1,source)
 endif
 
 ncstart(:) = 1
@@ -3418,7 +3391,7 @@ DimCheck : do i = 1,numdims
    elseif ( size(var2d,i) /= dimlens(i) ) then
       write(string1,*) trim(varname)//' has shape ', dimlens(1:numdims)
       write(string2,*) 'which is not the expected shape of ', size(var2d,1),size(var2d,2)
-      call error_handler(E_ERR,'get_var_2d',string1,source,revision,revdate,text2=string2)
+      call error_handler(E_ERR,'get_var_2d',string1,source,text2=string2)
    endif
 
    nccount(i) = dimlens(i)
@@ -3440,17 +3413,17 @@ if (xtype == NF90_INT) then
    var2d = intarray  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalINT)
-   if (  io1 == NF90_NOERR) where (intarray == spvalINT) var2d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() ) then
+   if (io1 == NF90_NOERR) where (intarray == spvalINT) var2d = MISSING_R8
+   if (io1 == NF90_NOERR .and. do_output()) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalINT,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_2d',string1)
+      call error_handler(E_MSG,'get_var_2d',string1,source)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalINT)
-   if (  io2 == NF90_NOERR) where (intarray == spvalINT) var2d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() ) then
+   if (io2 == NF90_NOERR) where (intarray == spvalINT) var2d = MISSING_R8
+   if (io2 == NF90_NOERR .and. do_output()) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalINT,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_2d',string1)
+      call error_handler(E_MSG,'get_var_2d',string1,source)
    endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
@@ -3475,17 +3448,17 @@ elseif (xtype == NF90_FLOAT) then
    var2d = r4array  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR4)
-   if (  io1 == NF90_NOERR) where (r4array == spvalR4) var2d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() ) then
+   if (io1 == NF90_NOERR) where (r4array == spvalR4) var2d = MISSING_R8
+   if (io1 == NF90_NOERR .and. do_output()) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalR4,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_2d',string1)
+      call error_handler(E_MSG,'get_var_2d',string1,source)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR4)
-   if (  io2 == NF90_NOERR) where (r4array == spvalR4) var2d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() ) then
+   if (io2 == NF90_NOERR) where (r4array == spvalR4) var2d = MISSING_R8
+   if (io2 == NF90_NOERR .and. do_output()) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalR4,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_2d',string1)
+      call error_handler(E_MSG,'get_var_2d',string1,source)
    endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
@@ -3508,17 +3481,17 @@ elseif (xtype == NF90_DOUBLE) then
            'get_var_2d', 'get_var '//varname)
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR8)
-   if (  io1 == NF90_NOERR) where (var2d == spvalR8) var2d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() ) then
+   if (io1 == NF90_NOERR) where (var2d == spvalR8) var2d = MISSING_R8
+   if (io1 == NF90_NOERR .and. do_output()) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalR8,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_2d',string1)
+      call error_handler(E_MSG,'get_var_2d',string1,source)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR8)
-   if (  io2 == NF90_NOERR) where (var2d == spvalR8) var2d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() ) then
+   if (io2 == NF90_NOERR) where (var2d == spvalR8) var2d = MISSING_R8
+   if (io2 == NF90_NOERR .and. do_output()) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalR8,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_2d',string1)
+      call error_handler(E_MSG,'get_var_2d',string1,source)
    endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
@@ -3534,7 +3507,7 @@ elseif (xtype == NF90_DOUBLE) then
 
 else
    write(string1,*) trim(varname)//' has unsupported (by DART) xtype of', xtype
-   call error_handler(E_ERR,'get_var_2d',string1,source,revision,revdate)
+   call error_handler(E_ERR,'get_var_2d',string1,source)
 endif
 
 end subroutine get_var_2d
@@ -3604,7 +3577,7 @@ call nc_check(nf90_inquire_variable( ncid, VarID, dimids=dimIDs, ndims=numdims, 
 
 if ( (numdims /= 3)  ) then
    write(string1,*) trim(varname)//' is not a 3D variable as expected.'
-   call error_handler(E_ERR,'get_var_3d',string1,source,revision,revdate)
+   call error_handler(E_ERR,'get_var_3d',string1,source)
 endif
 
 ! only expecting [nlon,nlat,time]
@@ -3627,7 +3600,7 @@ DimCheck : do i = 1,numdims
    elseif ( size(var3d,i) /= dimlens(i) ) then
       write(string1,*) trim(varname)//' has shape ', dimlens(1:numdims)
       write(string2,*) 'which is not the expected shape of ', size(var3d,i)
-      call error_handler(E_ERR,'get_var_3d',string1,source,revision,revdate,text2=string2)
+      call error_handler(E_ERR,'get_var_3d',string1,source,text2=string2)
    endif
 
    nccount(i) = dimlens(i)
@@ -3649,17 +3622,17 @@ if (xtype == NF90_INT) then
    var3d = intarray  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalINT)
-   if (  io1 == NF90_NOERR) where (intarray == spvalINT) var3d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() ) then
+   if (io1 == NF90_NOERR) where (intarray == spvalINT) var3d = MISSING_R8
+   if (io1 == NF90_NOERR .and. do_output()) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalINT,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_3d',string1)
+      call error_handler(E_MSG,'get_var_3d',string1,source)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalINT)
-   if (  io2 == NF90_NOERR) where (intarray == spvalINT) var3d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() ) then
+   if (io2 == NF90_NOERR) where (intarray == spvalINT) var3d = MISSING_R8
+   if (io2 == NF90_NOERR .and. do_output()) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalINT,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_3d',string1)
+      call error_handler(E_MSG,'get_var_3d',string1,source)
    endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
@@ -3684,17 +3657,17 @@ elseif (xtype == NF90_FLOAT) then
    var3d = r4array  ! perform type conversion to desired output type
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR4)
-   if (  io1 == NF90_NOERR) where (r4array == spvalR4) var3d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() ) then
+   if (io1 == NF90_NOERR) where (r4array == spvalR4) var3d = MISSING_R8
+   if (io1 == NF90_NOERR .and. do_output()) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalR4,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_3d',string1)
+      call error_handler(E_MSG,'get_var_3d',string1,source)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR4)
-   if (  io2 == NF90_NOERR) where (r4array == spvalR4) var3d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() ) then
+   if (io2 == NF90_NOERR) where (r4array == spvalR4) var3d = MISSING_R8
+   if (io2 == NF90_NOERR .and. do_output()) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalR4,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_3d',string1)
+      call error_handler(E_MSG,'get_var_3d',string1,source)
    endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
@@ -3717,17 +3690,17 @@ elseif (xtype == NF90_DOUBLE) then
            'get_var_3d', 'get_var '//varname)
 
    io1 = nf90_get_att(ncid, VarID, '_FillValue' , spvalR8)
-   if (  io1 == NF90_NOERR) where (var3d == spvalR8) var3d = MISSING_R8
-   if ( (io1 == NF90_NOERR) .and. do_output() ) then
+   if (io1 == NF90_NOERR) where (var3d == spvalR8) var3d = MISSING_R8
+   if (io1 == NF90_NOERR .and. do_output()) then
       write(string1,*)trim(varname)//': replacing _FillValue ',spvalR8,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_3d',string1)
+      call error_handler(E_MSG,'get_var_3d',string1,source)
    endif
 
    io2 = nf90_get_att(ncid, VarID, 'missing_value' , spvalR8)
-   if (  io2 == NF90_NOERR) where (var3d == spvalR8) var3d = MISSING_R8
-   if ( (io2 == NF90_NOERR) .and. do_output() ) then
+   if (io2 == NF90_NOERR) where (var3d == spvalR8) var3d = MISSING_R8
+   if (io2 == NF90_NOERR .and. do_output()) then
       write(string1,*)trim(varname)//': replacing missing_value ',spvalR8,' with ',MISSING_R8
-      call error_handler(E_MSG,'get_var_3d',string1)
+      call error_handler(E_MSG,'get_var_3d',string1,source)
    endif
 
    io1 = nf90_get_att(ncid, VarID, 'scale_factor', scale_factor)
@@ -3743,7 +3716,7 @@ elseif (xtype == NF90_DOUBLE) then
 
 else
    write(string1,*) trim(varname)//' has unsupported (by DART) xtype of', xtype
-   call error_handler(E_ERR,'get_var_3d',string1,source,revision,revdate)
+   call error_handler(E_ERR,'get_var_3d',string1,source,source)
 endif
 
 end subroutine get_var_3d
@@ -3797,7 +3770,7 @@ if (.not. warned .and. debug > 0) then
    kind_string = get_name_for_quantity( qty_index )
    write(string1,*) trim(caller)//' cannot find "'//trim(kind_string)//'" in list of DART state variables.'
    write(string2,*) trim(caller)//' looking for DART KIND (index) ', qty_index
-   call error_handler(E_WARN,'findKindIndex',string1,source,revision,revdate, text2=string2)
+   call error_handler(E_WARN,'findKindIndex',string1,source,text2=string2)
    warned = .true.
 endif
 
@@ -3867,8 +3840,7 @@ do ij = 1,ncolumn
       write(string1,'(''gridcell('',i4,'','',i4,'') has at most '',i4,'' columns.'')') &
          ilon, ilat, gridCellInfo(ilon,ilat)%ncols
       write(string2,'(''Found '',i8,'' at dart index '',i12)') icol, ij
-      call error_handler(E_ERR, 'SetLocatorArrays', string1, &
-                   source, revision, revdate, text2=string2)
+      call error_handler(E_ERR,'SetLocatorArrays',string1,source,text2=string2)
    endif
 enddo
 
@@ -3889,8 +3861,7 @@ do ij = 1,npft
       write(string1,'(''gridcell('',i4,'','',i4,'') has at most '',i4,'' pfts.'')') &
          ilon, ilat, gridCellInfo(ilon,ilat)%npfts
       write(string2,'(''Found '',i8,'' at dart index '',i12)') ipft, ij
-      call error_handler(E_ERR, 'SetLocatorArrays', string1, &
-                   source, revision, revdate, text2=string2)
+      call error_handler(E_ERR,'SetLocatorArrays',string1,source,text2=string2)
    endif
 enddo
 
@@ -3963,8 +3934,7 @@ call nc_check(nf90_get_att(ncid, VarID, 'units', attvalue), &
 if (attvalue(1:10) /= 'days since') then
    write(string1,*)'expecting time units of [days since ... ]'
    write(string2,*)'read time units of ['//trim(attvalue)//']'
-   call error_handler(E_ERR, 'FindDesiredTimeIndx:', string1, &
-          source, revision, revdate, text2=string2)
+   call error_handler(E_ERR,'FindDesiredTimeIndx:',string1,source,text2=string2)
 endif
 
 read(attvalue,'(11x,i4,5(1x,i2))',iostat=ios)iyear,imonth,iday,ihour,imin,isec
@@ -3972,8 +3942,8 @@ if (ios /= 0) then
    write(string1,*)'Unable to read time units. Error status was ',ios
    write(string2,*)'expected "days since YYYY-MM-DD HH:MM:SS"'
    write(string3,*)'was      "'//trim(attvalue)//'"'
-   call error_handler(E_ERR, 'FindDesiredTimeIndx:', string1, &
-          source, revision, revdate, text2=string2, text3=string3)
+   call error_handler(E_ERR,'FindDesiredTimeIndx:',string1, &
+          source,text2=string2,text3=string3)
 endif
 
 thistime = set_date(iyear, imonth, iday, ihour, imin, isec)
@@ -4002,13 +3972,12 @@ if ( FindDesiredTimeIndx == MISSING_I ) then
    call print_date(model_time,str='model date is ',iunit=logfileunit)
    call print_date(model_time,str='model date is ')
    write(string1,*)'No time matching model_time found for '//trim(varname)
-   call error_handler(E_ERR, 'FindDesiredTimeIndx:', string1, &
-          source, revision, revdate )
+   call error_handler(E_ERR,'FindDesiredTimeIndx:',string1,source)
 endif
 
-if ((debug > 0) .and. do_output()) then
+if (debug > 0) then
    write(string1,*)trim(varname)//' matching time index is ',FindDesiredTimeIndx
-   call error_handler(E_MSG, 'FindDesiredTimeIndx:', string1)
+   call error_handler(E_ALLMSG,'FindDesiredTimeIndx:',string1,source)
 endif
 
 end function FindDesiredTimeIndx
@@ -4069,14 +4038,14 @@ VARLOOP : do ivar = 1,size(table,1)
 !TJH         table(ivar,VT_ORIGININDX) == 'RESTART' ) var_update(nvars) = .true.
    if ( table(ivar,VT_STATEINDX) == 'UPDATE' ) var_update(nvars) = .true.
 
-   if (do_output() .and. debug > 0) then
+   if (debug > 0 .and. do_output()) then
       write(string1,*)trim(origin),' defines domain ',domain_count, &
                       ' var "',trim(var_names(nvars)),'"'
       write(string2,*)'variable has declared range ', &
                       var_ranges(nvars,1),var_ranges(nvars,2)
       write(string3,*)'and quantity index ',var_qtys(nvars), &
                       '. Is var on update list:',var_update(nvars)
-      call error_handler(E_MSG,routine,string1,text2=string2,text3=string3)
+      call error_handler(E_MSG,routine,string1,source,text2=string2,text3=string3)
    endif
 
 enddo VARLOOP
