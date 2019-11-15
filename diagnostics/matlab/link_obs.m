@@ -90,6 +90,12 @@ if ( isempty(obs.lons) )
     error('There are no %s observations in the region specified in %s', ObsTypeString, fname)
 end
 
+if (sum(isfinite(obs.obs)) == 0)
+    fprintf('\n uh-oh all observation values are _FillValue')
+    fprintf('\n nothing good can happen -- all NaNs \n\n')
+    obs.obs(:) = -99.0;
+end
+
 l1 = length(copy.obs);
 l2 = length(obs.obs);
 
