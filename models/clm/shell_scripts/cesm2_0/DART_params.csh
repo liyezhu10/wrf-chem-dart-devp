@@ -127,7 +127,7 @@ setenv pmo_output_baseobsdir  /glade/p/cisl/dares/Observations/land/pmo/output
 # ==============================================================================
 
 setenv refcase      clm5.0.06_f09_80
-setenv refyear      2005
+setenv refyear      2010
 setenv refmon       07
 setenv refday       01
 setenv reftod       00000

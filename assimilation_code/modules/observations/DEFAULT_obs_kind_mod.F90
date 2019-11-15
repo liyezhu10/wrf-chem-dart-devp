@@ -469,7 +469,9 @@ integer, parameter, public :: &
   QTY_UNCONFINED_WATER              = 353, &
   QTY_SATURATED_WATER               = 354, &
   QTY_SNOW_DEPTH                    = 355, &
-  QTY_SOLAR_INDUCED_FLUORESCENCE    = 356
+  QTY_SOLAR_INDUCED_FLUORESCENCE    = 356, &
+  QTY_PHOTO_ACTIVE_RADIATION        = 357, &
+  QTY_PHOTO_ABSORBED_RADIATION      = 358
 
 ! WACCM
 integer, parameter, public :: &
@@ -956,6 +958,8 @@ obs_kind_names(353) = obs_kind_type(QTY_UNCONFINED_WATER           ,'QTY_UNCONFI
 obs_kind_names(354) = obs_kind_type(QTY_SATURATED_WATER            ,'QTY_SATURATED_WATER')
 obs_kind_names(355) = obs_kind_type(QTY_SNOW_DEPTH                 ,'QTY_SNOW_DEPTH')
 obs_kind_names(356) = obs_kind_type(QTY_SOLAR_INDUCED_FLUORESCENCE ,'QTY_SOLAR_INDUCED_FLUORESCENCE')
+obs_kind_names(357) = obs_kind_type(QTY_PHOTO_ACTIVE_RADIATION     ,'QTY_PHOTO_ACTIVE_RADIATION')
+obs_kind_names(358) = obs_kind_type(QTY_PHOTO_ABSORBED_RADIATION   ,'QTY_PHOTO_ABSORBED_RADIATION')
 
 obs_kind_names(365) = obs_kind_type(QTY_ION_O_MIXING_RATIO,    'QTY_ION_O_MIXING_RATIO')
 obs_kind_names(366) = obs_kind_type(QTY_ATOMIC_H_MIXING_RATIO, 'QTY_ATOMIC_H_MIXING_RATIO')
