@@ -67,21 +67,17 @@ use     obs_kind_mod, only : QTY_SOIL_TEMPERATURE,       &
                              QTY_SOIL_LIQUID_WATER,      &
                              QTY_SOIL_ICE,               &
                              QTY_SNOWCOVER_FRAC,         &
-                             QTY_SNOW_THICKNESS,         &
                              QTY_LEAF_CARBON,            &
                              QTY_LIVE_STEM_CARBON,       &
                              QTY_DEAD_STEM_CARBON,       &
                              QTY_LEAF_AREA_INDEX,        &
                              QTY_WATER_TABLE_DEPTH,      &
-                             QTY_STEM_CARBON,            &
                              QTY_GEOPOTENTIAL_HEIGHT,    &
                              QTY_VEGETATION_TEMPERATURE, &
-                             QTY_FRAC_PHOTO_AVAIL_RADIATION, &
+                             QTY_PAR_DIRECT,             &
+                             QTY_PAR_DIFFUSE,            &
+                             QTY_ABSORBED_PAR,           &
                              QTY_FRACTION_ABSORBED_PAR,  &
-                             QTY_FPAR_SUNLIT_DIRECT,     &
-                             QTY_FPAR_SUNLIT_DIFFUSE,    &
-                             QTY_FPAR_SHADED_DIRECT,     &
-                             QTY_FPAR_SHADED_DIFFUSE,    &
                              QTY_SOLAR_INDUCED_FLUORESCENCE, &
                              QTY_LATENT_HEAT_FLUX,       &
                              QTY_LEAF_NITROGEN,          &
@@ -1770,7 +1766,8 @@ select case( obs_kind )
       ! In the history file, the units are mm3/mm3
       ! In the restart file, the units are kg/m2 ... thanks ...
 
-      call get_grid_vertval(state_handle, ens_size, location, QTY_SOIL_MOISTURE, interp_val_liq, istatus)
+      call get_grid_vertval(state_handle, ens_size, location, QTY_SOIL_MOISTURE, &
+                            interp_val_liq, istatus)
       if (any(istatus == 0)) then
          where(istatus == 0) expected_obs = interp_val_liq
          return
@@ -1780,11 +1777,13 @@ select case( obs_kind )
 
       ! TJH FIXME : make sure this is consistent with the COSMOS operator
       ! This is terrible ... the COSMOS operator wants m3/m3 ... CLM is kg/m2
-      call get_grid_vertval(state_handle, ens_size, location, QTY_SOIL_LIQUID_WATER, interp_val_liq, istatus_liq)
+      call get_grid_vertval(state_handle, ens_size, location, QTY_SOIL_LIQUID_WATER, &
+                            interp_val_liq, istatus_liq)
       call track_status(ens_size, istatus_liq, interp_val_liq, istatus, return_now)
       if (return_now) return
     
-      call get_grid_vertval(state_handle, ens_size, location, QTY_SOIL_ICE,          interp_val_ice, istatus_ice)
+      call get_grid_vertval(state_handle, ens_size, location, QTY_SOIL_ICE, &
+                            interp_val_ice, istatus_ice)
       call track_status(ens_size, istatus_ice, interp_val_ice, istatus, return_now)
       if (return_now) return
 
@@ -1792,18 +1791,19 @@ select case( obs_kind )
 
    case ( QTY_SOIL_TEMPERATURE, QTY_SOIL_LIQUID_WATER, QTY_SOIL_ICE )
 
-      call get_grid_vertval(state_handle, ens_size, location, obs_kind, expected_obs, istatus)
+      call get_grid_vertval(state_handle, ens_size, location, obs_kind, &
+                            expected_obs, istatus)
 
    case ( QTY_SNOWCOVER_FRAC, QTY_LEAF_AREA_INDEX, QTY_LEAF_CARBON, &
           QTY_WATER_TABLE_DEPTH, QTY_VEGETATION_TEMPERATURE, &
-          QTY_FRAC_PHOTO_AVAIL_RADIATION, QTY_FRACTION_ABSORBED_PAR, &
-          QTY_FPAR_SUNLIT_DIRECT, QTY_FPAR_SUNLIT_DIFFUSE, &
-          QTY_FPAR_SHADED_DIRECT, QTY_FPAR_SHADED_DIFFUSE, &
-          QTY_LIVE_STEM_CARBON,   QTY_DEAD_STEM_CARBON, &
+          QTY_FRACTION_ABSORBED_PAR, &
+          QTY_PAR_DIRECT, QTY_PAR_DIFFUSE, QTY_ABSORBED_PAR, &
+          QTY_LIVE_STEM_CARBON, QTY_DEAD_STEM_CARBON, &
           QTY_SOLAR_INDUCED_FLUORESCENCE, &
           QTY_LATENT_HEAT_FLUX, QTY_LEAF_NITROGEN)
 
-      call compute_gridcell_value(state_handle, ens_size, location, obs_kind, expected_obs, istatus)
+      call compute_gridcell_value(state_handle, ens_size, location, obs_kind, &
+                                  expected_obs, istatus)
 
    case default
 
@@ -1836,7 +1836,8 @@ end subroutine model_interpolate
 !> aggregates across multiple pft's. So, each gridcell value
 !> is an area-weighted value of an unknown number of column-based quantities.
 
-subroutine compute_gridcell_value(state_handle, ens_size, location, qty_index, interp_val, istatus)
+subroutine compute_gridcell_value(state_handle, ens_size, location, qty_index, &
+                                  interp_val, istatus)
 
 ! Passed variables
 

@@ -155,8 +155,9 @@ use         obs_kind_mod, only : QTY_RADIATION_VISIBLE_DOWN, &
                                  QTY_DEAD_STEM_CARBON, &
                                  QTY_LEAF_CARBON, &
                                  QTY_FRACTION_ABSORBED_PAR, &
-                                 QTY_PHOTO_ACTIVE_RADIATION, &
-                                 QTY_PHOTO_ABSORBED_RADIATION
+                                 QTY_PAR_DIRECT, &
+                                 QTY_PAR_DIFFUSE, &
+                                 QTY_ABSORBED_PAR
 
 implicit none
 private
@@ -338,10 +339,12 @@ type(location_type), intent(in)  :: location
 real(r8),            intent(out) :: obs_val(ens_size)
 integer,             intent(out) :: istatus(ens_size)
 
+real(r8) :: diffuse(ens_size)
 real(r8) :: active(ens_size)
 real(r8) :: absorbed(ens_size)
-integer  :: stat(ens_size,2)
+integer  :: stat(ens_size,3)
 integer  :: imem
+real(r8) :: denom
 
 istatus = 1           ! 0 == success, anything else is a failure
 obs_val = MISSING_R8
@@ -358,33 +361,65 @@ if (all(istatus == 0)) return
 
 ! The rest of this routine has not been written ... needs scientific direction.
 
-call error_handler(E_ERR,'calculate_fpar:','not finished',source)
+call error_handler(E_MSG,'calculate_fpar:','not tested',source)
 
 ! Intentionally try to compute all required components before failing.
 ! This is the part that needs scientific direction ...
 
-call interpolate(state_handle, ens_size, location, QTY_PHOTO_ACTIVE_RADIATION,   &
+call interpolate(state_handle, ens_size, location, QTY_PAR_DIRECT,   &
                  active,   stat(:,1))
-call interpolate(state_handle, ens_size, location, QTY_PHOTO_ABSORBED_RADIATION, &
-                 absorbed, stat(:,2))
-
-if (any(stat /= 0)) then
-   istatus = stat(:,1)*10 + stat(:,2)
-   return
-endif
-
-obs_val = absorbed/active
-
-istatus = 0   ! success
+call interpolate(state_handle, ens_size, location, QTY_PAR_DIFFUSE,   &
+                 diffuse,  stat(:,2))
+call interpolate(state_handle, ens_size, location, QTY_ABSORBED_PAR, &
+                 absorbed, stat(:,3))
 
 if (debug .and. do_output()) then
    do imem = 1,ens_size
-      write(string1,*)'member',imem,'fpar',obs_val(imem),'status',istatus(imem)
-      write(string2,*)'values: active, absorbed',active(imem), absorbed(imem)
-      write(string3,*)'status: active, absorbed',stat(imem,:)
+      write(string1,*)'member ',imem,' fpar ',obs_val(imem),' status ',istatus(imem)
+      write(string2,*)'values: active, diffuse, absorbed ', &
+                      active(imem), diffuse(imem), absorbed(imem)
+      write(string3,*)'status: active, diffuse, absorbed ',stat(imem,:)
       call error_handler(E_MSG,'calculate_fpar:',string1,text2=string2,text3=string3)
    enddo
 endif
+
+if (any(stat /= 0)) then
+   istatus = stat(:,1)*1000 + stat(:,2)*100 + stat(:,3)
+   return
+endif
+
+! Cannot remember if it is possible to get a missing value and a status of 0
+
+do imem = 1,ens_size
+
+   ! If any of them are missing it is cause for failure and an early return
+   if (absorbed(imem) == MISSING_R8 .or.  &
+         active(imem) == MISSING_R8 .or.  &
+        diffuse(imem) == MISSING_R8 ) then
+      write(string1,*)'member',imem,'absorbed',absorbed(imem),'status',istatus(imem)
+      write(string2,*)'values: active, absorbed',active(imem),diffuse(imem)
+      call error_handler(E_MSG,'calculate_fpar:',string1,text2=string2)
+      istatus(imem) = imem
+      return
+   endif 
+
+   denom = active(imem) + diffuse(imem)
+
+   if (absorbed(imem) < tiny(denom)) then
+      obs_val(imem) = 0.0_r8
+      istatus(imem) = 0
+   elseif (denom <= tiny(denom)) then ! avoid dividing by zeroish
+      write(string1,*)'member ',imem,' denom ',denom
+      write(string2,*)'values: active, diffuse ',active(imem),diffuse(imem)
+      call error_handler(E_MSG,'calculate_fpar:',string1,text2=string2)
+      istatus(imem) = imem
+   else
+      obs_val(imem) = min(absorbed(imem) / denom, 1.0_r8)
+      istatus(imem) = 0
+   endif 
+
+enddo
+
 
 end subroutine calculate_fpar
 

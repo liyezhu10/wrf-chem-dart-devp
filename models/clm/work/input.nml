@@ -82,6 +82,21 @@
    /
 
 
+&fill_inflation_restart_nml
+   write_prior_inf = .true.
+   prior_inf_mean  = 1.00
+   prior_inf_sd    = 0.6
+
+   write_post_inf  = .false.
+   post_inf_mean   = 1.00
+   post_inf_sd     = 0.6
+
+   input_state_files = 'clm_restart.nc', 'clm_history.nc'
+   single_file       = .false.
+   verbose           = .false.
+   /
+
+
 &smoother_nml
    num_lags              = 0
    start_from_restart    = .false.
@@ -182,57 +197,63 @@
 &model_nml
    clm_restart_filename         = 'clm_restart.nc'
    clm_history_filename         = 'clm_history.nc'
-   clm_vector_history_filename  = 'clm_vector_history.nc'
+   clm_vector_history_filename  = ''
    assimilation_period_days     = 2
    assimilation_period_seconds  = 3600
    calendar                     = 'gregorian'
    debug                        = 0
    clm_variables = 
-       'H2OSOI_LIQ',  'QTY_SOIL_LIQUID_WATER',          '0.0', 'NA',    'restart', 'UPDATE',
-       'H2OSOI_ICE',  'QTY_SOIL_ICE',                   '0.0', 'NA',    'restart', 'UPDATE',
-       'T_SOISNO',    'QTY_SOIL_TEMPERATURE',           'NA' , 'NA',    'restart', 'UPDATE',
-       'leafc',       'QTY_LEAF_CARBON',                '0.0', '500.0', 'restart', 'UPDATE',
-       'leafn',       'QTY_LEAF_NITROGEN',              '0.0', 'NA',    'restart', 'UPDATE',
-       'TLAI',        'QTY_LEAF_AREA_INDEX',            '0.0', '10.0',  'history', 'UPDATE',
-       'EFLX_LH_TOT', 'QTY_LATENT_HEAT_FLUX',           'NA',  'NA',    'history', 'NO_COPY_BACK',
-       'NEP',         'QTY_NET_CARBON_PRODUCTION',      'NA',  'NA',    'history', 'NO_COPY_BACK',
+ 'H2OSOI_LIQ',  'QTY_SOIL_LIQUID_WATER',           '0.0',   'NA', 'restart', 'UPDATE',
+ 'H2OSOI_ICE',  'QTY_SOIL_ICE',                    '0.0',   'NA', 'restart', 'UPDATE',
+ 'T_SOISNO',    'QTY_SOIL_TEMPERATURE',            'NA' ,   'NA', 'restart', 'UPDATE',
+ 'frac_sno',    'QTY_SNOWCOVER_FRAC',              '0.0',  '1.0', 'restart', 'NO_COPY_BACK',
+ 'leafc',       'QTY_LEAF_CARBON',                 '0.0','500.0', 'restart', 'UPDATE',
+ 'leafn',       'QTY_LEAF_NITROGEN',               '0.0',   'NA', 'restart', 'UPDATE',
+ 'livestemc',   'QTY_LIVE_STEM_CARBON',            '0.0',   'NA', 'restart', 'UPDATE',
+ 'deadstemc',   'QTY_DEAD_STEM_CARBON',            '0.0',   'NA', 'restart', 'UPDATE',
+ 'TLAI',        'QTY_LEAF_AREA_INDEX',             '0.0', '10.0', 'history', 'NO_COPY_BACK',
+ 'EFLX_LH_TOT', 'QTY_LATENT_HEAT_FLUX',            'NA' ,   'NA', 'history', 'NO_COPY_BACK',
+ 'NEP',         'QTY_NET_CARBON_PRODUCTION',       'NA' ,   'NA', 'history', 'NO_COPY_BACK',
+ 'FSDSVD',      'QTY_PAR_DIRECT',                  '0.0',   'NA', 'history', 'NO_COPY_BACK',
+ 'FSDSVI',      'QTY_PAR_DIFFUSE',                 '0.0',   'NA', 'history', 'NO_COPY_BACK',
+ 'PARVEG',      'QTY_ABSORBED_PAR',                '0.0',   'NA', 'history', 'NO_COPY_BACK',
    /
 
-#      'frootc',      'QTY_ROOT_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
-#      'leafc',       'QTY_LEAF_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
-#      'livecrootc',  'QTY_ROOT_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
-#      'deadcrootc',  'QTY_ROOT_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
-#      'livestemc',   'QTY_ROOT_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
-#      'deadstemc',   'QTY_STEM_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
-#      'frootn',      'QTY_ROOT_NITROGEN',              '0.0', 'NA', 'restart', 'UPDATE',
-#      'leafn',       'QTY_LEAF_NITROGEN',              '0.0', 'NA', 'restart', 'UPDATE',
-#      'livecrootn',  'QTY_ROOT_NITROGEN',              '0.0', 'NA', 'restart', 'UPDATE',
-#      'deadcrootn',  'QTY_ROOT_NITROGEN',              '0.0', 'NA', 'restart', 'UPDATE',
-#      'livestemn',   'QTY_STEM_NITROGEN',              '0.0', 'NA', 'restart', 'UPDATE',
-#      'deadstemn',   'QTY_STEM_NITROGEN',              '0.0', 'NA', 'restart', 'UPDATE',
-#      'cpool',       'QTY_CARBON',                     '0.0', 'NA', 'restart', 'UPDATE',
-#      'litr1c_vr',   'QTY_SOIL_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
-#      'litr2c_vr',   'QTY_SOIL_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
-#      'litr3c_vr',   'QTY_SOIL_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
-#      'litr1n_vr',   'QTY_SOIL_NITROGEN',              '0.0', 'NA', 'restart', 'UPDATE',
-#      'litr2n_vr',   'QTY_SOIL_NITROGEN',              '0.0', 'NA', 'restart', 'UPDATE',
-#      'litr3n_vr',   'QTY_SOIL_NITROGEN',              '0.0', 'NA', 'restart', 'UPDATE',
-#      'T_SOISNO',    'QTY_SOIL_TEMPERATURE',           'NA' , 'NA', 'restart', 'UPDATE',
-#      'H2OSOI_LIQ',  'QTY_SOIL_LIQUID_WATER',          '0.0', 'NA', 'restart', 'UPDATE',
-#      'H2OSOI_ICE',  'QTY_SOIL_ICE',                   '0.0', 'NA', 'restart', 'UPDATE',
-#      'frac_sno',    'QTY_SNOWCOVER_FRAC',             'NA' , 'NA', 'restart', 'NO_COPY_BACK',
-#      'H2OSNO',      'QTY_SNOW_WATER',                 '0.0', 'NA', 'restart', 'UPDATE',
-#      'SNOW_DEPTH',  'QTY_SNOW_THICKNESS',             'NA' , 'NA', 'restart', 'UPDATE',
-#      'ZWT',         'QTY_WATER_TABLE_DEPTH',          'NA' , 'NA', 'restart', 'NO_COPY_BACK',
-#      'EFLX_LH_TOT', 'QTY_LATENT_HEAT_FLUX',           'NA',  'NA', 'history', 'NO_COPY_BACK',
-#      'NEP',         'QTY_NET_CARBON_PRODUCTION',      'NA' , 'NA', 'history', 'NO_COPY_BACK',
-#      'FSIF',        'QTY_SOLAR_INDUCED_FLUORESCENCE', '0.0', 'NA', 'history', 'NO_COPY_BACK',
-#      'LAI240_VALUE','QTY_LEAF_AREA_INDEX',            '0.0', 'NA', 'history', 'NO_COPY_BACK',
-#      'TV',          'QTY_VEGETATION_TEMPERATURE',     'NA' , 'NA', 'vector' , 'NO_COPY_BACK',
-#      'RH2M_R',      'QTY_SPECIFIC_HUMIDITY',          'NA' , 'NA', 'vector' , 'NO_COPY_BACK',
-#      'PBOT',        'QTY_SURFACE_PRESSURE',           'NA' , 'NA', 'vector' , 'NO_COPY_BACK',
-#      'TBOT',        'QTY_TEMPERATURE',                'NA' , 'NA', 'vector' , 'NO_COPY_BACK',
-#      'LAIP',        'QTY_LEAF_AREA_INDEX',            'NA' , 'NA', 'vector' , 'NO_COPY_BACK'
+# 'frootc',      'QTY_ROOT_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
+# 'leafc',       'QTY_LEAF_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
+# 'livecrootc',  'QTY_ROOT_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
+# 'deadcrootc',  'QTY_ROOT_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
+# 'livestemc',   'QTY_ROOT_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
+# 'deadstemc',   'QTY_STEM_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
+# 'frootn',      'QTY_ROOT_NITROGEN',              '0.0', 'NA', 'restart', 'UPDATE',
+# 'leafn',       'QTY_LEAF_NITROGEN',              '0.0', 'NA', 'restart', 'UPDATE',
+# 'livecrootn',  'QTY_ROOT_NITROGEN',              '0.0', 'NA', 'restart', 'UPDATE',
+# 'deadcrootn',  'QTY_ROOT_NITROGEN',              '0.0', 'NA', 'restart', 'UPDATE',
+# 'livestemn',   'QTY_STEM_NITROGEN',              '0.0', 'NA', 'restart', 'UPDATE',
+# 'deadstemn',   'QTY_STEM_NITROGEN',              '0.0', 'NA', 'restart', 'UPDATE',
+# 'cpool',       'QTY_CARBON',                     '0.0', 'NA', 'restart', 'UPDATE',
+# 'litr1c_vr',   'QTY_SOIL_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
+# 'litr2c_vr',   'QTY_SOIL_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
+# 'litr3c_vr',   'QTY_SOIL_CARBON',                '0.0', 'NA', 'restart', 'UPDATE',
+# 'litr1n_vr',   'QTY_SOIL_NITROGEN',              '0.0', 'NA', 'restart', 'UPDATE',
+# 'litr2n_vr',   'QTY_SOIL_NITROGEN',              '0.0', 'NA', 'restart', 'UPDATE',
+# 'litr3n_vr',   'QTY_SOIL_NITROGEN',              '0.0', 'NA', 'restart', 'UPDATE',
+# 'T_SOISNO',    'QTY_SOIL_TEMPERATURE',           'NA' , 'NA', 'restart', 'UPDATE',
+# 'H2OSOI_LIQ',  'QTY_SOIL_LIQUID_WATER',          '0.0', 'NA', 'restart', 'UPDATE',
+# 'H2OSOI_ICE',  'QTY_SOIL_ICE',                   '0.0', 'NA', 'restart', 'UPDATE',
+# 'frac_sno',    'QTY_SNOWCOVER_FRAC',             'NA' , 'NA', 'restart', 'NO_COPY_BACK',
+# 'H2OSNO',      'QTY_SNOW_WATER',                 '0.0', 'NA', 'restart', 'UPDATE',
+# 'SNOW_DEPTH',  'QTY_SNOW_THICKNESS',             'NA' , 'NA', 'restart', 'UPDATE',
+# 'ZWT',         'QTY_WATER_TABLE_DEPTH',          'NA' , 'NA', 'restart', 'NO_COPY_BACK',
+# 'EFLX_LH_TOT', 'QTY_LATENT_HEAT_FLUX',           'NA',  'NA', 'history', 'NO_COPY_BACK',
+# 'NEP',         'QTY_NET_CARBON_PRODUCTION',      'NA' , 'NA', 'history', 'NO_COPY_BACK',
+# 'FSIF',        'QTY_SOLAR_INDUCED_FLUORESCENCE', '0.0', 'NA', 'history', 'NO_COPY_BACK',
+# 'LAI240_VALUE','QTY_LEAF_AREA_INDEX',            '0.0', 'NA', 'history', 'NO_COPY_BACK',
+# 'TV',          'QTY_VEGETATION_TEMPERATURE',     'NA' , 'NA', 'vector' , 'NO_COPY_BACK',
+# 'RH2M_R',      'QTY_SPECIFIC_HUMIDITY',          'NA' , 'NA', 'vector' , 'NO_COPY_BACK',
+# 'PBOT',        'QTY_SURFACE_PRESSURE',           'NA' , 'NA', 'vector' , 'NO_COPY_BACK',
+# 'TBOT',        'QTY_TEMPERATURE',                'NA' , 'NA', 'vector' , 'NO_COPY_BACK',
+# 'LAIP',        'QTY_LEAF_AREA_INDEX',            'NA' , 'NA', 'vector' , 'NO_COPY_BACK'
 
 &location_nml
    horiz_dist_only             = .true.
