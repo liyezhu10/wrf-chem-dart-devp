@@ -11,7 +11,7 @@
 
 /glade/work/thoar/CESM/ctsm/cime/scripts/query_config  --compsets clm
 
-set CASE = clm5bgc-crop_simple_pnetcdf2
+set CASE = clm5bgc-crop_simple
 set CASEDIR = /glade/work/thoar/cases
 set COMPSET = 2000_DATM%GSWP3v1_CLM50%BGC-CROP_SICE_SOCN_MOSART_SGLC_SWAV
 set CASEROOT = ${CASEDIR}/${CASE}
@@ -44,9 +44,32 @@ end
 ./xmlchange DOUT_S=FALSE
 ./xmlchange CALENDAR=GREGORIAN
 
+@ nthreads = 1
+set nodes_per_instance = 2
+
+@ atm_tasks = -1 * ${nodes_per_instance}
+@ cpl_tasks = -1 * ${nodes_per_instance}
+@ ocn_tasks = -1 * ${nodes_per_instance}
+@ wav_tasks = -1 * ${nodes_per_instance}
+@ glc_tasks = -1 * ${nodes_per_instance}
+@ ice_tasks = -1 * ${nodes_per_instance}
+@ rof_tasks = -1 * ${nodes_per_instance}
+@ lnd_tasks = -1 * ${nodes_per_instance}
+@ esp_tasks = -1 * ${nodes_per_instance}
+
+./xmlchange ROOTPE_ATM=0,NTHRDS_ATM=$nthreads,NTASKS_ATM=$atm_tasks
+./xmlchange ROOTPE_CPL=0,NTHRDS_CPL=$nthreads,NTASKS_CPL=$cpl_tasks
+./xmlchange ROOTPE_OCN=0,NTHRDS_OCN=$nthreads,NTASKS_OCN=$ocn_tasks
+./xmlchange ROOTPE_WAV=0,NTHRDS_WAV=$nthreads,NTASKS_WAV=$wav_tasks
+./xmlchange ROOTPE_GLC=0,NTHRDS_GLC=$nthreads,NTASKS_GLC=$glc_tasks
+./xmlchange ROOTPE_ICE=0,NTHRDS_ICE=$nthreads,NTASKS_ICE=$ice_tasks
+./xmlchange ROOTPE_ROF=0,NTHRDS_ROF=$nthreads,NTASKS_ROF=$rof_tasks
+./xmlchange ROOTPE_LND=0,NTHRDS_LND=$nthreads,NTASKS_LND=$lnd_tasks
+./xmlchange ROOTPE_ESP=0,NTHRDS_ESP=$nthreads,NTASKS_ESP=$esp_tasks
+
 # At one point these had no effect when run before case.setup
 # With release-clm5.0.04,  these are best _before_ case.setup
-./xmlchange --subgroup case.run --id JOB_QUEUE          --val economy
+./xmlchange --subgroup case.run --id JOB_QUEUE          --val premium
 ./xmlchange --subgroup case.run --id JOB_WALLCLOCK_TIME --val 0:20
 
 ./case.setup || exit 2
@@ -56,7 +79,7 @@ setenv stop_option         nhours
 setenv stop_n              24
 @ clm_dtime = 1800
 @ h1nsteps = $stop_n * 3600 / $clm_dtime
-echo "hist_empty_htapes = .true."                                      >> ${fname}
+echo "hist_empty_htapes = .false."                                     >> ${fname}
 echo "hist_fincl1 = 'NEP','TOTECOSYSC','TOTVEGC','TLAI'"               >> ${fname}
 echo "hist_fincl2 = 'NEP','FSH','EFLX_LH_TOT_R'"                       >> ${fname}
 echo "hist_fincl3 = 'TV','TLAI','PBOT','TBOT','TSA','RH2M_R','SNOWDP'" >> ${fname}

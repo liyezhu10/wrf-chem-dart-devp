@@ -359,10 +359,6 @@ call interpolate(state_handle, ens_size, location, QTY_FRACTION_ABSORBED_PAR, &
 
 if (all(istatus == 0)) return
 
-! The rest of this routine has not been written ... needs scientific direction.
-
-call error_handler(E_MSG,'calculate_fpar:','not tested',source)
-
 ! Intentionally try to compute all required components before failing.
 ! This is the part that needs scientific direction ...
 
@@ -373,22 +369,10 @@ call interpolate(state_handle, ens_size, location, QTY_PAR_DIFFUSE,   &
 call interpolate(state_handle, ens_size, location, QTY_ABSORBED_PAR, &
                  absorbed, stat(:,3))
 
-if (debug .and. do_output()) then
-   do imem = 1,ens_size
-      write(string1,*)'member ',imem,' fpar ',obs_val(imem),' status ',istatus(imem)
-      write(string2,*)'values: active, diffuse, absorbed ', &
-                      active(imem), diffuse(imem), absorbed(imem)
-      write(string3,*)'status: active, diffuse, absorbed ',stat(imem,:)
-      call error_handler(E_MSG,'calculate_fpar:',string1,text2=string2,text3=string3)
-   enddo
-endif
-
 if (any(stat /= 0)) then
    istatus = stat(:,1)*1000 + stat(:,2)*100 + stat(:,3)
    return
 endif
-
-! Cannot remember if it is possible to get a missing value and a status of 0
 
 do imem = 1,ens_size
 
@@ -398,7 +382,7 @@ do imem = 1,ens_size
         diffuse(imem) == MISSING_R8 ) then
       write(string1,*)'member',imem,'absorbed',absorbed(imem),'status',istatus(imem)
       write(string2,*)'values: active, absorbed',active(imem),diffuse(imem)
-      call error_handler(E_MSG,'calculate_fpar:',string1,text2=string2)
+      call error_handler(E_MSG,'calculate_fpar:MISSING',string1,text2=string2)
       istatus(imem) = imem
       return
    endif 
@@ -411,7 +395,7 @@ do imem = 1,ens_size
    elseif (denom <= tiny(denom)) then ! avoid dividing by zeroish
       write(string1,*)'member ',imem,' denom ',denom
       write(string2,*)'values: active, diffuse ',active(imem),diffuse(imem)
-      call error_handler(E_MSG,'calculate_fpar:',string1,text2=string2)
+      call error_handler(E_MSG,'calculate_fpar:ZERO',string1,text2=string2)
       istatus(imem) = imem
    else
       obs_val(imem) = min(absorbed(imem) / denom, 1.0_r8)
@@ -420,6 +404,15 @@ do imem = 1,ens_size
 
 enddo
 
+if (debug .and. do_output()) then
+   do imem = 1,ens_size
+      write(string1,*)'member ',imem,' fpar ',obs_val(imem),' status ',istatus(imem)
+      write(string2,*)'values: active, diffuse, absorbed ', &
+                      active(imem), diffuse(imem), absorbed(imem)
+      write(string3,*)'status: active, diffuse, absorbed ',stat(imem,:)
+      call error_handler(E_MSG,'calculate_fpar:',string1,text2=string2,text3=string3)
+   enddo
+endif
 
 end subroutine calculate_fpar
 

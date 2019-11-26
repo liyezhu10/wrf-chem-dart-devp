@@ -325,6 +325,15 @@
    /
 
 
+&obs_loop_nml
+   filename_in   = 'obs_seq.out'
+   filename_out  = 'obs_seq.loop'
+   target_year   = 2013
+   target_month  = 7
+   target_day    = 1
+   /
+
+
 &schedule_nml
    calendar        = 'Gregorian'
    first_bin_start =  1601,  1,  1,  0,  0,  0
