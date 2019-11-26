@@ -1,14 +1,14 @@
 &perfect_model_obs_nml
    read_input_state_from_file = .true.
    write_output_state_to_file = .false.
-   async                      = 0
+   async                      =  0
    init_time_days             = -1
    init_time_seconds          = -1
    first_obs_days             = -1
    first_obs_seconds          = -1
    last_obs_days              = -1
    last_obs_seconds           = -1
-   output_interval            = 1
+   output_interval            =  1
    single_file_in             = .false.
    single_file_out            = .false.
    input_state_files          = 'clm_restart.nc', 'clm_history.nc', 'clm_vector_history.nc'
@@ -22,6 +22,7 @@
    print_every_nth_obs        = -1
    silence                    = .false.
    /
+
 
 &filter_nml
    async                    = 0
@@ -43,28 +44,32 @@
    num_output_obs_members   = 20
    output_interval          = 1
    num_groups               = 1
-   input_qc_threshold       = 1.0
-   outlier_threshold        = 3.0
+   compute_posterior        = .true.
    output_forward_op_errors = .false.
-   output_timestamps        = .false.
-   output_inflation         = .true.
+   output_timestamps        = .true.
    trace_execution          = .true.
    silence                  = .false.
+
+   stages_to_write          = 'preassim', 'output'
+   output_members           = .true.
+   output_mean              = .true.
+   output_sd                = .true.
+   write_all_stages_at_end  = .false.
 
    inf_flavor                  = 0,                       0
    inf_initial_from_restart    = .false.,                 .false.
    inf_sd_initial_from_restart = .false.,                 .false.
-   inf_output_restart          = .true.,                  .true.
    inf_deterministic           = .true.,                  .true.
-   inf_in_file_name            = 'prior_inflate_ics',     'post_inflate_ics'
-   inf_out_file_name           = 'prior_inflate_restart', 'post_inflate_restart'
-   inf_diag_file_name          = 'prior_inflate_diag',    'post_inflate_diag'
    inf_initial                 = 1.0,                     1.0
-   inf_sd_initial              = 0.6,                     0.6
-   inf_damping                 = 0.9,                     0.9
    inf_lower_bound             = 1.0,                     1.0
    inf_upper_bound             = 1000.0,               1000.0
+   inf_damping                 = 0.9,                     0.9
+   inf_sd_initial              = 0.6,                     0.6
    inf_sd_lower_bound          = 0.6,                     0.6
+   inf_sd_max_change           = 1.05,                    1.05
+   /
+
+
    /
 
 
@@ -81,7 +86,6 @@
 &assim_tools_nml
    filter_kind                     = 1
    cutoff                          = 0.05
-   allow_missing_in_clm            = .true.
    sort_obs_inc                    = .false.
    spread_restoration              = .false.
    sampling_error_correction       = .false.
@@ -93,9 +97,6 @@
 
 
 &ensemble_manager_nml
-   single_restart_file_in  = .false.
-   single_restart_file_out = .false.
-   perturbation_amplitude  = 0.2
    layout                  = 1
    tasks_per_node          = 1
    /
@@ -124,7 +125,8 @@
    output_obs_kind_mod_file = '../../../assimilation_code/modules/observations/obs_kind_mod.f90'
      input_obs_def_mod_file = '../../../observations/forward_operators/DEFAULT_obs_def_mod.F90'
     output_obs_def_mod_file = '../../../observations/forward_operators/obs_def_mod.f90'
-   input_files              = '../../../observations/forward_operators/obs_def_tower_mod.f90',
+   input_files              = '../../../observations/forward_operators/obs_def_land_mod.f90',
+                              '../../../observations/forward_operators/obs_def_tower_mod.f90',
                               '../../../observations/forward_operators/obs_def_COSMOS_mod.f90'
    /
 
@@ -133,19 +135,26 @@
 # hist_nhtfrq should be negative (hours) ... same context as in
 # the CLM namelist for the .h1. files.
 &obs_def_tower_nml
-   casename    = '../clm_dart'
+   casename    = 'clm_dart'
    hist_nhtfrq = -24
    debug       = .false.
    /
 
 
 &obs_kind_nml
-   assimilate_these_obs_types = 'TOWER_NETC_ECO_EXCHANGE',
+   assimilate_these_obs_types = 'SOIL_TEMPERATURE',
+                                'SOIL_MOISTURE',
+                                'BIOMASS',
+                                'MODIS_FPAR',
+                                'MODIS_SNOWCOVER_FRAC',
+                                'COSMOS_NEUTRON_INTENSITY',
+                                'MODIS_LEAF_AREA_INDEX',
+                                'OCO2_SIF',
+                                'LEAF_NITROGEN',
+                                'ECOSTRESS_ET'
+   evaluate_these_obs_types   = 'TOWER_NETC_ECO_EXCHANGE',
                                 'TOWER_LATENT_HEAT_FLUX',
                                 'TOWER_SENSIBLE_HEAT_FLUX',
-                                'MODIS_SNOWCOVER_FRAC',
-                                'COSMOS_NEUTRON_INTENSITY'
-   evaluate_these_obs_types   = 'null'
    /
 
 
@@ -161,34 +170,28 @@
 # The definitions for most of the DART kinds are in obs_def_tower_mod.f90
 
 &model_nml
-<<<<<<< HEAD
    clm_restart_filename         = 'clm_restart.nc'
    clm_history_filename         = 'clm_history.nc'
-   assimilation_period_days     = 1
-   assimilation_period_seconds  = 0
-   model_perturbation_amplitude = 0.2
-   output_state_vector          = .false.
-   calendar                     = 'Gregorian'
+   clm_vector_history_filename  = ''
+   assimilation_period_days     = 2
+   assimilation_period_seconds  = 3600
+   calendar                     = 'gregorian'
    debug                        = 0
-=======
-   clm_restart_filename         = 'clm_restart.nc',
-   clm_history_filename         = 'clm_history.nc',
-   assimilation_period_days     = 1,
-   assimilation_period_seconds  = 0,
-   model_perturbation_amplitude = 0.2,
-   output_state_vector          = .false.,
-   calendar                     = 'Gregorian',
-   debug                        = 0,
->>>>>>> master
-   clm_state_variables          = 'frac_sno',    'QTY_SNOWCOVER_FRAC',
-                                  'H2OSNO',      'QTY_SNOW_WATER',
-                                  'H2OSOI_LIQ',  'QTY_SOIL_MOISTURE',
-                                  'H2OSOI_ICE',  'QTY_ICE',
-                                  'T_SOISNO',    'QTY_SOIL_TEMPERATURE',
-                                  'cpool',       'QTY_CARBON',
-                                  'frootc',      'QTY_ROOT_CARBON',
-                                  'leafc',       'QTY_LEAF_CARBON',
-                                  'leafn',       'QTY_LEAF_NITROGEN',
+   clm_variables = 
+ 'H2OSOI_LIQ',  'QTY_SOIL_LIQUID_WATER',           '0.0',   'NA', 'restart', 'UPDATE',
+ 'H2OSOI_ICE',  'QTY_SOIL_ICE',                    '0.0',   'NA', 'restart', 'UPDATE',
+ 'T_SOISNO',    'QTY_SOIL_TEMPERATURE',            'NA' ,   'NA', 'restart', 'UPDATE',
+ 'frac_sno',    'QTY_SNOWCOVER_FRAC',              '0.0',  '1.0', 'restart', 'NO_COPY_BACK',
+ 'leafc',       'QTY_LEAF_CARBON',                 '0.0','500.0', 'restart', 'UPDATE',
+ 'leafn',       'QTY_LEAF_NITROGEN',               '0.0',   'NA', 'restart', 'UPDATE',
+ 'livestemc',   'QTY_LIVE_STEM_CARBON',            '0.0',   'NA', 'restart', 'UPDATE',
+ 'deadstemc',   'QTY_DEAD_STEM_CARBON',            '0.0',   'NA', 'restart', 'UPDATE',
+ 'TLAI',        'QTY_LEAF_AREA_INDEX',             '0.0', '10.0', 'history', 'NO_COPY_BACK',
+ 'EFLX_LH_TOT', 'QTY_LATENT_HEAT_FLUX',            'NA' ,   'NA', 'history', 'NO_COPY_BACK',
+ 'NEP',         'QTY_NET_CARBON_PRODUCTION',       'NA' ,   'NA', 'history', 'NO_COPY_BACK',
+ 'FSDSVD',      'QTY_PAR_DIRECT',                  '0.0',   'NA', 'history', 'NO_COPY_BACK',
+ 'FSDSVI',      'QTY_PAR_DIFFUSE',                 '0.0',   'NA', 'history', 'NO_COPY_BACK',
+ 'PARVEG',      'QTY_ABSORBED_PAR',                '0.0',   'NA', 'history', 'NO_COPY_BACK',
    /
 
   frac_sno  is needed for the forward operator
@@ -206,28 +209,28 @@
 
 
 &dart_to_clm_nml
-   dart_to_clm_input_file   = 'dart_restart',
+   dart_to_clm_input_file   = 'dart_restart'
    advance_time_present     = .false.
    /
 
 
 &location_nml
-   horiz_dist_only             = .true.,
-   vert_normalization_pressure = 100000.0,
-   vert_normalization_height   = 10000.0,
-   vert_normalization_level    = 20.0,
-   approximate_distance        = .false.,
-   nlon                        = 71,
-   nlat                        = 36,
+   horiz_dist_only             = .true.
+   vert_normalization_pressure = 100000.0
+   vert_normalization_height   = 10000.0
+   vert_normalization_level    = 20.0
+   approximate_distance        = .false.
+   nlon                        = 71
+   nlat                        = 36
    output_box_info             = .true.
    /
 
 
 &utilities_nml
-   TERMLEVEL = 2,
-   module_details = .false.,
-   logfilename = 'dart_log.out',
-   nmlfilename = 'dart_log.nml',
+   TERMLEVEL = 2
+   module_details = .false.
+   logfilename = 'dart_log.out'
+   nmlfilename = 'dart_log.nml'
    write_nml   = 'file'
    /
 
@@ -239,76 +242,91 @@
 # The times in the namelist for the obs_diag program are vectors
 # that follow the following sequence:
 # year   month   day   hour   minute   second
-# max_num_bins can be used to specify a fixed number of bins,
+# max_num_bins can be used to specify a fixed number of bins
 # in which case last_bin_center should be safely in the future.
 #
 # Acceptable latitudes range from  [-90,  90]
 # Acceptable longitudes range from [  0, Inf]
 
 &obs_diag_nml
-   obs_sequence_name = '',
-   obs_sequence_list = 'obs_seq_files.txt',
-   first_bin_center =  2002,11, 2, 0, 0, 0 ,
-   last_bin_center  =  2003,02, 1, 0, 0, 0 ,
-   bin_separation   =     0, 0, 1, 0, 0, 0 ,
-   bin_width        =     0, 0, 1, 0, 0, 0 ,
-   time_to_skip     =     0, 0, 0, 0, 0, 0 ,
-   max_num_bins     = 1000,
-   trusted_obs      = 'null',
-   Nregions   = 4,
-   lonlim1    =     0.0,     0.0,    0.0,  180.0,
-   lonlim2    =   360.0,   360.0,  180.0,  360.0,
-   latlim1    =   -90.0,     0.0,  -90.0,  -90.0,
-   latlim2    =     0.0,    90.0,   90.0,   90.0,
-   reg_names  = 'South', 'North', 'East', 'West',
-   hlevel     =  0.0,  0.05, 0.1, 0.2, 0.50, 1.0, 2.0, 5.0, 10.0, 20.0, 40.0,
-   print_mismatched_locs = .false.,
-   create_rank_histogram = .true.,
-   outliers_in_histogram = .true.,
-   use_zero_error_obs    = .false.,
-   verbose               = .true.,
+   obs_sequence_name = ''
+   obs_sequence_list = 'obs_seq_files.txt'
+   first_bin_center =  2002,11, 2, 0, 0, 0
+   last_bin_center  =  2003,02, 1, 0, 0, 0
+   bin_separation   =     0, 0, 1, 0, 0, 0
+   bin_width        =     0, 0, 1, 0, 0, 0
+   time_to_skip     =     0, 0, 0, 0, 0, 0
+   max_num_bins     = 1000
+   trusted_obs      = 'null'
+   Nregions   = 4
+   lonlim1    =     0.0,     0.0,    0.0,  180.0
+   lonlim2    =   360.0,   360.0,  180.0,  360.0
+   latlim1    =   -90.0,     0.0,  -90.0,  -90.0
+   latlim2    =     0.0,    90.0,   90.0,   90.0
+   reg_names  = 'South', 'North', 'East', 'West'
+   hlevel     =  0.0,  0.05, 0.1, 0.2, 0.50, 1.0, 2.0, 5.0, 10.0, 20.0, 40.0
+   print_mismatched_locs = .false.
+   create_rank_histogram = .true.
+   outliers_in_histogram = .true.
+   use_zero_error_obs    = .false.
+   verbose               = .true.
    /
 
 
 &obs_sequence_tool_nml
-   filename_seq      = '',
-   filename_seq_list = 'olist',
-   filename_out      = 'OUTDIR/obs_seq.YYYY-MM-DD-SSSSS',
-   print_only        = .false.,
-   gregorian_cal     = .true.,
-   first_obs_days    = DART1D,
-   first_obs_seconds = DART1S,
-   last_obs_days     = DARTND,
-   last_obs_seconds  = DARTNS,
+   filename_seq      = ''
+   filename_seq_list = 'olist'
+   filename_out      = 'OUTDIR/obs_seq.YYYY-MM-DD-SSSSS'
+   print_only        = .false.
+   gregorian_cal     = .true.
+   first_obs_days    = DART1D
+   first_obs_seconds = DART1S
+   last_obs_days     = DARTND
+   last_obs_seconds  = DARTNS
+   min_lon           = 0
+   max_lon           = 360
+   min_lat           = -90
+   max_lat           = 90
+   edit_qc_metadata  = .true.
+   new_qc_metadata   = 'Original QC'
+   /
+
    min_lon           = 75
    max_lon           = 105
    min_lat           = 30
    max_lat           = 45
-   edit_qc_metadata  = .true.,
-   new_qc_metadata   = 'Original QC',
-/
+
+&obs_loop_nml
+   filename_in  = 'obs_seq.out'
+   filename_out = 'obs_seq.loop'
+   print_only   = .false.
+   calendar     = 'Gregorian'
+   target_year  = 2013
+   target_month = MM
+   target_day   = DD
+   /
 
 
 &schedule_nml
-   calendar        = 'Gregorian',
-   first_bin_start =  1601,  1,  1,  0,  0,  0,
-   first_bin_end   =  2999,  1,  1,  0,  0,  0,
-   last_bin_end    =  2999,  1,  1,  0,  0,  0,
-   bin_interval_days    = 1000000,
-   bin_interval_seconds = 0,
-   max_num_bins         = 1000,
+   calendar        = 'Gregorian'
+   first_bin_start =  1601,  1,  1,  0,  0,  0
+   first_bin_end   =  2999,  1,  1,  0,  0,  0
+   last_bin_end    =  2999,  1,  1,  0,  0,  0
+   bin_interval_days    = 1000000
+   bin_interval_seconds = 0
+   max_num_bins         = 1000
    print_table          = .true.
    /
 
 
 &obs_seq_to_netcdf_nml
    obs_sequence_name = 'obs_seq.final'
-   obs_sequence_list = '',
-   append_to_netcdf  = .false.,
-   lonlim1    =    0.0,
-   lonlim2    =  360.0,
-   latlim1    =  -90.0,
-   latlim2    =   90.0,
+   obs_sequence_list = ''
+   append_to_netcdf  = .false.
+   lonlim1    =    0.0
+   lonlim2    =  360.0
+   latlim1    =  -90.0
+   latlim2    =   90.0
    verbose    = .false.
    /
 
@@ -320,24 +338,21 @@
    loc_of_interest      =  90.0,  41.00, 0.35
 
 &model_mod_check_nml
-   input_state_files     = 'clm_restart.nc', 'clm_history.nc', 'clm_vector_history.nc'
-   output_state_files    = 'mmc_output1.nc', 'mmc_output2.nc', 'mmc_output3.nc'
+   num_ens               = 1
+   input_state_files     = 'clm_restart.nc', 'clm_history.nc'
+   output_state_files    = 'mmc_output1.nc', 'mmc_output2.nc'
    test1thru             = 0
-   run_tests             = 1, 2, 3, 4, 7
-   x_ind                 = 720
-   loc_of_interest       = 254.727854, 39.9768545, 0.35
+   run_tests             = 1,2,3,4,7
+   x_ind                 = 6691574
+   loc_of_interest       = 254.724947, 39.978080, 0.039
    quantity_of_interest  = 'QTY_LEAF_CARBON'
    interp_test_vertcoord = 'VERTISHEIGHT'
-<<<<<<< HEAD
-   interp_test_lonrange  = 320.0, 90.0
-=======
-   interp_test_lonrange  = 320.0, 90.0 
->>>>>>> master
+   interp_test_lonrange  = 0.0, 180.0
    interp_test_dlon      = 1.0
-   interp_test_latrange  = 0.0, 75.0
+   interp_test_latrange  = 0.0, 90.0
    interp_test_dlat      = 1.0
-   interp_test_vertrange = 1.0, 2.0
-   interp_test_dvert     = 1.0
-   verbose               = .false.
+   interp_test_vertrange = 0.0, 0.2
+   interp_test_dvert     = 0.1
+   verbose               = .true.
   /
 

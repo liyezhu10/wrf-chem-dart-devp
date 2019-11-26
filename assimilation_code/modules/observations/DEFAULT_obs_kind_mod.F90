@@ -412,8 +412,8 @@ integer, parameter, public :: &
   QTY_VEGETATION_TEMPERATURE        = 301, &
   QTY_CANOPY_HEIGHT                 = 302, &
   QTY_FRACTION_ABSORBED_PAR         = 303, &  ! "FAPAR"
-  QTY_FPAR_DIRECT                   = 304, &
-  QTY_FPAR_DIFFUSE                  = 305, &
+  QTY_PAR_DIRECT                    = 304, &
+  QTY_PAR_DIFFUSE                   = 305, &
   QTY_FPAR_SUNLIT_DIRECT            = 306, &
   QTY_FPAR_SUNLIT_DIFFUSE           = 307, &
   QTY_FPAR_SHADED_DIRECT            = 308, &
@@ -469,7 +469,9 @@ integer, parameter, public :: &
   QTY_UNCONFINED_WATER              = 353, &
   QTY_SATURATED_WATER               = 354, &
   QTY_SNOW_DEPTH                    = 355, &
-  QTY_SOLAR_INDUCED_FLUORESCENCE    = 356
+  QTY_SOLAR_INDUCED_FLUORESCENCE    = 356, &
+  QTY_PHOTO_AVAILABLE_RADIATION     = 357, &
+  QTY_ABSORBED_PAR                  = 358
 
 ! WACCM
 integer, parameter, public :: &
@@ -903,8 +905,8 @@ obs_kind_names(300) = obs_kind_type(QTY_BRIGHTNESS_TEMPERATURE     ,'QTY_BRIGHTN
 obs_kind_names(301) = obs_kind_type(QTY_VEGETATION_TEMPERATURE     ,'QTY_VEGETATION_TEMPERATURE')
 obs_kind_names(302) = obs_kind_type(QTY_CANOPY_HEIGHT              ,'QTY_CANOPY_HEIGHT')
 obs_kind_names(303) = obs_kind_type(QTY_FRACTION_ABSORBED_PAR      ,'QTY_FRACTION_ABSORBED_PAR')
-obs_kind_names(304) = obs_kind_type(QTY_FPAR_DIRECT                ,'QTY_FPAR_DIRECT')
-obs_kind_names(305) = obs_kind_type(QTY_FPAR_DIFFUSE               ,'QTY_FPAR_DIFFUSE')
+obs_kind_names(304) = obs_kind_type(QTY_PAR_DIRECT                 ,'QTY_PAR_DIRECT')
+obs_kind_names(305) = obs_kind_type(QTY_PAR_DIFFUSE                ,'QTY_PAR_DIFFUSE')
 obs_kind_names(306) = obs_kind_type(QTY_FPAR_SUNLIT_DIRECT         ,'QTY_FPAR_SUNLIT_DIRECT')
 obs_kind_names(307) = obs_kind_type(QTY_FPAR_SUNLIT_DIFFUSE        ,'QTY_FPAR_SUNLIT_DIFFUSE')
 obs_kind_names(308) = obs_kind_type(QTY_FPAR_SHADED_DIRECT         ,'QTY_FPAR_SHADED_DIRECT')
@@ -956,6 +958,8 @@ obs_kind_names(353) = obs_kind_type(QTY_UNCONFINED_WATER           ,'QTY_UNCONFI
 obs_kind_names(354) = obs_kind_type(QTY_SATURATED_WATER            ,'QTY_SATURATED_WATER')
 obs_kind_names(355) = obs_kind_type(QTY_SNOW_DEPTH                 ,'QTY_SNOW_DEPTH')
 obs_kind_names(356) = obs_kind_type(QTY_SOLAR_INDUCED_FLUORESCENCE ,'QTY_SOLAR_INDUCED_FLUORESCENCE')
+obs_kind_names(357) = obs_kind_type(QTY_PHOTO_AVAILABLE_RADIATION  ,'QTY_PHOTO_AVAILABLE_RADIATION')
+obs_kind_names(358) = obs_kind_type(QTY_ABSORBED_PAR               ,'QTY_ABSORBED_PAR')
 
 obs_kind_names(365) = obs_kind_type(QTY_ION_O_MIXING_RATIO,    'QTY_ION_O_MIXING_RATIO')
 obs_kind_names(366) = obs_kind_type(QTY_ATOMIC_H_MIXING_RATIO, 'QTY_ATOMIC_H_MIXING_RATIO')

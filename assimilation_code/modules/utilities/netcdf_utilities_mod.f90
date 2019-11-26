@@ -166,7 +166,7 @@ interface nc_get_variable_size
 end interface
 
 ! version controlled file description for error handling, do not edit
-character(len=*), parameter :: source   = "$URL$"
+character(len=*), parameter :: source   = "netcdf_utilities_mod.f90"
 character(len=*), parameter :: revision = "$Revision$"
 character(len=*), parameter :: revdate  = "$Date$"
 

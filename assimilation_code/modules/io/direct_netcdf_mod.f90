@@ -128,7 +128,7 @@ public :: read_transpose,            &
           nc_get_num_times
 
 ! version controlled file description for error handling, do not edit
-character(len=*), parameter :: source   = "$URL$"
+character(len=*), parameter :: source   = "direct_netcdf_mod.f90"
 character(len=*), parameter :: revision = "$Revision$"
 character(len=*), parameter :: revdate  = "$Date$"
 

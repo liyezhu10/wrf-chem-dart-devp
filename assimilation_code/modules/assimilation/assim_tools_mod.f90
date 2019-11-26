@@ -111,8 +111,7 @@ real(r8), allocatable  :: exp_true_correl(:), alpha(:)
 real(r8), allocatable  :: obs_impact_table(:,:)
 
 ! version controlled file description for error handling, do not edit
-character(len=*), parameter :: source   = &
-   "$URL$"
+character(len=*), parameter :: source   = "assim_tools_mod.f90"
 character(len=*), parameter :: revision = "$Revision$"
 character(len=*), parameter :: revdate  = "$Date$"
 
@@ -3223,8 +3222,3 @@ end subroutine test_close_obs_dist
 
 end module assim_tools_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

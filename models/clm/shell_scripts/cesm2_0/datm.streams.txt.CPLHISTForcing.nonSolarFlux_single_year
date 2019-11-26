@@ -1,14 +1,15 @@
 <streamstemplate>
       <general_comment>
          streams template for datm in CESM2_0
-         files originally in /glade/p/rda/data/ds199.1 had some bad flux values
+         /glade/p/nsc/ncis0006/Reanalyses/f.e21.FHIST_BGC.f09_025.CAM6assim.011/cpl/hist
+         TJH: The offset is unexplored.
       </general_comment>
 <stream>
       <comment>
-         Stream description file for CPL history 3-hourly Precip data at 0.9x1.25 resolution
+         Stream description file for CPL history 3-hourly data at 0.9x1.25 resolution
       </comment>
       <dataSource>
-         Raeder et al. 80 member CAM/DART reanalysis
+         Raeder et al. 80 member CAM/DART reanalysis V2
       </dataSource>
       <domainInfo>
          <variableNames>
@@ -19,28 +20,28 @@
             doma_mask     mask
          </variableNames>
          <filePath>
-            /glade/p/cisl/dares/thoar/CAM_DATM/4xdaily
+            /glade/scratch/thoar/datm_test
          </filePath>
          <fileNames>
-          CAM_DATM.cpl_NINST.ha2x1dx6h.RUNYEAR.nc
+          f.e21.FHIST_BGC.f09_025.CAM6assim.011.cpl_NINST.ha2x3h.RUNYEAR.nc
          </fileNames>
       </domainInfo>
       <fieldInfo>
          <variableNames>
-            a2x6h_Faxa_rainc     rainc
-            a2x6h_Faxa_rainl     rainl
-            a2x6h_Faxa_snowc     snowc
-            a2x6h_Faxa_snowl     snowl
-            a2x6h_Faxa_lwdn      lwdn
+            a2x3h_Faxa_rainc     rainc
+            a2x3h_Faxa_rainl     rainl
+            a2x3h_Faxa_snowc     snowc
+            a2x3h_Faxa_snowl     snowl
+            a2x3h_Faxa_lwdn      lwdn
          </variableNames>
          <filePath>
-            /glade/p/cisl/dares/thoar/CAM_DATM/4xdaily
+            /glade/scratch/thoar/datm_test
          </filePath>
          <offset>
             -10800
          </offset>
          <fileNames>
-          CAM_DATM.cpl_NINST.ha2x1dx6h.RUNYEAR.nc
+          f.e21.FHIST_BGC.f09_025.CAM6assim.011.cpl_NINST.ha2x3h.RUNYEAR.nc
          </fileNames>
       </fieldInfo>
       <build_streams_documentation>

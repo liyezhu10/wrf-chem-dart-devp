@@ -2,6 +2,12 @@
 ! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 
+! The obs_def_land_mod.f90 is intended to provide the forward operators
+! necessary to convert land surface states to the expected values of the
+! observations. Since the meaning of land model variables varies across
+! land models, the forward operators here may try multiple approaches.
+
+
 ! The following observation kinds are currently created by the converters
 ! in the NASA_Earthdata directory. As NASA provides them
 !	soil_moisture_x:long_name = "Volumetric Soil Moisture from X-band" ;
@@ -54,7 +60,7 @@
 !MODIS_LEAF_AREA_INDEX,          QTY_LEAF_AREA_INDEX,            COMMON_CODE
 !GIMMS_LEAF_AREA_INDEX,          QTY_LEAF_AREA_INDEX,            COMMON_CODE
 !SP_LEAF_AREA_INDEX,             QTY_LEAF_AREA_INDEX,            COMMON_CODE
-!MODIS_FPAR,                     QTY_FRACTION_ABSORBED_PAR,      COMMON_CODE
+!MODIS_FPAR,                     QTY_FRACTION_ABSORBED_PAR
 !BIOMASS,                        QTY_BIOMASS
 !LEAF_CARBON,                    QTY_LEAF_CARBON,                COMMON_CODE
 !LIVE_STEM_CARBON,               QTY_LIVE_STEM_CARBON,           COMMON_CODE
@@ -76,7 +82,8 @@
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
 !  use obs_def_land_mod, only : calculate_albedo, &
-!                                calculate_biomass
+!                               calculate_biomass, &
+!                               calculate_fpar
 ! END DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
 !-----------------------------------------------------------------------------
 
@@ -86,13 +93,16 @@
 !     call calculate_albedo(state_handle, ens_size, location, expected_obs, istatus)
 !  case(BIOMASS)
 !     call calculate_biomass(state_handle, ens_size, location, expected_obs, istatus)
+!  case(MODIS_FPAR)
+!     call calculate_fpar(state_handle, ens_size, location, expected_obs, istatus)
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 !-----------------------------------------------------------------------------
 
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS READ_OBS_DEF
 !    case(SURFACE_ALBEDO, &
-!         BIOMASS)
+!         BIOMASS, &
+!         MODIS_FPAR)
 !       continue
 ! END DART PREPROCESS READ_OBS_DEF
 !-----------------------------------------------------------------------------
@@ -100,7 +110,8 @@
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS WRITE_OBS_DEF
 !    case(SURFACE_ALBEDO, &
-!         BIOMASS)
+!         BIOMASS, &
+!         MODIS_FPAR)
 !       continue
 ! END DART PREPROCESS WRITE_OBS_DEF
 !-----------------------------------------------------------------------------
@@ -108,7 +119,8 @@
 !-----------------------------------------------------------------------------
 ! BEGIN DART PREPROCESS INTERACTIVE_OBS_DEF
 !    case(SURFACE_ALBEDO, &
-!         BIOMASS)
+!         BIOMASS, &
+!         MODIS_FPAR)
 !       continue
 ! END DART PREPROCESS INTERACTIVE_OBS_DEF
 !-----------------------------------------------------------------------------
@@ -141,13 +153,18 @@ use         obs_kind_mod, only : QTY_RADIATION_VISIBLE_DOWN, &
                                  QTY_RADIATION_NEAR_IR_UP, &
                                  QTY_LIVE_STEM_CARBON, &
                                  QTY_DEAD_STEM_CARBON, &
-                                 QTY_LEAF_CARBON
+                                 QTY_LEAF_CARBON, &
+                                 QTY_FRACTION_ABSORBED_PAR, &
+                                 QTY_PAR_DIRECT, &
+                                 QTY_PAR_DIFFUSE, &
+                                 QTY_ABSORBED_PAR
 
 implicit none
 private
 
 public :: calculate_albedo, &
-          calculate_biomass
+          calculate_biomass, &
+          calculate_fpar
 
 character(len=*), parameter :: source   = 'obs_def_land_mod.f90'
 character(len=*), parameter :: revision = ''
@@ -212,13 +229,13 @@ if ( .not. module_initialized ) call initialize_module()
 ! one-by-one.
 
 call interpolate(state_handle, ens_size, location, QTY_RADIATION_VISIBLE_DOWN, &
-        visible_in, stat(:,1))
+        visible_in,  stat(:,1))
 call interpolate(state_handle, ens_size, location, QTY_RADIATION_NEAR_IR_DOWN, &
-        nir_in, stat(:,2))
+        nir_in,      stat(:,2))
 call interpolate(state_handle, ens_size, location, QTY_RADIATION_VISIBLE_UP, &
         visible_out, stat(:,3))
 call interpolate(state_handle, ens_size, location, QTY_RADIATION_NEAR_IR_UP, &
-        nir_out, stat(:,4))
+        nir_out,     stat(:,4))
 
 if (any(stat /= 0)) then
    istatus = stat(:,1)*1000 + stat(:,2)*100 + stat(:,3)*10 + stat(:,4)
@@ -278,9 +295,12 @@ if ( .not. module_initialized ) call initialize_module()
 ! The desire is to inform about ALL failed components instead of failing
 ! one-by-one.
 
-call interpolate(state_handle, ens_size, location, QTY_LEAF_CARBON,      leaf_carbon,      stat(:,1))
-call interpolate(state_handle, ens_size, location, QTY_LIVE_STEM_CARBON, live_stem_carbon, stat(:,2))
-call interpolate(state_handle, ens_size, location, QTY_DEAD_STEM_CARBON, dead_stem_carbon, stat(:,3))
+call interpolate(state_handle, ens_size, location, QTY_LEAF_CARBON, &
+                 leaf_carbon,      stat(:,1))
+call interpolate(state_handle, ens_size, location, QTY_LIVE_STEM_CARBON, &
+                 live_stem_carbon, stat(:,2))
+call interpolate(state_handle, ens_size, location, QTY_DEAD_STEM_CARBON, &
+                 dead_stem_carbon, stat(:,3))
 
 if (any(stat /= 0)) then
    istatus = stat(:,1)*100 + stat(:,2)*10 + stat(:,3)
@@ -302,6 +322,99 @@ if (debug .and. do_output()) then
 endif
 
 end subroutine calculate_biomass
+
+
+!===============================================================================
+!> calculate the fraction of photosynthetically available radiation
+!> The MODIS website https://modis.gsfc.nasa.gov/data/dataprod/mod15.php
+!> states: 'FPAR is the fraction of photosynthetically active radiation
+!>          (400-700 nm) absorbed by green vegetation.'
+
+
+subroutine calculate_fpar(state_handle, ens_size, location, obs_val, istatus)
+
+type(ensemble_type), intent(in)  :: state_handle
+integer,             intent(in)  :: ens_size
+type(location_type), intent(in)  :: location
+real(r8),            intent(out) :: obs_val(ens_size)
+integer,             intent(out) :: istatus(ens_size)
+
+real(r8) :: diffuse(ens_size)
+real(r8) :: active(ens_size)
+real(r8) :: absorbed(ens_size)
+integer  :: stat(ens_size,3)
+integer  :: imem
+real(r8) :: denom
+
+istatus = 1           ! 0 == success, anything else is a failure
+obs_val = MISSING_R8
+
+if ( .not. module_initialized ) call initialize_module()
+
+! If the model state has it directly, this is simple.
+! If it does not, we try to calculate it from what is available and what is absorbed
+
+call interpolate(state_handle, ens_size, location, QTY_FRACTION_ABSORBED_PAR, &
+                 obs_val, istatus)
+
+if (all(istatus == 0)) return
+
+! Intentionally try to compute all required components before failing.
+! This is the part that needs scientific direction ...
+
+call interpolate(state_handle, ens_size, location, QTY_PAR_DIRECT,   &
+                 active,   stat(:,1))
+call interpolate(state_handle, ens_size, location, QTY_PAR_DIFFUSE,   &
+                 diffuse,  stat(:,2))
+call interpolate(state_handle, ens_size, location, QTY_ABSORBED_PAR, &
+                 absorbed, stat(:,3))
+
+if (any(stat /= 0)) then
+   istatus = stat(:,1)*1000 + stat(:,2)*100 + stat(:,3)
+   return
+endif
+
+do imem = 1,ens_size
+
+   ! If any of them are missing it is cause for failure and an early return
+   if (absorbed(imem) == MISSING_R8 .or.  &
+         active(imem) == MISSING_R8 .or.  &
+        diffuse(imem) == MISSING_R8 ) then
+      write(string1,*)'member',imem,'absorbed',absorbed(imem),'status',istatus(imem)
+      write(string2,*)'values: active, absorbed',active(imem),diffuse(imem)
+      call error_handler(E_MSG,'calculate_fpar:MISSING',string1,text2=string2)
+      istatus(imem) = imem
+      return
+   endif 
+
+   denom = active(imem) + diffuse(imem)
+
+   if (absorbed(imem) < tiny(denom)) then
+      obs_val(imem) = 0.0_r8
+      istatus(imem) = 0
+   elseif (denom <= tiny(denom)) then ! avoid dividing by zeroish
+      write(string1,*)'member ',imem,' denom ',denom
+      write(string2,*)'values: active, diffuse ',active(imem),diffuse(imem)
+      call error_handler(E_MSG,'calculate_fpar:ZERO',string1,text2=string2)
+      istatus(imem) = imem
+   else
+      obs_val(imem) = min(absorbed(imem) / denom, 1.0_r8)
+      istatus(imem) = 0
+   endif 
+
+enddo
+
+if (debug .and. do_output()) then
+   do imem = 1,ens_size
+      write(string1,*)'member ',imem,' fpar ',obs_val(imem),' status ',istatus(imem)
+      write(string2,*)'values: active, diffuse, absorbed ', &
+                      active(imem), diffuse(imem), absorbed(imem)
+      write(string3,*)'status: active, diffuse, absorbed ',stat(imem,:)
+      call error_handler(E_MSG,'calculate_fpar:',string1,text2=string2,text3=string3)
+   enddo
+endif
+
+end subroutine calculate_fpar
 
 end module obs_def_land_mod
 

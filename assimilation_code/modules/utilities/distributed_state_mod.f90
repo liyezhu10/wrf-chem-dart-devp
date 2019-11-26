@@ -33,10 +33,9 @@ public :: get_state_array, get_state, create_state_window, &
           free_state_window, create_mean_window, free_mean_window
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = "distributed_state_mod.f90"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 contains
 
@@ -163,8 +162,3 @@ end subroutine get_mean
 
 end module distributed_state_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
