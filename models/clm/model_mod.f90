@@ -67,11 +67,11 @@ use     obs_kind_mod, only : QTY_SOIL_TEMPERATURE,       &
                              QTY_SOIL_LIQUID_WATER,      &
                              QTY_SOIL_ICE,               &
                              QTY_SNOWCOVER_FRAC,         &
-                             QTY_LEAF_CARBON,            &
-                             QTY_LIVE_STEM_CARBON,       &
-                             QTY_DEAD_STEM_CARBON,       &
-                             QTY_LEAF_AREA_INDEX,        &
                              QTY_WATER_TABLE_DEPTH,      &
+                             QTY_LEAF_CARBON,   QTY_LIVE_STEM_CARBON,   QTY_DEAD_STEM_CARBON, &
+                             QTY_LEAF_NITROGEN, QTY_LIVE_STEM_NITROGEN, QTY_DEAD_STEM_NITROGEN, &
+                             QTY_NET_CARBON_PRODUCTION,  &
+                             QTY_LEAF_AREA_INDEX,        &
                              QTY_GEOPOTENTIAL_HEIGHT,    &
                              QTY_VEGETATION_TEMPERATURE, &
                              QTY_PAR_DIRECT,             &
@@ -80,7 +80,6 @@ use     obs_kind_mod, only : QTY_SOIL_TEMPERATURE,       &
                              QTY_FRACTION_ABSORBED_PAR,  &
                              QTY_SOLAR_INDUCED_FLUORESCENCE, &
                              QTY_LATENT_HEAT_FLUX,       &
-                             QTY_LEAF_NITROGEN,          &
                              QTY_LANDMASK,               &
                              get_index_for_quantity,     &
                              get_name_for_quantity
@@ -1794,13 +1793,13 @@ select case( obs_kind )
       call get_grid_vertval(state_handle, ens_size, location, obs_kind, &
                             expected_obs, istatus)
 
-   case ( QTY_SNOWCOVER_FRAC, QTY_LEAF_AREA_INDEX, QTY_LEAF_CARBON, &
+   case ( QTY_SNOWCOVER_FRAC, QTY_LEAF_AREA_INDEX, &
+          QTY_LEAF_CARBON,   QTY_LIVE_STEM_CARBON,   QTY_DEAD_STEM_CARBON, &
+          QTY_LEAF_NITROGEN, QTY_LIVE_STEM_NITROGEN, QTY_DEAD_STEM_NITROGEN, &
           QTY_WATER_TABLE_DEPTH, QTY_VEGETATION_TEMPERATURE, &
-          QTY_FRACTION_ABSORBED_PAR, &
+          QTY_FRACTION_ABSORBED_PAR, QTY_NET_CARBON_PRODUCTION, &
           QTY_PAR_DIRECT, QTY_PAR_DIFFUSE, QTY_ABSORBED_PAR, &
-          QTY_LIVE_STEM_CARBON, QTY_DEAD_STEM_CARBON, &
-          QTY_SOLAR_INDUCED_FLUORESCENCE, &
-          QTY_LATENT_HEAT_FLUX, QTY_LEAF_NITROGEN)
+          QTY_SOLAR_INDUCED_FLUORESCENCE, QTY_LATENT_HEAT_FLUX)
 
       call compute_gridcell_value(state_handle, ens_size, location, obs_kind, &
                                   expected_obs, istatus)
