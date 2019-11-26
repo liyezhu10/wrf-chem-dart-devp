@@ -2547,23 +2547,17 @@ if (istatus == nf90_noerr) then
                routine,'inquire_dimension levcan '//trim(fname))
 endif
 
-! levsno is presently required, but I can envision a domain/experiment that
-! will not have snow levels. How this relates to variables dimensioned 'levtot'
-! is unclear. For that reason, levsno is presently required.
+call nc_check(nf90_inq_dimid(ncid, 'levsno', dimid), &
+            routine,'inq_dimid levsno '//trim(fname))
+call nc_check(nf90_inquire_dimension(ncid, dimid, len=nlevsno), &
+            routine,'inquire_dimension levsno '//trim(fname))
 
-istatus = nf90_inq_dimid(ncid, 'levsno', dimid)
-if (istatus == nf90_noerr) then
-   call nc_check(nf90_inquire_dimension(ncid, dimid, len=nlevsno), &
-               routine,'inquire_dimension levsno '//trim(fname))
-endif
+call nc_check(nf90_inq_dimid(ncid, 'levsno1', dimid), &
+            routine,'inq_dimid levsno1 '//trim(fname))
+call nc_check(nf90_inquire_dimension(ncid, dimid, len=nlevsno1), &
+            routine,'inquire_dimension levsno1 '//trim(fname))
 
-! levsno1, rtmlon, rtmlat are optional ... so it is not a fatal error if they are not present.
-
-istatus = nf90_inq_dimid(ncid, 'levsno1', dimid)
-if (istatus == nf90_noerr) then
-   call nc_check(nf90_inquire_dimension(ncid, dimid, len=nlevsno1), &
-               routine,'inquire_dimension levsno1 '//trim(fname))
-endif
+! rtmlon, rtmlat are optional ... so it is not a fatal error if they are not present.
 
 istatus = nf90_inq_dimid(ncid, 'rtmlon', dimid)
 if (istatus == nf90_noerr) then
@@ -2583,7 +2577,7 @@ if (cstat == 'close') then
 endif
 
 ! Echo what we know if desired.
-if ((debug > 7) .and. do_output()) then
+if ((debug > 1) .and. do_output()) then
    write(logfileunit,*)
    write(logfileunit,*)'get_sparse_dims output follows:'
    write(logfileunit,*)'ngridcell = ',ngridcell
