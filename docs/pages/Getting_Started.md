@@ -665,25 +665,27 @@ calculate the error in the assimilation:
 <table>
 <tr>
 <td width="50%">
+   
 <pre>
 <code>
+
 [unix prompt] cd DARTHOME/models/lorenz_63/work
 [unix prompt] matlab -nodesktop
 (lots of startup messages I'm skipping)
 
-    >> addpath ../../../diagnostics/matlab
-    >> plot_total_err
+    [matlab_prompt] addpath ../../../diagnostics/matlab
+    [matlab_prompt] plot_total_err
     Input name of true model trajectory file;
-    <cr> for perfect_output.nc
+    (cr) for perfect_output.nc
     perfect_output.nc
     Input name of ensemble trajectory file;
-    <cr> for preassim.nc
+    (cr) for preassim.nc
     preassim.nc
     Comparing true_state.nc and
               preassim.nc
-    >> plot_ens_time_series
+    [matlab_prompt] plot_ens_time_series
     Input name of ensemble trajectory file;
-    <cr> for preassim.nc
+    (cr) for preassim.nc
 
     Comparing true_state.nc and
               preassim.nc
@@ -711,8 +713,7 @@ calculate the error in the assimilation:
                       time: [200x1 double]
         time_series_length: 200
                        var: 'state'
-                  var_inds: [1 2 3]
-                  
+                  var_inds: [1 2 3]       
 </code>
 </pre>
 </td>

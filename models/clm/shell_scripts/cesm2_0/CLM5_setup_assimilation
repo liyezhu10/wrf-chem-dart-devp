@@ -298,16 +298,37 @@ while ( $inst <= $num_instances )
    #              i.e. 5 means every 24 time-steps and -24 means every day
    #              Default: 0,-24,-24,-24,-24,-24
    # hist_mfilt:  Per tape series maximum number of time samples.
+   # EXAMPLE with stop_option = 'nhours' and 'stop_n' is 24
+   #  hist_nhtfrq          =    -24,     1,   -24
+   #  hist_mfilt           =      1,    48,     1
+   #  hist_avgflag_pertape =    'A',   'A',    'I'
+   #  hist_dov2xy          = .true.,.true.,.false.
+   #  means the .h0. will be daily averages in lat/lon space
+   #  means the .h1. will have 48 'averages' (i.e. every 30 mins) in lat/lon space
+   #  means the .h2. will have an instantaneous value in the same 'vector' format
+   #                 as the restart file.
+
+   # Here are some of the candidate variables. Generally do not want ALL possible
+   # variables - the files are already huge, and we have an ensemble of them.
+   # FSH     units="W/m^2"    long_name='sensible heat not including correction for ... 
+   # FSDSVD  units='W/m^2'    long_name='direct vis incident solar radiation'
+   # FSDSVI  units='W/m^2'    long_name='diffuse vis incident solar radiation'
+   # PARVEG  units='W/m^2'    long_name='absorbed par by vegetation'  SOURCEMOD
+   # EFLX_LH_TOT    units='W/m^2' long_name='total latent heat flux [+ to atm]'
+   # EFLX_LH_TOT_R  units='W/m^2' long_name='Rural total evaporation'
+   # TLAI    units='m^2/m^2'  long_name='total projected leaf area index'
+   # NEP     units='gC/m^2/s' long_name='net ecosystem production, excludes ...
+   # GPP     units='gC/m^2/s' long_name='gross primary production'
 
    echo "use_lch4 = .false."                                     >> ${fname}
-#  echo "use_init_interp = .true."                               >> ${fname}
-#  echo "init_interp_fill_missing_with_natveg = .true."          >> ${fname}
-   echo "hist_empty_htapes = .false."                            >> ${fname}
-   echo "hist_fincl1 = 'FSIF','EFLX_LH_TOT'"                     >> ${fname}
-   echo "hist_fincl2 = 'NEP','FSH','EFLX_LH_TOT_R','FSIF','GPP'" >> ${fname}
+   echo "use_init_interp = .true."                               >> ${fname}
+   echo "init_interp_fill_missing_with_natveg = .true."          >> ${fname}
+   echo "hist_empty_htapes = .true."                             >> ${fname}
+   echo "hist_fincl1 = 'EFLX_LH_TOT','TLAI','FSDSVD','FSDSVI','PARVEG'" >> ${fname}
+   echo "hist_fincl2 = 'NEP','FSH','EFLX_LH_TOT_R','GPP'"        >> ${fname}
    echo "hist_fincl3 = 'LEAFN','TLAI'"                           >> ${fname}
-   echo "hist_nhtfrq = -24,-1,-24"                               >> ${fname}
-   echo "hist_mfilt  = 1,24,1"                                   >> ${fname}
+   echo "hist_nhtfrq = -$stop_n,1,-$stop_n"                      >> ${fname}
+   echo "hist_mfilt  = 1,$h1nsteps,1"                            >> ${fname}
    echo "hist_avgflag_pertape = 'A','A','I'"                     >> ${fname}
    echo "hist_dov2xy = .true.,.true.,.false."                    >> ${fname}
    echo "hist_type1d_pertape = ' ',' ',' '"                      >> ${fname}

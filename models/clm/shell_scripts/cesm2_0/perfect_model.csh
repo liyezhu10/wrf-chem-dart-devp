@@ -127,22 +127,6 @@ if ($?TASKS_PER_NODE) then
    endif
 endif
 
-# Enforce the namelist assumptions used in this script.
-
-ex input.nml <<ex_end
-g;read_input_state_from_file ;s;= .*;= .true.;
-g;write_output_state_to_file ;s;= .*;= .false.;
-g;single_file_in ;s;= .*;= .false.;
-g;single_file_out ;s;= .*;= .false.;
-g;input_state_files ;s;= .*;= 'clm_restart.nc', 'clm_history.nc', 'clm_vector_history.nc';
-g;output_state_files ;s;= .*;= 'clm_restart.nc', 'clm_history.nc', 'clm_vector_history.nc';
-g;input_state_file_list ;s;= .*;= '', '';
-g;output_state_file_list ;s;= .*;= '', '';
-g;obs_seq_in_file_name ;s;= .*;= 'obs_seq.in';
-g;obs_seq_out_file_name ;s;= .*;= 'obs_seq.out';
-wq
-ex_end
-
 # DART/CLM routines all need a clm_restart.nc, clm_history.nc, etc.
 # The flux tower forward operator looks for a CLM history file with
 # an instance number in the filename.

@@ -90,10 +90,9 @@ public :: time_manager_init, print_time, print_date
 public :: write_time, read_time, interactive_time
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = "time_manager_mod.f90"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 ! Global data to define calendar type
 integer, parameter :: THIRTY_DAY_MONTHS = 1,      JULIAN = 2, &
@@ -3299,8 +3298,3 @@ end subroutine time_index_sort
 
 end module time_manager_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

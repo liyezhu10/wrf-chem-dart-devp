@@ -49,10 +49,9 @@ public :: location_type, get_location, set_location, &
 
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = "threed_sphere/location_mod.f90"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 integer,             parameter :: LocationDims = 3
 character(len = 64), parameter :: LocationName = "loc3Dsphere"
@@ -2434,8 +2433,3 @@ end subroutine print_get_close_type
 
 end module location_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

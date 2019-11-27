@@ -23,8 +23,7 @@ public :: has_vertical_choice, vertical_localization_on, &
           get_vertical_localization_coord, set_vertical_localization_coord
 
 ! version controlled file description for error handling, do not edit
-character(len=*), parameter :: source   = &
-   "$URL$"
+character(len=*), parameter :: source   = "default_location_mod.f90"
 character(len=*), parameter :: revision = "$Revision$"
 character(len=*), parameter :: revdate  = "$Date$"
 
@@ -97,8 +96,3 @@ end function vertical_localization_on
 
 end module default_location_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$

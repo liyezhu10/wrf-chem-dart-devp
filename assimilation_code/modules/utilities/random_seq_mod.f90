@@ -30,10 +30,9 @@ public :: random_seq_type, &
           random_exponential
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+character(len=*), parameter :: source   = "random_sequence_mod.f90"
+character(len=*), parameter :: revision = "$Revision$"
+character(len=*), parameter :: revdate  = "$Date$"
 
 ! Gives ability to generate unique repeatable sequences of random numbers
 ! using random congruential package. Needed to allow different assim algorithms
@@ -546,8 +545,3 @@ end function ran_gamma
 
 end module random_seq_mod
 
-! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
