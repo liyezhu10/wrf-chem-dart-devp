@@ -4,7 +4,7 @@
 # by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# $Id$
+# $Id: da_create_dart_iasi_input_nml.ksh 13133 2019-04-25 21:47:54Z nancy@ucar.edu $
 #
 
 #########################################################################
@@ -30,14 +30,18 @@ cat > input.nml << EOF
    IASI_CO_retrieval_type      = ${NL_IASI_CO_RETRIEVAL_TYPE}
    IASI_O3_retrieval_type      = ${NL_IASI_O3_RETRIEVAL_TYPE}
    fac_obs_error               = ${NL_FAC_OBS_ERROR}
-   use_log_co                  = ${NL_USE_LOG_CO}
-   use_log_o3                  = ${NL_USE_LOG_O3}
    use_cpsr_co_trunc           = ${NL_USE_CPSR_CO_TRUNC}
    cpsr_co_trunc_lim           = ${NL_CPSR_CO_TRUNC_LIM}
    use_cpsr_o3_trunc           = ${NL_USE_CPSR_O3_TRUNC}
    cpsr_o3_trunc_lim           = ${NL_CPSR_O3_TRUNC_LIM}
    iasi_co_vloc                = ${NL_IASI_CO_VLOC}
    iasi_o3_vloc                = ${NL_IASI_O3_VLOC}
+   use_log_co                  = ${NL_USE_LOG_CO}
+   use_log_o3                  = ${NL_USE_LOG_O3}
+   lon_min                     = ${NNL_MIN_LON}
+   lon_max                     = ${NNL_MAX_LON}
+   lat_min                     = ${NNL_MIN_LAT}
+   lat_max                     = ${NNL_MAX_LAT}
 /
 &obs_sequence_nml
    write_binary_obs_sequence   = .false.
@@ -86,7 +90,7 @@ EOF
 
 #
 # <next few lines under version control, do not edit>
-# $URL$
-# $Id$
-# $Revision$
-# $Date$
+# $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/models/wrf_chem/hybrid_scripts/da_create_dart_iasi_input_nml.ksh $
+# $Id: da_create_dart_iasi_input_nml.ksh 13133 2019-04-25 21:47:54Z nancy@ucar.edu $
+# $Revision: 13133 $
+# $Date: 2019-04-25 15:47:54 -0600 (Thu, 25 Apr 2019) $

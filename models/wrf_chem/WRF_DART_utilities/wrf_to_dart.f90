@@ -2,7 +2,7 @@
 ! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! $Id$
+! $Id: wrf_to_dart.f90 13127 2019-04-25 02:28:39Z thoar@ucar.edu $
  
 PROGRAM wrf_to_dart
 
@@ -26,9 +26,9 @@ implicit none
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+   "$URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/models/wrf_chem/WRF_DART_utilities/wrf_to_dart.f90 $"
+character(len=32 ), parameter :: revision = "$Revision: 13127 $"
+character(len=128), parameter :: revdate  = "$Date: 2019-04-24 20:28:39 -0600 (Wed, 24 Apr 2019) $"
 
 character(len=129) :: wrf_state_variables(num_state_table_columns,max_state_variables)
 character(len=129) :: my_field
@@ -76,10 +76,14 @@ character(len=129) :: dart_restart_name = "dart_wrf_vector"
 
 !
 ! LXL/APM +++
-logical :: add_emiss = .false., use_log_co = .false., use_log_o3 = .false.
+logical :: add_emiss = .false., use_log_co = .false., use_log_o3 = .false., &
+           use_log_nox=.false., use_log_so2=.false., &
+           use_log_pm10=.false., use_log_pm25=.false., use_log_aod=.false.
 
 namelist /wrf_to_dart_nml/  &
-    dart_restart_name, print_data_ranges, debug, add_emiss, use_log_co, use_log_o3
+    dart_restart_name, print_data_ranges, debug, add_emiss, use_log_co, &
+    use_log_o3, use_log_nox, use_log_so2, use_log_pm10, &
+    use_log_pm25, use_log_aod
 ! LXL/APM ---
 !
 
@@ -216,34 +220,124 @@ WRFDomains2 : do id = 1,num_domains
 !
 ! APM: +++
 ! APM: code to take ln(x) transform of CO chemistry field
-         if (use_log_co .and. trim(my_field).eq.'co') then
-!            print *, 'APM: wrf_to_dart 3D CO conversion '
-            do jj=1,wrf%var_size(2,ind)
-               do ii=1,wrf%var_size(1,ind)
-                  if(wrf_var_2d(ii,jj).gt.0.) then
-                     wrf_var_2d(ii,jj)=log(wrf_var_2d(ii,jj))
-                  else
-                     wrf_var_2d(ii,jj)=-3.
-                     print *, 'APM 2d: wrf_to_dart reset ',ii,jj,kk
-                 endif
+         if (use_log_co) then
+            if (trim(my_field).eq.'co' .or. trim(my_field).eq.'E_CO') then
+!               print *, 'APM: wrf_to_dart 3D CO conversion '
+               do jj=1,wrf%var_size(2,ind)
+                  do ii=1,wrf%var_size(1,ind)
+                     if(wrf_var_2d(ii,jj).gt.0.) then
+                        wrf_var_2d(ii,jj)=log(wrf_var_2d(ii,jj))
+                     else
+                        wrf_var_2d(ii,jj)=-3.
+                        print *, 'APM 2d: wrf_to_dart reset ',ii,jj,kk
+                     endif
+                  enddo
                enddo
-            enddo
+            endif
          endif
 !
 ! APM: code to take ln(x) transform of O3 chemistry field
-         if (use_log_o3 .and. trim(my_field).eq.'o3') then
-!            print *, 'APM: wrf_to_dart 3D O3 conversion '
-            do jj=1,wrf%var_size(2,ind)
-               do ii=1,wrf%var_size(1,ind)
-                  if(wrf_var_2d(ii,jj).gt.0.) then
-                     wrf_var_2d(ii,jj)=log(wrf_var_2d(ii,jj))
-                  else
-                     wrf_var_2d(ii,jj)=-3.
-                     print *, 'APM 2d: wrf_to_dart reset ',ii,jj,kk
-                 endif
+         if (use_log_o3) then
+            if (trim(my_field).eq.'o3') then
+!               print *, 'APM: wrf_to_dart 3D O3 conversion '
+               do jj=1,wrf%var_size(2,ind)
+                  do ii=1,wrf%var_size(1,ind)
+                     if(wrf_var_2d(ii,jj).gt.0.) then
+                        wrf_var_2d(ii,jj)=log(wrf_var_2d(ii,jj))
+                     else
+                        wrf_var_2d(ii,jj)=-3.
+                        print *, 'APM 2d: wrf_to_dart reset ',ii,jj,kk
+                     endif
+                  enddo
                enddo
-            enddo
+            endif
+         endif 
+!
+! APM: code to take ln(x) transform of NOX chemistry field
+         if (use_log_nox) then
+            if (trim(my_field).eq.'no' .or. trim(my_field).eq.'no2' .or. &
+            trim(my_field).eq.'E_NO' .or. trim(my_field).eq.'E_NO2' .or. &
+            trim(my_field).eq.'ebu_in_no' .or. trim(my_field).eq.'ebu_in_no2') then
+!               print *, 'APM: wrf_to_dart 3D NO conversion '
+               do jj=1,wrf%var_size(2,ind)
+                  do ii=1,wrf%var_size(1,ind)
+                     if(wrf_var_2d(ii,jj).gt.0.) then
+                        wrf_var_2d(ii,jj)=log(wrf_var_2d(ii,jj))
+                     else
+                        wrf_var_2d(ii,jj)=-3.
+                        print *, 'APM 2d: wrf_to_dart reset ',ii,jj,kk
+                     endif
+                  enddo
+               enddo
+            endif
          endif
+!
+! APM: code to take ln(x) transform of SO2 chemistry field
+         if (use_log_so2) then
+            if (trim(my_field).eq.'so2' .or. trim(my_field).eq.'E_SO2' .or. &
+            trim(my_field).eq.'ebu_in_so2') then
+!               print *, 'APM: wrf_to_dart 3D SO2 conversion '
+               do jj=1,wrf%var_size(2,ind)
+                  do ii=1,wrf%var_size(1,ind)
+                     if(wrf_var_2d(ii,jj).gt.0.) then
+                        wrf_var_2d(ii,jj)=log(wrf_var_2d(ii,jj))
+                     else
+                        wrf_var_2d(ii,jj)=-3.
+                        print *, 'APM 2d: wrf_to_dart reset ',ii,jj,kk
+                     endif
+                  enddo
+               enddo
+            endif
+         endif
+!
+! APM: code to take ln(x) transform of PM10 and PM25 chemistry fields
+         if (use_log_pm10 .or. use_log_pm25) then
+            if (trim(my_field).eq.'P25') then 
+               do jj=1,wrf%var_size(2,ind)
+                  do ii=1,wrf%var_size(1,ind)
+                     if(wrf_var_2d(ii,jj).gt.0.) then
+                        wrf_var_2d(ii,jj)=log(wrf_var_2d(ii,jj))
+                     else
+!                        wrf_var_2d(ii,jj)=-3.
+                        print *, 'APM 2d: wrf_to_dart reset ',ii,jj,kk
+                     endif
+                  enddo
+               enddo
+            endif
+         endif
+!
+! APM: code to take ln(x) transform of PM10, PM25, and AOD chemistry fields
+         if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+            if (trim(my_field).eq.'sulf' .or. &
+            trim(my_field).eq.'BC1' .or. trim(my_field).eq.'BC2' .or. &
+            trim(my_field).eq.'OC1' .or. trim(my_field).eq.'OC2' .or. &
+            trim(my_field).eq.'SEAS_1' .or. trim(my_field).eq.'SEAS_2' .or. &
+            trim(my_field).eq.'SEAS_3' .or. trim(my_field).eq.'SEAS_4' .or. &
+            trim(my_field).eq.'DUST_1' .or. trim(my_field).eq.'DUST_2' .or. &
+            trim(my_field).eq.'DUST_3' .or. trim(my_field).eq.'DUST_4' .or. &
+            trim(my_field).eq.'DUST_5' .or. trim(my_field).eq.'TAUAER1' .or. &
+            trim(my_field).eq.'TAUAER2' .or. trim(my_field).eq.'TAUAER3' .or. &
+            trim(my_field).eq.'TAUAER4' .or. &
+            trim(my_field).eq.'E_PM_10' .or. trim(my_field).eq.'E_PM25' .or. &
+            trim(my_field).eq.'E_PM25I' .or. trim(my_field).eq.'E_PM25J' .or. &
+            trim(my_field).eq.'E_EC1' .or. trim(my_field).eq.'E_EC2' .or. &
+            trim(my_field).eq.'E_ORG1' .or. trim(my_field).eq.'E_ORG2' .or. &
+            trim(my_field).eq.'E_PM_BC' .or. trim(my_field).eq.'E_PM_OC' .or. &
+            trim(my_field).eq.'E_SO4I' .or. trim(my_field).eq.'E_SO4J' .or. &
+            trim(my_field).eq.'ebu_in_oc' .or. trim(my_field).eq.'ebu_in_bc') then
+               do jj=1,wrf%var_size(2,ind)
+                  do ii=1,wrf%var_size(1,ind)
+                     if(wrf_var_2d(ii,jj).gt.0.) then
+                        wrf_var_2d(ii,jj)=log(wrf_var_2d(ii,jj))
+                     else
+!                        wrf_var_2d(ii,jj)=-3.
+                        print *, 'APM 2d: wrf_to_dart reset ',ii,jj,kk
+                     endif
+                  enddo
+               enddo
+            endif
+         endif
+!
 ! APM: ---
 !
          if (print_data_ranges) write(*,"(A,2F16.6)") trim(my_field)//': data min/max vals: ', &
@@ -272,37 +366,134 @@ WRFDomains2 : do id = 1,num_domains
 !
 ! APM: +++
 ! APM: code to take ln(x) transform of CO chemistry field
-         if (use_log_co .and. trim(my_field).eq.'co') then
-!            print *, 'APM: wrf_to_dart 2D CO conversion '
-            do kk=1,wrf%var_size(3,ind)
-               do jj=1,wrf%var_size(2,ind)
-                  do ii=1,wrf%var_size(1,ind)
-                     if(wrf_var_3d(ii,jj,kk).gt.0.) then
-                        wrf_var_3d(ii,jj,kk)=log(wrf_var_3d(ii,jj,kk))
-                     else
-                        wrf_var_3d(ii,jj,kk)=-3.
-                        print *, 'APM 3d: wrf_to_dart reset ',ii,jj,kk
-                    endif
+         if (use_log_co) then
+            if (trim(my_field).eq.'co' .or. trim(my_field).eq.'E_CO') then
+!               print *, 'APM: wrf_to_dart 2D CO conversion '
+               do kk=1,wrf%var_size(3,ind)
+                  do jj=1,wrf%var_size(2,ind)
+                     do ii=1,wrf%var_size(1,ind)
+                        if(wrf_var_3d(ii,jj,kk).gt.0.) then
+                           wrf_var_3d(ii,jj,kk)=log(wrf_var_3d(ii,jj,kk))
+                        else
+                           wrf_var_3d(ii,jj,kk)=-3.
+                           print *, 'APM 3d: wrf_to_dart reset ',ii,jj,kk
+                        endif
+                     enddo
                   enddo
                enddo
-            enddo
+            endif
          endif
 !
 ! APM: code to take ln(x) transform of O3 chemistry field
-         if (use_log_o3 .and. trim(my_field).eq.'o3') then
-!            print *, 'APM: wrf_to_dart 2D O3 conversion '
-            do kk=1,wrf%var_size(3,ind)
-               do jj=1,wrf%var_size(2,ind)
-                  do ii=1,wrf%var_size(1,ind)
-                     if(wrf_var_3d(ii,jj,kk).gt.0.) then
-                        wrf_var_3d(ii,jj,kk)=log(wrf_var_3d(ii,jj,kk))
-                     else
-                        wrf_var_3d(ii,jj,kk)=-3.
-                        print *, 'APM 3d: wrf_to_dart reset ',ii,jj,kk
-                    endif
+         if (use_log_o3) then
+            if (trim(my_field).eq.'o3') then
+!               print *, 'APM: wrf_to_dart 2D O3 conversion '
+               do kk=1,wrf%var_size(3,ind)
+                  do jj=1,wrf%var_size(2,ind)
+                     do ii=1,wrf%var_size(1,ind)
+                        if(wrf_var_3d(ii,jj,kk).gt.0.) then
+                           wrf_var_3d(ii,jj,kk)=log(wrf_var_3d(ii,jj,kk))
+                        else
+                           wrf_var_3d(ii,jj,kk)=-3.
+                           print *, 'APM 3d: wrf_to_dart reset ',ii,jj,kk
+                        endif
+                     enddo
                   enddo
                enddo
-            enddo
+            endif
+         endif
+!
+! APM: code to take ln(x) transform of NOX chemistry field
+         if (use_log_nox) then
+            if (trim(my_field).eq.'no' .or. trim(my_field).eq.'no2' .or. &
+            trim(my_field).eq.'E_NO' .or. trim(my_field).eq.'E_NO2' .or. &
+            trim(my_field).eq.'ebu_in_no' .or. trim(my_field).eq.'ebu_in_no2') then
+!               print *, 'APM: wrf_to_dart 3D NO conversion '
+               do kk=1,wrf%var_size(3,ind)
+                  do jj=1,wrf%var_size(2,ind)
+                     do ii=1,wrf%var_size(1,ind)
+                        if(wrf_var_3d(ii,jj,kk).gt.0.) then
+                           wrf_var_3d(ii,jj,kk)=log(wrf_var_3d(ii,jj,kk))
+                        else
+                           wrf_var_3d(ii,jj,kk)=-3.
+                           print *, 'APM 3d: wrf_to_dart reset ',ii,jj,kk
+                        endif
+                     enddo
+                  enddo
+               enddo
+            endif
+         endif
+!
+! APM: code to take ln(x) transform of SO2 chemistry field
+         if (use_log_so2) then
+            if (trim(my_field).eq.'so2' .or. trim(my_field).eq.'E_SO2' .or. &
+            trim(my_field).eq.'ebu_in_so2') then
+!               print *, 'APM: wrf_to_dart 3D SO2 conversion '
+               do kk=1,wrf%var_size(3,ind)
+                  do jj=1,wrf%var_size(2,ind)
+                     do ii=1,wrf%var_size(1,ind)
+                        if(wrf_var_3d(ii,jj,kk).gt.0.) then
+                           wrf_var_3d(ii,jj,kk)=log(wrf_var_3d(ii,jj,kk))
+                        else
+                           wrf_var_3d(ii,jj,kk)=-3.
+                           print *, 'APM 3d: wrf_to_dart reset ',ii,jj,kk
+                        endif
+                     enddo
+                  enddo
+               enddo
+            endif
+         endif
+!
+! APM: code to take ln(x) transform of PM10 and PM25 chemistry field
+         if (use_log_pm10 .or. use_log_pm25) then
+            if (trim(my_field).eq.'P25') then
+               do kk=1,wrf%var_size(3,ind)
+                  do jj=1,wrf%var_size(2,ind)
+                     do ii=1,wrf%var_size(1,ind)
+                        if(wrf_var_3d(ii,jj,kk).gt.0.) then
+                           wrf_var_3d(ii,jj,kk)=log(wrf_var_3d(ii,jj,kk))
+                        else
+                           wrf_var_3d(ii,jj,kk)=-3.
+!                           print *, 'APM 3d: wrf_to_dart reset ',ii,jj,kk
+                        endif
+                     enddo
+                  enddo
+               enddo
+            endif
+         endif
+!
+! APM: code to take ln(x) transform of PM10, PM25, and AOD chemistry field
+         if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+            if (trim(my_field).eq.'sulf' .or. &
+            trim(my_field).eq.'BC1' .or. trim(my_field).eq.'BC2' .or. &
+            trim(my_field).eq.'OC1' .or. trim(my_field).eq.'OC2' .or. &
+            trim(my_field).eq.'SEAS_1' .or. trim(my_field).eq.'SEAS_2' .or. &
+            trim(my_field).eq.'SEAS_3' .or. trim(my_field).eq.'SEAS_4' .or. &
+            trim(my_field).eq.'DUST_1' .or. trim(my_field).eq.'DUST_2' .or. &
+            trim(my_field).eq.'DUST_3' .or. trim(my_field).eq.'DUST_4' .or. &
+            trim(my_field).eq.'DUST_5' .or. trim(my_field).eq.'TAUAER1' .or. &
+            trim(my_field).eq.'TAUAER2' .or. trim(my_field).eq.'TAUAER3' .or. &
+            trim(my_field).eq.'TAUAER4' .or. &
+            trim(my_field).eq.'E_PM_10' .or. trim(my_field).eq.'E_PM_25' .or. &
+            trim(my_field).eq.'E_PM25I' .or. trim(my_field).eq.'E_PM25J' .or. &
+            trim(my_field).eq.'E_EC1' .or. trim(my_field).eq.'E_EC2' .or. &
+            trim(my_field).eq.'E_ORG1' .or. trim(my_field).eq.'E_ORG2' .or. &
+            trim(my_field).eq.'E_PM_BC' .or. trim(my_field).eq.'E_PM_OC' .or. &
+            trim(my_field).eq.'E_SO4I' .or. trim(my_field).eq.'E_SO4J' .or. &
+            trim(my_field).eq.'ebu_in_oc' .or. trim(my_field).eq.'ebu_in_bc') then
+               do kk=1,wrf%var_size(3,ind)
+                  do jj=1,wrf%var_size(2,ind)
+                     do ii=1,wrf%var_size(1,ind)
+                        if(wrf_var_3d(ii,jj,kk).gt.0.) then
+                           wrf_var_3d(ii,jj,kk)=log(wrf_var_3d(ii,jj,kk))
+                        else
+!                           wrf_var_3d(ii,jj,kk)=-3.
+                           print *, 'APM 3d: wrf_to_dart reset ',ii,jj,kk
+                        endif
+                     enddo
+                  enddo
+               enddo
+            endif
          endif
 ! APM: ---
 !
@@ -400,7 +591,7 @@ call finalize_utilities('wrf_to_dart')  ! closes log file.
 end PROGRAM wrf_to_dart
 
 ! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
+! $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/models/wrf_chem/WRF_DART_utilities/wrf_to_dart.f90 $
+! $Id: wrf_to_dart.f90 13127 2019-04-25 02:28:39Z thoar@ucar.edu $
+! $Revision: 13127 $
+! $Date: 2019-04-24 20:28:39 -0600 (Wed, 24 Apr 2019) $

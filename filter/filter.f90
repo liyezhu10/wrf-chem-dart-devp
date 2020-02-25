@@ -2,7 +2,7 @@
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! $Id$
+! $Id: filter.f90 10931 2017-01-21 22:02:59Z thoar@ucar.edu $
 
 program filter
 
@@ -58,9 +58,9 @@ implicit none
 
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+   "$URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/filter/filter.f90 $"
+character(len=32 ), parameter :: revision = "$Revision: 10931 $"
+character(len=128), parameter :: revdate  = "$Date: 2017-01-21 15:02:59 -0700 (Sat, 21 Jan 2017) $"
 
 ! Some convenient global storage items
 character(len=129)      :: msgstring
@@ -99,6 +99,9 @@ integer  :: output_interval     = 1
 integer  :: num_groups          = 1
 real(r8) :: outlier_threshold   = -1.0_r8
 logical  :: enable_special_outlier_code = .false.
+! APM: +++
+real(r8) :: special_outlier_threshold = -1.0_r8
+! APM: ---
 real(r8) :: input_qc_threshold  = 3.0_r8
 logical  :: output_forward_op_errors = .false.
 logical  :: output_timestamps        = .false.
@@ -144,7 +147,9 @@ namelist /filter_nml/ async, adv_ens_command, ens_size, tasks_per_model_advance,
    inf_out_file_name, inf_diag_file_name, inf_initial, inf_sd_initial,              &
    inf_lower_bound, inf_upper_bound, inf_sd_lower_bound, output_inflation,          &
    silence
-
+! APM: +++
+namelist /filter_apm_nml/ special_outlier_threshold
+! APM: ---
 
 !----------------------------------------------------------------
 
@@ -230,8 +235,16 @@ end do
 
 ! if doing something special with outlier threshold, say so
 if (enable_special_outlier_code) then
+! APM: +++
+   open(unit=210,file='filter_apm.nml',form='formatted', &
+   status='old',action='read')
+   read(210,filter_apm_nml)
+   close(210)
+   write(msgstring, *) 'APM: special_outlier_threshold=', special_outlier_threshold
+   call error_handler(E_MSG,'filter', msgstring, source, revision, revdate)
    call error_handler(E_MSG,'filter:', 'special outlier threshold handling enabled', &
       source, revision, revdate)
+! APM: ---
 endif
 
 ! Observation space inflation for posterior not currently supported
@@ -1558,8 +1571,10 @@ do j = 1, obs_ens_handle%my_num_vars
          ! obs type for this obs.
          ! the function should return .true. if this is an outlier, .false. if it is ok.
          if (enable_special_outlier_code) then
-            failed = failed_outlier(ratio, outlier_threshold, obs_ens_handle, &
-                                    OBS_KEY_COPY, j, seq)
+! APM: +++ (add special_outlier threshold code)
+            failed = failed_outlier(ratio, outlier_threshold, special_outlier_threshold, &
+                                    obs_ens_handle, OBS_KEY_COPY, j, seq)
+! APM: ---
          else 
             failed = (ratio > outlier_threshold)
          endif
@@ -1865,8 +1880,10 @@ endif
 end subroutine print_obs_time
 
 !-------------------------------------------------------------------------
-
-function failed_outlier(ratio, outlier_threshold, obs_ens_handle, OBS_KEY_COPY, j, seq)
+! APM: +++ add special_outlier_threshold code
+function failed_outlier(ratio, outlier_threshold, special_outlier_threshold, &
+                        obs_ens_handle, OBS_KEY_COPY, j, seq)
+! APM: ---
 
 ! return true if the observation value is too far away from the ensemble mean
 ! and should be rejected and not assimilated.
@@ -1877,6 +1894,9 @@ use obs_kind_mod         ! this allows you to use all the types available
 
 real(r8),                intent(in) :: ratio
 real(r8),                intent(in) :: outlier_threshold
+! APM: +++
+real(r8),                intent(in) :: special_outlier_threshold
+! APM: ---
 type(ensemble_type),     intent(in) :: obs_ens_handle
 integer,                 intent(in) :: OBS_KEY_COPY
 integer,                 intent(in) :: j
@@ -1920,6 +1940,32 @@ this_obs_type = get_obs_kind(obs_def)
 ! time, the value, the error) is available to you as well.
 
 select case (this_obs_type)
+! APM: +++
+   case (MOPITT_CO_RETRIEVAL)
+      if (ratio > special_outlier_threshold) then
+         failed_outlier = .true.
+      else
+         failed_outlier = .false.
+      endif
+   case (IASI_CO_RETRIEVAL)
+      if (ratio > special_outlier_threshold) then
+         failed_outlier = .true.
+      else
+         failed_outlier = .false.
+      endif
+   case (IASI_O3_RETRIEVAL)
+      if (ratio > special_outlier_threshold) then
+         failed_outlier = .true.
+      else
+         failed_outlier = .false.
+      endif
+   case (OMI_NO2_COLUMN)
+      if (ratio > special_outlier_threshold) then
+         failed_outlier = .true.
+      else
+         failed_outlier = .false.
+      endif
+! APM: ---
 
 ! example of specifying a different threshold value for one obs type:
 !   case (RADIOSONDE_TEMPERATURE)
@@ -1950,7 +1996,7 @@ end function failed_outlier
 end program filter
 
 ! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
+! $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/filter/filter.f90 $
+! $Id: filter.f90 10931 2017-01-21 22:02:59Z thoar@ucar.edu $
+! $Revision: 10931 $
+! $Date: 2017-01-21 15:02:59 -0700 (Sat, 21 Jan 2017) $

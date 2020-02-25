@@ -2,7 +2,7 @@
 ! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! $Id$
+! $Id: model_mod.f90 13126 2019-04-25 01:59:32Z thoar@ucar.edu $
 
 module model_mod
 
@@ -77,12 +77,12 @@ use      obs_kind_mod, only : KIND_SO2, KIND_O3, KIND_CO, KIND_NO, KIND_NO2, KIN
                               KIND_DMS, KIND_DST01, KIND_DST02, KIND_DST03, KIND_DST04, &
                               KIND_DST05, KIND_SO4, KIND_SSLT01, KIND_SSLT02, KIND_SSLT03, &
                               KIND_SSLT04, KIND_TAUAER1, KIND_TAUAER2, KIND_TAUAER3, KIND_TAUAER4, &
-                              KIND_PM25, KIND_PM10, &
+                              KIND_PM25, KIND_PM10, KIND_PM2_5_DRY, KIND_NOy, KIND_PB, KIND_NMOC, &
 !
 ! LXL/APM +++
-                              KIND_E_CO, KIND_E_NO, KIND_E_NO2, KIND_E_SO2, KIND_E_OC, &
-                              KIND_E_BC, KIND_E_PM_10, KIND_E_PM_25, & 
-                              KIND_EBU_CO, KIND_EBU_NO, &
+                              KIND_P25, KIND_P10, KIND_E_CO, KIND_E_NO, KIND_E_NO2, KIND_E_SO2, &
+                              KIND_E_SO4, KIND_E_PM25, KIND_E_PM10, KIND_E_BC, KIND_E_OC, & 
+                              KIND_EBU_CO, KIND_EBU_NO, KIND_EBU_NO2, KIND_EBU_SO2, KIND_EBU_SO4, &
                               KIND_EBU_OC, KIND_EBU_BC, KIND_EBU_c2h4, KIND_EBU_ch2o, &
                               KIND_EBU_ch3oh
                                
@@ -169,9 +169,9 @@ public :: wrf_dom, wrf_static_data_for_dart
 !-----------------------------------------------------------------------
 ! version controlled file description for error handling, do not edit
 character(len=256), parameter :: source   = &
-   "$URL$"
-character(len=32 ), parameter :: revision = "$Revision$"
-character(len=128), parameter :: revdate  = "$Date$"
+   "$URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/models/wrf_chem/model_mod.f90 $"
+character(len=32 ), parameter :: revision = "$Revision: 13126 $"
+character(len=128), parameter :: revdate  = "$Date: 2019-04-24 19:59:32 -0600 (Wed, 24 Apr 2019) $"
 
 ! miscellaneous
 integer, parameter :: max_state_variables = 100
@@ -239,6 +239,14 @@ character(len = 72) :: adv_mod_command = ''
 ! LXL/APM +++
 logical :: add_emiss = .false.
 logical :: use_varloc = .true., use_indep_chem_assim =.false.
+logical :: use_log_co = .false.
+logical :: use_log_o3 = .false.
+logical :: use_log_nox = .false.
+logical :: use_log_so2 = .false.
+logical :: use_log_pm10 = .false.
+logical :: use_log_pm25 = .false.
+logical :: use_log_aod = .false.
+
 namelist /model_nml/ output_state_vector, num_moist_vars, &
                      num_domains, calendar_type, surf_obs, soil_data, h_diab, &
                      default_state_variables, &
@@ -250,7 +258,9 @@ namelist /model_nml/ output_state_vector, num_moist_vars, &
                      periodic_x, periodic_y, scm, &
                      conv_state_variables, emiss_chemi_variables, &
                      emiss_firechemi_variables,add_emiss, &
-                     use_varloc,use_indep_chem_assim
+                     use_varloc,use_indep_chem_assim,use_log_co, &
+                     use_log_o3,use_log_nox,use_log_so2,use_log_pm10, &
+                     use_log_pm25,use_log_aod
 ! LXL/APM ---
 !
 real(r8), allocatable :: ens_mean(:)
@@ -339,6 +349,7 @@ TYPE wrf_static_data_for_dart
               type_tol, type_mvk, type_biglak, type_isopr, type_macr, type_glyald, &
               type_c10h16 
    integer :: type_tauaer1, type_tauaer2, type_tauaer3, type_tauaer4
+   integer :: type_p, type_pm2_5_dry, type_p25, type_p10
 ! LXL/APM +++
    integer :: type_e_co, type_e_no, type_e_no2, type_e_so2, type_e_oc, type_e_bc, &
               type_e_pm_10, type_e_pm_25, &
@@ -1003,10 +1014,29 @@ WRFDomains : do id=1,num_domains
    wrf%dom(id)%type_o3 = get_type_ind_from_type_string(id,'o3')
    wrf%dom(id)%type_no  = get_type_ind_from_type_string(id,'no')
    wrf%dom(id)%type_no2 = get_type_ind_from_type_string(id,'no2')
+   wrf%dom(id)%type_so2 = get_type_ind_from_type_string(id,'so2')
    wrf%dom(id)%type_tauaer1 = get_type_ind_from_type_string(id,'TAUAER1')
    wrf%dom(id)%type_tauaer2 = get_type_ind_from_type_string(id,'TAUAER2')
    wrf%dom(id)%type_tauaer3 = get_type_ind_from_type_string(id,'TAUAER3')
    wrf%dom(id)%type_tauaer4 = get_type_ind_from_type_string(id,'TAUAER4')
+!
+   wrf%dom(id)%type_p25 = get_type_ind_from_type_string(id,'P25')
+   wrf%dom(id)%type_so4 = get_type_ind_from_type_string(id,'sulf')
+   wrf%dom(id)%type_bc1 = get_type_ind_from_type_string(id,'BC1')
+   wrf%dom(id)%type_bc2 = get_type_ind_from_type_string(id,'BC2')
+   wrf%dom(id)%type_oc1 = get_type_ind_from_type_string(id,'OC1')
+   wrf%dom(id)%type_oc2 = get_type_ind_from_type_string(id,'OC2')
+   wrf%dom(id)%type_sslt01 = get_type_ind_from_type_string(id,'SEAS_1')
+   wrf%dom(id)%type_sslt02 = get_type_ind_from_type_string(id,'SEAS_2')
+   wrf%dom(id)%type_sslt03 = get_type_ind_from_type_string(id,'SEAS_3')
+   wrf%dom(id)%type_sslt04 = get_type_ind_from_type_string(id,'SEAS_4')
+   wrf%dom(id)%type_dst01 = get_type_ind_from_type_string(id,'DUST_1')
+   wrf%dom(id)%type_dst02 = get_type_ind_from_type_string(id,'DUST_2')
+   wrf%dom(id)%type_dst03 = get_type_ind_from_type_string(id,'DUST_3')
+   wrf%dom(id)%type_dst04 = get_type_ind_from_type_string(id,'DUST_4')
+   wrf%dom(id)%type_dst05 = get_type_ind_from_type_string(id,'DUST_5')
+   wrf%dom(id)%type_p = get_type_ind_from_type_string(id,'P')
+!
    if ( add_emiss) then
       wrf%dom(id)%type_e_co = get_type_ind_from_type_string(id,'e_co')
       wrf%dom(id)%type_e_no = get_type_ind_from_type_string(id,'e_no')
@@ -1576,7 +1606,7 @@ else
    ! Table of Contents:
    ! 1.a Horizontal Winds (U, V, U10, V10)
    ! 1.b Sensible Temperature (T, T2)
-   ! 1.c Potential Temperature (Theta, TH2)
+   ! 1.c Potential Temperature (Theta, TH2, Theta_Init)
    ! 1.d Density (Rho)
    ! 1.e Vertical Wind (W)
    ! 1.f Specific Humidity (SH, SH2)
@@ -1595,12 +1625,12 @@ else
    ! 1.q.2 Hail Number Concentration (QNHAIL)
    ! 1.r Previous time step condensational heating (H_DIABATIC)
    ! 1.s Reflectivity weighted precip fall speed (FALL_SPD_Z_WEIGHTED)
-   ! 1.t Pressure (P)
+   ! 1.t Pressure (P, PB)
    ! 1.u Vortex Center Stuff from Yongsheng
    ! 1.v.1 Radar Reflectivity (REFL_10CM)
    ! 1.v.2 Differential Reflectivity (DIFF_REFL_10CM)
    ! 1.v.3 Specific Differential Phase (SPEC_DIFF_10CM)
-   ! 1.w Geopotential Height (GZ)
+   ! 1.w Geopotential Height (GZ, GZB)
    ! 1.x Surface Elevation (HGT)
    ! 1.y Surface Skin Temperature (TSK)
    ! 1.z Land Mask (XLAND)
@@ -1848,7 +1878,7 @@ else
 
 
    !-----------------------------------------------------
-   ! 1.c Potential Temperature (Theta, TH2)
+   ! 1.c Potential Temperature (Theta, TH2, Theta_Init)
 
    ! Note:  T is perturbation potential temperature (potential temperature - ts0)
    !   TH2 is potential temperature at 2 m
@@ -1885,7 +1915,7 @@ else
                fld(2) = ts0 + dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
    
             endif
-         endif
+         endif       
 
       ! This is for surface potential temperature (TH2)
       else
@@ -2683,35 +2713,39 @@ else
       ! This is for the 3D pressure field -- surface pressure later
       if(.not. surf_var) then
 
-         ! Check to make sure retrieved integer gridpoints are in valid range
-         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+         if ( obs_kind == KIND_PRESSURE ) then
+
+            ! Check to make sure retrieved integer gridpoints are in valid range
+            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
+                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
    
-            call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-            if ( rc .ne. 0 ) &
-                 print*, 'model_mod.f90 :: model_interpolate :: getCorners P rc = ', rc
-         
-            ! Hmmm, it does not appear that P is part of the DART state vector, so there
-            !   is not a reference to wrf%dom(id)%dart_ind -- we'll have to go right from
-            !   the corner indices
+               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
+               if ( rc .ne. 0 ) &
+                    print*, 'model_mod.f90 :: model_interpolate :: getCorners P rc = ', rc
+               
+               ! Hmmm, it does not appear that P is part of the DART state vector, so there
+               !   is not a reference to wrf%dom(id)%dart_ind -- we'll have to go right from
+               !   the corner indices
+               
+               ! Interpolation for the P field at level k
+               pres1 = model_pressure_t(ll(1), ll(2), k, id, x)
+               pres2 = model_pressure_t(lr(1), lr(2), k, id, x)
+               pres3 = model_pressure_t(ul(1), ul(2), k, id, x)
+               pres4 = model_pressure_t(ur(1), ur(2), k, id, x)
+               
+               fld(1) = dym*( dxm*pres1 + dx*pres2 ) + dy*( dxm*pres3 + dx*pres4 )
+               
+               ! Interpolation for the P field at level k+1
+               pres1 = model_pressure_t(ll(1), ll(2), k+1, id, x)
+               pres2 = model_pressure_t(lr(1), lr(2), k+1, id, x)
+               pres3 = model_pressure_t(ul(1), ul(2), k+1, id, x)
+               pres4 = model_pressure_t(ur(1), ur(2), k+1, id, x)
+               
+               fld(2) = dym*( dxm*pres1 + dx*pres2 ) + dy*( dxm*pres3 + dx*pres4 )
    
-            ! Interpolation for the P field at level k
-            pres1 = model_pressure_t(ll(1), ll(2), k, id, x)
-            pres2 = model_pressure_t(lr(1), lr(2), k, id, x)
-            pres3 = model_pressure_t(ul(1), ul(2), k, id, x)
-            pres4 = model_pressure_t(ur(1), ur(2), k, id, x)
-   
-            fld(1) = dym*( dxm*pres1 + dx*pres2 ) + dy*( dxm*pres3 + dx*pres4 )
-   
-            ! Interpolation for the P field at level k+1
-            pres1 = model_pressure_t(ll(1), ll(2), k+1, id, x)
-            pres2 = model_pressure_t(lr(1), lr(2), k+1, id, x)
-            pres3 = model_pressure_t(ul(1), ul(2), k+1, id, x)
-            pres4 = model_pressure_t(ur(1), ur(2), k+1, id, x)
-   
-            fld(2) = dym*( dxm*pres1 + dx*pres2 ) + dy*( dxm*pres3 + dx*pres4 )
-   
+            endif
+
          endif
 
       !  This is for surface pressure (PSFC)
@@ -3319,7 +3353,6 @@ else
          endif
       endif
 
-
    !-----------------------------------------------------
    ! 1.x Surface Elevation (HGT)
 
@@ -3423,7 +3456,11 @@ else
             ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_o3)
             iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_o3)
 
-            fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+            if (use_log_o3) then
+               fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+            else
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+            endif
 
    ! hard wired for IASI
             if (k < 33) then          
@@ -3433,7 +3470,11 @@ else
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_o3)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_o3)         
 
-               fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               if (use_log_o3) then
+                  fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
 
             else
                fld(2) = fld(1)
@@ -3471,7 +3512,12 @@ else
             ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_co)
             iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_co)
 
-            fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+            if (use_log_co) then
+               fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+            else
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+            endif
+
             if(fld(1).eq.missing_r8) then
                print *, 'fld,dx,dxm,dy,dym ',fld(1),dx,dxm,dy,dym
                print *, 'x_ill,x_ilr,x_iul,x_iur ',x(ill),x(ilr),x(iul),x(iur)
@@ -3483,7 +3529,11 @@ else
             ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_co)
             iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_co)         
 
-            fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+            if (use_log_co) then
+               fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+            else
+               fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+            endif
 
             if(fld(2).eq.missing_r8) then
                print *, 'fld,dx,dxm,dy,dym ',fld(2),dx,dxm,dy,dym
@@ -3492,133 +3542,129 @@ else
          endif
       endif
 !
-   !-----------------------------------------------------
-   ! 1.zc Aerosol Optical Depth (TAUAER1, TAUAER2, TAUAER3, TAUAER4)
-   !      added by AFAJ Ave Arellano for AOD assimilation
-   !      currently we do not have AOD that exactly match the wavelength
-   !      of MODIS 550nm. we will use instead the TAU at 400 and 600 nm 
-   !      1) get the total AOD for TAUAER2 and TAUAER3 (vertical integral)
-   !      2) calculate ang=log(tau300/tau999)/log(999/300)
-   !      3) tau550=tau400*( (0.4/0.55)^ang)
-   !      FOR NOW, USE TAUAER3 (600nm) APPROXIMATING 550nm
-   !      SINCE IT REQUIRES THE INTERACTION BETWEEN 4 TAU FIELDS
-
-   else if( obs_kind == KIND_AOD ) then
-         if ( wrf%dom(id)%type_tauaer1 >= 0 .and. wrf%dom(id)%type_tauaer2 >= 0 .and. &
-              wrf%dom(id)%type_tauaer3 >= 0 .and. wrf%dom(id)%type_tauaer4 >= 0) then
+! Removed my APM and replaced with new obs_def_MODIS_AOD_mod.f90
 !
-            zk_aod = 32 !wrf%dom(id)%bt
-            aod5 = 0.0_r8
+!   !-----------------------------------------------------
+!   ! 1.zc Aerosol Optical Depth (TAUAER1, TAUAER2, TAUAER3, TAUAER4)
+!   !      added by AFAJ Ave Arellano for AOD assimilation
+!   !      currently we do not have AOD that exactly match the wavelength
+!   !      of MODIS 550nm. we will use instead the TAU at 400 and 600 nm 
+!   !      1) get the total AOD for TAUAER2 and TAUAER3 (vertical integral)
+!   !      2) calculate ang=log(tau300/tau999)/log(999/300)
+!   !      3) tau550=tau400*( (0.4/0.55)^ang)
+!   !      FOR NOW, USE TAUAER3 (600nm) APPROXIMATING 550nm
+!   !      SINCE IT REQUIRES THE INTERACTION BETWEEN 4 TAU FIELDS
 !
-! Verrtical integration loop
-            do kaod = 1, zk_aod
-!
-! Interpolation for the TAUAER1 field
-               aod1 = 0.0_r8
-               aod2 = 0.0_r8
-               aod3 = 0.0_r8
-               aod4 = 0.0_r8
-               if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_tauaer1 ) .and. &
-                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_tauaer1 ) .and. &
-                    boundsCheck( kaod, .false.,             id, dim=3, type=wrf%dom(id)%type_tauaer1 ) ) then
-                  call getCorners(i, j, id, wrf%dom(id)%type_tauaer1, ll, ul, lr, ur, rc )
-                  if ( rc .ne. 0 ) then
-                     print*, 'APM model_mod.f90 :: model_interpolate :: getCorners TAUAER1 rc = ', rc
-                     call abort
-                  endif
-!                  write(*,*) 'APM kaod, zk_aod ',kaod, zk_aod
-                  ill = wrf%dom(id)%dart_ind(ll(1), ll(2), kaod, wrf%dom(id)%type_tauaer1)
-                  iul = wrf%dom(id)%dart_ind(ul(1), ul(2), kaod, wrf%dom(id)%type_tauaer1)
-                  ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), kaod, wrf%dom(id)%type_tauaer1)
-                  iur = wrf%dom(id)%dart_ind(ur(1), ur(2), kaod, wrf%dom(id)%type_tauaer1)
-!                  write(*,*) 'APM TAUER1 ill,iul,ilr.iur ',ill,iul,ilr,iur
-                  aod1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               else
-                  write(*,*) 'APM TAUER1 Failed bounds check: kaod,zk_aod',kaod,zk_aod
-               endif
-!
-! Interpolation for the TAUAER2 field
-               if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_tauaer2 ) .and. &
-                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_tauaer2 ) .and. &
-                    boundsCheck( kaod, .false.,             id, dim=3, type=wrf%dom(id)%type_tauaer2 ) ) then
-                  call getCorners(i, j, id, wrf%dom(id)%type_tauaer2, ll, ul, lr, ur, rc )
-                  if ( rc .ne. 0 ) then
-                     print*, 'APM model_mod.f90 :: model_interpolate :: getCorners TAUAER2 rc = ', rc
-                     call abort
-                  endif
-!                  write(*,*) 'APM kaod, zk_aod ',kaod, zk_aod
-                  ill = wrf%dom(id)%dart_ind(ll(1), ll(2), kaod, wrf%dom(id)%type_tauaer2)
-                  iul = wrf%dom(id)%dart_ind(ul(1), ul(2), kaod, wrf%dom(id)%type_tauaer2)
-                  ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), kaod, wrf%dom(id)%type_tauaer2)
-                  iur = wrf%dom(id)%dart_ind(ur(1), ur(2), kaod, wrf%dom(id)%type_tauaer2)
-!                  write(*,*) 'APM TAUER2 ill,iul,ilr.iur ',ill,iul,ilr,iur
-                  aod2 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               else
-                  write(*,*) 'APM TAUER2 Failed bounds check: kaod,zk_aod',kaod,zk_aod
-               endif
-!
-! Interpolation for the TAUAER3 field
-               if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_tauaer3 ) .and. &
-                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_tauaer3 ) .and. &
-                    boundsCheck( kaod, .false.,             id, dim=3, type=wrf%dom(id)%type_tauaer3 ) ) then
-                  call getCorners(i, j, id, wrf%dom(id)%type_tauaer3, ll, ul, lr, ur, rc )
-                  if ( rc .ne. 0 ) then
-                     print*, 'APM model_mod.f90 :: model_interpolate :: getCorners TAUAER3 rc = ', rc
-                     call abort
-                  endif
-!                  write(*,*) 'APM kaod, zk_aod ',kaod, zk_aod
-                  ill = wrf%dom(id)%dart_ind(ll(1), ll(2), kaod, wrf%dom(id)%type_tauaer3)
-                  iul = wrf%dom(id)%dart_ind(ul(1), ul(2), kaod, wrf%dom(id)%type_tauaer3)
-                  ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), kaod, wrf%dom(id)%type_tauaer3)
-                  iur = wrf%dom(id)%dart_ind(ur(1), ur(2), kaod, wrf%dom(id)%type_tauaer3)
-!                  write(*,*) 'APM TAUER3 ill,iul,ilr.iur ',ill,iul,ilr,iur
-                  aod3 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               else
-                  write(*,*) 'APM TAUER3 Failed bounds check: kaod,zk_aod',kaod,zk_aod
-               endif
-!
-! Interpolation for the TAUAER4 field
-               if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_tauaer4 ) .and. &
-                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_tauaer4 ) .and. &
-                    boundsCheck( kaod, .false.,             id, dim=3, type=wrf%dom(id)%type_tauaer4 ) ) then
-                  call getCorners(i, j, id, wrf%dom(id)%type_tauaer4, ll, ul, lr, ur, rc )
-                  if ( rc .ne. 0 ) then
-                     print*, 'APM model_mod.f90 :: model_interpolate :: getCorners TAUAER4 rc = ', rc
-                     call abort
-                  endif
-!                  write(*,*) 'APM kaod, zk_aod ',kaod, zk_aod
-                  ill = wrf%dom(id)%dart_ind(ll(1), ll(2), kaod, wrf%dom(id)%type_tauaer4)
-                  iul = wrf%dom(id)%dart_ind(ul(1), ul(2), kaod, wrf%dom(id)%type_tauaer4)
-                  ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), kaod, wrf%dom(id)%type_tauaer4)
-                  iur = wrf%dom(id)%dart_ind(ur(1), ur(2), kaod, wrf%dom(id)%type_tauaer4)
-!                  write(*,*) 'APM TAUER4 ill,iul,ilr.iur ',ill,iul,ilr,iur
-                  aod4 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               else
-                  write(*,*) 'APM TAUER4 Failed bounds check: kaod,zk_aod',kaod,zk_aod
-               endif
-!
-               if ( (aod1 > 0.0_r8) .and. (aod4 > 0.0_r8) ) then
-                  ang = log(aod1/aod4)/1.2030 
-                  aod5 = aod5 + aod2*((0.7273)**ang)
-               else
-                  write(*,*) 'APM AOD conversion failed ',aod1,aod2,aod3,aod4
-               endif
-            enddo
-            fld(1) = aod5
-         endif
+!   else if( obs_kind == KIND_AOD ) then
+!         if ( wrf%dom(id)%type_tauaer1 >= 0 .and. wrf%dom(id)%type_tauaer2 >= 0 .and. &
+!              wrf%dom(id)%type_tauaer3 >= 0 .and. wrf%dom(id)%type_tauaer4 >= 0) then
+!!
+!            zk_aod = 32 !wrf%dom(id)%bt
+!            aod5 = 0.0_r8
+!!
+!! Verrtical integration loop
+!            do kaod = 1, zk_aod
+!!
+!! Interpolation for the TAUAER1 field
+!               aod1 = 0.0_r8
+!               aod2 = 0.0_r8
+!               aod3 = 0.0_r8
+!               aod4 = 0.0_r8
+!               if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_tauaer1 ) .and. &
+!                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_tauaer1 ) .and. &
+!                    boundsCheck( kaod, .false.,             id, dim=3, type=wrf%dom(id)%type_tauaer1 ) ) then
+!                  call getCorners(i, j, id, wrf%dom(id)%type_tauaer1, ll, ul, lr, ur, rc )
+!                  if ( rc .ne. 0 ) then
+!                     print*, 'APM model_mod.f90 :: model_interpolate :: getCorners TAUAER1 rc = ', rc
+!                     call abort
+!                  endif
+!!                  write(*,*) 'APM kaod, zk_aod ',kaod, zk_aod
+!                  ill = wrf%dom(id)%dart_ind(ll(1), ll(2), kaod, wrf%dom(id)%type_tauaer1)
+!                  iul = wrf%dom(id)%dart_ind(ul(1), ul(2), kaod, wrf%dom(id)%type_tauaer1)
+!                  ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), kaod, wrf%dom(id)%type_tauaer1)
+!                  iur = wrf%dom(id)%dart_ind(ur(1), ur(2), kaod, wrf%dom(id)%type_tauaer1)
+!!                  write(*,*) 'APM TAUER1 ill,iul,ilr.iur ',ill,iul,ilr,iur
+!                  aod1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+!               else
+!                  write(*,*) 'APM TAUER1 Failed bounds check: kaod,zk_aod',kaod,zk_aod
+!               endif
+!!
+!! Interpolation for the TAUAER2 field
+!               if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_tauaer2 ) .and. &
+!                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_tauaer2 ) .and. &
+!                    boundsCheck( kaod, .false.,             id, dim=3, type=wrf%dom(id)%type_tauaer2 ) ) then
+!                  call getCorners(i, j, id, wrf%dom(id)%type_tauaer2, ll, ul, lr, ur, rc )
+!                  if ( rc .ne. 0 ) then
+!                     print*, 'APM model_mod.f90 :: model_interpolate :: getCorners TAUAER2 rc = ', rc
+!                     call abort
+!                  endif
+!!                  write(*,*) 'APM kaod, zk_aod ',kaod, zk_aod
+!                  ill = wrf%dom(id)%dart_ind(ll(1), ll(2), kaod, wrf%dom(id)%type_tauaer2)
+!                  iul = wrf%dom(id)%dart_ind(ul(1), ul(2), kaod, wrf%dom(id)%type_tauaer2)
+!                  ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), kaod, wrf%dom(id)%type_tauaer2)
+!                  iur = wrf%dom(id)%dart_ind(ur(1), ur(2), kaod, wrf%dom(id)%type_tauaer2)
+!!                  write(*,*) 'APM TAUER2 ill,iul,ilr.iur ',ill,iul,ilr,iur
+!                  aod2 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+!               else
+!                  write(*,*) 'APM TAUER2 Failed bounds check: kaod,zk_aod',kaod,zk_aod
+!               endif
+!!
+!! Interpolation for the TAUAER3 field
+!               if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_tauaer3 ) .and. &
+!                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_tauaer3 ) .and. &
+!                    boundsCheck( kaod, .false.,             id, dim=3, type=wrf%dom(id)%type_tauaer3 ) ) then
+!                  call getCorners(i, j, id, wrf%dom(id)%type_tauaer3, ll, ul, lr, ur, rc )
+!                  if ( rc .ne. 0 ) then
+!                     print*, 'APM model_mod.f90 :: model_interpolate :: getCorners TAUAER3 rc = ', rc
+!                     call abort
+!                  endif
+!!                  write(*,*) 'APM kaod, zk_aod ',kaod, zk_aod
+!                  ill = wrf%dom(id)%dart_ind(ll(1), ll(2), kaod, wrf%dom(id)%type_tauaer3)
+!                  iul = wrf%dom(id)%dart_ind(ul(1), ul(2), kaod, wrf%dom(id)%type_tauaer3)
+!                  ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), kaod, wrf%dom(id)%type_tauaer3)
+!                  iur = wrf%dom(id)%dart_ind(ur(1), ur(2), kaod, wrf%dom(id)%type_tauaer3)
+!!                  write(*,*) 'APM TAUER3 ill,iul,ilr.iur ',ill,iul,ilr,iur
+!                  aod3 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+!               else
+!                  write(*,*) 'APM TAUER3 Failed bounds check: kaod,zk_aod',kaod,zk_aod
+!               endif
+!!
+!! Interpolation for the TAUAER4 field
+!               if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_tauaer4 ) .and. &
+!                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_tauaer4 ) .and. &
+!                    boundsCheck( kaod, .false.,             id, dim=3, type=wrf%dom(id)%type_tauaer4 ) ) then
+!                  call getCorners(i, j, id, wrf%dom(id)%type_tauaer4, ll, ul, lr, ur, rc )
+!                  if ( rc .ne. 0 ) then
+!                     print*, 'APM model_mod.f90 :: model_interpolate :: getCorners TAUAER4 rc = ', rc
+!                     call abort
+!                  endif
+!!                  write(*,*) 'APM kaod, zk_aod ',kaod, zk_aod
+!                  ill = wrf%dom(id)%dart_ind(ll(1), ll(2), kaod, wrf%dom(id)%type_tauaer4)
+!                  iul = wrf%dom(id)%dart_ind(ul(1), ul(2), kaod, wrf%dom(id)%type_tauaer4)
+!                  ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), kaod, wrf%dom(id)%type_tauaer4)
+!                  iur = wrf%dom(id)%dart_ind(ur(1), ur(2), kaod, wrf%dom(id)%type_tauaer4)
+!!                  write(*,*) 'APM TAUER4 ill,iul,ilr.iur ',ill,iul,ilr,iur
+!                  aod4 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+!               else
+!                  write(*,*) 'APM TAUER4 Failed bounds check: kaod,zk_aod',kaod,zk_aod
+!               endif
+!!
+!               if ( (aod1 > 0.0_r8) .and. (aod4 > 0.0_r8) ) then
+!                  ang = log(aod1/aod4)/1.2030 
+!                  aod5 = aod5 + aod2*((0.7273)**ang)
+!               else
+!                  write(*,*) 'APM AOD conversion failed ',aod1,aod2,aod3,aod4
+!               endif
+!            enddo
+!            fld(1) = aod5
+!         endif
 !
 ! LXL/APM +++
    !-----------------------------------------------------
    ! 1.zd OMI NO2 Retrieval (NO2)
-
    else if( obs_kind == KIND_NO2 ) then  
 
       if ( wrf%dom(id)%type_no2 >= 0 ) then
-! APM: OMI CHECK
-!         print *, 'APM i,j,k : ',i,j,k
-!         print *, "APM:i ",boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_no2)
-!         print *, "APM:j ",boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_no2)
-!         print *, "APM:k ",boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_no2)
 
    ! Check to make sure retrieved integer gridpoints are in valid range
          if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_no2 ) .and. &
@@ -3626,7 +3672,6 @@ else
               boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_no2 ) ) then
 
             call getCorners(i, j, id, wrf%dom(id)%type_no2, ll, ul, lr, ur, rc )
-
             if ( rc .ne. 0 ) then
                print*, 'model_mod.f90 :: model_interpolate :: getCorners NO2 rc = ', rc
                call abort
@@ -3637,15 +3682,22 @@ else
             iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_no2)
             ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_no2)
             iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_no2)
-
-            fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+            if (use_log_nox) then
+               fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+            else
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+            endif
 
    ! Interpolation for the NO2 field at level k+1
             ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_no2)
             iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_no2)
             ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_no2)
             iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_no2)
-            fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+            if (use_log_nox) then
+               fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+            else
+               fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+            endif
          endif
       endif
 !
@@ -3655,72 +3707,41 @@ else
 !1.zd SO2
    elseif ( obs_kind == KIND_SO2 ) then
 
-      ! This is for 3D field 
-      if(.not. surf_var) then
+      if ( wrf%dom(id)%type_so2 >= 0 ) then
 
-         if ( wrf%dom(id)%type_so2 >= 0 ) then
-
-            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
-   
-               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-               if ( rc .ne. 0 ) &
-                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
+   ! Check to make sure retrieved integer gridpoints are in valid range
+         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_so2 ) .and. &
+              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_so2 ) .and. &
+              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_so2 ) ) then
+  
+            call getCorners(i, j, id, wrf%dom(id)%type_so2, ll, ul, lr, ur, rc )
+            if ( rc .ne. 0 ) &
+                 print*, 'model_mod.f90 :: model_interpolate :: getCorners SO2 rc = ', rc
                
-
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_so2)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_so2)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_so2)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_so2)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-   
-
-               fld(1) = a1
-
-
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_so2)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_so2)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_so2)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_so2)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-
-               fld(2) = a1
-   
-            endif
-         endif
-
-      ! This is for surface field
-      else
-         
-         if ( wrf%dom(id)%type_so2 >= 0 ) then
-
-
-            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
-                   .or. wrf%dom(id)%scm ) then
-   
-               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-               if ( rc .ne. 0 ) &
-                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
-   
-
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_so2)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_so2)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_so2)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_so2)
-               
+   ! Interpolation for the SO2 field at level k
+            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_so2)
+            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_so2)
+            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_so2)
+            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_so2)
+            if (use_log_so2) then
+               fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+            else
                fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
+            endif
+ 
+   ! Interpolation for the SO2 field at level k+1
+            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_so2)
+            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_so2)
+            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_so2)
+            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_so2)
+            if (use_log_so2) then
+               fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+            else
+               fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
             endif
          endif
       endif
+
 !1.zd BC1
    elseif ( obs_kind == KIND_BC1 ) then
 
@@ -3732,36 +3753,29 @@ else
             if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
                  boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
                  boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
-   
+
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
-               
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_bc1)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_bc1)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_bc1)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_bc1)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-   
-
-               fld(1) = a1
-
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
 
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_bc1)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_bc1)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_bc1)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_bc1)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-
-               fld(2) = a1
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
 
@@ -3770,7 +3784,6 @@ else
          
          if ( wrf%dom(id)%type_bc1 >= 0 ) then
 
-
             if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
                    .or. wrf%dom(id)%scm ) then
@@ -3778,15 +3791,15 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
-   
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_bc1)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_bc1)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_bc1)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_bc1)
-               
-               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
       endif
@@ -3805,32 +3818,25 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
-               
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_bc2)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_bc2)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_bc2)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_bc2)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-   
-
-               fld(1) = a1
-
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
 
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_bc2)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_bc2)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_bc2)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_bc2)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-
-               fld(2) = a1
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
 
@@ -3839,7 +3845,6 @@ else
          
          if ( wrf%dom(id)%type_bc2 >= 0 ) then
 
-
             if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
                    .or. wrf%dom(id)%scm ) then
@@ -3847,15 +3852,15 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
-   
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_bc2)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_bc2)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_bc2)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_bc2)
-               
-               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
       endif
@@ -3874,32 +3879,25 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
-               
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_oc1)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_oc1)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_oc1)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_oc1)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-   
-
-               fld(1) = a1
-
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
 
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_oc1)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_oc1)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_oc1)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_oc1)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-
-               fld(2) = a1
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
 
@@ -3908,7 +3906,6 @@ else
          
          if ( wrf%dom(id)%type_oc1 >= 0 ) then
 
-
             if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
                    .or. wrf%dom(id)%scm ) then
@@ -3916,15 +3913,15 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
-   
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_oc1)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_oc1)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_oc1)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_oc1)
-               
-               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
       endif
@@ -3943,32 +3940,26 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
-               
 
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_oc2)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_oc2)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_oc2)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_oc2)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-   
-
-               fld(1) = a1
-
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
 
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_oc2)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_oc2)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_oc2)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_oc2)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-
-               fld(2) = a1
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
 
@@ -3976,7 +3967,6 @@ else
       else
          
          if ( wrf%dom(id)%type_oc2 >= 0 ) then
-
 
             if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
@@ -3991,9 +3981,11 @@ else
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_oc2)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_oc2)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_oc2)
-               
-               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
       endif
@@ -4012,32 +4004,25 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
-               
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_dst01)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_dst01)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_dst01)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_dst01)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-   
-
-               fld(1) = a1
-
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
 
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_dst01)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_dst01)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_dst01)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_dst01)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-
-               fld(2) = a1
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
 
@@ -4046,7 +4031,6 @@ else
          
          if ( wrf%dom(id)%type_dst01 >= 0 ) then
 
-
             if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
                    .or. wrf%dom(id)%scm ) then
@@ -4054,15 +4038,15 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
-   
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_dst01)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_dst01)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_dst01)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_dst01)
-               
-               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
       endif
@@ -4080,32 +4064,25 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
-               
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_dst02)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_dst02)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_dst02)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_dst02)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-   
-
-               fld(1) = a1
-
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
 
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_dst02)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_dst02)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_dst02)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_dst02)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-
-               fld(2) = a1
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
 
@@ -4114,7 +4091,6 @@ else
          
          if ( wrf%dom(id)%type_dst02 >= 0 ) then
 
-
             if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
                    .or. wrf%dom(id)%scm ) then
@@ -4122,15 +4098,15 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
-   
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_dst02)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_dst02)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_dst02)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_dst02)
-               
-               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
       endif
@@ -4148,32 +4124,25 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
-               
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_dst03)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_dst03)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_dst03)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_dst03)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-   
-
-               fld(1) = a1
-
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
 
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_dst03)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_dst03)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_dst03)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_dst03)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-
-               fld(2) = a1
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
 
@@ -4182,7 +4151,6 @@ else
          
          if ( wrf%dom(id)%type_dst03 >= 0 ) then
 
-
             if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
                    .or. wrf%dom(id)%scm ) then
@@ -4190,15 +4158,15 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
-   
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_dst03)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_dst03)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_dst03)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_dst03)
-               
-               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
       endif
@@ -4217,32 +4185,25 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
-               
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_dst04)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_dst04)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_dst04)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_dst04)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-   
-
-               fld(1) = a1
-
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
 
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_dst04)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_dst04)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_dst04)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_dst04)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-
-               fld(2) = a1
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
 
@@ -4251,7 +4212,6 @@ else
          
          if ( wrf%dom(id)%type_dst04 >= 0 ) then
 
-
             if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
                    .or. wrf%dom(id)%scm ) then
@@ -4259,15 +4219,15 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
-   
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_dst04)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_dst04)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_dst04)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_dst04)
-               
-               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
       endif
@@ -4285,32 +4245,25 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
-               
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_dst05)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_dst05)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_dst05)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_dst05)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-   
-
-               fld(1) = a1
-
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
 
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_dst05)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_dst05)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_dst05)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_dst05)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-
-               fld(2) = a1
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
 
@@ -4319,7 +4272,6 @@ else
          
          if ( wrf%dom(id)%type_dst05 >= 0 ) then
 
-
             if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
                    .or. wrf%dom(id)%scm ) then
@@ -4327,15 +4279,15 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
-   
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_dst05)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_dst05)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_dst05)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_dst05)
-               
-               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
       endif
@@ -4354,32 +4306,25 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
-               
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_sslt01)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_sslt01)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_sslt01)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_sslt01)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-   
-
-               fld(1) = a1
-
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
 
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_sslt01)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_sslt01)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_sslt01)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_sslt01)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-
-               fld(2) = a1
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
 
@@ -4388,7 +4333,6 @@ else
          
          if ( wrf%dom(id)%type_sslt01 >= 0 ) then
 
-
             if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
                    .or. wrf%dom(id)%scm ) then
@@ -4396,15 +4340,15 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
-   
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_sslt01)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_sslt01)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_sslt01)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_sslt01)
-               
-               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
       endif
@@ -4422,32 +4366,25 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
-               
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_sslt02)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_sslt02)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_sslt02)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_sslt02)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-   
-
-               fld(1) = a1
-
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
 
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_sslt02)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_sslt02)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_sslt02)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_sslt02)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-
-               fld(2) = a1
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
 
@@ -4456,7 +4393,6 @@ else
          
          if ( wrf%dom(id)%type_sslt02 >= 0 ) then
 
-
             if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
                    .or. wrf%dom(id)%scm ) then
@@ -4464,15 +4400,15 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
-   
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_sslt02)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_sslt02)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_sslt02)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_sslt02)
-               
-               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
       endif
@@ -4490,32 +4426,25 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
-               
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_sslt03)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_sslt03)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_sslt03)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_sslt03)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-   
-
-               fld(1) = a1
-
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
 
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_sslt03)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_sslt03)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_sslt03)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_sslt03)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-
-               fld(2) = a1
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
 
@@ -4524,7 +4453,6 @@ else
          
          if ( wrf%dom(id)%type_sslt03 >= 0 ) then
 
-
             if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
                    .or. wrf%dom(id)%scm ) then
@@ -4532,15 +4460,15 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
-   
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_sslt03)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_sslt03)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_sslt03)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_sslt03)
-               
-               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
       endif
@@ -4558,32 +4486,25 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
-               
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_sslt04)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_sslt04)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_sslt04)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_sslt04)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-   
-
-               fld(1) = a1
-
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
 
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_sslt04)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_sslt04)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_sslt04)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_sslt04)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-
-               fld(2) = a1
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
 
@@ -4592,7 +4513,6 @@ else
          
          if ( wrf%dom(id)%type_sslt04 >= 0 ) then
 
-
             if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
                    .or. wrf%dom(id)%scm ) then
@@ -4600,84 +4520,48 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
-   
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_sslt04)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_sslt04)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_sslt04)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_sslt04)
-               
-               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
       endif
 !1.zd sulfate
-   elseif ( obs_kind == KIND_SO4 ) then
+   elseif ( obs_kind == KIND_SO4) then
 
-      ! This is for 3D field 
-      if(.not. surf_var) then
+      if ( wrf%dom(id)%type_so4 >= 0 ) then
 
-         if ( wrf%dom(id)%type_so4 >= 0 ) then
-
-            if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-                 boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
-                 boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
+         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_so4 ) .and. &
+              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_so4 ) .and. &
+              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_so4 ) ) then
    
-               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-               if ( rc .ne. 0 ) &
-                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
-               
-
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_so4)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_so4)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_so4)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_so4)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-   
-
-               fld(1) = a1
-
-
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_so4)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_so4)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_so4)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_so4)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-
-               fld(2) = a1
-   
-            endif
-         endif
-
-      ! This is for surface field
-      else
-         
-         if ( wrf%dom(id)%type_so4 >= 0 ) then
-
-
-            if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
-                   boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
-                   .or. wrf%dom(id)%scm ) then
-   
-               call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
-               if ( rc .ne. 0 ) &
-                    print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
-   
-
-               ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_so4)
-               iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_so4)
-               ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_so4)
-               iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_so4)
-               
+            call getCorners(i, j, id, wrf%dom(id)%type_so4, ll, ul, lr, ur, rc )
+            if ( rc .ne. 0 ) &
+                 print*, 'model_mod.f90 :: model_interpolate :: getCorners SO4 rc = ', rc
+            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_so4)
+            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_so4)
+            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_so4)
+            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_so4)
+            if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+               fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+            else
                fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
+            endif
+
+            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_so4)
+            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_so4)
+            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_so4)
+            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_so4)
+            if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+               fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+            else
+               fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
             endif
          endif
       endif
@@ -4696,32 +4580,25 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
-               
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_pm25)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_pm25)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_pm25)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_pm25)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-   
-
-               fld(1) = a1
-
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
 
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_pm25)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_pm25)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_pm25)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_pm25)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-
-               fld(2) = a1
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
 
@@ -4730,7 +4607,6 @@ else
          
          if ( wrf%dom(id)%type_pm25 >= 0 ) then
 
-
             if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
                    .or. wrf%dom(id)%scm ) then
@@ -4738,15 +4614,15 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
-   
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_pm25)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_pm25)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_pm25)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_pm25)
-               
-               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
       endif
@@ -4761,36 +4637,29 @@ else
             if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
                  boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) .and. &
                  boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_t ) ) then
-   
+
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T rc = ', rc
-               
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_pm10)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_pm10)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_pm10)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_pm10)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-               
-   
-
-               fld(1) = a1
-
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
 
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_pm10)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_pm10)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_pm10)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_pm10)
-   
-
-               a1 = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
-   
-
-               fld(2) = a1
-   
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
             endif
          endif
 
@@ -4799,7 +4668,6 @@ else
          
          if ( wrf%dom(id)%type_pm10 >= 0 ) then
 
-
             if ( ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_t ) .and. &
                    boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_t ) ) &
                    .or. wrf%dom(id)%scm ) then
@@ -4807,15 +4675,50 @@ else
                call getCorners(i, j, id, wrf%dom(id)%type_t, ll, ul, lr, ur, rc )
                if ( rc .ne. 0 ) &
                     print*, 'model_mod.f90 :: model_interpolate :: getCorners T2 rc = ', rc
-   
-
                ill = wrf%dom(id)%dart_ind(ll(1), ll(2), 1, wrf%dom(id)%type_pm10)
                iul = wrf%dom(id)%dart_ind(ul(1), ul(2), 1, wrf%dom(id)%type_pm10)
                ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), 1, wrf%dom(id)%type_pm10)
                iur = wrf%dom(id)%dart_ind(ur(1), ur(2), 1, wrf%dom(id)%type_pm10)
-               
-               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               if (use_log_pm10 .or. use_log_pm25 .or. use_log_aod) then
+                  fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+               else
+                  fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+               endif
+            endif
+         endif
+      endif
+
+!1.zd P25
+   elseif ( obs_kind == KIND_P25 ) then
+
+      if ( wrf%dom(id)%type_p25 >= 0 ) then
+
+         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_p25 ) .and. &
+              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_p25 ) .and. &
+              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_p25 ) ) then
    
+            call getCorners(i, j, id, wrf%dom(id)%type_p25, ll, ul, lr, ur, rc )
+            if ( rc .ne. 0 ) &
+                 print*, 'model_mod.f90 :: model_interpolate :: getCorners P25 rc = ', rc
+
+            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_p25)
+            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_p25)
+            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_p25)
+            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_p25)   
+            if (use_log_pm10 .or. use_log_pm25) then
+               fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+            else
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+            endif
+
+            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_p25)
+            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_p25)
+            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_p25)
+            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_p25)
+            if (use_log_pm10 .or. use_log_pm25) then
+               fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+            else
+               fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
             endif
          endif
       endif
@@ -8574,268 +8477,275 @@ if (istatus1 == 0) then
 !
 ! Variable locaization
       if ( use_varloc ) then
-         if ((base_obs_kind.ne.KIND_O3)       .and. &
-         (base_obs_kind.ne.KIND_CO)           .and. &
-         (base_obs_kind.ne.KIND_NO)           .and. &
-         (base_obs_kind.ne.KIND_AOD)) then
+         if ( &
+! These are the only chemistry obs
+         (base_obs_kind.ne.KIND_CO)          .and. &
+         (base_obs_kind.ne.KIND_O3)          .and. &
+         (base_obs_kind.ne.KIND_NO)          .and. &
+         (base_obs_kind.ne.KIND_NO2)         .and. &
+         (base_obs_kind.ne.KIND_SO2)         .and. &
+         (base_obs_kind.ne.KIND_PM10)        .and. &
+         (base_obs_kind.ne.KIND_PM25)        .and. &
+         (base_obs_kind.ne.KIND_AOD) &
+         ) then
 !
 ! Met obs go here
-            if ((obs_kind(t_ind).ne.KIND_SO2)         .and. &
-            (obs_kind(t_ind).ne.KIND_O3)              .and. &
-            (obs_kind(t_ind).ne.KIND_CO)              .and. &
-            (obs_kind(t_ind).ne.KIND_NO)              .and. &
-            (obs_kind(t_ind).ne.KIND_NO2)             .and. &
-            (obs_kind(t_ind).ne.KIND_HNO3)            .and. &
-            (obs_kind(t_ind).ne.KIND_HNO4)            .and. &
-            (obs_kind(t_ind).ne.KIND_N2O5)            .and. &
-            (obs_kind(t_ind).ne.KIND_PAN)             .and. &
-            (obs_kind(t_ind).ne.KIND_MEK)             .and. &
-            (obs_kind(t_ind).ne.KIND_ALD)             .and. &
-            (obs_kind(t_ind).ne.KIND_CH3O2)           .and. &
-            (obs_kind(t_ind).ne.KIND_C3H8)            .and. &
-            (obs_kind(t_ind).ne.KIND_C2H6)            .and. &
-            (obs_kind(t_ind).ne.KIND_ACET)            .and. &
-            (obs_kind(t_ind).ne.KIND_HCHO)            .and. &
-            (obs_kind(t_ind).ne.KIND_C2H4)            .and. &
-            (obs_kind(t_ind).ne.KIND_C3H6)            .and. &
-            (obs_kind(t_ind).ne.KIND_TOL)             .and. &
-            (obs_kind(t_ind).ne.KIND_MVK)             .and. &
-            (obs_kind(t_ind).ne.KIND_BIGALK)          .and. &
-            (obs_kind(t_ind).ne.KIND_ISOPR)           .and. &
-            (obs_kind(t_ind).ne.KIND_MACR)            .and. &
-            (obs_kind(t_ind).ne.KIND_GLYALD)          .and. &
-            (obs_kind(t_ind).ne.KIND_C10H16)          .and. &
-            (obs_kind(t_ind).ne.KIND_AOD)             .and. &
-            (obs_kind(t_ind).ne.KIND_BC1)             .and. &
-            (obs_kind(t_ind).ne.KIND_BC2)             .and. &
-            (obs_kind(t_ind).ne.KIND_OC1)             .and. &
-            (obs_kind(t_ind).ne.KIND_OC2)             .and. &
-            (obs_kind(t_ind).ne.KIND_DMS)             .and. &
-            (obs_kind(t_ind).ne.KIND_DST01)           .and. &
-            (obs_kind(t_ind).ne.KIND_DST02)           .and. &
-            (obs_kind(t_ind).ne.KIND_DST03)           .and. &
-            (obs_kind(t_ind).ne.KIND_DST04)           .and. &
-            (obs_kind(t_ind).ne.KIND_DST05)           .and. &
-            (obs_kind(t_ind).ne.KIND_SO4)             .and. &
-            (obs_kind(t_ind).ne.KIND_SSLT01)          .and. &
-            (obs_kind(t_ind).ne.KIND_SSLT02)          .and. &
-            (obs_kind(t_ind).ne.KIND_SSLT03)          .and. &
-            (obs_kind(t_ind).ne.KIND_SSLT04)          .and. &
-            (obs_kind(t_ind).ne.KIND_TAUAER1)         .and. &
-            (obs_kind(t_ind).ne.KIND_TAUAER2)         .and. &
-            (obs_kind(t_ind).ne.KIND_TAUAER3)         .and. &
-            (obs_kind(t_ind).ne.KIND_TAUAER4)         .and. &
-            (obs_kind(t_ind).ne.KIND_PM10)            .and. &
-            (obs_kind(t_ind).ne.KIND_PM25)            .and. &
-            (obs_kind(t_ind).ne.KIND_E_CO)            .and. &
-            (obs_kind(t_ind).ne.KIND_E_NO)            .and. &
-            (obs_kind(t_ind).ne.KIND_EBU_CO)          .and. &
-            (obs_kind(t_ind).ne.KIND_EBU_NO)          .and. &
-            (obs_kind(t_ind).ne.KIND_EBU_OC)          .and. &
-            (obs_kind(t_ind).ne.KIND_EBU_BC)          .and. &
-            (obs_kind(t_ind).ne.KIND_EBU_c2h4)        .and. &
-            (obs_kind(t_ind).ne.KIND_EBU_ch2o)        .and. &
-            (obs_kind(t_ind).ne.KIND_EBU_ch3oh)) then
+            if ( &
+! These are the chemisry state variables
+            (obs_kind(t_ind).ne.KIND_CO)        .and. &
+            (obs_kind(t_ind).ne.KIND_O3)        .and. &
+            (obs_kind(t_ind).ne.KIND_NO)        .and. &
+            (obs_kind(t_ind).ne.KIND_NO2)       .and. &
+            (obs_kind(t_ind).ne.KIND_SO2)       .and. &
+            (obs_kind(t_ind).ne.KIND_SO4)       .and. &
+            (obs_kind(t_ind).ne.KIND_HNO3)      .and. &
+            (obs_kind(t_ind).ne.KIND_HNO4)      .and. &
+            (obs_kind(t_ind).ne.KIND_N2O5)      .and. &
+            (obs_kind(t_ind).ne.KIND_C2H6)      .and. &
+            (obs_kind(t_ind).ne.KIND_ACET)      .and. &
+            (obs_kind(t_ind).ne.KIND_HCHO)      .and. &
+            (obs_kind(t_ind).ne.KIND_C2H4)      .and. &
+            (obs_kind(t_ind).ne.KIND_C3H6)      .and. &
+            (obs_kind(t_ind).ne.KIND_TOL)       .and. &
+            (obs_kind(t_ind).ne.KIND_MVK)       .and. &
+            (obs_kind(t_ind).ne.KIND_BIGALK)    .and. &
+            (obs_kind(t_ind).ne.KIND_ISOPR)     .and. &
+            (obs_kind(t_ind).ne.KIND_MACR)      .and. &
+            (obs_kind(t_ind).ne.KIND_C3H8)      .and. &
+            (obs_kind(t_ind).ne.KIND_C10H16)    .and. &
+            (obs_kind(t_ind).ne.KIND_DST01)     .and. &
+            (obs_kind(t_ind).ne.KIND_DST02)     .and. &
+            (obs_kind(t_ind).ne.KIND_DST03)     .and. &
+            (obs_kind(t_ind).ne.KIND_DST04)     .and. &
+            (obs_kind(t_ind).ne.KIND_DST05)     .and. &
+            (obs_kind(t_ind).ne.KIND_BC1)       .and. &
+            (obs_kind(t_ind).ne.KIND_BC2)       .and. &
+            (obs_kind(t_ind).ne.KIND_OC1)       .and. &
+            (obs_kind(t_ind).ne.KIND_OC2)       .and. &
+            (obs_kind(t_ind).ne.KIND_TAUAER1)   .and. &
+            (obs_kind(t_ind).ne.KIND_TAUAER2)   .and. &
+            (obs_kind(t_ind).ne.KIND_TAUAER3)   .and. &
+            (obs_kind(t_ind).ne.KIND_TAUAER4)   .and. &
+            (obs_kind(t_ind).ne.KIND_PM2_5_DRY) .and. &
+            (obs_kind(t_ind).ne.KIND_PM10)      .and. &
+            (obs_kind(t_ind).ne.KIND_P25)       .and. &
+            (obs_kind(t_ind).ne.KIND_P10)       .and. &
+            (obs_kind(t_ind).ne.KIND_SSLT01)    .and. &
+            (obs_kind(t_ind).ne.KIND_SSLT02)    .and. &
+            (obs_kind(t_ind).ne.KIND_SSLT03)    .and. &
+            (obs_kind(t_ind).ne.KIND_SSLT04)    .and. &
+            (obs_kind(t_ind).ne.KIND_E_CO)      .and. &
+            (obs_kind(t_ind).ne.KIND_E_NO)      .and. &
+            (obs_kind(t_ind).ne.KIND_E_NO2)     .and. &
+            (obs_kind(t_ind).ne.KIND_E_SO2)     .and. &
+            (obs_kind(t_ind).ne.KIND_E_SO4)     .and. &
+            (obs_kind(t_ind).ne.KIND_E_PM25)    .and. &
+            (obs_kind(t_ind).ne.KIND_E_PM10)    .and. &
+            (obs_kind(t_ind).ne.KIND_E_BC)      .and. &
+            (obs_kind(t_ind).ne.KIND_E_OC)      .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_CO)    .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_NO)    .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_NO2)   .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_SO2)   .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_OC)    .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_BC)    .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_c2h4)  .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_ch2o)  .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_ch3oh) .and. &
+! the following not in FRAPPE state vector 
+            (obs_kind(t_ind).ne.KIND_GLYALD)    .and. &
+            (obs_kind(t_ind).ne.KIND_PAN)       .and. &
+            (obs_kind(t_ind).ne.KIND_MEK)       .and. &
+            (obs_kind(t_ind).ne.KIND_ALD)       .and. &
+            (obs_kind(t_ind).ne.KIND_CH3O2)     .and. &
+            (obs_kind(t_ind).ne.KIND_AOD)       .and. &
+            (obs_kind(t_ind).ne.KIND_DMS) &
+            ) then
 !
-! Met state variable go here
+! Met obs and Met state variable
                dist(k) = dist(k)
             else
 !
-! Chem state variable go here
+! Met obs and Chem state variable
                dist(k) = 1.0e9
             endif
 !
 ! Chem obs go here
-         else if ((obs_kind(t_ind).eq.KIND_SO2)    .or. &
-         (obs_kind(t_ind).eq.KIND_O3)              .or. &
-         (obs_kind(t_ind).eq.KIND_CO)              .or. &
-         (obs_kind(t_ind).eq.KIND_NO)              .or. &
-         (obs_kind(t_ind).eq.KIND_NO2)             .or. &
-         (obs_kind(t_ind).eq.KIND_HNO3)            .or. &
-         (obs_kind(t_ind).eq.KIND_HNO4)            .or. &
-         (obs_kind(t_ind).eq.KIND_N2O5)            .or. &
-         (obs_kind(t_ind).eq.KIND_PAN)             .or. &
-         (obs_kind(t_ind).eq.KIND_MEK)             .or. &
-         (obs_kind(t_ind).eq.KIND_ALD)             .or. &
-         (obs_kind(t_ind).eq.KIND_CH3O2)           .or. &
-         (obs_kind(t_ind).eq.KIND_C3H8)            .or. &
-         (obs_kind(t_ind).eq.KIND_C2H6)            .or. &
-         (obs_kind(t_ind).eq.KIND_ACET)            .or. &
-         (obs_kind(t_ind).eq.KIND_HCHO)            .or. &
-         (obs_kind(t_ind).eq.KIND_C2H4)            .or. &
-         (obs_kind(t_ind).eq.KIND_C3H6)            .or. &
-         (obs_kind(t_ind).eq.KIND_TOL)             .or. &
-         (obs_kind(t_ind).eq.KIND_MVK)             .or. &
-         (obs_kind(t_ind).eq.KIND_BIGALK)          .or. &
-         (obs_kind(t_ind).eq.KIND_ISOPR)           .or. &
-         (obs_kind(t_ind).eq.KIND_MACR)            .or. &
-         (obs_kind(t_ind).eq.KIND_GLYALD)          .or. &
-         (obs_kind(t_ind).eq.KIND_C10H16)          .or. &
-         (obs_kind(t_ind).eq.KIND_AOD)             .or. &
-         (obs_kind(t_ind).eq.KIND_BC1)             .or. &
-         (obs_kind(t_ind).eq.KIND_BC2)             .or. &
-         (obs_kind(t_ind).eq.KIND_OC1)             .or. &
-         (obs_kind(t_ind).eq.KIND_OC2)             .or. &
-         (obs_kind(t_ind).eq.KIND_DMS)             .or. &
-         (obs_kind(t_ind).eq.KIND_DST01)           .or. &
-         (obs_kind(t_ind).eq.KIND_DST02)           .or. &
-         (obs_kind(t_ind).eq.KIND_DST03)           .or. &
-         (obs_kind(t_ind).eq.KIND_DST04)           .or. &
-         (obs_kind(t_ind).eq.KIND_DST05)           .or. &
-         (obs_kind(t_ind).eq.KIND_SO4)             .or. &
-         (obs_kind(t_ind).eq.KIND_SSLT01)          .or. &
-         (obs_kind(t_ind).eq.KIND_SSLT02)          .or. &
-         (obs_kind(t_ind).eq.KIND_SSLT03)          .or. &
-         (obs_kind(t_ind).eq.KIND_SSLT04)          .or. &
-         (obs_kind(t_ind).eq.KIND_TAUAER1)         .or. &
-         (obs_kind(t_ind).eq.KIND_TAUAER2)         .or. &
-         (obs_kind(t_ind).eq.KIND_TAUAER3)         .or. &
-         (obs_kind(t_ind).eq.KIND_TAUAER4)         .or. &
-         (obs_kind(t_ind).eq.KIND_PM10)            .or. &
-         (obs_kind(t_ind).eq.KIND_PM25)            .or. &
-         (obs_kind(t_ind).eq.KIND_E_CO)            .or. &
-         (obs_kind(t_ind).ne.KIND_E_NO)            .or. &
-         (obs_kind(t_ind).eq.KIND_EBU_CO)          .or. &
-         (obs_kind(t_ind).ne.KIND_EBU_NO)          .or. &
-         (obs_kind(t_ind).ne.KIND_EBU_OC)          .or. &
-         (obs_kind(t_ind).ne.KIND_EBU_BC)          .or. &
-         (obs_kind(t_ind).ne.KIND_EBU_c2h4)        .or. &
-         (obs_kind(t_ind).ne.KIND_EBU_ch2o)        .or. &
-         (obs_kind(t_ind).ne.KIND_EBU_ch3oh)) then
+         else if ( &
+         (obs_kind(t_ind).eq.KIND_CO)        .or. &
+         (obs_kind(t_ind).eq.KIND_O3)        .or. &
+         (obs_kind(t_ind).eq.KIND_NO)        .or. &
+         (obs_kind(t_ind).eq.KIND_NO2)       .or. &
+         (obs_kind(t_ind).eq.KIND_SO2)       .or. &
+         (obs_kind(t_ind).eq.KIND_SO4)       .or. &
+         (obs_kind(t_ind).eq.KIND_HNO3)      .or. &
+         (obs_kind(t_ind).eq.KIND_HNO4)      .or. &
+         (obs_kind(t_ind).eq.KIND_N2O5)      .or. &
+         (obs_kind(t_ind).eq.KIND_C2H6)      .or. &
+         (obs_kind(t_ind).eq.KIND_ACET)      .or. &
+         (obs_kind(t_ind).eq.KIND_HCHO)      .or. &
+         (obs_kind(t_ind).eq.KIND_C2H4)      .or. &
+         (obs_kind(t_ind).eq.KIND_C3H6)      .or. &
+         (obs_kind(t_ind).eq.KIND_TOL)       .or. &
+         (obs_kind(t_ind).eq.KIND_MVK)       .or. &
+         (obs_kind(t_ind).eq.KIND_BIGALK)    .or. &
+         (obs_kind(t_ind).eq.KIND_ISOPR)     .or. &
+         (obs_kind(t_ind).eq.KIND_MACR)      .or. &
+         (obs_kind(t_ind).eq.KIND_C3H8)      .or. &
+         (obs_kind(t_ind).eq.KIND_C10H16)    .or. &
+         (obs_kind(t_ind).eq.KIND_DST01)     .or. &
+         (obs_kind(t_ind).eq.KIND_DST02)     .or. &
+         (obs_kind(t_ind).eq.KIND_DST03)     .or. &
+         (obs_kind(t_ind).eq.KIND_DST04)     .or. &
+         (obs_kind(t_ind).eq.KIND_DST05)     .or. &
+         (obs_kind(t_ind).eq.KIND_BC1)       .or. &
+         (obs_kind(t_ind).eq.KIND_BC2)       .or. &
+         (obs_kind(t_ind).eq.KIND_OC1)       .or. &
+         (obs_kind(t_ind).eq.KIND_OC2)       .or. &
+         (obs_kind(t_ind).eq.KIND_TAUAER1)   .or. &
+         (obs_kind(t_ind).eq.KIND_TAUAER2)   .or. &
+         (obs_kind(t_ind).eq.KIND_TAUAER3)   .or. &
+         (obs_kind(t_ind).eq.KIND_TAUAER4)   .or. &
+         (obs_kind(t_ind).eq.KIND_PM2_5_DRY) .or. &
+         (obs_kind(t_ind).eq.KIND_PM10)      .or. &
+         (obs_kind(t_ind).eq.KIND_P25)       .or. &
+         (obs_kind(t_ind).eq.KIND_P10)       .or. &
+         (obs_kind(t_ind).eq.KIND_SSLT01)    .or. &
+         (obs_kind(t_ind).eq.KIND_SSLT02)    .or. &
+         (obs_kind(t_ind).eq.KIND_SSLT03)    .or. &
+         (obs_kind(t_ind).eq.KIND_SSLT04)    .or. &
+         (obs_kind(t_ind).eq.KIND_E_CO)      .or. &
+         (obs_kind(t_ind).eq.KIND_E_NO)      .or. &
+         (obs_kind(t_ind).eq.KIND_E_NO2)     .or. &
+         (obs_kind(t_ind).eq.KIND_E_SO2)     .or. &
+         (obs_kind(t_ind).eq.KIND_E_SO4)     .or. &
+         (obs_kind(t_ind).eq.KIND_E_PM25)    .or. &
+         (obs_kind(t_ind).eq.KIND_E_PM10)    .or. &
+         (obs_kind(t_ind).eq.KIND_E_BC)      .or. &
+         (obs_kind(t_ind).eq.KIND_E_OC)      .or. &
+         (obs_kind(t_ind).eq.KIND_EBU_CO)    .or. &
+         (obs_kind(t_ind).eq.KIND_EBU_NO)    .or. &
+         (obs_kind(t_ind).eq.KIND_EBU_NO2)   .or. &
+         (obs_kind(t_ind).eq.KIND_EBU_SO2)   .or. &
+         (obs_kind(t_ind).eq.KIND_EBU_SO4)   .or. &
+         (obs_kind(t_ind).eq.KIND_EBU_OC)    .or. &
+         (obs_kind(t_ind).eq.KIND_EBU_BC)    .or. &
+         (obs_kind(t_ind).eq.KIND_EBU_c2h4)  .or. &
+         (obs_kind(t_ind).eq.KIND_EBU_ch2o)  .or. &
+         (obs_kind(t_ind).eq.KIND_EBU_ch3oh) .or. &
+! The following not in FRAPPE state vector
+         (obs_kind(t_ind).eq.KIND_GLYALD)    .or. &
+         (obs_kind(t_ind).eq.KIND_PAN)       .or. &
+         (obs_kind(t_ind).eq.KIND_MEK)       .or. &
+         (obs_kind(t_ind).eq.KIND_ALD)       .or. &
+         (obs_kind(t_ind).eq.KIND_CH3O2)     .or. &
+         (obs_kind(t_ind).eq.KIND_AOD)       .or. &
+         (obs_kind(t_ind).eq.KIND_DMS) &
+         ) then
 !
-! Chem state variable go here
+! Chem obs and Chem state variable
             dist(k) = dist(k)
          else
 !
-! Met state variable go here
+! Chem obs and Met state variable
             dist(k) = 1.0e9
          endif
       endif
 !
-! Independent assimilaiton of chem obs
-! APM - All Chem Obs must be checked in this statement
-      if (use_indep_chem_assim) then     
-         if ((base_obs_kind.eq.KIND_O3)       .or. &
-         (base_obs_kind.eq.KIND_CO)           .or. &
-         (base_obs_kind.eq.KIND_NO)           .or. &
-         (base_obs_kind.eq.KIND_NO2)          .or. &
-         (base_obs_kind.eq.KIND_HNO3)         .or. &
-         (base_obs_kind.eq.KIND_HNO4)         .or. &
-         (base_obs_kind.eq.KIND_N2O5)         .or. &
-         (base_obs_kind.eq.KIND_PAN)          .or. &
-         (base_obs_kind.eq.KIND_MEK)          .or. &
-         (base_obs_kind.eq.KIND_ALD)          .or. &
-         (base_obs_kind.eq.KIND_CH3O2)        .or. &
-         (base_obs_kind.eq.KIND_C3H8)         .or. &
-         (base_obs_kind.eq.KIND_C2H6)         .or. &
-         (base_obs_kind.eq.KIND_ACET)         .or. &
-         (base_obs_kind.eq.KIND_HCHO)         .or. &
-         (base_obs_kind.eq.KIND_C2H4)         .or. &
-         (base_obs_kind.eq.KIND_C3H6)         .or. &
-         (base_obs_kind.eq.KIND_TOL)          .or. &
-         (base_obs_kind.eq.KIND_MVK)          .or. &
-         (base_obs_kind.eq.KIND_BIGALK)       .or. &
-         (base_obs_kind.eq.KIND_ISOPR)        .or. &
-         (base_obs_kind.eq.KIND_MACR)         .or. &
-         (base_obs_kind.eq.KIND_GLYALD)       .or. &
-         (base_obs_kind.eq.KIND_C10H16)       .or. &
-         (base_obs_kind.eq.KIND_BC1)          .or. &
-         (base_obs_kind.eq.KIND_BC2)          .or. &
-         (base_obs_kind.eq.KIND_DMS)          .or. &
-         (base_obs_kind.eq.KIND_DST01)        .or. &
-         (base_obs_kind.eq.KIND_DST02)        .or. &
-         (base_obs_kind.eq.KIND_DST03)        .or. &
-         (base_obs_kind.eq.KIND_DST04)        .or. &
-         (base_obs_kind.eq.KIND_SO4)          .or. &
-         (base_obs_kind.eq.KIND_SSLT01)       .or. &
-         (base_obs_kind.eq.KIND_SSLT02)       .or. &
-         (base_obs_kind.eq.KIND_SSLT03)       .or. &
-         (base_obs_kind.eq.KIND_SSLT04)       .or. &
-         (base_obs_kind.eq.KIND_TAUAER1)      .or. &
-         (base_obs_kind.eq.KIND_TAUAER2)      .or. &
-         (base_obs_kind.eq.KIND_TAUAER3)      .or. &
-         (base_obs_kind.eq.KIND_TAUAER4)      .or. &
-         (base_obs_kind.eq.KIND_PM10)         .or. &
-         (base_obs_kind.eq.KIND_PM25)         .or. &
-!         (base_obs_kind.eq.KIND_NOy)          .or. &
-!         (base_obs_kind.eq.KIND_PB)           .or. &
-!         (base_obs_kind.eq.KIND_NMOC)         .or. &
-         (base_obs_kind.eq.KIND_AOD)) then
+! Independent assimilation of chem obs
+      if (use_indep_chem_assim) then    
+! These are the only chemistry obs
+         if ( &
+         (base_obs_kind.eq.KIND_CO)          .or. &
+         (base_obs_kind.eq.KIND_O3)          .or. &
+         (base_obs_kind.eq.KIND_NO)          .or. &
+         (base_obs_kind.eq.KIND_NO2)         .or. &
+         (base_obs_kind.eq.KIND_SO2)         .or. &
+         (base_obs_kind.eq.KIND_PM10)        .or. &
+         (base_obs_kind.eq.KIND_PM25)        .or. &
+         (base_obs_kind.eq.KIND_AOD) &
+         ) then
 !
-! Chem obs go here
-            if ((base_obs_kind.eq.KIND_O3).and.((obs_kind(t_ind).eq.KIND_O3))) then
-               dist(k) = dist(k)
-            else if ((base_obs_kind.eq.KIND_CO).and.((obs_kind(t_ind).eq.KIND_CO).or. &
+! Chem obs
+            if ((base_obs_kind.eq.KIND_CO).and.((obs_kind(t_ind).eq.KIND_CO).or. &
             (obs_kind(t_ind).eq.KIND_E_CO))) then
                dist(k) = dist(k)
-            else if ((base_obs_kind.eq.KIND_NO).and.((obs_kind(t_ind).eq.KIND_NO).or. &
-            (obs_kind(t_ind).eq.KIND_E_NO).or.(obs_kind(t_ind).eq.KIND_E_NO2))) then
+            else if ((base_obs_kind.eq.KIND_O3).and.((obs_kind(t_ind).eq.KIND_O3))) then
                dist(k) = dist(k)
-            else if ((base_obs_kind.eq.KIND_NO2).and.((obs_kind(t_ind).eq.KIND_NO2).or. &
-            (obs_kind(t_ind).eq.KIND_E_NO).or.(obs_kind(t_ind).eq.KIND_E_NO2))) then
+            else if ((base_obs_kind.eq.KIND_NO).and.((obs_kind(t_ind).eq.KIND_NO).or. &
+            (obs_kind(t_ind).eq.KIND_NO2).or.(obs_kind(t_ind).eq.KIND_E_NO).or. &
+            (obs_kind(t_ind).eq.KIND_E_NO2))) then
+               dist(k) = dist(k)
+            else if ((base_obs_kind.eq.KIND_NO2).and.((obs_kind(t_ind).eq.KIND_NO).or. &
+            (obs_kind(t_ind).eq.KIND_NO2).or.(obs_kind(t_ind).eq.KIND_E_NO).or. &
+            (obs_kind(t_ind).eq.KIND_E_NO2))) then
                dist(k) = dist(k)
             else if ((base_obs_kind.eq.KIND_SO2).and.((obs_kind(t_ind).eq.KIND_SO2).or. &
             (obs_kind(t_ind).eq.KIND_E_SO2))) then
                dist(k) = dist(k)
-            else if ((base_obs_kind.eq.KIND_PM10).and.((obs_kind(t_ind).eq.KIND_PM10)&
-            .or.(obs_kind(t_ind).eq.KIND_PM25)&
-            .or.(obs_kind(t_ind).eq.KIND_SO4)&
-            .or.(obs_kind(t_ind).eq.KIND_BC1)&
-            .or.(obs_kind(t_ind).eq.KIND_BC2)&
-            .or.(obs_kind(t_ind).eq.KIND_OC1)&
-            .or.(obs_kind(t_ind).eq.KIND_OC2)&
-            .or.(obs_kind(t_ind).eq.KIND_DST01)&
-            .or.(obs_kind(t_ind).eq.KIND_DST02)&
-            .or.(obs_kind(t_ind).eq.KIND_DST03)&
-            .or.(obs_kind(t_ind).eq.KIND_DST04)&
-            .or.(obs_kind(t_ind).eq.KIND_SSLT01)&
-            .or.(obs_kind(t_ind).eq.KIND_SSLT02)&
-            .or.(obs_kind(t_ind).eq.KIND_SSLT03)&
-            .or.(obs_kind(t_ind).eq.KIND_E_PM_10)&
-            .or.(obs_kind(t_ind).eq.KIND_E_PM_25)&
-            .or.(obs_kind(t_ind).eq.KIND_E_BC)&
-            .or.(obs_kind(t_ind).eq.KIND_E_OC)&
-            )) then
-                dist(k) = dist(k)
-            else if ((base_obs_kind.eq.KIND_PM25).and.((obs_kind(t_ind).eq.KIND_PM25)&
-            .or.(obs_kind(t_ind).eq.KIND_SO4)&
-            .or.(obs_kind(t_ind).eq.KIND_BC1)&
-            .or.(obs_kind(t_ind).eq.KIND_BC2)&
-            .or.(obs_kind(t_ind).eq.KIND_OC1)&
-            .or.(obs_kind(t_ind).eq.KIND_OC2)&
-            .or.(obs_kind(t_ind).eq.KIND_DST01)&
-            .or.(obs_kind(t_ind).eq.KIND_DST02)&
-            .or.(obs_kind(t_ind).eq.KIND_SSLT01)&
-            .or.(obs_kind(t_ind).eq.KIND_SSLT02)&
-            .or.(obs_kind(t_ind).eq.KIND_E_PM_25)&
-            .or.(obs_kind(t_ind).eq.KIND_E_BC)&
-            .or.(obs_kind(t_ind).eq.KIND_E_OC)&
-            )) then
-                dist(k) = dist(k)
-            else if ((base_obs_kind.eq.KIND_AOD).and.((obs_kind(t_ind).eq.KIND_TAUAER1).or. &
-            (obs_kind(t_ind).eq.KIND_TAUAER2).or. &
-            (obs_kind(t_ind).eq.KIND_TAUAER3).or. &
-            (obs_kind(t_ind).eq.KIND_TAUAER4).or. &
-            (obs_kind(t_ind).eq.KIND_PM10).or. &
-            (obs_kind(t_ind).eq.KIND_PM25).or. &
-            (obs_kind(t_ind).eq.KIND_DST01).or. &
-            (obs_kind(t_ind).eq.KIND_DST02).or. & 
-            (obs_kind(t_ind).eq.KIND_DST03).or. &
-            (obs_kind(t_ind).eq.KIND_DST04).or. &
-            (obs_kind(t_ind).eq.KIND_DST05).or. &
-            (obs_kind(t_ind).eq.KIND_OC1).or. &
-            (obs_kind(t_ind).eq.KIND_OC2).or. &
+            else if ((base_obs_kind.eq.KIND_PM10).and.( &
+            (obs_kind(t_ind).eq.KIND_P25).or. &
+            (obs_kind(t_ind).eq.KIND_SO4).or. &
             (obs_kind(t_ind).eq.KIND_BC1).or. &
             (obs_kind(t_ind).eq.KIND_BC2).or. &
+            (obs_kind(t_ind).eq.KIND_OC1).or. &
+            (obs_kind(t_ind).eq.KIND_OC2).or. &
+            (obs_kind(t_ind).eq.KIND_DST01).or. &
+            (obs_kind(t_ind).eq.KIND_DST02).or. &
+            (obs_kind(t_ind).eq.KIND_DST03).or. &
+            (obs_kind(t_ind).eq.KIND_DST04).or. &
             (obs_kind(t_ind).eq.KIND_SSLT01).or. &
             (obs_kind(t_ind).eq.KIND_SSLT02).or. &
             (obs_kind(t_ind).eq.KIND_SSLT03).or. &
-            (obs_kind(t_ind).eq.KIND_SSLT04).or. &
+            (obs_kind(t_ind).eq.KIND_E_PM25).or.&
+            (obs_kind(t_ind).eq.KIND_E_PM10).or.&
+            (obs_kind(t_ind).eq.KIND_E_BC).or.&
+            (obs_kind(t_ind).eq.KIND_E_OC).or.&
+            (obs_kind(t_ind).eq.KIND_E_SO4) &
+            )) then
+                dist(k) = dist(k)
+            else if ((base_obs_kind.eq.KIND_PM25).and.( &
+            (obs_kind(t_ind).eq.KIND_P25).or. &
             (obs_kind(t_ind).eq.KIND_SO4).or. &
-            (obs_kind(t_ind).eq.KIND_E_PM_10).or.&
-            (obs_kind(t_ind).eq.KIND_E_PM_25).or.&
+            (obs_kind(t_ind).eq.KIND_BC1).or. &
+            (obs_kind(t_ind).eq.KIND_BC2).or. &
+            (obs_kind(t_ind).eq.KIND_OC1).or. &
+            (obs_kind(t_ind).eq.KIND_OC2).or. &
+            (obs_kind(t_ind).eq.KIND_DST01).or. &
+            (obs_kind(t_ind).eq.KIND_DST02).or. &
+            (obs_kind(t_ind).eq.KIND_SSLT01).or. &
+            (obs_kind(t_ind).eq.KIND_SSLT02).or. &
+            (obs_kind(t_ind).eq.KIND_E_PM25).or.&
+            (obs_kind(t_ind).eq.KIND_E_BC).or. &
             (obs_kind(t_ind).eq.KIND_E_OC).or. &
-            (obs_kind(t_ind).eq.KIND_E_BC) &
+            (obs_kind(t_ind).eq.KIND_E_SO4) &
+            )) then
+                dist(k) = dist(k)
+! The following assumes MODIS AOD
+            else if ((base_obs_kind.eq.KIND_AOD).and.( &
+            (obs_kind(t_ind).eq.KIND_SO4).or. &
+            (obs_kind(t_ind).eq.KIND_BC1).or. &
+            (obs_kind(t_ind).eq.KIND_BC2).or. &
+            (obs_kind(t_ind).eq.KIND_OC1).or. &
+            (obs_kind(t_ind).eq.KIND_OC2).or. &
+            (obs_kind(t_ind).eq.KIND_SSLT01).or. &
+            (obs_kind(t_ind).eq.KIND_SSLT02).or. &
+            (obs_kind(t_ind).eq.KIND_SSLT03).or. & 
+            (obs_kind(t_ind).eq.KIND_SSLT04).or. &
+            (obs_kind(t_ind).eq.KIND_DST01).or. &
+            (obs_kind(t_ind).eq.KIND_DST02).or. &
+            (obs_kind(t_ind).eq.KIND_DST03).or. &
+            (obs_kind(t_ind).eq.KIND_DST04).or. &
+            (obs_kind(t_ind).eq.KIND_DST05).or. &
+            (obs_kind(t_ind).eq.KIND_TAUAER1).or. &
+            (obs_kind(t_ind).eq.KIND_TAUAER2).or. &
+            (obs_kind(t_ind).eq.KIND_TAUAER3).or. &
+            (obs_kind(t_ind).eq.KIND_TAUAER4).or. &
+            (obs_kind(t_ind).eq.KIND_E_PM25).or.&
+            (obs_kind(t_ind).eq.KIND_E_PM10).or.&
+            (obs_kind(t_ind).eq.KIND_E_BC).or.&
+            (obs_kind(t_ind).eq.KIND_E_OC).or.&
+            (obs_kind(t_ind).eq.KIND_E_SO4) &
             )) then
                dist(k) = dist(k)
             else
@@ -8844,19 +8754,15 @@ if (istatus1 == 0) then
          else
 !
 ! Met obs go here
-            if ((obs_kind(t_ind).ne.KIND_SO2)         .and. &
-            (obs_kind(t_ind).ne.KIND_O3)              .and. &
+            if ( &
             (obs_kind(t_ind).ne.KIND_CO)              .and. &
+            (obs_kind(t_ind).ne.KIND_O3)              .and. &
             (obs_kind(t_ind).ne.KIND_NO)              .and. &
             (obs_kind(t_ind).ne.KIND_NO2)             .and. &
+            (obs_kind(t_ind).ne.KIND_SO2)             .and. &
+            (obs_kind(t_ind).ne.KIND_SO4)             .and. &
             (obs_kind(t_ind).ne.KIND_HNO3)            .and. &
             (obs_kind(t_ind).ne.KIND_HNO4)            .and. &
-            (obs_kind(t_ind).ne.KIND_N2O5)            .and. &
-            (obs_kind(t_ind).ne.KIND_PAN)             .and. &
-            (obs_kind(t_ind).ne.KIND_MEK)             .and. &
-            (obs_kind(t_ind).ne.KIND_ALD)             .and. &
-            (obs_kind(t_ind).ne.KIND_CH3O2)           .and. &
-            (obs_kind(t_ind).ne.KIND_C3H8)            .and. &
             (obs_kind(t_ind).ne.KIND_C2H6)            .and. &
             (obs_kind(t_ind).ne.KIND_ACET)            .and. &
             (obs_kind(t_ind).ne.KIND_HCHO)            .and. &
@@ -8867,45 +8773,63 @@ if (istatus1 == 0) then
             (obs_kind(t_ind).ne.KIND_BIGALK)          .and. &
             (obs_kind(t_ind).ne.KIND_ISOPR)           .and. &
             (obs_kind(t_ind).ne.KIND_MACR)            .and. &
-            (obs_kind(t_ind).ne.KIND_GLYALD)          .and. &
+            (obs_kind(t_ind).ne.KIND_C3H8)            .and. &
             (obs_kind(t_ind).ne.KIND_C10H16)          .and. &
-            (obs_kind(t_ind).ne.KIND_AOD)             .and. &
-            (obs_kind(t_ind).ne.KIND_BC1)             .and. &
-            (obs_kind(t_ind).ne.KIND_BC2)             .and. &
-            (obs_kind(t_ind).ne.KIND_OC1)             .and. &
-            (obs_kind(t_ind).ne.KIND_OC2)             .and. &
-            (obs_kind(t_ind).ne.KIND_DMS)             .and. &
             (obs_kind(t_ind).ne.KIND_DST01)           .and. &
             (obs_kind(t_ind).ne.KIND_DST02)           .and. &
             (obs_kind(t_ind).ne.KIND_DST03)           .and. &
             (obs_kind(t_ind).ne.KIND_DST04)           .and. &
             (obs_kind(t_ind).ne.KIND_DST05)           .and. &
-            (obs_kind(t_ind).ne.KIND_SO4)             .and. &
-            (obs_kind(t_ind).ne.KIND_SSLT01)          .and. &
-            (obs_kind(t_ind).ne.KIND_SSLT02)          .and. &
-            (obs_kind(t_ind).ne.KIND_SSLT03)          .and. &
-            (obs_kind(t_ind).ne.KIND_SSLT04)          .and. &
+            (obs_kind(t_ind).ne.KIND_BC1)             .and. &
+            (obs_kind(t_ind).ne.KIND_BC2)             .and. &
+            (obs_kind(t_ind).ne.KIND_OC1)             .and. &
+            (obs_kind(t_ind).ne.KIND_OC2)             .and. &
             (obs_kind(t_ind).ne.KIND_TAUAER1)         .and. &
             (obs_kind(t_ind).ne.KIND_TAUAER2)         .and. &
             (obs_kind(t_ind).ne.KIND_TAUAER3)         .and. &
             (obs_kind(t_ind).ne.KIND_TAUAER4)         .and. &
+            (obs_kind(t_ind).ne.KIND_PM2_5_DRY)       .and. &
             (obs_kind(t_ind).ne.KIND_PM10)            .and. &
-            (obs_kind(t_ind).ne.KIND_PM25)            .and. &
+            (obs_kind(t_ind).ne.KIND_P25)             .and. &
+            (obs_kind(t_ind).ne.KIND_P10)             .and. &
+            (obs_kind(t_ind).ne.KIND_SSLT01)          .and. &
+            (obs_kind(t_ind).ne.KIND_SSLT02)          .and. &
+            (obs_kind(t_ind).ne.KIND_SSLT03)          .and. &
+            (obs_kind(t_ind).ne.KIND_SSLT04)          .and. &
             (obs_kind(t_ind).ne.KIND_E_CO)            .and. &
             (obs_kind(t_ind).ne.KIND_E_NO)            .and. &
-            (obs_kind(t_ind).ne.KIND_EBU_CO)            .and. &
-            (obs_kind(t_ind).ne.KIND_EBU_NO)            .and. &
-            (obs_kind(t_ind).ne.KIND_EBU_OC)            .and. &
-            (obs_kind(t_ind).ne.KIND_EBU_BC)            .and. &
-            (obs_kind(t_ind).ne.KIND_EBU_c2h4)          .and. &
-            (obs_kind(t_ind).ne.KIND_EBU_ch2o)          .and. &
-            (obs_kind(t_ind).ne.KIND_EBU_ch3oh)) then
+            (obs_kind(t_ind).ne.KIND_E_NO2)           .and. &
+            (obs_kind(t_ind).ne.KIND_E_SO2)           .and. &
+            (obs_kind(t_ind).ne.KIND_E_SO4)           .and. &
+            (obs_kind(t_ind).ne.KIND_E_PM25)          .and. &
+            (obs_kind(t_ind).ne.KIND_E_PM10)          .and. &
+            (obs_kind(t_ind).ne.KIND_E_BC)            .and. &
+            (obs_kind(t_ind).ne.KIND_E_OC)            .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_CO)          .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_NO)          .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_NO2)         .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_SO2)         .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_SO4)         .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_OC)          .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_BC)          .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_c2h4)        .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_ch2o)        .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_ch3oh)       .and. &
+! The following not in FRAPPE state vectand           
+            (obs_kind(t_ind).ne.KIND_GLYALD)          .and. &
+            (obs_kind(t_ind).ne.KIND_PAN)             .and. &
+            (obs_kind(t_ind).ne.KIND_MEK)             .and. &
+            (obs_kind(t_ind).ne.KIND_ALD)             .and. &
+            (obs_kind(t_ind).ne.KIND_CH3O2)           .and. &
+            (obs_kind(t_ind).ne.KIND_AOD)             .and. &
+            (obs_kind(t_ind).ne.KIND_DMS) &
+            ) then
 !
-! Met state variable go here
+! Met obs and Met state variable
                dist(k) = dist(k)
             else
 !
-! Chem state variable go here
+! Met obs and Chem state variable
                dist(k) = 1.0e9
             endif
          endif
@@ -10057,7 +9981,7 @@ do i = 1, size(in_state_vector)
           (.not. in_state_vector(KIND_DST02))   .or. &
           (.not. in_state_vector(KIND_SSLT01))   .or. &
           (.not. in_state_vector(KIND_SSLT02))   .or. &
-          (.not. in_state_vector(KIND_SO4))   .or. &
+          (.not. in_state_vector(KIND_SO4))      .or. &
           (.not. in_state_vector(KIND_OC1))   .or. &
           (.not. in_state_vector(KIND_OC2))) then
          write(msgstring1, *) 'PM2.5 assimilation requires P25, BC1,2, DUST_1,2, SEAS_1,2, sulf, OC1,2 in state vector'
@@ -10074,7 +9998,7 @@ do i = 1, size(in_state_vector)
           (.not. in_state_vector(KIND_SSLT01))   .or. &
           (.not. in_state_vector(KIND_SSLT02))   .or. &
           (.not. in_state_vector(KIND_SSLT03))   .or. &
-          (.not. in_state_vector(KIND_SO4))   .or. &
+          (.not. in_state_vector(KIND_SO4))      .or. &
           (.not. in_state_vector(KIND_OC1))   .or. &
           (.not. in_state_vector(KIND_OC2))   .or. &
           (.not. in_state_vector(KIND_PM10))) then
@@ -10849,7 +10773,7 @@ end subroutine get_emiss_variable_size_from_file
 end module model_mod
 
 ! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
+! $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/models/wrf_chem/model_mod.f90 $
+! $Id: model_mod.f90 13126 2019-04-25 01:59:32Z thoar@ucar.edu $
+! $Revision: 13126 $
+! $Date: 2019-04-24 19:59:32 -0600 (Wed, 24 Apr 2019) $

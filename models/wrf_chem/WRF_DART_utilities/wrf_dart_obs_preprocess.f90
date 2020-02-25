@@ -2,7 +2,7 @@
 ! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! $Id$
+! $Id: wrf_dart_obs_preprocess.f90 13126 2019-04-25 01:59:32Z thoar@ucar.edu $
 
 program wrf_dart_obs_preprocess
 
@@ -43,7 +43,8 @@ use     obs_kind_mod, only : RADIOSONDE_U_WIND_COMPONENT, ACARS_U_WIND_COMPONENT
                              IASI_CO_RETRIEVAL, &
                              IASI_O3_RETRIEVAL, &
                              OMI_NO2_COLUMN, &
-                             AIRNOW_CO, AIRNOW_O3, &
+                             AIRNOW_CO, AIRNOW_O3, AIRNOW_NO2, AIRNOW_SO2, &
+                             AIRNOW_PM10, AIRNOW_PM25, &
                              PANDA_CO, PANDA_O3, PANDA_PM25
 ! APM/JB ---
 use time_manager_mod, only : time_type, set_calendar_type, GREGORIAN, set_time
@@ -76,6 +77,10 @@ character(len=129) :: file_name_input    = 'obs_seq.old',        &
                       omi_no2_extra      = 'obs_seq.omi_no2',    &
                       airnow_co_extra    = 'obs_seq.airnow_co',  &
                       airnow_o3_extra    = 'obs_seq.airnow_o3',  &
+                      airnow_no2_extra   = 'obs_seq.airnow_no2',  &
+                      airnow_so2_extra   = 'obs_seq.airnow_so2',  &
+                      airnow_pm10_extra  = 'obs_seq.airnow_pm10',  &
+                      airnow_pm25_extra = 'obs_seq.airnow_pm25',  &
                       panda_co_extra     = 'obs_seq.panda_co',   &
                       panda_o3_extra     = 'obs_seq.panda_o3',   &
                       panda_pm25_extra   = 'obs_seq.panda_pm25'
@@ -147,6 +152,26 @@ logical            :: superob_airnow_o3           = .false.    ! super-ob sat wi
 real(r8)           :: airnow_o3_horiz_int         = 100.0_r8   ! horizontal interval for super-ob
 real(r8)           :: airnow_o3_pres_int          = 2500.0_r8  ! pressure interval for super-ob
 logical            :: overwrite_ncep_airnow_o3_qc = .false.    ! true to overwrite NCEP QC (see instructions)
+!  AIRNOW NO2 specific parameters
+logical            :: superob_airnow_no2           = .false.    ! super-ob sat wind data
+real(r8)           :: airnow_no2_horiz_int         = 100.0_r8   ! horizontal interval for super-ob
+real(r8)           :: airnow_no2_pres_int          = 2500.0_r8  ! pressure interval for super-ob
+logical            :: overwrite_ncep_airnow_no2_qc = .false.    ! true to overwrite NCEP QC (see instructions)
+!  AIRNOW SO2 specific parameters
+logical            :: superob_airnow_so2           = .false.    ! super-ob sat wind data
+real(r8)           :: airnow_so2_horiz_int         = 100.0_r8   ! horizontal interval for super-ob
+real(r8)           :: airnow_so2_pres_int          = 2500.0_r8  ! pressure interval for super-ob
+logical            :: overwrite_ncep_airnow_so2_qc = .false.    ! true to overwrite NCEP QC (see instructions)
+!  AIRNOW PM10 specific parameters
+logical            :: superob_airnow_pm10           = .false.    ! super-ob sat wind data
+real(r8)           :: airnow_pm10_horiz_int         = 100.0_r8   ! horizontal interval for super-ob
+real(r8)           :: airnow_pm10_pres_int          = 2500.0_r8  ! pressure interval for super-ob
+logical            :: overwrite_ncep_airnow_pm10_qc = .false.    ! true to overwrite NCEP QC (see instructions)
+!  AIRNOW PM25 specific parameters
+logical            :: superob_airnow_pm25           = .false.    ! super-ob sat wind data
+real(r8)           :: airnow_pm25_horiz_int         = 100.0_r8   ! horizontal interval for super-ob
+real(r8)           :: airnow_pm25_pres_int          = 2500.0_r8  ! pressure interval for super-ob
+logical            :: overwrite_ncep_airnow_pm25_qc = .false.    ! true to overwrite NCEP QC (see instructions)
 !  PANDA CO specific parameters
 logical            :: superob_panda_co            = .false.    ! super-ob sat wind data
 real(r8)           :: panda_co_horiz_int          = 100.0_r8   ! horizontal interval for super-ob
@@ -184,6 +209,10 @@ namelist /wrf_obs_preproc_nml/file_name_input, file_name_output,      &
          superob_omi_no2, omi_no2_pres_int, omi_no2_extra, omi_no2_horiz_int, &
          superob_airnow_co, airnow_co_pres_int, airnow_co_extra, airnow_co_horiz_int, &
          superob_airnow_o3, airnow_o3_pres_int, airnow_o3_extra, airnow_o3_horiz_int, &
+         superob_airnow_no2, airnow_no2_pres_int, airnow_no2_extra, airnow_no2_horiz_int, &
+         superob_airnow_so2, airnow_so2_pres_int, airnow_so2_extra, airnow_so2_horiz_int, &
+         superob_airnow_pm10, airnow_pm10_pres_int, airnow_pm10_extra, airnow_pm10_horiz_int, &
+         superob_airnow_pm25, airnow_pm25_pres_int, airnow_pm25_extra, airnow_pm25_horiz_int, &
          superob_panda_co, panda_co_pres_int, panda_co_extra, panda_co_horiz_int, &
          superob_panda_o3, panda_o3_pres_int, panda_o3_extra, panda_o3_horiz_int, &
          superob_panda_pm25, panda_pm25_pres_int, panda_pm25_extra, panda_pm25_horiz_int
@@ -206,7 +235,8 @@ type(obs_sequence_type) :: seq_all, seq_rawin, seq_sfc, seq_acars, seq_satwnd, &
                            seq_prof, seq_tc, seq_gpsro, seq_other, &
 ! APM/JB +++
                            seq_modis_aod, seq_mopitt_co, seq_iasi_co, seq_iasi_o3, &
-                           seq_omi_no2, seq_airnow_co, seq_airnow_o3, &
+                           seq_omi_no2, seq_airnow_co, seq_airnow_o3, seq_airnow_no2, &
+                           seq_airnow_so2 ,seq_airnow_pm10, seq_airnow_pm25, &
                            seq_panda_co, seq_panda_o3, seq_panda_pm25
 ! APM/JB ---
 
@@ -288,6 +318,10 @@ call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_iasi_o3)
 call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_omi_no2)
 call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_airnow_co)
 call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_airnow_o3)
+call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_airnow_no2)
+call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_airnow_so2)
+call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_airnow_pm10)
+call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_airnow_pm25)
 call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_panda_co)
 call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_panda_o3)
 call create_new_obs_seq(num_copies, num_qc, max_num_obs, seq_panda_pm25)
@@ -301,7 +335,8 @@ include_sig_data, obs_pressure_top, obs_height_top, sfc_elevation_check, &
 sfc_elevation_tol, overwrite_ncep_sfc_qc, overwrite_ncep_satwnd_qc, &
 overwrite_obs_time, anal_time, seq_rawin, seq_sfc, seq_acars, seq_satwnd, & 
 seq_tc, seq_gpsro, seq_modis_aod, seq_mopitt_co, seq_iasi_co, seq_iasi_o3, seq_omi_no2, &
-seq_airnow_co, seq_airnow_o3, seq_panda_co, seq_panda_o3, seq_panda_pm25, seq_other)
+seq_airnow_co, seq_airnow_o3, seq_airnow_no2, seq_airnow_so2, seq_airnow_pm10, &
+seq_airnow_pm25, seq_panda_co, seq_panda_o3, seq_panda_pm25, seq_other)
 ! APM/JB ---
 
 !  add supplimental rawinsonde observations from file
@@ -396,6 +431,26 @@ AIRNOW_O3, nx, ny, obs_boundary, include_sig_data, &
 obs_pressure_top, obs_height_top, sfc_elevation_check, sfc_elevation_tol, &
 overwrite_obs_time, anal_time)
 !
+call add_supplimental_obs(airnow_no2_extra, seq_airnow_no2, max_obs_seq, &
+AIRNOW_NO2, nx, ny, obs_boundary, include_sig_data, &
+obs_pressure_top, obs_height_top, sfc_elevation_check, sfc_elevation_tol, &
+overwrite_obs_time, anal_time)
+!
+call add_supplimental_obs(airnow_so2_extra, seq_airnow_so2, max_obs_seq, &
+AIRNOW_SO2, nx, ny, obs_boundary, include_sig_data, &
+obs_pressure_top, obs_height_top, sfc_elevation_check, sfc_elevation_tol, &
+overwrite_obs_time, anal_time)
+!
+call add_supplimental_obs(airnow_pm10_extra, seq_airnow_pm10, max_obs_seq, &
+AIRNOW_PM10, nx, ny, obs_boundary, include_sig_data, &
+obs_pressure_top, obs_height_top, sfc_elevation_check, sfc_elevation_tol, &
+overwrite_obs_time, anal_time)
+!
+call add_supplimental_obs(airnow_pm25_extra, seq_airnow_pm25, max_obs_seq, &
+AIRNOW_PM25, nx, ny, obs_boundary, include_sig_data, &
+obs_pressure_top, obs_height_top, sfc_elevation_check, sfc_elevation_tol, &
+overwrite_obs_time, anal_time)
+!
 call add_supplimental_obs(panda_co_extra, seq_panda_co, max_obs_seq, &
 PANDA_CO, nx, ny, obs_boundary, include_sig_data, &
 obs_pressure_top, obs_height_top, sfc_elevation_check, sfc_elevation_tol, &
@@ -411,7 +466,7 @@ PANDA_PM25, nx, ny, obs_boundary, include_sig_data, &
 obs_pressure_top, obs_height_top, sfc_elevation_check, sfc_elevation_tol, &
 overwrite_obs_time, anal_time)
 ! APM/JB ---
-
+!
 !  remove all sonde observations within radius of TC if desired
 if ( tc_sonde_radii > 0.0_r8 ) call remove_sondes_near_tc(seq_tc, & 
                                                seq_rawin, tc_sonde_radii)
@@ -446,6 +501,18 @@ if ( superob_sat_winds ) call superob_sat_wind_data(seq_satwnd, anal_time, &
 !  super-ob AIRNOW_O3 data
 ! if ( superob_airnow_o3 ) call superob_airnow_o3_data(seq_airnow_o3, anal_time, &
 !                                     airnow_o3_horiz_int, airnow_o3_pres_int)
+!  super-ob AIRNOW_NO2 data
+! if ( superob_airnow_no2 ) call superob_airnow_no2_data(seq_airnow_no2, anal_time, &
+!                                     airnow_no2_horiz_int, airnow_no2_pres_int)
+!  super-ob AIRNOW_SO2 data
+! if ( superob_airnow_so2 ) call superob_airnow_so2_data(seq_airnow_so2, anal_time, &
+!                                     airnow_so2_horiz_int, airnow_so2_pres_int)
+!  super-ob AIRNOW_PM10 data
+! if ( superob_airnow_pm10 ) call superob_airnow_pm10_data(seq_airnow_pm10, anal_time, &
+!                                     airnow_pm10_horiz_int, airnow_pm10_pres_int)
+!  super-ob AIRNOW_PM25 data
+! if ( superob_airnow_pm25 ) call superob_airnow_pm25_data(seq_airnow_pm25, anal_time, &
+!                                     airnow_pm25_horiz_int, airnow_pm25_pres_int)
 !  super-ob PANDA_CO data
 ! if ( superob_panda_co ) call superob_panda_co_data(seq_panda_co, anal_time, &
 !                                     panda_co_horiz_int, panda_co_pres_int)
@@ -466,6 +533,8 @@ max_obs_seq = get_num_obs(seq_tc)     + get_num_obs(seq_rawin) + &
               get_num_obs(seq_iasi_co) + get_num_obs(seq_iasi_o3) + &
               get_num_obs(seq_omi_no2) + &
               get_num_obs(seq_airnow_co) + get_num_obs(seq_airnow_o3) + & 
+              get_num_obs(seq_airnow_no2) + get_num_obs(seq_airnow_so2) + & 
+              get_num_obs(seq_airnow_pm10) + get_num_obs(seq_airnow_pm25) + & 
               get_num_obs(seq_panda_co) + get_num_obs(seq_panda_o3) + &
               get_num_obs(seq_panda_pm25) 
 ! APM/JB ---
@@ -517,6 +586,18 @@ call destroy_obs_sequence(seq_airnow_co)
 !
 call build_master_sequence(seq_airnow_o3, seq_all)
 call destroy_obs_sequence(seq_airnow_o3)
+!
+call build_master_sequence(seq_airnow_no2, seq_all)
+call destroy_obs_sequence(seq_airnow_no2)
+!
+call build_master_sequence(seq_airnow_so2, seq_all)
+call destroy_obs_sequence(seq_airnow_so2)
+!
+call build_master_sequence(seq_airnow_pm10, seq_all)
+call destroy_obs_sequence(seq_airnow_pm10)
+!
+call build_master_sequence(seq_airnow_pm25, seq_all)
+call destroy_obs_sequence(seq_airnow_pm25)
 !
 call build_master_sequence(seq_panda_co, seq_all)
 call destroy_obs_sequence(seq_panda_co)
@@ -608,6 +689,8 @@ use      obs_kind_mod, only : RADIOSONDE_U_WIND_COMPONENT, ACARS_U_WIND_COMPONEN
                               IASI_O3_RETRIEVAL, &
                               OMI_NO2_COLUMN, &
                               AIRNOW_CO, AIRNOW_O3, &
+                              AIRNOW_SO2, AIRNOW_NO2, &
+                              AIRNOW_PM10, AIRNOW_PM25, &
                               PANDA_CO, PANDA_O3, PANDA_PM25
 ! APM/JB ---
 use         model_mod, only : get_domain_info 
@@ -628,7 +711,8 @@ logical  :: file_exist, last_obs, pass_checks, original_observation, &
 ! APM/JB +++
             modis_aod_obs_check, mopitt_co_obs_check, iasi_co_obs_check, &
             iasi_o3_obs_check, omi_no2_obs_check, airnow_co_obs_check, airnow_o3_obs_check, &
-            panda_co_obs_check, panda_o3_obs_check, panda_pm25_obs_check
+            airnow_no2_obs_check, airnow_so2_obs_check, airnow_pm10_obs_check, &
+            airnow_pm25_obs_check, panda_co_obs_check, panda_o3_obs_check, panda_pm25_obs_check
 ! APM/JB ---
 real(r8) :: xyz_loc(3), xloc, yloc
 real(r8) :: real_nx, real_ny
@@ -686,6 +770,18 @@ select case (plat_kind)
 !
   case (AIRNOW_O3)                           
     write(6,*) 'Adding Supplimental AIRNOW_O3 Data'   
+!
+  case (AIRNOW_NO2)                           
+    write(6,*) 'Adding Supplimental AIRNOW_NO2 Data'   
+!
+  case (AIRNOW_SO2)                           
+    write(6,*) 'Adding Supplimental AIRNOW_SO2 Data'   
+!
+  case (AIRNOW_PM10)                           
+    write(6,*) 'Adding Supplimental AIRNOW_PM10 Data'   
+!
+  case (AIRNOW_PM25)                           
+    write(6,*) 'Adding Supplimental AIRNOW_PM25 Data'   
 !
   case (PANDA_CO)                           
     write(6,*) 'Adding Supplimental PANDA_CO Data'   
@@ -810,6 +906,18 @@ ObsLoop:  do while ( .not. last_obs ) ! loop over all observations in a sequence
 !
     case (AIRNOW_O3)             
       pass_checks = airnow_o3_obs_check()  
+!
+    case (AIRNOW_NO2)             
+      pass_checks = airnow_no2_obs_check()  
+!
+    case (AIRNOW_SO2)             
+      pass_checks = airnow_so2_obs_check()  
+!
+    case (AIRNOW_PM10)             
+      pass_checks = airnow_pm10_obs_check()  
+!
+    case (AIRNOW_PM25)             
+      pass_checks = airnow_pm25_obs_check()  
 !
     case (PANDA_CO)             
       pass_checks = panda_co_obs_check()  
@@ -1296,8 +1404,9 @@ subroutine read_and_parse_input_seq(filename, nx, ny, obs_bdy, siglevel, ptop, &
 ! APM/JB +++
                                     tc_seq, gpsro_seq, modis_aod_seq, mopitt_co_seq, &
                                     iasi_co_seq, iasi_o3_seq, omi_no2_seq, airnow_co_seq, &
-                                    airnow_o3_seq, panda_co_seq, panda_o3_seq, &
-                                    panda_pm25_seq, other_seq)
+                                    airnow_o3_seq, airnow_no2_seq, airnow_so2_seq, &
+                                    airnow_pm10_seq, airnow_pm25_seq, panda_co_seq, &
+                                    panda_o3_seq, panda_pm25_seq, other_seq)
 ! APM/JB ---
 
 use         types_mod, only : r8
@@ -1340,6 +1449,8 @@ use      obs_kind_mod, only : RADIOSONDE_U_WIND_COMPONENT, RADIOSONDE_V_WIND_COM
                               IASI_O3_RETRIEVAL, &
                               OMI_NO2_COLUMN, &
                               AIRNOW_CO, AIRNOW_O3, &
+                              AIRNOW_NO2, AIRNOW_SO2, &
+                              AIRNOW_PM10, AIRNOW_PM25, &
                               PANDA_CO, PANDA_O3, PANDA_PM25
 ! APM/JB ---
 use         model_mod, only : get_domain_info
@@ -1362,8 +1473,9 @@ type(obs_sequence_type), intent(inout) :: rawin_seq, sfc_seq, acars_seq, &
 ! APM/JB +++
                                           modis_aod_seq, mopitt_co_seq, &
                                           iasi_co_seq, iasi_o3_seq, omi_no2_seq, airnow_co_seq, &
-                                          airnow_o3_seq, panda_co_seq, panda_o3_seq, &
-                                          panda_pm25_seq, other_seq     
+                                          airnow_o3_seq, airnow_no2_seq, airnow_so2_seq, &
+                                          airnow_pm10_seq, airnow_pm25_seq, panda_co_seq, &
+                                          panda_o3_seq, panda_pm25_seq, other_seq     
 ! APM/JB ---
 
 character(len=129)    :: qcmeta
@@ -1372,7 +1484,9 @@ logical               :: file_exist, last_obs, input_ncep_qc, rawinsonde_obs_che
                          surface_obs_check, aircraft_obs_check, sat_wind_obs_check, &
 ! APM/JB +++
                          modis_aod_obs_check, mopitt_co_obs_check, iasi_co_obs_check, &
-                         iasi_o3_obs_check, omi_no2_obs_check, airnow_co_obs_check, airnow_o3_obs_check, &
+                         iasi_o3_obs_check, omi_no2_obs_check, airnow_co_obs_check, &
+                         airnow_o3_obs_check, airnow_no2_obs_check, airnow_so2_obs_check, &
+                         airnow_pm10_obs_check, airnow_pm25_obs_check, &
                          panda_co_obs_check, panda_o3_obs_check, panda_pm25_obs_check
 ! APM/JB ---
 real(r8), allocatable :: xland(:,:), qc(:)
@@ -1561,6 +1675,22 @@ InputObsLoop:  do while ( .not. last_obs ) ! loop over all observations in a seq
     case ( AIRNOW_O3 )              
       call copy_obs(obs, obs_in)            
       call append_obs_to_seq(airnow_o3_seq, obs)
+!
+    case ( AIRNOW_NO2 )              
+      call copy_obs(obs, obs_in)            
+      call append_obs_to_seq(airnow_no2_seq, obs)
+!
+    case ( AIRNOW_SO2 )              
+      call copy_obs(obs, obs_in)            
+      call append_obs_to_seq(airnow_so2_seq, obs)
+!
+    case ( AIRNOW_PM10 )              
+      call copy_obs(obs, obs_in)            
+      call append_obs_to_seq(airnow_pm10_seq, obs)
+!
+    case ( AIRNOW_PM25 )              
+      call copy_obs(obs, obs_in)            
+      call append_obs_to_seq(airnow_pm25_seq, obs)
 !
     case ( PANDA_CO )              
       call copy_obs(obs, obs_in)            
@@ -1836,6 +1966,93 @@ airnow_o3_obs_check = .true.
 
 return
 end function airnow_o3_obs_check
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!   airnow_no2_obs_check - function that determines whether to include an
+!                        AIRNOW NO2 observation in the sequence.
+!                        For now, this function is a placeholder and 
+!                        returns true.
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+function airnow_no2_obs_check()
+
+use     types_mod, only : r8
+
+implicit none
+
+logical  :: airnow_no2_obs_check
+
+airnow_no2_obs_check = .true.
+
+return
+end function airnow_no2_obs_check
+
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!   airnow_so2_obs_check - function that determines whether to include an
+!                        AIRNOW SO2 observation in the sequence.
+!                        For now, this function is a placeholder and 
+!                        returns true.
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+function airnow_so2_obs_check()
+
+use     types_mod, only : r8
+
+implicit none
+
+logical  :: airnow_so2_obs_check
+
+airnow_so2_obs_check = .true.
+
+return
+end function airnow_so2_obs_check
+
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!   airnow_pm10_obs_check - function that determines whether to include an
+!                        AIRNOW PM10 observation in the sequence.
+!                        For now, this function is a placeholder and 
+!                        returns true.
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+function airnow_pm10_obs_check()
+
+use     types_mod, only : r8
+
+implicit none
+
+logical  :: airnow_pm10_obs_check
+
+airnow_pm10_obs_check = .true.
+
+return
+end function airnow_pm10_obs_check
+
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!   airnow_pm25_obs_check - function that determines whether to include an
+!                        AIRNOW PM25 observation in the sequence.
+!                        For now, this function is a placeholder and 
+!                        returns true.
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+function airnow_pm25_obs_check()
+
+use     types_mod, only : r8
+
+implicit none
+
+logical  :: airnow_pm25_obs_check
+
+airnow_pm25_obs_check = .true.
+
+return
+end function airnow_pm25_obs_check
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
@@ -2795,7 +3012,7 @@ end subroutine wrap_lon
 
 
 ! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
+! $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/models/wrf_chem/WRF_DART_utilities/wrf_dart_obs_preprocess.f90 $
+! $Id: wrf_dart_obs_preprocess.f90 13126 2019-04-25 01:59:32Z thoar@ucar.edu $
+! $Revision: 13126 $
+! $Date: 2019-04-24 19:59:32 -0600 (Wed, 24 Apr 2019) $

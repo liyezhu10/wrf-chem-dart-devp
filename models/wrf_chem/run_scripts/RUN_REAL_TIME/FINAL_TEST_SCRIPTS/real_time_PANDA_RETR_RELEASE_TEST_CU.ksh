@@ -10,18 +10,16 @@ export FIRST_DART_INFLATE_DATE=2014072500
 export FIRST_EMISS_INV_DATE=2014072500
 #
 # START CYCLE DATE-TIME:
-export CYCLE_STR_DATE=2014072418
-#export CYCLE_STR_DATE=2014072500
+export CYCLE_STR_DATE=2014072500
 #
 # END CYCLE DATE-TIME:
-export CYCLE_END_DATE=2014072418
-#export CYCLE_END_DATE=2014072500
+export CYCLE_END_DATE=2014072500
 #export CYCLE_END_DATE=${CYCLE_STR_DATE}
 #
 export CYCLE_DATE=${CYCLE_STR_DATE}
 export NL_FAC_OBS_ERROR_MOPITT=1.00
 export NL_FAC_OBS_ERROR_IASI=1.00
-export RETRIEVAL_TYPE_MOPITT=RETR
+export RETRIEVAL_TYPE_MOPITT=RAWR
 export RETRIEVAL_TYPE_IASI=RAWR
 #
 export PERT_CHEM_GENER=true
@@ -269,20 +267,20 @@ export ASIM_MAX_SEC_GREG=${temp[1]}
 #
 # SELECT COMPONENT RUN OPTIONS:
 if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
-   export RUN_GEOGRID=true
-   export RUN_UNGRIB=true
-   export RUN_METGRID=true
-   export RUN_REAL=true
-   export RUN_PERT_WRFCHEM_MET_IC=true
-   export RUN_PERT_WRFCHEM_MET_BC=true
-   export RUN_EXO_COLDENS=true
-   export RUN_SEASON_WES=true
-   export RUN_WRFCHEM_BIO=true
-   export RUN_WRFCHEM_FIRE=true
-   export RUN_WRFCHEM_CHEMI=true
-   export RUN_PERT_WRFCHEM_CHEM_ICBC=true
-   export RUN_PERT_WRFCHEM_CHEM_EMISS=true
-   export RUN_MOPITT_CO_OBS=true
+   export RUN_GEOGRID=false
+   export RUN_UNGRIB=false
+   export RUN_METGRID=false
+   export RUN_REAL=false
+   export RUN_PERT_WRFCHEM_MET_IC=false
+   export RUN_PERT_WRFCHEM_MET_BC=false
+   export RUN_EXO_COLDENS=false
+   export RUN_SEASON_WES=false
+   export RUN_WRFCHEM_BIO=false
+   export RUN_WRFCHEM_FIRE=false
+   export RUN_WRFCHEM_CHEMI=false
+   export RUN_PERT_WRFCHEM_CHEM_ICBC=false
+   export RUN_PERT_WRFCHEM_CHEM_EMISS=false
+   export RUN_MOPITT_CO_OBS=false
    export RUN_IASI_CO_OBS=false
    export RUN_IASI_O3_OBS=false
    export RUN_OMI_NO2_OBS=false
@@ -292,9 +290,9 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_PANDA_O3_OBS=false
    export RUN_PANDA_PM25_OBS=false
    export RUN_MODIS_AOD_OBS=false
-   export RUN_MET_OBS=true
-   export RUN_COMBINE_OBS=true
-   export RUN_PREPROCESS_OBS=true
+   export RUN_MET_OBS=false
+   export RUN_COMBINE_OBS=false
+   export RUN_PREPROCESS_OBS=false
 #
    if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
       export RUN_WRFCHEM_INITIAL=true
@@ -308,7 +306,7 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
       export RUN_ENSEMBLE_MEAN_OUTPUT=true
    else
       export RUN_WRFCHEM_INITIAL=false
-      export RUN_DART_FILTER=true
+      export RUN_DART_FILTER=false
       export RUN_UPDATE_BC=true
       export RUN_ENSEMBLE_MEAN_INPUT=true
       export RUN_WRFCHEM_CYCLE_CR=true
@@ -466,6 +464,7 @@ export GRIB_PART2=.g2.tar
 #
 # COMPUTER PARAMETERS:
 export PROJ_NUMBER=P93300612
+export ACCOUNT=ucb93_summit2
 export GENERAL_JOB_CLASS=normal
 export GENERAL_TIME_LIMIT=00:40:00
 export GENERAL_NODES=1
@@ -483,7 +482,7 @@ export BIO_TIME_LIMIT=00:20:00
 export BIO_NODES=1
 export BIO_TASKS=1
 export FILTER_JOB_CLASS=normal
-export FILTER_TIME_LIMIT=03:30:00
+export FILTER_TIME_LIMIT=04:00:00
 export FILTER_NODES=2-4
 export FILTER_TASKS=48
 export WRFCHEM_JOB_CLASS=normal
@@ -538,20 +537,25 @@ export METGRID_TABLE_TYPE=ARW
 # TARG_LAT=31.56 (33,15) for 072600
 # TARG_LON=-120.14 = 239.85 (33,15)
 #
-export NL_MIN_LAT=-15.
-export NL_MAX_LAT=60.
-export NL_MIN_LON=40.
-export NL_MAX_LON=170.
-export NNL_MIN_LAT=${NL_MIN_LAT}
-export NNL_MAX_LAT=${NL_MAX_LAT}
+# NL_MIN_LON, NL_MAX_LON = [-180.,190.]
+# NL_MIN_LAT, NL_MAX_LAT = [-90.,90.]
+# NNL_MIN_LON, NL_MAX_LON = [0.,360.]
+# NNL_MIN_LON, NL_MAX_LON = [-90.,90.]
+export NL_MIN_LON=58.
+export NL_MAX_LON=152.
+export NL_MIN_LAT=-8.
+export NL_MAX_LAT=52.
 export NNL_MIN_LON=${NL_MIN_LON}
-if [[ ${NL_MIN_LON} -gt 180 ]]; then 
-   (( NNL_MIN_LON=${NL_MIN_LON}-360 ))
+if [[ ${NL_MIN_LON} -lt 0. ]]; then
+   (( NNL_MIN_LON=${NL_MIN_LON}+360 ))
 fi
 export NNL_MAX_LON=${NL_MAX_LON}
-if [[ ${NL_MAX_LON} -gt 180 ]]; then 
-   (( NNL_MAX_LON=${NL_MAX_LON}-360 ))
- fi 
+if [[ ${NL_MAX_LON} -lt 0. ]]; then
+   (( NNL_MAX_LON=${NL_MAX_LON}+360 ))
+fi
+export NNL_MIN_LAT=${NL_MIN_LAT}
+export NNL_MAX_LAT=${NL_MAX_LAT}
+#
 export NL_OBS_PRESSURE_TOP=10000.
 #
 # PERT CHEM PARAMETERS
@@ -761,9 +765,9 @@ export NL_KEMIT=${NNZ_CHEM}
 # APM NO_CHEM
 #export NL_CHEM_OPT=0,0
 export NL_CHEM_OPT=112,112
-export NL_BIOEMDT=1,1
-export NL_PHOTDT=1,1
-export NL_CHEMDT=1,1
+export NL_BIOEMDT=0,0
+export NL_PHOTDT=0,0
+export NL_CHEMDT=0,0
 export NL_IO_STYLE_EMISSIONS=2
 export NL_EMISS_INPT_OPT=111,111
 export NL_EMISS_OPT=8,8
@@ -1020,8 +1024,8 @@ export NL_CONV_STATE_VARIABLES="'U',     'KIND_U_WIND_COMPONENT',     'TYPE_U', 
           'DUST_3','KIND_DST03',                'TYPE_DST03','UPDATE','999',
           'DUST_4','KIND_DST04',                'TYPE_DST04','UPDATE','999',
           'DUST_5','KIND_DST05',                'TYPE_DST05','UPDATE','999',
-          'BC1','KIND_CB1',                     'TYPE_EXTCOF','UPDATE','999',
-          'BC2','KIND_CB2',                     'TYPE_EXTCOF','UPDATE','999',
+          'BC1','KIND_BC1',                     'TYPE_EXTCOF','UPDATE','999',
+          'BC2','KIND_BC2',                     'TYPE_EXTCOF','UPDATE','999',
           'OC1','KIND_OC1',                     'TYPE_EXTCOF','UPDATE','999',
           'OC2','KIND_OC2',                     'TYPE_EXTCOF','UPDATE','999',
           'sulf','KIND_SO4',                    'TYPE_SO4'   ,'UPDATE','999',
@@ -1283,7 +1287,7 @@ if [[ ${RUN_GEOGRID} = "true" ]]; then
 #
    RANDOM=$$
    export JOBRND=${RANDOM}_geogrid
-   ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} geogrid.exe SERIAL
+   ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} geogrid.exe SERIAL ${ACCOUNT}
    sbatch -W job.ksh
 fi
 #
@@ -1360,7 +1364,7 @@ if [[ ${RUN_UNGRIB} = "true" ]]; then
 #
    RANDOM=$$
    export JOBRND=${RANDOM}_ungrib
-   ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} ungrib.exe SERIAL
+   ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} ungrib.exe SERIAL ${ACCOUNT}
    sbatch -W job.ksh
 #
 # TAR THE PARENT FORECAST FILES
@@ -1422,7 +1426,7 @@ if [[ ${RUN_METGRID} = "true" ]]; then
 #
    RANDOM=$$
    export JOBRND=${RANDOM}_metgrid
-   ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} metgrid.exe SERIAL
+   ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} metgrid.exe SERIAL ${ACCOUNT}
    sbatch -W job.ksh
 fi
 #
@@ -1489,7 +1493,7 @@ if [[ ${RUN_REAL} = "true" ]]; then
 #
       RANDOM=$$
       export JOBRND=${RANDOM}_real
-      ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} real.exe SERIAL
+      ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} real.exe SERIAL ${ACCOUNT}
       sbatch -W job.ksh
 #
       mv wrfinput_d${CR_DOMAIN} wrfinput_d${CR_DOMAIN}_$(${BUILD_DIR}/da_advance_time.exe ${P_DATE} 0 -W 2>/dev/null)
@@ -1858,7 +1862,7 @@ if [[ ${RUN_PERT_WRFCHEM_MET_IC} = "true" ]]; then
 #
 #         RANDOM=$$
          export JOBRND=${TRANDOM}_wrfda_cr
-         ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${WRFDA_JOB_CLASS} ${WRFDA_TIME_LIMIT} ${WRFDA_NODES} ${WRFDA_TASKS} da_wrfvar.exe SERIAL
+         ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${WRFDA_JOB_CLASS} ${WRFDA_TIME_LIMIT} ${WRFDA_NODES} ${WRFDA_TASKS} da_wrfvar.exe SERIAL ${ACCOUNT}
          sbatch job.ksh
 #
 # FINE RESOLUTION GRID
@@ -1890,7 +1894,7 @@ if [[ ${RUN_PERT_WRFCHEM_MET_IC} = "true" ]]; then
 #
 #         RANDOM=$$
 #         export JOBRND=${TRANDOM}_wrfda_fr
-#         ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${WRFDA_JOB_CLASS} ${WRFDA_TIME_LIMIT} ${WRFDA_NODES} ${WRFDA_TASKS} da_wrfvar.exe SERIAL
+#         ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${WRFDA_JOB_CLASS} ${WRFDA_TIME_LIMIT} ${WRFDA_NODES} ${WRFDA_TASKS} da_wrfvar.exe SERIAL ${ACCOUNT}
 #         sbatch job.ksh
          let MEM=${MEM}+1
       done
@@ -1985,7 +1989,7 @@ if [[ ${RUN_PERT_WRFCHEM_MET_BC} = "true" ]]; then
 #
 #         RANDOM=$$
          export JOBRND=${TRANDOM}_pert_bc
-         ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${SINGLE_JOB_CLASS} ${SINGLE_TIME_LIMIT} ${SINGLE_NODES} ${SINGLE_TASKS} pert_wrf_bc SERIAL
+         ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${SINGLE_JOB_CLASS} ${SINGLE_TIME_LIMIT} ${SINGLE_NODES} ${SINGLE_TASKS} pert_wrf_bc SERIAL ${ACCOUNT}
          sbatch job.ksh
          export L_DATE=${NEXT_L_DATE} 
       done
@@ -2161,7 +2165,7 @@ EOF
 #
       RANDOM=$$
       export JOBRND=${RANDOM}_bio
-      ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${BIO_JOB_CLASS} ${BIO_TIME_LIMIT} ${BIO_NODES} ${BIO_TASKS} "megan_bio_emiss.exe < megan_bio_emiss.inp" SERIAL
+      ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${BIO_JOB_CLASS} ${BIO_TIME_LIMIT} ${BIO_NODES} ${BIO_TASKS} "megan_bio_emiss.exe < megan_bio_emiss.inp" SERIAL ${ACCOUNT}
       sbatch -W job.ksh
 #
 # TEST WHETHER OUTPUT EXISTS
@@ -2239,7 +2243,7 @@ EOF
 #
    RANDOM=$$
    export JOBRND=${RANDOM}_fire
-   ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} "fire_emis.exe < fire_emis.mozc.inp" SERIAL
+   ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} "fire_emis.exe < fire_emis.mozc.inp" SERIAL ${ACCOUNT}
    sbatch -W job.ksh
 #
    export L_DATE=${DATE}
@@ -2363,7 +2367,7 @@ EOF
    export JOBRND=${RANDOM}_icbc_pert_cr
    cat << EOF > job.ksh
 #!/bin/ksh -aeux
-#SBATCH --account ucb93_summit1
+#SBATCH --account ucb93_summit2
 #SBATCH --job-name ${JOBRND}
 #SBATCH --qos ${GENERAL_JOB_CLASS}
 #SBATCH --time ${GENERAL_TIME_LIMIT}
@@ -2426,7 +2430,7 @@ EOF
 #   export JOBRND=${RANDOM}_icbc_pert_fr
 #   cat << EOF > job.ksh
 ##!/bin/ksh -aeux
-##SBATCH --account ucb93_summit1
+##SBATCH --account ucb93_summit2
 ##SBATCH --job-name ${JOBRND}
 ##SBATCH --qos ${GENERAL_JOB_CLASS}
 ##SBATCH --time ${GENERAL_TIME_LIMIT}
@@ -2610,7 +2614,7 @@ ch_bio_spc='MSEBIO_ISOP',
 EOF
       RANDOM=$$
       export JOBRND=${RANDOM}_cr_emiss_pert
-      ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} perturb_chem_emiss_CORR_RT_CONST.exe SERIAL
+      ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} perturb_chem_emiss_CORR_RT_CONST.exe SERIAL ${ACCOUNT}
       sbatch -W job.ksh
 #
 # GET FINE GRID EMISSON FILES FOR THIS MEMBER
@@ -2675,7 +2679,7 @@ EOF
 #
 #   RANDOM=$$
 #   export JOBRND=${RANDOM}_fr_emiss_pert
-#   ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} perturb_chem_emiss_CORR_RT_CONST.exe SERIAL
+#   ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} perturb_chem_emiss_CORR_RT_CONST.exe SERIAL ${ACCOUNT}
 #   sbatch -W job.ksh
 #
 # ADVANCE TIME
@@ -2735,7 +2739,7 @@ if ${RUN_MOPITT_CO_OBS}; then
    export JOBRND=${RANDOM}_idl_mopitt
    cat << EOFF > job.ksh
 #!/bin/ksh -aeux
-#SBATCH --account ucb93_summit1
+#SBATCH --account ucb93_summit2
 #SBATCH --job-name ${JOBRND}
 #SBATCH --qos ${GENERAL_JOB_CLASS}
 #SBATCH --time ${GENERAL_TIME_LIMIT}
@@ -2748,7 +2752,7 @@ module load idl
 #
 idl << EOF
 .compile mopitt_extract_no_transform_RT.pro
-mopitt_extract_no_transform_RT, ${MOP_INFILE}, ${MOP_OUTFILE}, ${BIN_BEG}, ${BIN_END}, ${NNL_MIN_LON}, ${NNL_MAX_LON}, ${NNL_MIN_LAT}, ${NNL_MAX_LAT}
+mopitt_extract_no_transform_RT, ${MOP_INFILE}, ${MOP_OUTFILE}, ${BIN_BEG}, ${BIN_END}, ${NL_MIN_LON}, ${NL_MAX_LON}, ${NL_MIN_LAT}, ${NL_MAX_LAT}
 EOF
 export RC=\$?     
 if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
@@ -2775,7 +2779,7 @@ EOFF
       export JOBRND=${RANDOM}_idl_mopitt
       cat << EOFF > job.ksh
 #!/bin/ksh -aeux
-#SBATCH --account ucb93_summit1
+#SBATCH --account ucb93_summit2
 #SBATCH --job-name ${JOBRND}
 #SBATCH --qos ${GENERAL_JOB_CLASS}
 #SBATCH --time ${GENERAL_TIME_LIMIT}
@@ -2788,7 +2792,7 @@ module load idl
 #
 idl << EOF
 .compile mopitt_extract_no_transform_RT.pro
-mopitt_extract_no_transform_RT, ${MOP_INFILE}, ${MOP_OUTFILE}, ${BIN_BEG}, ${BIN_END}, ${NNL_MIN_LON}, ${NNL_MAX_LON}, ${NNL_MIN_LAT}, ${NNL_MAX_LAT}
+mopitt_extract_no_transform_RT, ${MOP_INFILE}, ${MOP_OUTFILE}, ${BIN_BEG}, ${BIN_END}, ${NL_MIN_LON}, ${NL_MAX_LON}, ${NL_MIN_LAT}, ${NL_MAX_LAT}
 EOF
 export RC=\$?     
 if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
@@ -2930,7 +2934,7 @@ if ${RUN_IASI_CO_OBS}; then
                export JOBRND=${RANDOM}_idl_iasi
                cat << EOFF > job.ksh
 #!/bin/ksh -aeux
-#SBATCH --account ucb93_summit1
+#SBATCH --account ucb93_summit2
 #SBATCH --job-name ${JOBRND}
 #SBATCH --qos ${GENERAL_JOB_CLASS}
 #SBATCH --time ${GENERAL_TIME_LIMIT}
@@ -2943,7 +2947,7 @@ module load idl
 #
 idl << EOF
 .compile iasi_extract_no_transform_UA.pro
-iasi_extract_no_transform_UA,${INFILE},${OUTFILE},${BIN_BEG_SEC},${BIN_END_SEC}, ${NNL_MIN_LON}, ${NNL_MAX_LON}, ${NNL_MIN_LAT}, ${NNL_MAX_LAT}
+iasi_extract_no_transform_UA,${INFILE},${OUTFILE},${BIN_BEG_SEC},${BIN_END_SEC}, ${NL_MIN_LON}, ${NL_MAX_LON}, ${NL_MIN_LAT}, ${NL_MAX_LAT}
 EOF
 export RC=\$?     
 if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
@@ -3030,7 +3034,7 @@ EOFF
                export JOBRND=${RANDOM}_idl_iasi
                cat << EOFF > job.ksh
 #!/bin/ksh -aeux
-#SBATCH --account ucb93_summit1
+#SBATCH --account ucb93_summit2
 #SBATCH --job-name ${JOBRND}
 #SBATCH --qos ${GENERAL_JOB_CLASS}
 #SBATCH --time ${GENERAL_TIME_LIMIT}
@@ -3043,7 +3047,7 @@ module load idl
 #
 idl << EOF
 .compile iasi_extract_no_transform_UA.pro
-iasi_extract_no_transform_UA,${INFILE},${OUTFILE},${BIN_BEG_SEC},${BIN_END_SEC}, ${NNL_MIN_LON}, ${NNL_MAX_LON}, ${NNL_MIN_LAT}, ${NNL_MAX_LAT}
+iasi_extract_no_transform_UA,${INFILE},${OUTFILE},${BIN_BEG_SEC},${BIN_END_SEC}, ${NL_MIN_LON}, ${NL_MAX_LON}, ${NL_MIN_LAT}, ${NL_MAX_LAT}
 EOF
 export RC=\$?     
 if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
@@ -3223,7 +3227,7 @@ if ${RUN_IASI_O3_OBS}; then
          export JOBRND=${RANDOM}_idl_iasi
          cat << EOFF > job.ksh
 #!/bin/ksh -aeux
-#SBATCH --account ucb93_summit1
+#SBATCH --account ucb93_summit2
 #SBATCH --job-name ${JOBRND}
 #SBATCH --qos ${GENERAL_JOB_CLASS}
 #SBATCH --time ${GENERAL_TIME_LIMIT}
@@ -3236,7 +3240,7 @@ module load idl
 #
 idl << EOF
 .compile create_ascii_IASI_O3.pro
-create_ascii_IASI_O3,${INFILE_COL},${INFILE_ERR},${INFILE_VMR},${OUTFILE},${BIN_BEG_SEC},${BIN_END_SEC}, ${NNL_MIN_LON}, ${NNL_MAX_LON}, ${NNL_MIN_LAT}, ${NNL_MAX_LAT}, ${DATE}
+create_ascii_IASI_O3,${INFILE_COL},${INFILE_ERR},${INFILE_VMR},${OUTFILE},${BIN_BEG_SEC},${BIN_END_SEC}, ${NL_MIN_LON}, ${NL_MAX_LON}, ${NL_MIN_LAT}, ${NL_MAX_LAT}, ${DATE}
 EOF
 export RC=\$?     
 if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
@@ -3296,7 +3300,7 @@ EOFF
          export JOBRND=${RANDOM}_idl_iasi
          cat << EOFF > job.ksh
 #!/bin/ksh -aeux
-#SBATCH --account ucb93_summit1
+#SBATCH --account ucb93_summit2
 #SBATCH --job-name ${JOBRND}
 #SBATCH --qos ${GENERAL_JOB_CLASS}
 #SBATCH --time ${GENERAL_TIME_LIMIT}
@@ -3309,7 +3313,7 @@ module load idl
 #
 idl << EOF
 .compile create_ascii_IASI_O3.pro
-create_ascii_IASI_O3,${INFILE_COL},${INFILE_ERR},${INFILE_VMR},${OUTFILE},${BIN_BEG_SEC},${BIN_END_SEC}, ${NNL_MIN_LON}, ${NNL_MAX_LON}, ${NNL_MIN_LAT}, ${NNL_MAX_LAT}, ${DATE}
+create_ascii_IASI_O3,${INFILE_COL},${INFILE_ERR},${INFILE_VMR},${OUTFILE},${BIN_BEG_SEC},${BIN_END_SEC}, ${NL_MIN_LON}, ${NL_MAX_LON}, ${NL_MIN_LAT}, ${NL_MAX_LAT}, ${DATE}
 EOF
 export RC=\$?     
 if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
@@ -3465,8 +3469,8 @@ if ${RUN_AIRNOW_O3_OBS}; then
    export NL_HOUR=${L_HH}
 #
    export NL_FILENAME=\'airnow_o3_hourly_csv_data\'
-   export NL_LAT_MN=${NL_MIN_LAT}
-   export NL_LAT_MX=${NL_MAX_LAT}
+   export NL_LAT_MN=${NNL_MIN_LAT}
+   export NL_LAT_MX=${NNL_MAX_LAT}
    export NL_LON_MN=${NNL_MIN_LON}
    export NL_LON_MX=${NNL_MAX_LON}
    export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
@@ -3534,8 +3538,8 @@ if ${RUN_AIRNOW_CO_OBS}; then
    export NL_HOUR=${L_HH}
 #
    export NL_FILENAME=\'airnow_co_hourly_csv_data\'
-   export NL_LAT_MN=${NL_MIN_LAT}
-   export NL_LAT_MX=${NL_MAX_LAT}
+   export NL_LAT_MN=${NNL_MIN_LAT}
+   export NL_LAT_MX=${NNL_MAX_LAT}
    export NL_LON_MN=${NNL_MIN_LON}
    export NL_LON_MX=${NNL_MAX_LON}
    export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
@@ -3607,8 +3611,8 @@ if ${RUN_PANDA_CO_OBS}; then
 #
    export NL_FILENAME_COORD=\'panda_station_coordinates.csv\'
    export NL_FILENAME_DATA=\'panda_stationData.csv\'
-   export NL_LAT_MN=${NL_MIN_LAT}
-   export NL_LAT_MX=${NL_MAX_LAT}
+   export NL_LAT_MN=${NNL_MIN_LAT}
+   export NL_LAT_MX=${NNL_MAX_LAT}
    export NL_LON_MN=${NNL_MIN_LON}
    export NL_LON_MX=${NNL_MAX_LON}
 #
@@ -3678,8 +3682,8 @@ if ${RUN_PANDA_O3_OBS}; then
 #
    export NL_FILENAME_COORD=\'panda_station_coordinates.csv\'
    export NL_FILENAME_DATA=\'panda_stationData.csv\'
-   export NL_LAT_MN=${NL_MIN_LAT}
-   export NL_LAT_MX=${NL_MAX_LAT}
+   export NL_LAT_MN=${NNL_MIN_LAT}
+   export NL_LAT_MX=${NNL_MAX_LAT}
    export NL_LON_MN=${NNL_MIN_LON}
    export NL_LON_MX=${NNL_MAX_LON}
 #
@@ -3749,8 +3753,8 @@ if ${RUN_PANDA_PM25_OBS}; then
 #
    export NL_FILENAME_COORD=\'panda_station_coordinates.csv\'
    export NL_FILENAME_DATA=\'panda_stationData.csv\'
-   export NL_LAT_MN=${NL_MIN_LAT}
-   export NL_LAT_MX=${NL_MAX_LAT}
+   export NL_LAT_MN=${NNL_MIN_LAT}
+   export NL_LAT_MX=${NNL_MAX_LAT}
    export NL_LON_MN=${NNL_MIN_LON}
    export NL_LON_MX=${NNL_MAX_LON}
 #
@@ -3812,7 +3816,7 @@ if ${RUN_MODIS_AOD_OBS}; then
    export JOBRND=${RANDOM}_idl_modis
    cat << EOFF > job.ksh
 #!/bin/ksh -aeux
-#SBATCH --account ucb93_summit1
+#SBATCH --account ucb93_summit2
 #SBATCH --job-name ${JOBRND}
 #SBATCH --qos ${GENERAL_JOB_CLASS}
 #SBATCH --time ${GENERAL_TIME_LIMIT}
@@ -4061,7 +4065,7 @@ if ${RUN_PREPROCESS_OBS}; then
    export JOBRND=${RANDOM}_preproc
    cat << EOFF > job.ksh
 #!/bin/ksh -aeux
-#SBATCH --account ucb93_summit1
+#SBATCH --account ucb93_summit2
 #SBATCH --job-name ${JOBRND}
 #SBATCH --qos ${GENERAL_JOB_CLASS}
 #SBATCH --time ${GENERAL_TIME_LIMIT}
@@ -4219,7 +4223,7 @@ if ${RUN_WRFCHEM_INITIAL}; then
       ${HYBRID_SCRIPTS_DIR}/da_create_wrfchem_namelist_RT.ksh
 #
       export JOBRND=${TRANDOM}_wrf
-      ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${WRFCHEM_JOB_CLASS} ${WRFCHEM_TIME_LIMIT} ${WRFCHEM_NODES} ${WRFCHEM_TASKS} wrf.exe PARALLEL
+      ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${WRFCHEM_JOB_CLASS} ${WRFCHEM_TIME_LIMIT} ${WRFCHEM_NODES} ${WRFCHEM_TASKS} wrf.exe PARALLEL ${ACCOUNT}
       sbatch job.ksh
       let IMEM=${IMEM}+1
    done
@@ -4354,7 +4358,7 @@ if ${RUN_DART_FILTER}; then
       cd ${RUN_DIR}/${DATE}/dart_filter/wrk_wrf_${CMEM}
 #
       export JOBRND=${TRANDOM}_wrf2drt
-      ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} wrf_to_dart SERIAL
+      ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} wrf_to_dart SERIAL ${ACCOUNT}
       sbatch job.ksh
       let MEM=${MEM}+1
    done
@@ -4431,7 +4435,7 @@ EOF
 #
    RANDOM=$$
    export JOBRND=${RANDOM}_filter
-   ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${FILTER_JOB_CLASS} ${FILTER_TIME_LIMIT} ${FILTER_NODES} ${FILTER_TASKS} filter PARALLEL
+   ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${FILTER_JOB_CLASS} ${FILTER_TIME_LIMIT} ${FILTER_NODES} ${FILTER_TASKS} filter PARALLEL ${ACCOUNT}
    sbatch -W job.ksh
 #
 # Check whether DART worked properly
@@ -4499,7 +4503,7 @@ EOF
       fi
 #
       export JOBRND=${TRANDOM}_drt2wrf
-      ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} dart_to_wrf SERIAL
+      ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${GENERAL_JOB_CLASS} ${GENERAL_TIME_LIMIT} ${GENERAL_NODES} ${GENERAL_TASKS} dart_to_wrf SERIAL ${ACCOUNT}
       sbatch job.ksh
 #
       let MEM=${MEM}+1
@@ -4808,7 +4812,7 @@ EOF
       ${HYBRID_SCRIPTS_DIR}/da_create_wrfchem_namelist_RT.ksh
 #
       export JOBRND=${TRANDOM}_wrf
-      ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${WRFCHEM_JOB_CLASS} ${WRFCHEM_TIME_LIMIT} ${WRFCHEM_NODES} ${WRFCHEM_TASKS} wrf.exe PARALLEL
+      ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${WRFCHEM_JOB_CLASS} ${WRFCHEM_TIME_LIMIT} ${WRFCHEM_NODES} ${WRFCHEM_TASKS} wrf.exe PARALLEL ${ACCOUNT}
       sbatch job.ksh
 #
       let IMEM=${IMEM}+1
@@ -4870,7 +4874,7 @@ if ${RUN_BAND_DEPTH}; then
    export JOBRND=${RANDOM}_deepmem
    cat << EOFF > job.ksh
 #!/bin/ksh -aeux
-#SBATCH --account ucb93_summit1
+#SBATCH --account ucb93_summit2
 #SBATCH --job-name ${JOBRND}
 #SBATCH --qos ${GENERAL_JOB_CLASS}
 #SBATCH --time ${GENERAL_TIME_LIMIT}
@@ -4989,7 +4993,7 @@ if ${RUN_WRFCHEM_CYCLE_FR}; then
 #
    RANDOM=$$
    export JOBRND=${RANDOM}_wrf
-   ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${WRFCHEM_JOB_CLASS} ${WRFCHEM_TIME_LIMIT} ${WRFCHEM_NODES} ${WRFCHEM_TASKS} wrf.exe PARALLEL
+   ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${WRFCHEM_JOB_CLASS} ${WRFCHEM_TIME_LIMIT} ${WRFCHEM_NODES} ${WRFCHEM_TASKS} wrf.exe PARALLEL ${ACCOUNT}
    sbatch -W job.ksh
 #
 fi
@@ -5138,7 +5142,7 @@ if ${RUN_ENSMEAN_CYCLE_FR}; then
 #
    RANDOM=$$
    export JOBRND=${RANDOM}_wrf
-   ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${WRFCHEM_JOB_CLASS} ${WRFCHEM_TIME_LIMIT} ${WRFCHEM_NODES} ${WRFCHEM_TASKS} wrf.exe PARALLEL
+   ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${WRFCHEM_JOB_CLASS} ${WRFCHEM_TIME_LIMIT} ${WRFCHEM_NODES} ${WRFCHEM_TASKS} wrf.exe PARALLEL ${ACCOUNT}
    sbatch -W job.ksh
 fi
 #

@@ -4,7 +4,7 @@
 # by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# $Id$
+# $Id: run_obs_diag_FINAL.ksh 13169 2019-05-09 14:40:33Z mizzi@ucar.edu $
 #
 
 ###############################################################################
@@ -13,15 +13,18 @@
 #
 ############################################################################### 
 #
-export START_DATE=2014072006
-export END_DATE=2014072006
-export START_DATE=2014071406
-export END_DATE=2014071406
+export START_DATE=2014071606
+export END_DATE=2014071706
 #
 # Define EXPERIMENT path
-export DIR_NAME=real_FRAPPE_CONTROL
-#export DIR_NAME=real_FRAPPE_RETR_MOP_CO
-#export DIR_NAME=real_FRAPPE_CPSR_MOP_CO
+#export DIR_NAME=real_FRAPPE_CONTROL
+#export DIR_NAME=real_FRAPPE_RETR_IAS_CO
+#export DIR_NAME=real_FRAPPE_RETR_AIR_CO
+export DIR_NAME=real_FRAPPE_CPSR_MOP_CO_INF_DAMP
+export DIR_NAME=real_FRAPPE_CPSR_IAS_CO_INF_DAMP
+export DIR_NAME=real_FRAPPE_RETR_MOP_CO_INF_DAMP
+#export DIR_NAME=real_FRAPPE_RETR_MOP_CO_1p0
+#export DIR_NAME=real_FRAPPE_CPSR_MOP_CO_1p0
 #
 # Define FILTER path
 export DART_FILTER=dart_filter
@@ -29,7 +32,7 @@ export DART_FILTER=dart_filter
 export DELETE_FLG=true
 export DOMAIN=01
 export NUM_MEMBERS=30
-export CYCLE_PERIOD=6
+export CYCLE_PERIOD=12
 export FCST_PERIOD=6
 export ASIM_PERIOD=3
 export LBC_FREQ=3
@@ -77,7 +80,7 @@ while [[ ${L_DATE} -le ${END_DATE} ]]; do
    export L_HH=`echo $L_DATE | cut -c9-10`
    export L_FILE_DATE=${L_YY}-${L_MM}-${L_DD}_${L_HH}:00:00
 #
-   export NEXT_DATE=`echo ${L_DATE} +${FCST_PERIOD}h | ./advance_time` 
+   export NEXT_DATE=`echo ${L_DATE} +${CYCLE_PERIOD}h | ./advance_time` 
    export NEXT_YY=`echo $NEXT_DATE | cut -c1-4`
    export NEXT_MM=`echo $NEXT_DATE | cut -c5-6`
    export NEXT_DD=`echo $NEXT_DATE | cut -c7-8`
@@ -185,13 +188,13 @@ export NL_LAST_BIN_CENTER_SS=0
 export NL_BIN_SEPARATION_YY=0
 export NL_BIN_SEPARATION_MM=0
 export NL_BIN_SEPARATION_DD=0
-export NL_BIN_SEPARATION_HH=6
+export NL_BIN_SEPARATION_HH=${CYCLE_PERIOD}
 export NL_BIN_SEPARATION_MN=0
 export NL_BIN_SEPARATION_SS=0
 export NL_BIN_WIDTH_YY=0
 export NL_BIN_WIDTH_MM=0
 export NL_BIN_WIDTH_DD=0
-export NL_BIN_WIDTH_HH=6
+export NL_BIN_WIDTH_HH=${CYCLE_PERIOD}
 export NL_BIN_WIDTH_MN=0
 export NL_BIN_WIDTH_SS=0
 export NL_TIME_TO_SKIP_YY=0
@@ -242,14 +245,15 @@ export NL_LAST_BIN_END_HH=${ASIM_MAX_HH_END}
 export NL_LAST_BIN_END_MN=0
 export NL_LAST_BIN_END_SS=0
 export NL_BIN_INTERVAL_DAYS=0
-export NL_BIN_INTERVAL_SECONDS=21600
+#export NL_BIN_INTERVAL_SECONDS=21600
+export NL_BIN_INTERVAL_SECONDS=43200
 export NL_MAX_NUMBER_BINS=1000
 export NL_PRINT_TABLE=.false.
 #
 # &assim_tools_nml
    export NL_CUTOFF=0.1
-   export NL_SPECIAL_LOCALIZATION_OBS_TYPES="'MOPITT_CO_RETRIEVAL'"
-   export NL_SPECIAL_LOCALIZATION_CUTOFFS=0.025
+   export NL_SPECIAL_LOCALIZATION_OBS_TYPES="'MOPITT_CO_RETRIEVAL','IASI_CO_RETRIEVAL'"
+   export NL_SPECIAL_LOCALIZATION_CUTOFFS=0.025,0.025
 #
 # &ensemble_manager_nml
    export NL_SINGLE_RESTART_FILE_IN=.false.       
@@ -444,11 +448,11 @@ export NL_PRINT_TABLE=.false.
                                       'AIRCRAFT_TEMPERATURE',
                                       'SAT_U_WIND_COMPONENT',
                                       'SAT_V_WIND_COMPONENT',
-                                      'MOPITT_CO_RETRIEVAL'"
-#                                      'AIRNOW_CO'"
+                                      'IASI_CO_RETRIEVAL',
+                                      'MOPITT_CO_RETRIEVAL',
+                                      'AIRNOW_CO'"
 #                                      'OMI_NO2_COLUMN'"
 #                                      'AIRNOW_O3'"
-#                                      'IASI_CO_RETRIEVAL',
 #                                      'IASI_O3_RETRIEVAL',
 #                                      'MODIS_AOD_RETRIEVAL',
    export NL_EVALUATE_THESE_OBS_TYPES="'MODIS_AOD_RETRIEVAL'"
@@ -510,7 +514,7 @@ rm -rf obs_diag
 
 #
 # <next few lines under version control, do not edit>
-# $URL$
-# $Id$
-# $Revision$
-# $Date$
+# $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/models/wrf_chem/run_diagnostics/run_obs_diag_FINAL.ksh $
+# $Id: run_obs_diag_FINAL.ksh 13169 2019-05-09 14:40:33Z mizzi@ucar.edu $
+# $Revision: 13169 $
+# $Date: 2019-05-09 08:40:33 -0600 (Thu, 09 May 2019) $

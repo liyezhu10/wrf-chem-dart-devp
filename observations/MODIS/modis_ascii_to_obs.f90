@@ -5,10 +5,10 @@
 program modis_ascii_to_obs
 
 ! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
+! $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/observations/MODIS/modis_ascii_to_obs.f90 $
+! $Id: modis_ascii_to_obs.f90 11132 2017-02-22 19:55:59Z mizzi@ucar.edu $
+! $Revision: 11132 $
+! $Date: 2017-02-22 12:55:59 -0700 (Wed, 22 Feb 2017) $
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
@@ -145,9 +145,12 @@ obsloop: do    ! no end limit - have the loop break when input ends
    ! here, otype is fixed to 1 for MODIS AOD
    if (debug) print *, 'next observation type = ', otype
 
+   ! lon = [-180.,180.]
+   ! lon = [-90.,900.]
    read(input_line(3:84), *, iostat=rcio) lat, lon, vert, &
                               year, month, day, hour, minute, second, &
                               aod, aoderr
+   if(lon.lt.0.) lon=lon+360.
     ! temp correction (July 1 comes in as July 0)
     if(month.eq.7 .and. day.eq.0) then
        day = day + 1
@@ -163,19 +166,10 @@ obsloop: do    ! no end limit - have the loop break when input ends
    if (debug) print *, 'next observation located at lat, lon = ', lat, lon
 
    ! check the lat/lon values to see if they are ok
-   !if ( lat >  90.0_r8 .or. lat <  -90.0_r8 ) cycle obsloop
-   !if ( lon <   0.0_r8 .or. lon >  360.0_r8 ) cycle obsloop
-
-
-   ! if lon comes in between -180 and 180, use these lines instead:
-   if ( lat >  90.0_r8 .or. lat <  -90.0_r8 ) cycle obsloop
-   if ( lon > 180.0_r8 .or. lon < -180.0_r8 ) cycle obsloop
+   if ( lon <   0.0_r8 .or. lon >  360.0_r8 ) cycle obsloop
+   if ( lat < -90.0_r8 .or. lat >   90.0_r8 ) cycle obsloop
    if ( lon < 0.0_r8 )  lon = lon + 360.0_r8 ! changes into 0-360
 
-!
-! APM: skip for single obs cluster
-!   if ( lon < 263.0_r8 .or. lon > 267.0_r8 .or. lat < 38.0_r8 .or. lat > 42.0_r8 ) cycle obsloop
-!
    ! put date into a dart time format
    time_obs = set_date(year, month, day, hour, minute, second)
 
@@ -257,16 +251,15 @@ use     location_mod, only : set_location
 real(r8)           :: obs_val(1), qc_val(1)
 type(obs_def_type) :: obs_def
 
-call set_obs_def_location(obs_def, set_location(lon, lat, vval, vkind))
 call set_obs_def_kind(obs_def, okind)
+call set_obs_def_location(obs_def, set_location(lon, lat, vval, vkind))
 call set_obs_def_time(obs_def, set_time(sec, day))
 call set_obs_def_error_variance(obs_def, oerr * oerr)
-call set_obs_def(obs, obs_def)
-
 obs_val(1) = obsv
 call set_obs_values(obs, obs_val)
 qc_val(1)  = qc
 call set_qc(obs, qc_val)
+call set_obs_def(obs, obs_def)
 
 end subroutine create_3d_obs
 

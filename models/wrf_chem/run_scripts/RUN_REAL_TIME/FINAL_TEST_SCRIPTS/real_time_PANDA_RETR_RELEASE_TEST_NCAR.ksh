@@ -744,9 +744,9 @@ export NL_KEMIT=${NNZ_CHEM}
 # APM NO_CHEM
 #export NL_CHEM_OPT=0,0
 export NL_CHEM_OPT=112,112
-export NL_BIOEMDT=1,1
-export NL_PHOTDT=1,1
-export NL_CHEMDT=1,1
+export NL_BIOEMDT=0,0
+export NL_PHOTDT=0,0
+export NL_CHEMDT=0,0
 export NL_IO_STYLE_EMISSIONS=2
 export NL_EMISS_INPT_OPT=111,111
 export NL_EMISS_OPT=8,8

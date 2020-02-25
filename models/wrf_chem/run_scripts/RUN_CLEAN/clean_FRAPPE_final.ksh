@@ -4,15 +4,20 @@ export NUM_MEMBERS=30
 export WRFDA_VERSION=WRFDAv3.9.1.1_dmpar
 export BUILD_DIR=/projects/mizzi/TRUNK/${WRFDA_VERSION}/var/build
 #
-export EXP=/real_FRAPPE_CONTROL
-export EXP=/real_FRAPPE_RETR_MOP_CO
-export EXP=/real_FRAPPE_CPSR_MOP_CO
+#export EXP=/real_FRAPPE_CONTROL
+#export EXP=/real_FRAPPE_RETR_MOP_CO
+#export EXP=/real_FRAPPE_RETR_IAS_CO
+#export EXP=/real_FRAPPE_RETR_AIR_CO
+#export EXP=/real_FRAPPE_RETR_MOP_CO_INF_DAMP
+#export EXP=/real_FRAPPE_RETR_IAS_CO_INF_DAMP
+export EXP=/real_FRAPPE_CPSR_MOP_CO_INF_DAMP
+#export EXP=/real_FRAPPE_CPSR_IAS_CO_INF_DAMP
 #
 export SOURCE_PATH=/scratch/summit/mizzi${EXP}
 #
-export DATE_STR=2014071406
-export DATE_END=2014071406
-
+export DATE_STR=2014071606
+export DATE_END=2014071806
+#
 export CYCLE_PERIOD=6
 #
 # Copy file into ${L_DATE} subdirectory
@@ -28,15 +33,17 @@ export L_DATE=${DATE_STR}
 # wrfchem_cycle_cr
 #
 while [[ ${L_DATE} -le ${DATE_END} ]] ; do
-   cd ${SOURCE_PATH}/geogrid
+   if [[ -e ${SOURCE_PATH}/geogrid ]]; then
+      cd ${SOURCE_PATH}/geogrid
       rm -rf *geogrid.log*
       rm -rf geogrid.*
       rm -rf index.html
       rm -rf job.ksh
       rm -rf SUCCESS
+   fi
    cd ${SOURCE_PATH}/${L_DATE}
-   rm -rf ungrib
-   rm -rf metgrid
+      rm -rf ungrib
+      rm -rf metgrid
 #   cd ${SOURCE_PATH}/${L_DATE}/metgrid
 #      rm -rf *metgrid.log*
 #      rm -rf FILE:*
@@ -48,7 +55,7 @@ while [[ ${L_DATE} -le ${DATE_END} ]] ; do
 #      rm -rf namelist.wps*
 #      rm -rf SUCCESS
 #   cd ${SOURCE_PATH}/${L_DATE}
-   rm -rf real
+      rm -rf real
 #   cd ${SOURCE_PATH}/${L_DATE}/real
 #      rm -rf *real.log*
 #      rm -rf hist_io*
@@ -60,14 +67,15 @@ while [[ ${L_DATE} -le ${DATE_END} ]] ; do
 #      rm -rf rsl.*
 #      rm -rf SUCCESS
 #   cd ${SOURCE_PATH}/${L_DATE}
-   rm -rf wrfchem_met_ic
-   rm -rf wrfchem_met_bc
-   rm -rf exo_coldens
-   rm -rf seasons_wes
-   rm -rf wrfchem_bio
-   rm -rf wrfchem_fire
-   rm -rf wrfchem_chemi
-   cd ${SOURCE_PATH}/${L_DATE}/wrfchem_chem_icbc
+      rm -rf wrfchem_met_ic
+      rm -rf wrfchem_met_bc
+      rm -rf exo_coldens
+      rm -rf seasons_wes
+      rm -rf wrfchem_bio
+      rm -rf wrfchem_fire
+      rm -rf wrfchem_chemi
+   if [[ -e ${SOURCE_PATH}/${L_DATE}/wrfchem_chem_icbc ]]; then
+      cd ${SOURCE_PATH}/${L_DATE}/wrfchem_chem_icbc
       rm -rf *_cr_icbc_pert.log
       rm -rf job*
       rm -rf met_em*
@@ -77,24 +85,34 @@ while [[ ${L_DATE} -le ${DATE_END} ]] ; do
       rm -rf set*
       rm -rf SUCCESS
       rm -rf wrfbdy*
-      rm -rf wrfinput*
-   cd ${SOURCE_PATH}/${L_DATE}/wrfchem_chem_emiss
+#      rm -rf wrfinput*
+   fi
+   if [[ -e ${SOURCE_PATH}/${L_DATE}/wrfchem_chem_emiss ]]; then
+      cd ${SOURCE_PATH}/${L_DATE}/wrfchem_chem_emiss
       rm -rf *_cr_emiss_pert.log
       rm -rf job*
       rm -rf perturb_chem*
       rm -rf perturb_emiss*
       rm -rf SUCCESS
-      rm -rf wrfbiochemi*
-      rm -rf wrfchemi*
-      rm -rf wrffirechemi*
+      rm -rf wrfbiochemi*:00*
+      rm -rf wrfchemi*:00*
+      rm -rf wrffirechemi*:00*
       rm -rf wrfinput*
+      rm -rf *_mean
+      rm -rf *_sprd
+      rm -rf *_frac
+      rm -rf *_incr
+   fi
    cd ${SOURCE_PATH}/${L_DATE}
    rm -rf mopitt_co_obs
    rm -rf iasi_co_obs
    rm -rf iasi_o3_obs
    rm -rf airnow_co_obs
    rm -rf airnow_o3_obs
-   rm -rf airnow_co_obs
+   rm -rf airnow_no2_obs
+   rm -rf airnow_so2_obs
+   rm -rf airnow_pm10_obs
+   rm -rf airnow_pm25_obs
    rm -rf modis_aod_obs
    rm -rf airnow_co_obs
    rm -rf prepbufr_met_obs
@@ -115,8 +133,9 @@ while [[ ${L_DATE} -le ${DATE_END} ]] ; do
       rm -rf job.ksh
       rm -rf SUCCESS
       rm -rf ubvals_*
-      rm -rf wrfchemi_d*
-      rm -rf wrffirechemi_d*
+      rm -rf wrfchemi_d01
+      rm -rf wrffirechemi_d01
+      rm -rf wrfbiochemi_d01
       rm -rf wrfinput_d*
       rm -rf wrfout_d*   
       rm -rf wrk_dart_e*

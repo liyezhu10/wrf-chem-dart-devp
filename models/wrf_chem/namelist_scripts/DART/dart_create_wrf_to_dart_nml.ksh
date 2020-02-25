@@ -16,6 +16,11 @@ cat > input.nml_temp << EOF
    add_emiss           = ${NL_ADD_EMISS:-.false.},
    use_log_co          = ${NL_USE_LOG_CO:-.false.},
    use_log_o3          = ${NL_USE_LOG_O3:-.false.},
+   use_log_nox         = ${NL_USE_LOG_NOX:-.false.},
+   use_log_so2         = ${NL_USE_LOG_SO2:-.false.},
+   use_log_pm10        = ${NL_USE_LOG_PM10:-.false.},
+   use_log_pm25        = ${NL_USE_LOG_PM25:-.false.},
+   use_log_aod         = ${NL_USE_LOG_AOD:-.false.},
 / 
 EOF
 #

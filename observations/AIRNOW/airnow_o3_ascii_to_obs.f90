@@ -6,10 +6,10 @@
    program create_airnow_o3_obs_sequence
 !
 ! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
+! $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/observations/AIRNOW/airnow_o3_ascii_to_obs.f90 $
+! $Id: airnow_o3_ascii_to_obs.f90 13165 2019-05-07 17:11:04Z thoar@ucar.edu $
+! $Revision: 13165 $
+! $Date: 2019-05-07 11:11:04 -0600 (Tue, 07 May 2019) $
 !
 !=============================================
 ! AIRNOW SURFACE AQ obs
@@ -78,9 +78,9 @@
 !
 ! version controlled file description for error handling, do not edit                          
       character(len=128), parameter :: &
-      source   = "$URL$", &
-      revision = "$Revision$", &
-      revdate  = "$Date$"
+      source   = "$URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/observations/AIRNOW/airnow_o3_ascii_to_obs.f90 $", &
+      revision = "$Revision: 13165 $", &
+      revdate  = "$Date: 2019-05-07 11:11:04 -0600 (Tue, 07 May 2019) $"
 !
       type(obs_sequence_type)      :: seq
       type(obs_type)               :: obs
@@ -127,13 +127,14 @@
       character(len=129)           :: qc_meta_data='AIRNOW QC index'
       character(len=129)           :: file_name='airnow_obs_seq'
       character(len=180)           :: file_in
-      logical                      :: use_log_co, use_log_o3
+      logical                      :: use_log_co,use_log_o3,use_log_nox,use_log_so2,use_log_pm10,use_log_pm25
 
-      real                         :: pi,err_frac,ran1,ran2,zfac
+      real                         :: pi,err_fac,ran1,ran2,zfac
 
       namelist /create_airnow_obs_nml/year0,month0,day0,hour0,beg_year,beg_mon,beg_day, &
       beg_hour,beg_min,beg_sec,end_year,end_mon,end_day,end_hour,end_min,end_sec, &
-      file_in,lat_mn,lat_mx,lon_mn,lon_mx,use_log_co,use_log_o3
+      file_in,lat_mn,lat_mx,lon_mn,lon_mx,use_log_co,use_log_o3,use_log_nox, &
+      use_log_so2,use_log_pm10,use_log_pm25
 
 !============================================================
 !obs sequence extra variables
@@ -141,7 +142,7 @@
 
       pi=4.*atan(1.0)
       fac=1.0
-      err_frac=0.4
+      err_fac=0.3
       obs_qc(1)=0.
 
       save_greg_sec=-9999                                                 
@@ -234,11 +235,6 @@
             lon_mn .le. lon_temp .and. lon_mx .ge. lon_temp .and. &
             beg_greg_sec .le. data_greg_sec_temp .and. end_greg_sec .ge. data_greg_sec_temp) then
             indx=indx+1
-!            call random_number(ran1)
-!            if(ran1.eq.0.) call random_number(ran1)
-!            call random_number(ran2)
-!            if(ran2.eq.0.) call random_number(ran2)
-!            zfac=sqrt(-2.*log(ran1))*cos(2.*pi*ran2)
             lat(indx)=lat_temp
             lon(indx)=lon_temp
             year(indx)=year_temp
@@ -246,19 +242,13 @@
             day(indx)=day_temp
             hour(indx)=hour_temp
             minute(indx)=minute_temp
-            obs_val(indx)=obs_val_temp*fac
-! physical space error
-!            obs_err(indx)=obs_val_temp*fac*err_frac
-            obs_err(indx)=(exp(err_frac)-1.)*obs_val_temp*fac
-            if (use_log_o3) then
-!               o3_log_max=log(obs_val(indx)+obs_err(indx))
-!               o3_log_min=log(obs_val(indx)-obs_err(indx))
-!               obs_err(indx)=o3_log_max-log(obs_val(indx))
-! log space error
-               obs_err(indx)=err_frac
-               obs_val(indx)=log(obs_val(indx))
-            endif
             data_greg_sec(indx)=data_greg_sec_temp
+            obs_val(indx)=obs_val_temp*fac
+            obs_err(indx)=obs_val_temp*fac*err_fac
+            if(use_log_co) then
+               obs_val(indx)=log(obs_val_temp*fac)
+               obs_err(indx)=err_fac
+            endif
          endif
       enddo
 !      print *, 'APM - At end of input file read ',nndx

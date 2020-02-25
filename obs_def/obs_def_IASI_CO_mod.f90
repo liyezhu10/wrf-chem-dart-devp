@@ -2,7 +2,7 @@
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! DART $Id$
+! DART $Id: obs_def_IASI_CO_mod.f90 13121 2019-04-24 16:32:43Z mizzi@ucar.edu $
 
 ! BEGIN DART PREPROCESS KIND LIST
 ! IASI_CO_RETRIEVAL, KIND_CO
@@ -76,9 +76,9 @@ integer,  allocatable, dimension(:) :: iasi_nlevelsp
 
 ! version controlled file description for error handling, do not edit
 character(len=*), parameter :: source   = &
-   "$URL$"
-character(len=*), parameter :: revision = "$Revision$"
-character(len=*), parameter :: revdate  = "$Date$"
+   "$URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/obs_def/obs_def_IASI_CO_mod.f90 $"
+character(len=*), parameter :: revision = "$Revision: 13121 $"
+character(len=*), parameter :: revdate  = "$Date: 2019-04-24 10:32:43 -0600 (Wed, 24 Apr 2019) $"
 
 character(len=512) :: string1, string2
 
@@ -89,8 +89,8 @@ character(len=129)  :: IASI_CO_retrieval_type
 logical             :: use_log_co
 !
 ! IASI_CO_retrieval_type:
-!     RAWR - retrievals in VMR (ppb) units
-!     RETR - retrievals in log10(VMR ([ ])) units
+!     RAWR - retrievals in format from the supplier
+!     RETR - retrievals in retrieval format (ppbv)
 !     QOR  - quasi-optimal retrievals
 !     CPSR - compact phase space retrievals
     namelist /obs_def_IASI_CO_nml/ IASI_CO_retrieval_type, use_log_co
@@ -395,14 +395,13 @@ subroutine get_expected_iasi_co(state, location, key, val, istatus)
          val = val + avg_kernel(key,ilev) * obs_val * 1.e3
       endif
    enddo
-   if (trim(IASI_CO_retrieval_type).eq.'RETR') then
-!      val = val + iasi_prior(key)
-      val = log10(val)
-!         print *, 'prior term       ',iasi_prior(key)
-!         print *, ' '
-   elseif (trim(IASI_CO_retrieval_type).eq.'RAWR' .or. trim(IASI_CO_retrieval_type).eq.'QOR' &
+!
+! NOTE: For the following the mopitt_prior is zero due to the QOR subtraction
+   if (trim(IASI_CO_retrieval_type).eq.'RAWR' .or. trim(IASI_CO_retrieval_type).eq.'QOR' &
    .or. trim(IASI_CO_retrieval_type).eq.'CPSR') then
-!      val = val + iasi_prior(key)
+      val = val + iasi_prior(key)
+   elseif (trim(IASI_CO_retrieval_type).eq.'RETR') then
+      val = val + iasi_prior(key)
    endif
 !
 end subroutine get_expected_iasi_co
@@ -654,7 +653,7 @@ end module obs_def_iasi_CO_mod
 ! END DART PREPROCESS MODULE CODE
 
 ! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
+! $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/obs_def/obs_def_IASI_CO_mod.f90 $
+! $Id: obs_def_IASI_CO_mod.f90 13121 2019-04-24 16:32:43Z mizzi@ucar.edu $
+! $Revision: 13121 $
+! $Date: 2019-04-24 10:32:43 -0600 (Wed, 24 Apr 2019) $

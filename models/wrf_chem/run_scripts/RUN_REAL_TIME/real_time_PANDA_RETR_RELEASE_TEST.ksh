@@ -12,11 +12,11 @@
 #########################################################################
 #
 # CYCLE DATE-TIME:
-export CYCLE_STR_DATE=2014071400
-# initial cycle
-#export CYCLE_STR_DATE=2014072418
-# first assimilation cycle
 export CYCLE_STR_DATE=2014072500
+# initial cycle
+#export CYCLE_STR_DATE=2014072500
+# first assimilation cycle
+#export CYCLE_STR_DATE=2014072506
 #
 export CYCLE_END_DATE=${CYCLE_STR_DATE}
 export CYCLE_END_DATE=2014072500
@@ -65,13 +65,13 @@ fi
 #
 # Run WRF-Chem for failed forecasts
 export RUN_SPECIAL_FORECAST=false
-export NUM_SPECIAL_FORECAST=1
+export NUM_SPECIAL_FORECAST=3
 export SPECIAL_FORECAST_FAC=1.
 export SPECIAL_FORECAST_FAC=1./2.
 export SPECIAL_FORECAST_FAC=2./3.
 export SPECIAL_FORECAST_MEM[1]=4
-export SPECIAL_FORECAST_MEM[2]=2
-export SPECIAL_FORECAST_MEM[3]=3
+export SPECIAL_FORECAST_MEM[2]=7
+export SPECIAL_FORECAST_MEM[3]=8
 export SPECIAL_FORECAST_MEM[4]=4
 export SPECIAL_FORECAST_MEM[5]=5
 export SPECIAL_FORECAST_MEM[6]=6
@@ -287,9 +287,9 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
       export RUN_WRFCHEM_CYCLE_CR=false
       export RUN_BAND_DEPTH=false
       export RUN_WRFCHEM_CYCLE_FR=false
-      export RUN_ENSEMBLE_MEAN_INPUT=false
+      export RUN_ENSEMBLE_MEAN_INPUT=true
       export RUN_ENSMEAN_CYCLE_FR=false
-      export RUN_ENSEMBLE_MEAN_OUTPUT=false
+      export RUN_ENSEMBLE_MEAN_OUTPUT=true
    else
       export RUN_WRFCHEM_INITIAL=false
       export RUN_DART_FILTER=true
