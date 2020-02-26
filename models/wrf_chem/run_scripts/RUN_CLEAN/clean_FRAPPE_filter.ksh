@@ -1,5 +1,25 @@
 #!/bin/ksh -aeux
 #
+# Copyright 2019 University Corporation for Atmospheric Research and 
+# Colorado Department of Public Health and Environment.
+# 
+# Licensed under the Apache License, Version 2.0 (the "License"); 
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software distributed
+# under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR 
+# CONDITIONS OF ANY KIND, either express or implied. See the License for the 
+# specific language governing permissions and limitations under the License.
+# 
+# Development of this code utilized the RMACC Summit supercomputer, which is 
+# supported by the National Science Foundation (awards ACI-1532235 and ACI-1532236),
+# the University of Colorado Boulder, and Colorado State University. The Summit 
+# supercomputer is a joint effort of the University of Colorado Boulder and 
+# Colorado State University.
+
+#
 export NUM_MEMBERS=30
 export WRFDA_VERSION=WRFDAv3.9.1.1_dmpar
 export BUILD_DIR=/projects/mizzi/TRUNK/${WRFDA_VERSION}/var/build
@@ -133,5 +153,3 @@ while [[ ${L_DATE} -le ${DATE_END} ]] ; do
 
    export L_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} ${CYCLE_PERIOD} 2>/dev/null)
 done
-
-
