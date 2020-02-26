@@ -106,8 +106,7 @@ obs_time = get_vd(iasi_input_file, name)
 ; Read Seconds in Day
 name = 'Seconds in Day'
 obs_sec = get_vd(iasi_input_file, name)
-nx = long(n_elements(obs_sec)-1)
-;print, 'Seconds in Day ',obs_sec[0]
+print, 'APM: Read ',name
 ;
 ; Read Pressure grid;
 name = 'Pressure Grid'
@@ -213,7 +212,7 @@ copriorcol = reform(codata[0,*,*])
 copriorcol_err = reform(codata[1,*,*])
 print, 'APM: Read ',name
 ;   
-print, 'APM: Complted data read '
+print, 'APM: Completed data read '
 ;
 ; Open output file
 unit=10
@@ -236,7 +235,8 @@ allqc_count = 0.0
 allpix_count = 0.0
 ;
 ; loop through each pixel
-for k = 0L, nx do begin 
+nx=long(size(avgker)-1)
+for k = 0L, nx(3) do begin 
 ;
 ; Update counter
    allpix_count = allpix_count + 1.0

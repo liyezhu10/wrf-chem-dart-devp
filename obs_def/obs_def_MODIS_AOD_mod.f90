@@ -2,249 +2,400 @@
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! DART $Id$
+! $Id: obs_def_MODIS_AOD_mod.f90 7039 2014-07-02 22:00:57Z mizzi $
+
+! An example of a simple forward operator that involves more than
+! just interpolating directly from a state vector in a model.
+!
+! This section defines a specific type in the left column and
+! can be any string you want to use for an observation.  The
+! right column must be a generic kind that already exists in
+! the obs_kind/DEFAULT_obs_kind_mod.F90 file.
 
 ! BEGIN DART PREPROCESS KIND LIST
-! MODIS_AOD_RETRIEVAL, KIND_AOD
+! MODIS_AOD_RETRIEVAL,         KIND_AOD
 ! END DART PREPROCESS KIND LIST
 
+! This section will be added to the main obs_def_mod.f90 that
+! is going to be generated, to allow it to call the code we
+! are defining here.
+
 ! BEGIN DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
-!   use obs_def_modis_mod, only : write_modis_aod, read_modis_aod, &
-!                                  interactive_modis_aod, get_expected_modis_aod, &
-!                                  set_obs_def_modis_aod
+!   use obs_def_MODIS_AOD_mod, only : get_expected_modis_aod
 ! END DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
 
+! This section will be dropped into a large case statement in the
+! main obs_def_mod.f90 code to control what happens with each
+! observation type that is processed.
+
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
-!         case(MODIS_AOD_RETRIEVAL)                                                           
-!            call get_expected_modis_aod(state, location, obs_def%key, obs_val, istatus)  
+!   case(MODIS_AOD_RETRIEVAL)
+!        call get_expected_modis_aod(state, location, obs_val, istatus) 
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 
+! The next few sections do nothing because there is no additional
+! data to read, write, or prompt for.  But there still needs to be a
+! case statement in the large select, so they must be here.
+
 ! BEGIN DART PREPROCESS READ_OBS_DEF
-!      case(MODIS_AOD_RETRIEVAL)
-!         call read_modis_aod(obs_def%key, ifile, fileformat)
+!   case(MODIS_AOD_RETRIEVAL)
+!     continue
 ! END DART PREPROCESS READ_OBS_DEF
 
 ! BEGIN DART PREPROCESS WRITE_OBS_DEF
-!      case(MODIS_AOD_RETRIEVAL)
-!         call write_modis_aod(obs_def%key, ifile, fileformat)
+!   case(MODIS_AOD_RETRIEVAL)
+!     continue
 ! END DART PREPROCESS WRITE_OBS_DEF
 
 ! BEGIN DART PREPROCESS INTERACTIVE_OBS_DEF
-!      case(MODIS_AOD_RETRIEVAL)
-!         call interactive_modis_aod(obs_def%key)
+!   case(MODIS_AOD_RETRIEVAL)
+!     continue
 ! END DART PREPROCESS INTERACTIVE_OBS_DEF
 
-! BEGIN DART PREPROCESS SET_OBS_DEF_MODIS_AOD
-!      case(MODIS_AOD_RETRIEVAL)
-!         call set_obs_def_modis_aod(obs_def%key)
-! END DART PREPROCESS SET_OBS_DEF_MODIS_AOD
-
+! This is the code that implements the forward operator.
+! Define a module, and make public anything that will be called
+! from the main obs_def_mod.f90 file.  Here it is just the
+! get_expected routine.  There isn't any initialization needed
+! but the stub is there; it could read a namelist if there are
+! any run-time options to be set.
 
 ! BEGIN DART PREPROCESS MODULE CODE
-module obs_def_modis_mod
+module obs_def_MODIS_AOD_mod
 
-use        types_mod, only : r8
-use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG
-use     location_mod, only : location_type, set_location, get_location, VERTISPRESSURE, VERTISUNDEF
-
+use        types_mod, only : r8, missing_r8
+use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG, &
+                             nmlfileunit, check_namelist_read, &
+                             find_namelist_in_file, do_nml_file, do_nml_term, &
+                             ascii_file_format
+use     location_mod, only : location_type, set_location, get_location, VERTISPRESSURE, VERTISLEVEL, VERTISSURFACE, VERTISUNDEF
 use  assim_model_mod, only : interpolate
-use    obs_kind_mod, only  : KIND_AOD
-
+use     obs_kind_mod
 implicit none
 private
 
-public :: write_modis_aod, &
-          read_modis_aod, &
-          interactive_modis_aod, &
-          get_expected_modis_aod, &
-          set_obs_def_modis_aod
-
-! Storage for the special information required for observations of this type
-integer, parameter               :: max_modis_aod_obs = 10000000
-integer                          :: num_modis_aod_obs = 0
+public :: get_expected_modis_aod
 
 ! version controlled file description for error handling, do not edit
-character(len=*), parameter :: source   = &
-   "$URL$"
-character(len=*), parameter :: revision = "$Revision$"
-character(len=*), parameter :: revdate  = "$Date$"
-
-character(len=512) :: string1, string2
+character(len=256), parameter :: source   = &
+   "$URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/obs_def/obs_def_MODIS_AOD_mod.f90 $"
+character(len=32 ), parameter :: revision = "$Revision: 7039 $"
+character(len=128), parameter :: revdate  = "$Date: 2014-07-02 16:00:57 -0600 (Wed, 02 Jul 2014) $"
 
 logical, save :: module_initialized = .false.
-integer  :: counts1 = 0
+logical       :: use_log_aod
+namelist /obs_def_MODIS_AOD_nml/ use_log_aod
 
 contains
 
-!----------------------------------------------------------------------
-!>
+! ---------------------------------------------------
 
 subroutine initialize_module
+! Handle any module initialization tasks
+integer ::     iunit, rc
 
-! Prevent multiple calls from executing this code more than once.
 if (module_initialized) return
 
 call register_module(source, revision, revdate)
 module_initialized = .true.
+use_log_aod=.false.
+! Read the namelist entry.
+call find_namelist_in_file("input.nml", "obs_def_MODIS_AOD_nml", iunit)
+read(iunit, nml = obs_def_MODIS_AOD_nml, iostat = rc)
+call check_namelist_read(iunit, rc, "obs_def_MODIS_AOD_nml")
+
+! Record the namelist values used for the run ... 
+if (do_nml_file()) write(nmlfileunit, nml=obs_def_MODIS_AOD_nml)
+if (do_nml_term()) write(     *     , nml=obs_def_MODIS_AOD_nml)
 
 end subroutine initialize_module
 
-!----------------------------------------------------------------------
-!>
+! ---------------------------------------------------
 
-subroutine read_modis_aod(key, ifile, fform)
+subroutine get_expected_modis_aod(state_vector, location, modis_aod, istatus)  
+ real(r8),            intent(in)  :: state_vector(:)
+ type(location_type), intent(in)  :: location
+ real(r8),            intent(out) :: modis_aod ! (dimensionless)
+ integer,             intent(out) :: istatus
 
-integer,                    intent(out) :: key
-integer,                    intent(in)  :: ifile
-character(len=*), optional, intent(in)  :: fform
+ integer, parameter :: wrf_nlev=33
+ integer, parameter :: aod_nlev=wrf_nlev-1
 
-character(len=32) :: fileformat
+! Forward operator for MODIS AOD.  The argument list to this routine
+! must match the call in the GET_EXPECTED_OBS_FROM_DEF section above.
 
-integer :: keyin
+ type(location_type)  :: nloc,nploc
+ integer  :: ilev
+ real(r8) :: qvapor   ! water vapor mixing ratio
+ real(r8) :: p25      ! p25 
+ real(r8) :: sulf     ! Sulphate 
+ real(r8) :: BC1      ! Hydrophobic Black Carbon 
+ real(r8) :: BC2      ! Hydrophilic Black Carbon 
+ real(r8) :: OC1      ! Hydrophobic Organic Carbon
+ real(r8) :: OC2      ! Hydrophilic Organic Carbon 
+ real(r8) :: DUST1    ! Dust 1
+ real(r8) :: DUST2    ! Dust 2
+ real(r8) :: DUST3    ! Dust 3
+ real(r8) :: DUST4    ! Dust 4
+ real(r8) :: DUST5    ! Dust 5
+ real(r8) :: SS1      ! Sea Salt 1
+ real(r8) :: SS2      ! Sea Salt 2
+ real(r8) :: SS3      ! Sea Salt 3
+ real(r8) :: SS4      ! Sea Salt 4
+ real(r8) :: Theta    ! perturbation potential temperature
+ real(r8) :: T        ! temperature
+ real(r8) :: Tv       ! virtual temperature
+ real(r8) :: P        ! perturbation pressure
+ real(r8) :: PH_dn    ! perturbation geopotential
+ real(r8) :: PH_up    ! perturbation geopotential
+ real(r8) :: rho_d    ! density dry air
+ real(r8) :: rho_m    ! density moist air
+ real(r8) :: Rd       ! gas constant dry air
+ real(r8) :: Cp       ! heat capacity dry air
+ real(r8) :: Pa_to_torr  ! convert Pa to torr
+ real(r8) :: grav     ! gravity
+ real(r8) :: fac      ! units conversion factor
+ real(r8) :: mloc(3)
+!
+ namelist /obs_def_MODIS_AOD_nml/ use_log_aod
 
-if ( .not. module_initialized ) call initialize_module
+ if ( .not. module_initialized ) call initialize_module
 
-fileformat = "ascii"   ! supply default
-if(present(fform)) fileformat = adjustl(fform)
+ fac=1.e-6
+ grav = 9.8      ! m/s^2
+ Rd = 287.05     ! J/kg
+ Cp = 1006.0     ! J/kg/K
+ Pa_to_torr = 133.322
+ modis_aod = 0.  ! dimensionless
 
-! Philosophy, read ALL information about this special obs_type at once???
-! For now, this means you can only read ONCE (that's all we're doing 3 June 05)
-! Toggle the flag to control this reading
-
-SELECT CASE (trim(fileformat))
-   CASE ("unf", "UNF", "unformatted", "UNFORMATTED")
-   read(ifile) keyin
-
-   CASE DEFAULT
-   read(ifile, *) keyin
-END SELECT
-
-counts1 = counts1 + 1
-key = counts1
-call set_obs_def_modis_aod(key)
-
-end subroutine read_modis_aod
-
-!----------------------------------------------------------------------
-!>
-
-subroutine write_modis_aod(key, ifile, fform)
-
-integer,                    intent(in) :: key
-integer,                    intent(in) :: ifile
-character(len=*), optional, intent(in) :: fform
-
-character(len=32) :: fileformat
-
-if ( .not. module_initialized ) call initialize_module
-
-fileformat = "ascii"   ! supply default
-if(present(fform)) fileformat = adjustl(fform)
-
-! Philosophy, read ALL information about this special obs_type at once???
-! For now, this means you can only read ONCE (that's all we're doing 3 June 05)
-! Toggle the flag to control this reading
-   
-SELECT CASE (trim(fileformat))
-   CASE ("unf", "UNF", "unformatted", "UNFORMATTED")
-   write(ifile) key
-
-   CASE DEFAULT
-   write(ifile, *) key
-END SELECT 
-
-end subroutine write_modis_aod
-
-!----------------------------------------------------------------------
-!>
-
-subroutine interactive_modis_aod(key)
-
-! Initializes the specialized part of a MODIS observation
-! Passes back up the key for this one
-
-integer, intent(out) :: key
-
-if ( .not. module_initialized ) call initialize_module
-
-! Make sure there's enough space, if not die for now (clean later)
-if(num_modis_aod_obs >= max_modis_aod_obs) then
-   write(string1, *)'Not enough space for a modis AOD obs.'
-   write(string2, *)'Can only have max_modis_aod_obs (currently ',max_modis_aod_obs,')'
-   call error_handler(E_ERR, 'interactive_modis_aod', string1, &
-              source, revision, revdate, text2=string2)
-endif
-
-! Increment the index
-num_modis_aod_obs = num_modis_aod_obs + 1
-key = num_modis_aod_obs
-
-! Otherwise, prompt for input for the three required beasts
-write(*, *) 'Creating an interactive_modis_aod observation'
-
-end subroutine interactive_modis_aod
-
-!----------------------------------------------------------------------
-!>
-
-subroutine get_expected_modis_aod(state, location, key, val, istatus)
-
-real(r8),            intent(in)  :: state(:)
-type(location_type), intent(in)  :: location
-integer,             intent(in)  :: key
-real(r8),            intent(out) :: val
-integer,             intent(out) :: istatus
-
-type(location_type) :: loc2
-real(r8)            :: mloc(3)
-real(r8)    :: obs_val
-
-if ( .not. module_initialized ) call initialize_module
-
-mloc = get_location(location)
- 
-val = 0.0_r8
-if (mloc(2)>90.0_r8) then
+ mloc = get_location(location)
+ if (mloc(2)>90.0_r8) then
     mloc(2)=90.0_r8
-elseif (mloc(2)<-90.0_r8) then
+ elseif (mloc(2)<-90.0_r8) then
     mloc(2)=-90.0_r8
-endif
-!print *, 'APM in obs_def call interpolate '
-loc2 = set_location(mloc(1),mloc(2),mloc(3), VERTISUNDEF)
-call interpolate(state, loc2, KIND_AOD, obs_val, istatus)  
-if (istatus /= 0) then
-    val = 0
-    return
-endif
-val = obs_val  
-!print *, 'AFAJ DEBUG AOD VAL ', val, istatus
+ endif
 
+ do ilev=1,aod_nlev
+    mloc(3)=real(ilev)
+    nloc = set_location(mloc(1), mloc(2), mloc(3), VERTISLEVEL)
+    mloc(3)=real(ilev+1)
+    nploc = set_location(mloc(1), mloc(2), mloc(3), VERTISLEVEL)
+!
+! water vapor mixing ratio (kg/kg) at this location - this calls the model_mod code.
+    call interpolate(state_vector, nloc, KIND_VAPOR_MIXING_RATIO, qvapor, istatus)
+    if (istatus /= 0) then
+       qvapor = missing_r8
+       modis_aod = missing_r8
+       return
+    endif
+!    print *, 'ilev, qvapor ',qvapor
+!
+! dust (ug/kg - dry air) at this location - this calls the model_mod code.
+    call interpolate(state_vector, nloc, KIND_DST01, DUST1, istatus)
+    if (istatus /= 0) then
+       DUST1 = missing_r8
+       modis_aod = missing_r8
+       return
+    endif
+!    print *, 'ilev, DUST1 ',DUST1
+!
+! dust (ug/kg - dry air) at this location - this calls the model_mod code.
+    call interpolate(state_vector, nloc, KIND_DST02, DUST2, istatus)
+    if (istatus /= 0) then
+       DUST2 = missing_r8
+       modis_aod = missing_r8
+       return
+    endif
+!    print *, 'ilev, DUST2 ',DUST2
+!
+! dust (ug/kg - dry air) at this location - this calls the model_mod code.
+    call interpolate(state_vector, nloc, KIND_DST03, DUST3, istatus)
+    if (istatus /= 0) then
+       DUST3 = missing_r8
+       modis_aod = missing_r8
+       return
+    endif
+!    print *, 'ilev, DUST3 ',DUST3
+!
+! dust (ug/kg - dry air) at this location - this calls the model_mod code.
+    call interpolate(state_vector, nloc, KIND_DST04, DUST4, istatus)
+    if (istatus /= 0) then
+       DUST4 = missing_r8
+       modis_aod = missing_r8
+       return
+    endif
+!    print *, 'ilev, DUST4 ',DUST4
+!
+! dust (ug/kg - dry air) at this location - this calls the model_mod code.
+    call interpolate(state_vector, nloc, KIND_DST05, DUST5, istatus)
+    if (istatus /= 0) then
+       DUST5 = missing_r8
+       modis_aod = missing_r8
+       return
+    endif
+!    print *, 'ilev, DUST5 ',DUST5
+!
+! hydrophilic black carbon (ug/kg - dry air) at this location - this calls the model_mod code.
+    call interpolate(state_vector, nloc, KIND_BC1, BC1, istatus)
+    if (istatus /= 0) then
+       BC1 = missing_r8
+       modis_aod = missing_r8
+       return
+    endif
+!    print *, 'ilev, BC1 ',BC1
+!
+! hydrophobic black carbon (ug/kg - dry air) at this location - this calls the model_mod code.
+    call interpolate(state_vector, nloc, KIND_BC2, BC2, istatus)
+    if (istatus /= 0) then
+       BC2 = missing_r8
+       modis_aod = missing_r8
+       return
+    endif
+!    print *, 'ilev, BC2 ',BC2
+!
+! hydrophilic organic carbon (ug/kg - dry air) at this location - this calls the model_mod code.
+    call interpolate(state_vector, nloc, KIND_OC1, OC1, istatus)
+    if (istatus /= 0) then
+       OC1 = missing_r8
+       modis_aod = missing_r8
+       return
+    endif
+!    print *, 'ilev, OC1 ',OC1
+!
+! hydrophobic organic carbon (ug/kg - dry air) at this location - this calls the model_mod code.
+    call interpolate(state_vector, nloc, KIND_OC2, OC2, istatus)
+    if (istatus /= 0) then
+       OC2 = missing_r8
+       modis_aod = missing_r8
+       return
+    endif
+!    print *, 'ilev, OC2 ',OC2
+!
+! sea salt (ug/kg - dry air) at this location - this calls the model_mod code.
+    call interpolate(state_vector, nloc, KIND_SSLT01, SS1, istatus)
+    if (istatus /= 0) then
+       SS1 = missing_r8
+       modis_aod = missing_r8
+       return
+    endif
+!    print *, 'ilev, SS1 ',SS1
+!
+! sea salt (ug/kg - dry air) at this location - this calls the model_mod code.
+    call interpolate(state_vector, nloc, KIND_SSLT02, SS2, istatus)
+    if (istatus /= 0) then
+       SS2 = missing_r8
+       modis_aod = missing_r8
+       return
+    endif
+!    print *, 'ilev, SS2 ',SS2
+!
+! sea salt (ug/kg - dry air) at this location - this calls the model_mod code.
+    call interpolate(state_vector, nloc, KIND_SSLT03, SS3, istatus)
+    if (istatus /= 0) then
+       SS3 = missing_r8
+       modis_aod = missing_r8
+       return
+    endif
+!    print *, 'ilev, SS3 ',SS3
+!
+! sea salt (ug/kg - dry air) at this location - this calls the model_mod code.
+    call interpolate(state_vector, nloc, KIND_SSLT04, SS4, istatus)
+    if (istatus /= 0) then
+       SS4 = missing_r8
+       modis_aod = missing_r8
+       return
+    endif
+!    print *, 'ilev, SS4 ',SS4
+!
+! theta (K) at this location - this calls the model_mod code.
+    call interpolate(state_vector, nloc, KIND_POTENTIAL_TEMPERATURE, Theta, istatus)
+    if (istatus /= 0) then
+       Theta = missing_r8
+       modis_aod = missing_r8
+       return
+    endif
+!    print *, 'ilev, Theta ',Theta
+!
+! pressure (Pa) at this location - this calls the model_mod code.
+    call interpolate(state_vector, nloc, KIND_PRESSURE, P, istatus)
+    if (istatus /= 0) then
+       P = missing_r8
+       modis_aod = missing_r8
+       return
+    endif
+!    print *, 'ilev, P ',P
+!
+! sulfate (kg/kg) at this location - this calls the model_mod code.
+    call interpolate(state_vector, nloc, KIND_SO4, sulf, istatus)
+    if (istatus /= 0) then
+       sulf = missing_r8
+       modis_aod = missing_r8
+       return
+    endif
+!    print *, 'ilev, sulf ',sulf
+!
+! geopotential height (m) below this location - this calls the model_mod code.
+    call interpolate(state_vector, nloc, KIND_GEOPOTENTIAL_HEIGHT, PH_dn, istatus)
+    if (istatus /= 0) then
+       PH_dn = missing_r8
+       modis_aod = missing_r8
+       return
+    endif
+!    print *, 'ilev, PH_dn ',PH_dn
+!
+! geopotential height (m) above this location - this calls the model_mod code.
+    call interpolate(state_vector, nploc, KIND_GEOPOTENTIAL_HEIGHT, PH_up, istatus)
+    if (istatus /= 0) then
+       PH_up = missing_r8
+       modis_aod = missing_r8
+       return
+    endif
+!    print *, 'ilev, PH_up ',PH_up
+!
+! p25 at this location - this calls the model_mod code.
+!    call interpolate(state_vector, location, KIND_P25, p25, istatus)
+!    if (istatus /= 0) then
+!       p25 = missing_r8
+!       modis_aod = missing_r8
+!       return
+!    endif
+!    print *, 'ilev, p25 ',p25
+!
+! The actual forward operator computation.  This is the value that
+! will be returned.  istatus (the return code) of 0 is good,
+! return any value > 0 for error.  (values < 0 reserved for
+! system use.)
+!
+    T = Theta / (100000./(P**(Rd/Cp)))
+    Tv = Theta / (100000./(P**(Rd/Cp))) &
+       * qvapor/(1.+qvapor)
+    rho_d = P/(Rd*T)
+    rho_m = P/(Rd*Tv)
+!
+! Expected Modis AOD
+    if (use_log_aod) then
+       modis_aod = modis_aod + (3.673*exp(sulf) + 2.473*(exp(OC1)+exp(OC2)) + 8.99*(exp(BC1)+exp(BC2)) + &
+                 2.548*exp(SS1) + .889*exp(SS2) + .227*exp(SS3) + .096*exp(SS4) + 1.596*exp(DUST1) + &
+                 .507*exp(DUST2) + .275*exp(DUST3) + .140*exp(DUST4) + .078*exp(DUST5)) * &
+                 rho_d * (PH_up-PH_dn) * fac
+    else
+       modis_aod = modis_aod + (3.673*sulf + 2.473*(OC1+OC2) + 8.99*(BC1+BC2) + &
+                 2.548*SS1 + .889*SS2 + .227*SS3 + .096*SS4 + 1.596*DUST1 + &
+                 .507*DUST2 + .275*DUST3 + .140*DUST4 + .078*DUST5) * &
+                 rho_d * (PH_up-PH_dn) * fac
+    endif 
+ enddo
+
+ istatus = 0
+    
 end subroutine get_expected_modis_aod
 
-!----------------------------------------------------------------------
-!> Allows passing of obs_def special information 
+! ---------------------------------------------------
 
-subroutine set_obs_def_modis_aod(key)
-
-integer, intent(in) :: key
-
-if ( .not. module_initialized ) call initialize_module
-
-if(num_modis_aod_obs >= max_modis_aod_obs) then
-   write(string1, *)'Not enough space for a modis AOD obs.'
-   write(string2, *)'Can only have max_modis_aod_obs (currently ',max_modis_aod_obs,')'
-   call error_handler(E_ERR, 'set_obs_def_modis_aod', string1, &
-              source, revision, revdate, text2=string2)
-endif
-
-end subroutine set_obs_def_modis_aod
-
-
-end module obs_def_modis_mod
+end module obs_def_MODIS_AOD_mod
 ! END DART PREPROCESS MODULE CODE
 
 ! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
+! $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/obs_def/obs_def_MODIS_AOD_mod.f90 $
+! $Id: obs_def_MODIS_AOD_mod.f90 7039 2014-07-02 22:00:57Z mizzi $
+! $Revision: 7039 $
+! $Date: 2014-07-02 16:00:57 -0600 (Wed, 02 Jul 2014) $

@@ -4,7 +4,7 @@
 # by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# $Id$
+# $Id: run_obs_diag_IASI_CO.ksh 13133 2019-04-25 21:47:54Z nancy@ucar.edu $
 #
 
 ###############################################################################
@@ -15,12 +15,12 @@
 # Define experiment parameters
 #
 # 2008 DATES
-export START_DATE=2008060112
-export END_DATE=2008060918
+#export START_DATE=2008060112
+#export END_DATE=2008060918
 #
 # FRAPPE DATES
-##export START_DATE=2014071406
-##export END_DATE=2014071906
+export START_DATE=2014071606
+export END_DATE=2014071706
 export DART_FILTER=dart_filter
 #
 export DOMAIN=01
@@ -458,7 +458,7 @@ mv obs_diag_output.nc obs_diag_output_IASI_CO.nc
 exit
 #
 # <next few lines under version control, do not edit>
-# $URL$
-# $Id$
-# $Revision$
-# $Date$
+# $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/models/wrf_chem/run_diagnostics/run_obs_diag_IASI_CO.ksh $
+# $Id: run_obs_diag_IASI_CO.ksh 13133 2019-04-25 21:47:54Z nancy@ucar.edu $
+# $Revision: 13133 $
+# $Date: 2019-04-25 15:47:54 -0600 (Thu, 25 Apr 2019) $

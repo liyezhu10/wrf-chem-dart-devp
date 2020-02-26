@@ -2,7 +2,7 @@
 ! provided by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
-! DART $Id$
+! DART $Id: obs_def_MOPITT_CO_mod.f90 13121 2019-04-24 16:32:43Z mizzi@ucar.edu $
 
 ! BEGIN DART PREPROCESS KIND LIST
 ! MOPITT_CO_RETRIEVAL, KIND_CO
@@ -69,7 +69,7 @@ integer                          :: num_mopitt_co_obs = 0
 !
 ! MOPITT pressures (level 1 is place holder for surface pressure)
 real(r8)   :: mopitt_pressure(MOPITT_DIM) =(/ &
-                              100000.,90000.,80000.,70000.,60000.,50000.,40000.,30000.,20000.,1000. /)
+                              90000.,80000.,70000.,60000.,50000.,40000.,30000.,20000.,10000.,5000. /)
 real(r8)   :: mopitt_pressure_mid(MOPITT_DIM) =(/ &
                               100000.,85000.,75000.,65000.,55000.,45000.,35000.,25000.,15000.,7500. /)
 
@@ -80,9 +80,9 @@ integer,  allocatable, dimension(:) :: mopitt_nlevels
 
 ! version controlled file description for error handling, do not edit
 character(len=*), parameter :: source   = &
-   "$URL$"
-character(len=*), parameter :: revision = "$Revision$"
-character(len=*), parameter :: revdate  = "$Date$"
+   "$URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/obs_def/obs_def_MOPITT_CO_mod.f90 $"
+character(len=*), parameter :: revision = "$Revision: 13121 $"
+character(len=*), parameter :: revdate  = "$Date: 2019-04-24 10:32:43 -0600 (Wed, 24 Apr 2019) $"
 
 character(len=512) :: string1, string2
 
@@ -93,8 +93,8 @@ character(len=129)  :: MOPITT_CO_retrieval_type
 logical             :: use_log_co
 !
 ! MOPITT_CO_retrieval_type:
-!     RAWR - retrievals in VMR (ppb) units
-!     RETR - retrievals in log10(VMR ([ ])) units
+!     RAWR - retrievals in format from supplier
+!     RETR - retrievals in retrieval (ppbv) format
 !     QOR  - quasi-optimal retrievals
 !     CPSR - compact phase space retrievals
     namelist /obs_def_MOPITT_CO_nml/ MOPITT_CO_retrieval_type, use_log_co
@@ -259,13 +259,14 @@ subroutine get_expected_mopitt_co(state, location, key, val, istatus)
    integer,             intent(out) :: istatus
 !
    integer,parameter   :: wrf_nlev=33
-   integer             :: i, kstr, ilev
+   integer,parameter   :: mop_nlev=10
+   integer             :: i, kstr, ilev, icnt
    type(location_type) :: loc2
    real(r8)            :: mloc(3), prs_wrf(wrf_nlev)
-   real(r8)            :: obs_val, co_min, co_min_log, level, missing
+   real(r8)            :: obs_val, obs_sum, co_min, co_min_log, level, missing
    real(r8)            :: prs_wrf_sfc, co_wrf_sfc
    real(r8)            :: prs_wrf_1, prs_wrf_2, co_wrf_1, co_wrf_2, prs_wrf_nlev
-   real(r8)            :: prs_mopitt_sfc, prs_mopitt
+   real(r8)            :: prs_mopitt_sfc, prs_mopitt, prs_dn, prs_up, prs_lc
    integer             :: nlevels,nlevelsp
 
    real(r8)            :: vert_mode_filt
@@ -280,6 +281,7 @@ subroutine get_expected_mopitt_co(state, location, key, val, istatus)
    co_min_log  = log(co_min)
    missing     = -888888.0_r8
    nlevels     = mopitt_nlevels(key)
+   kstr        = mop_nlev-nlevels+1
    if ( use_log_co ) then
       co_min=co_min_log
    endif
@@ -291,10 +293,10 @@ subroutine get_expected_mopitt_co(state, location, key, val, istatus)
    elseif (mloc(2)<-90.0_r8) then
       mloc(2)=-90.0_r8
    endif
+   prs_mopitt=mloc(3)
 !
 ! MOPITT surface pressure
    prs_mopitt_sfc = mopitt_psurf(key)
-   mopitt_pressure(1)=mopitt_psurf(key)
 !
 ! WRF surface pressure
    level=0.0_r8
@@ -350,18 +352,15 @@ subroutine get_expected_mopitt_co(state, location, key, val, istatus)
 !
 ! loop through MOPITT levels
    val = 0.0_r8
-   do ilev = 1, nlevels
-!
-! get location of obs
-      if (ilev.eq.1) then
+   do ilev = kstr, mop_nlev
+      if (ilev.eq.kstr) then
          prs_mopitt=(prs_mopitt_sfc+mopitt_pressure(ilev))/2.
          loc2 = set_location(mloc(1),mloc(2),prs_mopitt, VERTISPRESSURE)
       else
          prs_mopitt=(mopitt_pressure(ilev-1)+mopitt_pressure(ilev))/2.
          loc2 = set_location(mloc(1),mloc(2),prs_mopitt, VERTISPRESSURE)
       endif
-!
-      if(prs_mopitt .ge. prs_wrf_1) then
+      if(prs_mopitt.ge.prs_wrf_1) then
          istatus=0
          obs_val=co_wrf_1
       else
@@ -372,9 +371,8 @@ subroutine get_expected_mopitt_co(state, location, key, val, istatus)
             call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source,revision,revdate)
             val=missing
             return
-         endif            
-      endif
-!
+         endif
+      endif 
 ! check for lower bound
       if (obs_val.lt.co_min) then
          write(string1, *)'APM: NOTICE resetting minimum MOPITT CO value ',ilev
@@ -384,22 +382,21 @@ subroutine get_expected_mopitt_co(state, location, key, val, istatus)
 !
 ! apply averaging kernel
       if( use_log_co ) then
-         val = val + avg_kernel(key,ilev) * log10(exp(obs_val) * 1.e3)  
-!         print *, 'ilev,value, incr ', ilev, val, avg_kernel(key,ilev)*log10(exp(obs_val)/1.e6)
-!         print *, 'ilev,obs_val,exp ', ilev, obs_val, exp(obs_val)/1.e6
-!         print *, 'ilev,avg_ker,obs ', ilev, avg_kernel(key,ilev), log10(exp(obs_val)/1.e6)
-!         print *, ' '
+         val = val + avg_kernel(key,ilev-kstr+1) * log10(exp(obs_val) * 1.e3)  
+!            write(string1, *)'APM: prs, avg_k,obs_val ',ilev-kstr+1,prs_mopitt,avg_kernel(key,ilev-kstr+1), &
+!            exp(obs_val)*1.e3,mloc(1),mloc(2),mloc(3)
+!            call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source,revision,revdate)
       else
-         val = val + avg_kernel(key,ilev) * log10(obs_val * 1.e3)  
+         val = val + avg_kernel(key,ilev-kstr+1) * log10(obs_val * 1.e3)  
       endif
    enddo
-   if (trim(MOPITT_CO_retrieval_type).eq.'RETR' .or. trim(MOPITT_CO_retrieval_type).eq.'QOR' &
+!
+! NOTE: For the following the mopitt_prior is zero due to the QOR subtraction
+   if (trim(MOPITT_CO_retrieval_type).eq.'RAWR' .or. trim(MOPITT_CO_retrieval_type).eq.'QOR' &
    .or. trim(MOPITT_CO_retrieval_type).eq.'CPSR') then
-!      val = val + mopitt_prior(key)
-!         print *, 'prior term       ',mopitt_prior(key)
-!         print *, ' '
-   elseif (trim(MOPITT_CO_retrieval_type).eq.'RAWR') then
-!      val = val + mopitt_prior(key)
+      val = val + mopitt_prior(key)
+   elseif (trim(MOPITT_CO_retrieval_type).eq.'RETR') then
+      val = val + mopitt_prior(key)
       val = (10.**val) * 1.e-3
    endif
 !
@@ -618,7 +615,7 @@ end module obs_def_mopitt_mod
 ! END DART PREPROCESS MODULE CODE
 
 ! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
+! $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/obs_def/obs_def_MOPITT_CO_mod.f90 $
+! $Id: obs_def_MOPITT_CO_mod.f90 13121 2019-04-24 16:32:43Z mizzi@ucar.edu $
+! $Revision: 13121 $
+! $Date: 2019-04-24 10:32:43 -0600 (Wed, 24 Apr 2019) $

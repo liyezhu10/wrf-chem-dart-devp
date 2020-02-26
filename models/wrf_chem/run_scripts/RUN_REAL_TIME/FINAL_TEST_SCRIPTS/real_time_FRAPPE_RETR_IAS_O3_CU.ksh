@@ -14,10 +14,10 @@ export FIRST_DART_INFLATE_DATE=2014072006
 export FIRST_EMISS_INV_DATE=2014072006
 #
 # START CYCLE DATE-TIME:
-export CYCLE_STR_DATE=2014072006
+export CYCLE_STR_DATE=2014072000
 #
 # END CYCLE DATE-TIME:
-export CYCLE_END_DATE=2014072006
+export CYCLE_END_DATE=2014072000
 #export CYCLE_END_DATE=${CYCLE_STR_DATE}
 #
 export CYCLE_DATE=${CYCLE_STR_DATE}
@@ -280,7 +280,7 @@ if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
    export RUN_WRFCHEM_BIO=false
    export RUN_WRFCHEM_FIRE=false
    export RUN_WRFCHEM_CHEMI=false
-   export RUN_PERT_WRFCHEM_CHEM_ICBC=false
+   export RUN_PERT_WRFCHEM_CHEM_ICBC=true
    export RUN_PERT_WRFCHEM_CHEM_EMISS=false
    export RUN_MOPITT_CO_OBS=false
    export RUN_IASI_CO_OBS=false
@@ -766,9 +766,9 @@ export NL_KEMIT=11
 # APM NO_CHEM
 #export NL_CHEM_OPT=0,0
 export NL_CHEM_OPT=112,112
-export NL_BIOEMDT=1,1
-export NL_PHOTDT=1,1
-export NL_CHEMDT=1,1
+export NL_BIOEMDT=0,0
+export NL_PHOTDT=0,0
+export NL_CHEMDT=0,0
 export NL_IO_STYLE_EMISSIONS=2
 export NL_EMISS_INPT_OPT=111,111
 export NL_EMISS_OPT=8,8
@@ -2313,7 +2313,7 @@ if ${RUN_PERT_WRFCHEM_CHEM_ICBC}; then
    else
       cd ${RUN_DIR}/${DATE}/wrfchem_chem_icbc
    fi
-   export NL_SW_GENERATE=false
+   export NL_SW_GENERATE=true
    if [[ ${DATE} -eq ${INITIAL_DATE} && ${PERT_CHEM_GENER} == true ]]; then export NL_SW_GENERATE=true; fi
 #
 # PERTURB CHEM ICBC
@@ -2324,7 +2324,7 @@ if ${RUN_PERT_WRFCHEM_CHEM_ICBC}; then
    cp ${PERT_CHEM_INPUT_DIR}/random_correlated_perts_mirror.py ./APM_random.py
    cp ${PERT_CHEM_INPUT_DIR}/run_mozbc_rt_CR.csh ./.
    cp ${PERT_CHEM_INPUT_DIR}/run_mozbc_rt_FR.csh ./.
-   cp ${PERT_CHEM_INPUT_DIR}/mozbc-dart/mozbc ./.
+   cp ${PERT_CHEM_INPUT_DIR}/work/mozbc.exe ./.
    cp ${PERT_CHEM_INPUT_DIR}/set0 ./.
    cp ${PERT_CHEM_INPUT_DIR}/set00 ./.
 #
@@ -2476,8 +2476,8 @@ EOF
       if [[ ${MEM} -lt 10  ]]; then export CMEM=e00${MEM}; fi
 #
 # COMBINE WRFCHEM WITH WRF CR DOMAIN
-      export WRFINPEN=wrfinput_d${CR_DOMAIN}_${YYYY}-${MM}-${DD}_${HH}:00:00.${CMEM}
-      export WRFBDYEN=wrfbdy_d${CR_DOMAIN}_${YYYY}-${MM}-${DD}_${HH}:00:00.${CMEM}
+   export WRFINPEN=wrfinput_d${CR_DOMAIN}_${YYYY}-${MM}-${DD}_${HH}:00:00.${CMEM}
+   export WRFBDYEN=wrfbdy_d${CR_DOMAIN}_${YYYY}-${MM}-${DD}_${HH}:00:00.${CMEM}
       ncks -A ${WRFCHEM_MET_IC_DIR}/${WRFINPEN} ${WRFINPEN}
       ncks -A ${EXPERIMENT_DUST_DIR}/EROD_d${CR_DOMAIN} ${WRFINPEN}
       ncks -A ${WRFCHEM_MET_BC_DIR}/${WRFBDYEN} ${WRFBDYEN}
@@ -2489,6 +2489,10 @@ EOF
       let MEM=MEM+1
    done
 fi
+
+exit
+
+
 #
 #########################################################################
 #

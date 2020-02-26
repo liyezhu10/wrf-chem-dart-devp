@@ -4,7 +4,7 @@
 # by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 #
-# $Id$
+# $Id: da_create_dart_airnow_input_nml.ksh 13133 2019-04-25 21:47:54Z nancy@ucar.edu $
 #
 
 #########################################################################
@@ -38,10 +38,14 @@ cat > create_airnow_obs_nml.nl << EOF
    file_in=${NL_FILENAME}
    lat_mn=${NL_LAT_MN}
    lat_mx=${NL_LAT_MX}
-   lon_mn=${NL_LON_MN}
+   lon_mn=${NL_LON_MN}                                                                                      
    lon_mx=${NL_LON_MX}
    use_log_co=${NL_USE_LOG_CO}
    use_log_o3=${NL_USE_LOG_O3}
+   use_log_nox=${NL_USE_LOG_NOX}
+   use_log_so2=${NL_USE_LOG_SO2}
+   use_log_pm10=${NL_USE_LOG_PM10}
+   use_log_pm25=${NL_USE_LOG_PM25}
 /
 EOF
 #
@@ -83,7 +87,7 @@ EOF
 
 #
 # <next few lines under version control, do not edit>
-# $URL$
-# $Id$
-# $Revision$
-# $Date$
+# $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/models/wrf_chem/hybrid_scripts/da_create_dart_airnow_input_nml.ksh $
+# $Id: da_create_dart_airnow_input_nml.ksh 13133 2019-04-25 21:47:54Z nancy@ucar.edu $
+# $Revision: 13133 $
+# $Date: 2019-04-25 15:47:54 -0600 (Thu, 25 Apr 2019) $

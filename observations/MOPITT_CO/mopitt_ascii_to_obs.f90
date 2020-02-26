@@ -6,11 +6,16 @@
 program create_mopitt_obs_sequence
 
 ! <next few lines under version control, do not edit>
-! $URL$
-! $Id$
-! $Revision$
-! $Date$
-
+! $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/observations/MOPITT_CO/mopitt_ascii_to_obs.f90 $
+! $Id: mopitt_ascii_to_obs.f90 13121 2019-04-24 16:32:43Z mizzi@ucar.edu $
+! $Revision: 13121 $
+! $Date: 2019-04-24 10:32:43 -0600 (Wed, 24 Apr 2019) $
+!
+! RAWR - observations in the format provided by the distribution center.
+! RETR - observations in retrieval space format (ppbv) with the QOR subtractions.
+! QOR  - observations in phase space format with QOR transformation.
+! CPSR - observations in phase space format with the CPSR trasformations. 
+!
 !=============================================
 ! MOPITT CO retrieval obs
 !=============================================
@@ -81,9 +86,9 @@ implicit none
 !
 ! version controlled file description for error handling, do not edit                          
 character(len=128), parameter :: &
-   source   = "$URL$", &
-   revision = "$Revision$", &
-   revdate  = "$Date$"
+   source   = "$URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/observations/MOPITT_CO/mopitt_ascii_to_obs.f90 $", &
+   revision = "$Revision: 13121 $", &
+   revdate  = "$Date: 2019-04-24 10:32:43 -0600 (Wed, 24 Apr 2019) $"
 !
 ! add variables AFA
 type(obs_sequence_type) :: seq
@@ -101,19 +106,9 @@ integer,parameter       :: mop_dim=10, mop_dimp=11
 integer,parameter       :: num_copies=1, num_qc=1
 integer,parameter       :: lwrk=5*mop_dim
 !
-! 44 km
-!integer,parameter      :: nlon_qc=900, nlat_qc=301, nqc_obs=40 
-!real*8,parameter       :: dlon_qc=.4, dlat_qc=.6
-! 68 km
-!integer,parameter      :: nlon_qc=600, nlat_qc=190, nqc_obs=40 
-!real*8,parameter       :: dlon_qc=.6, dlat_qc=.95
-! 89 km
-integer,parameter       :: nlon_qc=451, nlat_qc=151, nqc_obs=40 
-real*8,parameter        :: dlon_qc=.8, dlat_qc=1.2
-! 111 km
-!integer,parameter       :: nlon_qc=360, nlat_qc=121, nqc_obs=40 
-!real*8,parameter        :: dlon_qc=1., dlat_qc=1.5
-!
+real                    :: qc_del,lat_mean
+integer                 :: nlon_qc,nlat_qc
+real*8                  :: dlon_qc,dlat_qc
 type (random_seq_type)  :: inc_ran_seq
 !
 integer                 :: year, month, day, hour
@@ -130,10 +125,8 @@ integer                 :: spc_vloc,mopitt_co_vloc,kmax,itrm
 integer,dimension(max_num_obs)             :: qc_mopitt, qc_thinning
 integer,dimension(12)                      :: days_in_month=(/ &
                                            31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31  /)
-integer,dimension(nlon_qc,nlat_qc)         :: xg_count
-integer,dimension(nlon_qc,nlat_qc,500)     :: xg
 integer,dimension(1000)                    :: index_20
-integer,dimension(nlon_qc,nlat_qc)         :: xg_nlvls
+
 !
 real*8                          :: eps_tol=1.e-3,log10e
 real*8                          :: dofs, sdof, co_tot_col, co_tot_err
@@ -144,7 +137,8 @@ real                            :: sec, lat, lon, nlevels
 real                            :: pi ,rad2deg, re, wt, corr_err, fac, fac_obs_error
 real                            :: ln_10, xg_sec_avg, co_log_max, co_log_min, co_min
 real                            :: prs_loc
-integer                         :: irot, nlvls_fix
+real                            :: lat_min,lat_max,lon_min,lon_max,lat_mn
+integer                         :: irot, nlvls_fix, nqc_obs
 real*8, dimension(1000)         :: unif
 real*8, dimension(num_qc)       :: co_qc
 real*8, dimension(mop_dim)      :: co_avgker
@@ -155,19 +149,12 @@ real,dimension(mop_dimp)        :: nprs =(/ &
 real,dimension(mop_dim)        :: nprs_mid =(/ &
                                 1000.,850.,750.,650.,550.,450.,350.,250.,150.,75. /)
 real,dimension(mop_dimp)        :: mop_prs
-real,dimension(mop_dim)         :: x_r, x_p, raw_x_r, raw_x_p, err2_rs_r, raw_err, ret_err
+real,dimension(mop_dim)         :: x_r, x_p, ret_x_r,ret_x_p,raw_x_r, raw_x_p, err2_rs_r, raw_err, ret_err
 real,dimension(mop_dim)         :: xcomp, xcomperr, xapr
 real,dimension(mop_dim,mop_dim) :: avgker, avg_k, adj_avg_k
 real,dimension(mop_dim,mop_dim) :: raw_cov, ret_cov, cov_a, cov_r, cov_m, cov_use
-real,dimension(nlon_qc,nlat_qc) :: xg_lon, xg_lat, xg_twt, xg_dof
-real,dimension(nlon_qc,nlat_qc,mop_dim) :: xg_sec, xg_raw_err, xg_ret_err
-real,dimension(nlon_qc,nlat_qc,mop_dim) :: xg_raw_adj_x_r, xg_raw_adj_x_p, xg_raw_x_r, xg_raw_x_p
-real,dimension(nlon_qc,nlat_qc,mop_dim) :: xg_ret_adj_x_r, xg_ret_adj_x_p, xg_ret_x_r, xg_ret_x_p
-real,dimension(nlon_qc,nlat_qc,mop_dim) :: xg_norm, xg_nint
-real,dimension(nlon_qc,nlat_qc,mop_dim,mop_dim) :: xg_avg_k, xg_raw_cov, xg_ret_cov
-real,dimension(nlon_qc,nlat_qc,mop_dimp) :: xg_prs, xg_prs_norm
 !
-double precision,dimension(mop_dim) ::  adj_x_r, adj_x_p 
+double precision,dimension(mop_dim) ::  raw_adj_x_r, ret_adj_x_r, adj_x_p 
 !
 character*129           :: qc_meta_data='MOPITT CO QC index'
 character*129           :: file_name='mopitt_obs_seq'
@@ -176,6 +163,18 @@ character*4             :: chr_year
 character*129           :: filedir, filename, copy_meta_data, filen
 character*129           :: transform_typ
 character*129           :: MOPITT_CO_retrieval_type
+!
+! SUPER OBBING ARRAYS
+integer,allocatable,dimension(:,:)       :: xg_count
+integer,allocatable,dimension(:,:,:)     :: xg
+integer,allocatable,dimension(:,:)       :: xg_nlvls
+real,allocatable,dimension(:,:)          :: xg_lon,xg_lat,xg_twt,xg_dof
+real,allocatable,dimension(:,:,:)        :: xg_sec,xg_raw_err,xg_ret_err
+real,allocatable,dimension(:,:,:)        :: xg_raw_adj_x_r,xg_raw_adj_x_p,xg_raw_x_r,xg_raw_x_p
+real,allocatable,dimension(:,:,:)        :: xg_ret_adj_x_r,xg_ret_adj_x_p,xg_ret_x_r,xg_ret_x_p
+real,allocatable,dimension(:,:,:)        :: xg_norm,xg_nint
+real,allocatable,dimension(:,:,:,:)      :: xg_avg_k,xg_raw_cov,xg_ret_cov
+real,allocatable,dimension(:,:,:)        :: xg_prs,xg_prs_norm
 !
 ! QOR/CPSR variables
 integer                                        :: info,nlvls_trc,qstatus
@@ -190,19 +189,12 @@ double precision,allocatable,dimension(:,:)    :: rs_avg_k,rs_cov
 !
 logical                 :: use_log_co
 logical                 :: use_cpsr_co_trunc
-
 !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
-! MOPITT_CO_retrieval_type:
-!     RAWR - retrievals in VMR (ppb) units
-!     RETR - retrievals in log10(VMR ([ ])) units
-!     QOR  - quasi-optimal retrievals
-!     CPSR - compact phase space retrievals
-!
 namelist /create_mopitt_obs_nml/filedir,filename,year,month,day,hour,bin_beg, bin_end, &
          MOPITT_CO_retrieval_type,fac_obs_error,use_log_co,use_cpsr_co_trunc, &
-         cpsr_co_trunc_lim, mopitt_co_vloc
+         cpsr_co_trunc_lim, mopitt_co_vloc,lon_min,lon_max,lat_min,lat_max
 !
 ! Set constants
 log10e=log10(exp(1.0))
@@ -219,6 +211,10 @@ minute_lst=-9999
 second_lst=-9999 
 fac=1.0
 mopitt_co_vloc=0
+lon_min=-9999
+lon_max=-9999
+lat_min=-9999
+lat_max=-9999
 !
 call find_namelist_in_file("input.nml", "create_mopitt_obs_nml", iunit)
 read(iunit, nml = create_mopitt_obs_nml, iostat = io)
@@ -262,7 +258,44 @@ qc_thinning(:)=100
 !
 ! assign obs error scale factor
 fac=fac_obs_error
-
+!
+! define qc arrays (add 1 degree to each side of the qc box)
+! qc-del is the size of the qc_bax in km
+!
+! 39 degress is the central latitude for Colorado:
+! nlat_qc=cos(39) * 2. * 3.14 * 6371 km /del_x_km
+! nlon_qc=2. *3.14 *6371 km /del_y_km
+! dlat_qc=180./nlat_qc
+! dlon_qc=360./nlon_qc
+!
+nqc_obs=40
+qc_del=30.
+lat_min=lat_min-1.
+lat_max=lat_max+1.
+lon_min=lon_min-1.
+lon_max=lon_max+1.
+lat_mean=(lat_min+lat_max)/2.
+nlon_qc=(lon_max-lon_min)/360.*2.*pi*re/1000./qc_del+1
+nlat_qc=cos(lat_mean/rad2deg)*(lat_max-lat_min)/360.*2.*pi*re/1000./qc_del+1
+dlon_qc=(lon_max-lon_min)/(nlon_qc-1)
+dlat_qc=(lat_max-lat_min)/(nlat_qc-1)
+!
+allocate (xg_count(nlon_qc,nlat_qc))
+allocate (xg(nlon_qc,nlat_qc,500))
+allocate (xg_nlvls(nlon_qc,nlat_qc))
+allocate (xg_lon(nlon_qc,nlat_qc),xg_lat(nlon_qc,nlat_qc), &
+xg_twt(nlon_qc,nlat_qc),xg_dof(nlon_qc,nlat_qc))
+allocate (xg_sec(nlon_qc,nlat_qc,mop_dim),xg_raw_err(nlon_qc,nlat_qc,mop_dim), &
+xg_ret_err(nlon_qc,nlat_qc,mop_dim))
+allocate (xg_raw_adj_x_r(nlon_qc,nlat_qc,mop_dim),xg_raw_adj_x_p(nlon_qc,nlat_qc,mop_dim), &
+xg_raw_x_r(nlon_qc,nlat_qc,mop_dim),xg_raw_x_p(nlon_qc,nlat_qc,mop_dim))
+allocate (xg_ret_adj_x_r(nlon_qc,nlat_qc,mop_dim),xg_ret_adj_x_p(nlon_qc,nlat_qc,mop_dim), &
+xg_ret_x_r(nlon_qc,nlat_qc,mop_dim), xg_ret_x_p(nlon_qc,nlat_qc,mop_dim))
+allocate (xg_norm(nlon_qc,nlat_qc,mop_dim),xg_nint(nlon_qc,nlat_qc,mop_dim))
+allocate (xg_avg_k(nlon_qc,nlat_qc,mop_dim,mop_dim), &
+xg_raw_cov(nlon_qc,nlat_qc,mop_dim,mop_dim),xg_ret_cov(nlon_qc,nlat_qc,mop_dim,mop_dim))
+allocate (xg_prs(nlon_qc,nlat_qc,mop_dimp),xg_prs_norm(nlon_qc,nlat_qc,mop_dimp))
+!
 !-------------------------------------------------------
 ! Read MOPITT obs
 !-------------------------------------------------------
@@ -309,7 +342,9 @@ fac=fac_obs_error
   endif
 
 ! Read MOPITT
+! lon = [-180,180]; lat = [-90,90]
   read(fileid,*,iostat=ios) transform_typ, sec, lat, lon, nlevels, dofs 
+  if(lon.lt.0.) lon=lon+360.
 !  print *, 'trans_typ, sec, lat, lon, nlevels, dofs ',trim(transform_typ),sec,lat,lon,nlevels,dofs
 !
 ! Error Check
@@ -334,28 +369,31 @@ fac=fac_obs_error
        read(fileid,*) cov_r(1:nlvls,1:nlvls)
        read(fileid,*) cov_m(1:nlvls,1:nlvls)
        read(fileid,*) co_tot_col,co_tot_err
-!       
-       index_qc = index_qc + 1
-       qc_mopitt(index_qc)=0
-
-       !-------------------------------------------------------
-       ! Bin to nlat_qc x nlon_qc
-       !-------------------------------------------------------
-       ! find lon_qc, lat_qc
-       lon_qc=nint((lon+180)/dlon_qc) + 1
-       lat_qc=nint((lat+90)/dlat_qc) + 1
-       if (lat>89.5) then
-           lat_qc=nlat_qc
-       elseif (lat<-89.5) then
-           lat_qc=1
+!
+       print *, 'lon,lon_min,lon_max ',lon,lon_min,lon_max
+       print *, 'lat,lat_min,lat_max ',lat,lat_min,lat_max
+       print *, ' '
+       if(lon.ge.lon_min .and. lon.le.lon_max .and. &
+       lat.ge.lat_min .and. lat.le.lat_max) then       
+          index_qc = index_qc + 1
+          qc_mopitt(index_qc)=0
+!
+!-------------------------------------------------------
+! Bin to nlat_qc x nlon_qc
+!-------------------------------------------------------
+! find lon_qc, lat_qc
+          lon_qc=nint((lon - lon_min)/dlon_qc)+1
+          lat_qc=nint((lat - lat_min)/dlat_qc)+1
+!
+          xg_count(lon_qc,lat_qc)=xg_count(lon_qc,lat_qc)+1
+          xg(lon_qc,lat_qc,xg_count(lon_qc,lat_qc))=index_qc
        endif
-
-       xg_count(lon_qc,lat_qc)=xg_count(lon_qc,lat_qc)+1
-       xg(lon_qc,lat_qc,xg_count(lon_qc,lat_qc))=index_qc
-
-       !read next data point
+!
+!read next data point
+! lon = [-180,180]
        read(fileid,*,iostat=ios) transform_typ, sec, lat, lon, nlevels, dofs 
-!  print *, 'trans_typ, sec, lat, lon, nlevels, dofs ',trim(transform_typ),sec,lat,lon,nlevels,dofs
+       if(lon.lt.0.) lon=lon+360.
+!       print *, 'trans_typ, sec, lat, lon, nlevels, dofs ',trim(transform_typ),sec,lat,lon,nlevels,dofs
        nlvls=nint(nlevels)
        nlvlsp=nlvls+1
   enddo !ios
@@ -364,34 +402,28 @@ fac=fac_obs_error
 
   close(fileid)
 !
-! Now do the thinning
+! Now do the thinning (draw nqc_obs obs)
   call init_random_seq(inc_ran_seq)
   do i=1,nlon_qc
      do j=1,nlat_qc
         if (xg_count(i,j)>nqc_obs) then
-
-            ! draw nqc_obs
-              do ik=1,xg_count(i,j)
-                  unif(ik)=random_uniform(inc_ran_seq)
-              enddo
-
-              call index_sort(unif,index_20,xg_count(i,j))
-
-              do ik=1,nqc_obs
-                    index=xg(i,j,index_20(ik))
-                    qc_thinning(index)=0
-              enddo
-
+           do ik=1,xg_count(i,j)
+              unif(ik)=random_uniform(inc_ran_seq)
+           enddo
+           call index_sort(unif,index_20,xg_count(i,j))
+           do ik=1,nqc_obs
+              index=xg(i,j,index_20(ik))
+              qc_thinning(index)=0
+           enddo
         else
-              do k=1,xg_count(i,j)
-                   index=xg(i,j,k)
-                   qc_thinning(index)=0
-              enddo
-
+           do k=1,xg_count(i,j)
+              index=xg(i,j,k)
+              qc_thinning(index)=0
+           enddo
         endif !xg_count
      enddo !j
   enddo !i
-
+!
 !===================================================================================
 !
 ! Read MOPITT file AGAIN
@@ -432,7 +464,9 @@ fac=fac_obs_error
   endif
 !
 ! Read MOPITT
+! lon = [-180,180]
   read(fileid,*,iostat=ios) transform_typ, sec, lat, lon, nlevels, dofs 
+  if(lon.lt.0.) lon=lon+360.
 !  print *, 'trans_typ, sec, lat, lon, nlevels, dofs ',trim(transform_typ),sec,lat,lon,nlevels,dofs
   nlvls=nint(nlevels)
   nlvlsp=nlvls+1
@@ -477,20 +511,15 @@ fac=fac_obs_error
      if ( co_qc(1) == 0 )  then
 !
 ! calculate bin indexes
-        lon_qc=nint((lon+180)/dlon_qc) + 1
-        lat_qc=nint((lat+90)/dlat_qc) + 1
-        if (lat>89.5) then
-           lat_qc=nlat_qc
-        elseif (lat<-89.5) then
-           lat_qc=1
-        endif
+        lon_qc=nint((lon - lon_min)/dlon_qc)+1
+        lat_qc=nint((lat - lat_min)/dlat_qc)+1
 !
 ! Assign cov_use
-        cov_use(:,:)=cov_r(:,:)
-        ret_cov(:,:)=cov_use(:,:)
+        cov_use=cov_r(:,:)
 !
-! Calculate RET prior term
-        adj_x_r(:)=0.
+! Calculate averaging kernel complement: (I-A) (RAWR form)
+        raw_adj_x_r(:)=0.
+        ret_adj_x_r(:)=0.
         adj_x_p(:)=0.
         adj_avg_k(:,:)=0.
         do i=1,nlvls
@@ -499,39 +528,52 @@ fac=fac_obs_error
            enddo
            adj_avg_k(i,i)=adj_avg_k(i,i)+1.
         enddo
-        call lh_mat_vec_prd(dble(adj_avg_k),dble(x_p),adj_x_p,nlvls)
-!        print *, 'adj_x_p ',adj_x_p(1:nlvls)
-        adj_x_r(1:nlvls)=x_r(1:nlvls)-adj_x_p(1:nlvls)
-!        print *, 'adj_x_r ',adj_x_r(1:nlvls)
 !
-! Calculate RAW retrieval and RAW prior 
+! Calcuate the prior term: (I-A) x_p (RAWR form)
+        call lh_mat_vec_prd(dble(adj_avg_k(1:nlvls,1:nlvls)),dble(x_p(1:nlvls)),adj_x_p(1:nlvls),nlvls)
+!
+! Calculate the QOR term: x_r - (I-A) x_p (RAWR form)
+        raw_adj_x_r(1:nlvls)=x_r(1:nlvls)-adj_x_p(1:nlvls)
+!
+! Calculate the QOR term: x_r - (I-A) x_p (RETR form)
+        ret_adj_x_r(1:nlvls)=10.**(x_r(1:nlvls)-adj_x_p(1:nlvls))
+!
+! Calculate RAWR retrieval and prior 
         do i=1,nlvls
-           raw_x_r(i)=(10.**x_r(i))
-           raw_x_p(i)=(10.**x_p(i))
+           raw_x_r(i)=x_r(i)
+           raw_x_p(i)=x_p(i)
         enddo
 !
-! Calculate RET errors
+! Calculate RETR retrieval and prior 
+        do i=1,nlvls
+           ret_x_r(i)=10.**x_r(i)
+           ret_x_p(i)=10.**x_p(i)
+        enddo
+!
+! Calculate RAWR errors d/dx[log_10(u)] = du/dx * 1/u * 1/log(10)
         do i=1,nlvls
            do j=1,nlvls
-              ret_cov(i,j)=cov_use(i,j)*x_r(i)*x_r(j)/log10e/log10e
+!              raw_cov(i,j)=cov_use(i,j)/log(10.)/log(10.)
+              raw_cov(i,j)=cov_use(i,j)
            enddo
         enddo
 !
-! Calculate RAW errors 
+! Calculate RETR errors d/dx[log_10(u)] = du/dx * 1/u * 1/log(10)
         do i=1,nlvls
            do j=1,nlvls
-              raw_cov(i,j)=cov_use(i,j)*raw_x_r(i)*raw_x_r(j)/log10e/log10e
+!              ret_cov(i,j)=cov_use(i,j)*(10.**x_r(i))*(10.**x_r(j))*log(10.)*log(10.)
+              ret_cov(i,j)=cov_use(i,j)*(10.**x_r(i))*(10.**x_r(j))
            enddo
         enddo
 !
-! Calculate errors for NO ROT RET case
-        do j=1,nlvls
-           ret_err(j)=sqrt(ret_cov(j,j))
-        enddo
-!
-! Calculate errors for NO ROT RAW case
+! Calculate errors for RAWR case
         do j=1,nlvls
            raw_err(j)=sqrt(raw_cov(j,j))
+        enddo
+!
+! Calculate errors for RETR case
+        do j=1,nlvls
+           ret_err(j)=sqrt(ret_cov(j,j))
         enddo
 !
 ! Calculate superobs 
@@ -554,13 +596,13 @@ fac=fac_obs_error
            xg_raw_x_r(lon_qc,lat_qc,i)=xg_raw_x_r(lon_qc,lat_qc,i)+raw_x_r(i-kstr+1)*wt
            xg_raw_x_p(lon_qc,lat_qc,i)=xg_raw_x_p(lon_qc,lat_qc,i)+raw_x_p(i-kstr+1)*wt
            xg_raw_err(lon_qc,lat_qc,i)=xg_raw_err(lon_qc,lat_qc,i)+raw_err(i-kstr+1)*wt
-!           xg_raw_adj_x_r(lon_qc,lat_qc,i)=xg_raw_adj_x_r(lon_qc,lat_qc,i)+adj_raw_x_r(i-kstr+1)*wt
-!           xg_raw_adj_x_p(lon_qc,lat_qc,i)=xg_raw_adj_x_p(lon_qc,lat_qc,i)+adj_raw_x_p(i-kstr+1)*wt
-           xg_ret_x_r(lon_qc,lat_qc,i)=xg_ret_x_r(lon_qc,lat_qc,i)+x_r(i-kstr+1)*wt
-           xg_ret_x_p(lon_qc,lat_qc,i)=xg_ret_x_p(lon_qc,lat_qc,i)+x_p(i-kstr+1)*wt
+           xg_raw_adj_x_r(lon_qc,lat_qc,i)=xg_raw_adj_x_r(lon_qc,lat_qc,i)+raw_adj_x_r(i-kstr+1)*wt
+!           xg_raw_adj_x_p(lon_qc,lat_qc,i)=xg_raw_adj_x_p(lon_qc,lat_qc,i)+adj_x_p(i-kstr+1)*wt
+           xg_ret_x_r(lon_qc,lat_qc,i)=xg_ret_x_r(lon_qc,lat_qc,i)+ret_x_r(i-kstr+1)*wt
+           xg_ret_x_p(lon_qc,lat_qc,i)=xg_ret_x_p(lon_qc,lat_qc,i)+ret_x_p(i-kstr+1)*wt
            xg_ret_err(lon_qc,lat_qc,i)=xg_ret_err(lon_qc,lat_qc,i)+ret_err(i-kstr+1)*wt
-           xg_ret_adj_x_r(lon_qc,lat_qc,i)=xg_ret_adj_x_r(lon_qc,lat_qc,i)+adj_x_r(i-kstr+1)*wt
-           xg_ret_adj_x_p(lon_qc,lat_qc,i)=xg_ret_adj_x_p(lon_qc,lat_qc,i)+adj_x_p(i-kstr+1)*wt
+           xg_ret_adj_x_r(lon_qc,lat_qc,i)=xg_ret_adj_x_r(lon_qc,lat_qc,i)+ret_adj_x_r(i-kstr+1)*wt
+!           xg_ret_adj_x_p(lon_qc,lat_qc,i)=xg_ret_adj_x_p(lon_qc,lat_qc,i)+adj_x_p(i-kstr+1)*wt
            do j=kstr,mop_dim
               xg_ret_cov(lon_qc,lat_qc,i,j)=xg_ret_cov(lon_qc,lat_qc,i,j)+ret_cov(i-kstr+1,j-kstr+1)*wt
               xg_raw_cov(lon_qc,lat_qc,i,j)=xg_raw_cov(lon_qc,lat_qc,i,j)+raw_cov(i-kstr+1,j-kstr+1)*wt
@@ -572,8 +614,9 @@ fac=fac_obs_error
      endif    ! co_qc(1)
 !
 ! read next data point
+! lon = [-180,180]
      read(fileid,*,iostat=ios) transform_typ, sec, lat, lon, nlevels, dofs 
-!  print *, 'trans_typ, sec, lat, lon, nlevels, dofs ',trim(transform_typ),sec,lat,lon,nlevels,dofs
+     if(lon.lt.0) lon=lon+360.
      nlvls=nint(nlevels)
      nlvlsp=nlvls+1
   enddo    !ios
@@ -593,14 +636,14 @@ fac=fac_obs_error
            xg_prs(i,j,k)=xg_prs(i,j,k)/real(xg_norm(i,j,k))
            xg_raw_x_r(i,j,k)=xg_raw_x_r(i,j,k)/real(xg_norm(i,j,k))
            xg_raw_x_p(i,j,k)=xg_raw_x_p(i,j,k)/real(xg_norm(i,j,k))
-           xg_raw_err(i,j,k)=xg_raw_err(i,j,k)/real(xg_norm(i,j,k))
-!           xg_raw_adj_x_r(i,j,k)=xg_raw_adj_x_r(i,j,k)/real(xg_norm(i,j,k))
+           xg_raw_err(i,j,k)=xg_raw_err(i,j,k)/sqrt(real(xg_norm(i,j,k)))
+           xg_raw_adj_x_r(i,j,k)=xg_raw_adj_x_r(i,j,k)/real(xg_norm(i,j,k))
 !           xg_raw_adj_x_p(i,j,k)=xg_raw_adj_x_p(i,j,k)/real(xg_norm(i,j,k))
            xg_ret_x_r(i,j,k)=xg_ret_x_r(i,j,k)/real(xg_norm(i,j,k))
            xg_ret_x_p(i,j,k)=xg_ret_x_p(i,j,k)/real(xg_norm(i,j,k))
-           xg_ret_err(i,j,k)=xg_ret_err(i,j,k)/real(xg_norm(i,j,k))
+           xg_ret_err(i,j,k)=xg_ret_err(i,j,k)/sqrt(real(xg_norm(i,j,k)))
            xg_ret_adj_x_r(i,j,k)=xg_ret_adj_x_r(i,j,k)/real(xg_norm(i,j,k))
-           xg_ret_adj_x_p(i,j,k)=xg_ret_adj_x_p(i,j,k)/real(xg_norm(i,j,k))
+!           xg_ret_adj_x_p(i,j,k)=xg_ret_adj_x_p(i,j,k)/real(xg_norm(i,j,k))
            do l=1,mop_dim
               if(xg_norm(i,j,l).eq.0) cycle
               xg_ret_cov(i,j,k,l)=xg_ret_cov(i,j,k,l)/real(xg_norm(i,j,k))
@@ -628,16 +671,6 @@ fac=fac_obs_error
            endif 
         enddo
 !
-! APM: Test print
-!        if(xg_nlvls(i,j).eq.mop_dim-2) then
-!           print *, 'xg_ret_adj_x_r ',xg_ret_adj_x_r(i,j,:)
-!           print *, 'xg_ret_err ',xg_ret_err(i,j,:)                 
-!           do kk=1,mop_dim
-!              print *, 'xg_avg_k ',kk,xg_avg_k(i,j,kk,:)
-!           enddo
-!           print *, ' '
-!        endif
-!
 ! Get number of vertical levels
         klvls=mop_dim
         do k=1,mop_dim
@@ -662,13 +695,13 @@ fac=fac_obs_error
 !
         if(trim(MOPITT_CO_retrieval_type) .eq. 'QOR') then
 !
-! Calculate SVD of ret_cov (Z=U_xxx * SV_xxx * VT_xxx)
+! Calculate SVD of raw_cov (Z=U_xxx * SV_xxx * VT_xxx)
            allocate(Z(nlvls,nlvls),SV_cov(nlvls),SV(nlvls,nlvls))
            allocate(U_cov(nlvls,nlvls),UT_cov(nlvls,nlvls),V_cov(nlvls,nlvls),VT_cov(nlvls,nlvls))
            allocate(rs_avg_k(nlvls,nlvls),rs_cov(nlvls,nlvls),rs_x_r(nlvls),rs_x_p(nlvls))       
            allocate(rr_avg_k(nlvls,nlvls),rr_cov(nlvls,nlvls),rr_x_r(nlvls),rr_x_p(nlvls))       
            allocate(ZL(nlvls,nlvls),ZR(nlvls,nlvls),ZV(nlvls))
-           Z(1:nlvls,1:nlvls)=dble(xg_ret_cov(i,j,kstr:mop_dim,kstr:mop_dim))
+           Z(1:nlvls,1:nlvls)=dble(xg_raw_cov(i,j,kstr:mop_dim,kstr:mop_dim))
            call dgesvd('A','A',nlvls,nlvls,Z,nlvls,SV_cov,U_cov,nlvls,VT_cov,nlvls,wrk,lwrk,info)
            nlvls_trc=0
            do k=1,nlvls
@@ -683,7 +716,7 @@ fac=fac_obs_error
 !              print *,'nlvls_trc ',nlvls_trc
 !              print *, 'SV ',SV_cov(:)
 !
-! Scale the singular vectors (NO SCALE/SCALE)     
+! Scale the singular vectors
            do k=1,nlvls_trc
               U_cov(:,k)=U_cov(:,k)/sqrt(SV_cov(k))
            enddo
@@ -713,31 +746,31 @@ fac=fac_obs_error
 !              do k=1,nlvls
 !                print *, 'rs_avg_k ',k,(rs_avg_k(k,l),l=1,nlvls)
 !              enddo
-           ZL(1:nlvls,1:nlvls)=dble(xg_ret_cov(i,j,kstr:mop_dim,kstr:mop_dim))
+           ZL(1:nlvls,1:nlvls)=dble(xg_raw_cov(i,j,kstr:mop_dim,kstr:mop_dim))
            call mat_tri_prd(UT_cov(1:nlvls,1:nlvls),ZL(1:nlvls,1:nlvls),U_cov(1:nlvls,1:nlvls), &
            rs_cov(1:nlvls,1:nlvls),nlvls,nlvls,nlvls,nlvls,nlvls,nlvls)
 !              do k=1,nlvls
 !                print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
 !              enddo
 !              do k=kstr,mop_dim
-!                print *, 'xg_ret_cov ',k,(xg_ret_cov(i,j,k,l),l=kstr,mop_dim)
+!                print *, 'xg_raw_cov ',k,(xg_raw_cov(i,j,k,l),l=kstr,mop_dim)
 !              enddo
 !              do k=1,nlvls
 !                print *, 'rs_cov ',k,(rs_cov(k,l),l=1,nlvls)
 !              enddo
-           ZV(1:nlvls)=dble(xg_ret_adj_x_r(i,j,kstr:mop_dim))
+           ZV(1:nlvls)=dble(xg_raw_adj_x_r(i,j,kstr:mop_dim))
            call lh_mat_vec_prd(UT_cov(1:nlvls,1:nlvls),ZV(1:nlvls),rs_x_r(1:nlvls),nlvls)
 !              do k=1,nlvls
 !                print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
 !              enddo
-!              print *, 'xg_adj_x_r ',(xg_ret_adj_x_r(i,j,l),l=kstr,mop_dim)
+!              print *, 'xg_adj_x_r ',(xg_raw_adj_x_r(i,j,l),l=kstr,mop_dim)
 !              print *, 'rs_x_r ',(rs_x_r(l),l=1,nlvls)
-           ZV(1:nlvls)=dble(xg_ret_adj_x_p(i,j,kstr:mop_dim))
+           ZV(1:nlvls)=dble(xg_raw_adj_x_p(i,j,kstr:mop_dim))
            call lh_mat_vec_prd(UT_cov(1:nlvls,1:nlvls),ZV(1:nlvls),rs_x_p(1:nlvls),nlvls)
 !              do k=1,nlvls
 !                 print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
 !              enddo
-!              print *, 'xg_adj_x_p ',(xg_ret_adj_x_p(i,j,l),l=kstr,mop_dim)
+!              print *, 'xg_adj_x_p ',(xg_raw_adj_x_p(i,j,l),l=kstr,mop_dim)
 !              print *, 'rs_x_p ',(rs_x_p(l),l=1,nlvls)
 !
 ! Get new errors (check if err2_rs_r < 0 the qstatus=1)
@@ -800,32 +833,32 @@ fac=fac_obs_error
 !              enddo
 
 ! retrieval error covariance
-           ZL(1:nlvls,1:nlvls)=dble(xg_ret_cov(i,j,kstr:mop_dim,kstr:mop_dim))
+           ZL(1:nlvls,1:nlvls)=dble(xg_raw_cov(i,j,kstr:mop_dim,kstr:mop_dim))
            call mat_tri_prd(UT_cov(1:nlvls,1:nlvls),ZL(1:nlvls,1:nlvls),U_cov(1:nlvls,1:nlvls), &
            rr_cov(1:nlvls,1:nlvls),nlvls,nlvls,nlvls,nlvls,nlvls,nlvls)
 !              do k=1,nlvls
 !                print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
 !              enddo
 !              do k=kstr,mop_dim
-!                print *, 'xg_ret_cov ',k,(xg_ret_cov(i,j,k,l),l=kstr,mop_dim)
+!                print *, 'xg_raw_cov ',k,(xg_raw_cov(i,j,k,l),l=kstr,mop_dim)
 !              enddo
 !              do k=1,nlvls
 !                print *, 'rr_cov ',k,(rr_cov(k,l),l=1,nlvls)
 !              enddo
 ! adjusted retrieval
-           ZV(1:nlvls)=dble(xg_ret_adj_x_r(i,j,kstr:mop_dim))
+           ZV(1:nlvls)=dble(xg_raw_adj_x_r(i,j,kstr:mop_dim))
            call lh_mat_vec_prd(UT_cov(1:nlvls,1:nlvls),ZV(1:nlvls),rr_x_r(1:nlvls),nlvls)
 !              do k=1,nlvls
 !                print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
 !              enddo
-!              print *, 'xg_adj_x_r ',(xg_ret_adj_x_r(i,j,l),l=kstr,mop_dim)
+!              print *, 'xg_adj_x_r ',(xg_raw_adj_x_r(i,j,l),l=kstr,mop_dim)
 !              print *, 'rr_x_r ',(rr_x_r(l),l=1,nlvls)
-           ZV(1:nlvls)=dble(xg_ret_adj_x_p(i,j,kstr:mop_dim))
+           ZV(1:nlvls)=dble(xg_raw_adj_x_p(i,j,kstr:mop_dim))
            call lh_mat_vec_prd(UT_cov(1:nlvls,1:nlvls),ZV(1:nlvls),rr_x_p(1:nlvls),nlvls)
 !              do k=1,nlvls
 !                 print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
 !              enddo
-!              print *, 'xg_adj_x_p ',(xg_ret_adj_x_p(i,j,l),l=kstr,mop_dim)
+!              print *, 'xg_adj_x_p ',(xg_raw_adj_x_p(i,j,l),l=kstr,mop_dim)
 !              print *, 'rr_x_p ',(rr_x_p(l),l=1,nlvls)
 !
 ! Calculate SVD of rr_cov (Z=U_xxx * SV_xxx * VT_xxx) - SECOND ROTATION
@@ -837,7 +870,7 @@ fac=fac_obs_error
               VT_cov(k,:)=0.
            enddo
 !
-! Scale the singular vectors (NO SCALE/SCALE)     
+! Scale the singular vectors     
            do k=1,nlvls_trc
               U_cov(:,k)=U_cov(:,k)/sqrt(SV_cov(k))
            enddo
@@ -942,7 +975,7 @@ fac=fac_obs_error
         do k=1,nlvls_fix
            qc_count=qc_count+1
 !
-! RAW with NO ROT
+! RAWR
            if(trim(MOPITT_CO_retrieval_type) .eq. 'RAWR') then
               xcomp(k)=xg_raw_adj_x_r(i,j,k+kstr-1)
               xcomperr(k)=fac*xg_raw_err(i,j,k+kstr-1)
@@ -953,7 +986,7 @@ fac=fac_obs_error
               enddo
            endif
 !
-! RET with NO ROT
+! RETR
            if(trim(MOPITT_CO_retrieval_type) .eq. 'RETR') then
               xcomp(k)=xg_ret_adj_x_r(i,j,k+kstr-1)
               xcomperr(k)=fac*xg_ret_err(i,j,k+kstr-1)
@@ -962,43 +995,9 @@ fac=fac_obs_error
               do l=1,xg_nlvls(i,j)
                  avgker(k,l)=xg_avg_k(i,j,k+kstr-1,l+kstr-1)
               enddo
-!              if(nlvls_fix.eq.mop_dim-2) then
-!                 print *, 'xcomp ',kstr,k,xg_ret_adj_x_r(i,j,k+kstr-1)
-!                 print *, 'xerr ',xg_ret_err(i,j,k+kstr-1)
-!                 print *, 'avg_k ',xg_avg_k(i,j,k+kstr-1,:)
-!                 print *, 'avg_k ',avgker(k,1:xg_nlvls(i,j))
-!                 print *, 'prs ',xg_prs(i,j,kstr:mop_dimp)*100.
-!                 stop
-!              endif
-           endif  
+           endif
 !
-! RAW QOR with NO ROT
-!           xcomp(k)=xg_raw_adj_x_r(i,j,k+kstr-1)
-!           xcomperr(k)=fac*xg_raw_err(i,j,k+kstr-1)
-!           xapr(k)=0.
-!           do l=1,xg_nlvls(i,j)
-!              avgker(k,l)=xg_avg_k(i,j,k+kstr-1,l+kstr-1)
-!           enddo
-!
-! RET QOR with NO ROT
-!           xcomp(k)=xg_ret_adj_x_r(i,j,k+kstr-1)
-!           xcomperr(k)=fac*xg_ret_err(i,j,k+kstr-1)
-!           xapr(k)=0.
-!           do l=1,xg_nlvls(i,j)
-!              avgker(k,l)=xg_avg_k(i,j,k+kstr-1,l+kstr-1)
-!           enddo
-!
-! RET QOR with ROT and NO SCALE
-! comment scaling
-!           xcomp(k)=rs_x_r(k)
-!           xcomperr(k)=fac*err2_rs_r(k)
-!           xapr(k)=0.
-!           do l=1,xg_nlvls(i,j)
-!              avgker(k,l)=rs_avg_k(k,l)
-!           enddo
-!
-! RET QOR with ROT and SCALE
-! uncomment scaling
+! RAWR QOR
            if(trim(MOPITT_CO_retrieval_type) .eq. 'QOR') then
               xcomp(k)=rs_x_r(k)
               xcomperr(k)=fac*err2_rs_r(k)
@@ -1008,17 +1007,7 @@ fac=fac_obs_error
               enddo
            endif
 !
-! RET CPSR with ROT and NO SCALE
-! comment scaling
-!           xcomp(k)=rs_x_r(k)
-!           xcomperr(k)=fac*err2_rs_r(k)
-!           xapr(k)=0.
-!           do l=1,xg_nlvls(i,j)
-!              avgker(k,l)=rs_avg_k(k,l)
-!           enddo
-!
-! RET CPSR with ROT and SCALE
-! uncomment scaling
+! RAWR CPSR
            if(trim(MOPITT_CO_retrieval_type) .eq. 'CPSR') then
               xcomp(k)=rs_x_r(k)
               xcomperr(k)=fac*err2_rs_r(k)
@@ -1041,11 +1030,7 @@ fac=fac_obs_error
 !
 ! location
            latitude=xg_lat(i,j) 
-           if (xg_lon(i,j)<0) then
-              longitude=xg_lon(i,j)+360
-           else
-              longitude=xg_lon(i,j)
-           endif
+           longitude=xg_lon(i,j)
 !
 ! time (get time from sec MOPITT variable)
            hour1 = int(xg_sec_avg/3600d0)
@@ -1177,6 +1162,14 @@ fac=fac_obs_error
         endif
      enddo
   enddo   
+  deallocate (xg_count,xg,xg_nlvls)
+  deallocate (xg_lon,xg_lat,xg_twt,xg_dof)
+  deallocate (xg_sec,xg_raw_err,xg_ret_err)
+  deallocate (xg_raw_adj_x_r,xg_raw_adj_x_p,xg_raw_x_r,xg_raw_x_p)
+  deallocate (xg_ret_adj_x_r,xg_ret_adj_x_p,xg_ret_x_r, xg_ret_x_p)
+  deallocate (xg_norm,xg_nint)
+  deallocate (xg_avg_k,xg_raw_cov,xg_ret_cov)
+  deallocate (xg_prs,xg_prs_norm)
 !
 !----------------------------------------------------------------------
 ! Write the sequence to a file
