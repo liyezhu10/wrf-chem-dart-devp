@@ -11,16 +11,20 @@
 ! WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ! See the License for the specific language governing permissions and
 ! limitations under the License.
-!
-! DART $Id: perturb_chem_emiss_INCRs.f90 13171 2019-05-09 16:42:36Z thoar@ucar.edu $
 
 ! code to ensemble mean and spread adjustemnts to the wrfchem emission files
 
 ! ifort -CB -C perturb_chem_emiss_ADD_PRIOR_INCRs.f90 -o perturb_chem_emiss_ADD_PRIOR_INCRs.exe -L${NETCDF}/lib -lnetcdff -lnetcdf -I${NETCDF}/include -L${CURC_MKL_LIB} -lmkl_rt -lmkl_lapack95_lp64 -lmkl_blas95_lp64
 
+program main
 
-          program main
-             implicit none
+implicit none
+
+! version controlled file description for error handling, do not edit
+character(len=*), parameter :: source   = 'perturb_chem_emiss_ADD_PRIOR_INCRs.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
+
              integer                                  :: unit,nx,ny,nz,nzp,nz_chem,nz_fire,nz_biog
              integer                                  :: nchem_spcs,nfire_spcs,nbiog_spcs
              integer                                  :: i,j,k,isp,num_mem,imem

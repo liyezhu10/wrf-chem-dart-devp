@@ -1,9 +1,7 @@
 ! DART software - Copyright UCAR. This open source software is provided
 ! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id: dart_to_wrf.f90 13126 2019-04-25 01:59:32Z thoar@ucar.edu $
- 
+
 PROGRAM dart_to_wrf
 
 use        types_mod, only : r8, missing_r8, PI, DEG2RAD
@@ -26,10 +24,9 @@ use                          netcdf
 implicit none
 
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/models/wrf_chem/WRF_DART_utilities/dart_to_wrf.f90 $"
-character(len=32 ), parameter :: revision = "$Revision: 13126 $"
-character(len=128), parameter :: revdate  = "$Date: 2019-04-24 19:59:32 -0600 (Wed, 24 Apr 2019) $"
+character(len=*), parameter :: source   = 'wrf_chem/WRF_DART_utilities/dart_to_wrf.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
 
 !-----------------------------------------------------------------------
 ! dart_to_wrf namelist parameters with default values.
@@ -647,8 +644,3 @@ call finalize_utilities('dart_to_wrf')   ! closes log file.
 
 end PROGRAM dart_to_wrf
 
-! <next few lines under version control, do not edit>
-! $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/models/wrf_chem/WRF_DART_utilities/dart_to_wrf.f90 $
-! $Id: dart_to_wrf.f90 13126 2019-04-25 01:59:32Z thoar@ucar.edu $
-! $Revision: 13126 $
-! $Date: 2019-04-24 19:59:32 -0600 (Wed, 24 Apr 2019) $

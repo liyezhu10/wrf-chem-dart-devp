@@ -1,16 +1,9 @@
-! Data Assimilation Research Testbed -- DART
-! Copyright 2004-2007, Data Assimilation Research Section
-! University Corporation for Atmospheric Research
-! Licensed under the GPL -- www.gpl.org/licenses/gpl.html
-!
-   program create_airnow_co_obs_sequence
-!
-! <next few lines under version control, do not edit>
-! $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/observations/AIRNOW/airnow_co_ascii_to_obs.f90 $
-! $Id: airnow_co_ascii_to_obs.f90 13165 2019-05-07 17:11:04Z thoar@ucar.edu $
-! $Revision: 13165 $
-! $Date: 2019-05-07 11:11:04 -0600 (Tue, 07 May 2019) $
-!
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
+! http://www.image.ucar.edu/DAReS/DART/DART_download
+
+program create_airnow_co_obs_sequence
+
 !=============================================
 ! AIRNOW SURFACE AQ obs
 ! Based from create_obs_sequence.f90
@@ -71,15 +64,14 @@
                                       random_uniform
 !
       use sort_mod, only :            index_sort
-!
-      implicit none
-!
-! version controlled file description for error handling, do not edit                          
-      character(len=128), parameter :: &
-      source   = "$URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/observations/AIRNOW/airnow_co_ascii_to_obs.f90 $", &
-      revision = "$Revision: 13165 $", &
-      revdate  = "$Date: 2019-05-07 11:11:04 -0600 (Tue, 07 May 2019) $"
-!
+
+implicit none
+
+! version controlled file description for error handling, do not edit
+character(len=*), parameter :: source   = 'airnow_co_ascii_to_obs.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
+
       type(obs_sequence_type)      :: seq
       type(obs_type)               :: obs
       type(obs_type)               :: obs_old
@@ -360,5 +352,3 @@
       calc_greg_sec=calc_greg_sec+sec
    end function calc_greg_sec
 
-      
-  

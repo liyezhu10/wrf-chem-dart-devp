@@ -11,13 +11,18 @@
 ! WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ! See the License for the specific language governing permissions and
 ! limitations under the License.
-!
-! DART $Id: perturb_chem_emiss_CORR_RT_MA_MPI.f90 13171 2019-05-09 16:42:36Z thoar@ucar.edu $
 
 ! code to perturb the wrfchem emission files
 
-          program main
-             implicit none
+program main
+
+implicit none
+
+! version controlled file description for error handling, do not edit
+character(len=*), parameter :: source   = 'perturb_chem_emiss_CORR_RT_MA_MPI.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
+
              include 'mpif.h'
              integer                                  :: unit,unita,unitb,num_procs,rank,stat
              integer                                  :: nx,ny,nz,nzp,nz_chem,nz_fire,nz_biog

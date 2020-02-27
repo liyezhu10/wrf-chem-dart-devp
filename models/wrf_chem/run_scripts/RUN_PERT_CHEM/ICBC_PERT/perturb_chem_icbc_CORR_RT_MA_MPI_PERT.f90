@@ -11,14 +11,20 @@
 ! WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ! See the License for the specific language governing permissions and
 ! limitations under the License.
-!
-! DART $Id: perturb_chem_icbc_CORR_RT_MA_MPI.f90 13171 2019-05-09 16:42:36Z thoar@ucar.edu $
 
 ! code to perturb the wrfchem icbc files
 
-          program main
-             implicit none
+program main
+
+implicit none
+
+! version controlled file description for error handling, do not edit
+character(len=*), parameter :: source   = 'perturb_chem_icbc_CORR_RT_MA_MPI_PERT.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
+
              include 'mpif.h'
+
              integer,parameter                           :: nbdy_exts=8
              integer,parameter                           :: nhalo=5
              integer                                     :: unit,unita,unitb,num_procs
