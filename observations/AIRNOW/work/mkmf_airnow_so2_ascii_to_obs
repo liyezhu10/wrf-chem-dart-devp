@@ -4,9 +4,9 @@
 # by UCAR, "as is", without charge, subject to all terms of use at
 # http://www.image.ucar.edu/DAReS/DART/DART_download
 
-       ../../../mkmf/mkmf -p airnow_so2_ascii_to_obs \
-    -t ../../../mkmf/mkmf.template \
--x -a "../../.." path_names_airnow_so2_ascii_to_obs
+     ../../../mkmf/mkmf -p airnow_so2_ascii_to_obs \
+ -t  ../../../mkmf/mkmf.template \
+ -a "../../.." path_names_airnow_so2_ascii_to_obs
 
 exit $status
 
