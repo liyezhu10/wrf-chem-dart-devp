@@ -1,8 +1,6 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! DART $Id: obs_def_MOPITT_CO_mod.f90 13121 2019-04-24 16:32:43Z mizzi@ucar.edu $
 
 ! BEGIN DART PREPROCESS KIND LIST
 ! MOPITT_CO_RETRIEVAL, KIND_CO
@@ -79,10 +77,9 @@ real(r8), allocatable, dimension(:) :: mopitt_psurf
 integer,  allocatable, dimension(:) :: mopitt_nlevels
 
 ! version controlled file description for error handling, do not edit
-character(len=*), parameter :: source   = &
-   "$URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/obs_def/obs_def_MOPITT_CO_mod.f90 $"
-character(len=*), parameter :: revision = "$Revision: 13121 $"
-character(len=*), parameter :: revdate  = "$Date: 2019-04-24 10:32:43 -0600 (Wed, 24 Apr 2019) $"
+character(len=*), parameter :: source   = 'obs_def_MOPITT_CO_mod.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
 
 character(len=512) :: string1, string2
 
@@ -614,8 +611,3 @@ end subroutine write_mopitt_avg_kernels
 end module obs_def_mopitt_mod
 ! END DART PREPROCESS MODULE CODE
 
-! <next few lines under version control, do not edit>
-! $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/obs_def/obs_def_MOPITT_CO_mod.f90 $
-! $Id: obs_def_MOPITT_CO_mod.f90 13121 2019-04-24 16:32:43Z mizzi@ucar.edu $
-! $Revision: 13121 $
-! $Date: 2019-04-24 10:32:43 -0600 (Wed, 24 Apr 2019) $
