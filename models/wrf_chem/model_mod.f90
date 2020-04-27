@@ -1,16 +1,14 @@
 ! DART software - Copyright UCAR. This open source software is provided
 ! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id: model_mod.f90 13126 2019-04-25 01:59:32Z thoar@ucar.edu $
 
 module model_mod
 
-! Assimilation interface for WRF model
+! Assimilation interface for WRF_chem model
 
 !-----------------------------------------------------------------------
 !
-!     interface for WRF
+!     interface for WRF_chem
 !
 !-----------------------------------------------------------------------
 !---------------- m o d u l e   i n f o r m a t i o n ------------------
@@ -168,10 +166,9 @@ public :: wrf_dom, wrf_static_data_for_dart
 
 !-----------------------------------------------------------------------
 ! version controlled file description for error handling, do not edit
-character(len=256), parameter :: source   = &
-   "$URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/models/wrf_chem/model_mod.f90 $"
-character(len=32 ), parameter :: revision = "$Revision: 13126 $"
-character(len=128), parameter :: revdate  = "$Date: 2019-04-24 19:59:32 -0600 (Wed, 24 Apr 2019) $"
+character(len=*), parameter :: source   = 'wrf_chem/model_mod.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
 
 ! miscellaneous
 integer, parameter :: max_state_variables = 100
@@ -10772,8 +10769,3 @@ end subroutine get_emiss_variable_size_from_file
 !
 end module model_mod
 
-! <next few lines under version control, do not edit>
-! $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/models/wrf_chem/model_mod.f90 $
-! $Id: model_mod.f90 13126 2019-04-25 01:59:32Z thoar@ucar.edu $
-! $Revision: 13126 $
-! $Date: 2019-04-24 19:59:32 -0600 (Wed, 24 Apr 2019) $

@@ -1,8 +1,6 @@
-! DART software - Copyright 2004 - 2013 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! DART $Id: obs_def_MODIS_AOD_mod.f90 11956 2017-09-26 19:47:16Z thoar@ucar.edu $
 
 ! BEGIN DART PREPROCESS KIND LIST
 ! MODIS_AOD_RETRIEVAL, KIND_AOD
@@ -64,10 +62,9 @@ integer, parameter               :: max_modis_aod_obs = 10000000
 integer                          :: num_modis_aod_obs = 0
 
 ! version controlled file description for error handling, do not edit
-character(len=*), parameter :: source   = &
-   "$URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/obs_def/obs_def_MODIS_AOD_mod.f90 $"
-character(len=*), parameter :: revision = "$Revision: 11956 $"
-character(len=*), parameter :: revdate  = "$Date: 2017-09-26 13:47:16 -0600 (Tue, 26 Sep 2017) $"
+character(len=*), parameter :: source   = "obs_def_MODIS_AOD_OLD_mod.f90"
+character(len=*), parameter :: revision = ""
+character(len=*), parameter :: revdate  = ""
 
 character(len=512) :: string1, string2
 
@@ -243,8 +240,3 @@ end subroutine set_obs_def_modis_aod
 end module obs_def_modis_mod
 ! END DART PREPROCESS MODULE CODE
 
-! <next few lines under version control, do not edit>
-! $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/obs_def/obs_def_MODIS_AOD_mod.f90 $
-! $Id: obs_def_MODIS_AOD_mod.f90 11956 2017-09-26 19:47:16Z thoar@ucar.edu $
-! $Revision: 11956 $
-! $Date: 2017-09-26 13:47:16 -0600 (Tue, 26 Sep 2017) $

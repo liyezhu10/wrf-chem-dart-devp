@@ -1,8 +1,6 @@
 ! DART software - Copyright UCAR. This open source software is provided
 ! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
-!
-! $Id: wrf_dart_obs_preprocess.f90 13126 2019-04-25 01:59:32Z thoar@ucar.edu $
 
 program wrf_dart_obs_preprocess
 
@@ -52,6 +50,11 @@ use        model_mod, only : static_init_model
 use           netcdf
 
 implicit none
+
+! version controlled file description for error handling, do not edit
+character(len=*), parameter :: source   = 'wrf_chem/WRF_DART_utilities/wrf_dart_obs_preprocess.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
 
 ! ----------------------------------------------------------------------
 ! Declare namelist parameters
@@ -3009,10 +3012,3 @@ if (westl > eastl .and. lon <= eastl) lon = lon + circumf
 return
 end subroutine wrap_lon
 
-
-
-! <next few lines under version control, do not edit>
-! $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/models/wrf_chem/WRF_DART_utilities/wrf_dart_obs_preprocess.f90 $
-! $Id: wrf_dart_obs_preprocess.f90 13126 2019-04-25 01:59:32Z thoar@ucar.edu $
-! $Revision: 13126 $
-! $Date: 2019-04-24 19:59:32 -0600 (Wed, 24 Apr 2019) $

@@ -1,14 +1,8 @@
-! DART software - Copyright © 2004 - 2010 UCAR. This open source software is
-! provided by UCAR, "as is", without charge, subject to all terms of use at
+! DART software - Copyright UCAR. This open source software is provided
+! by UCAR, "as is", without charge, subject to all terms of use at
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 
 program modis_ascii_to_obs
-
-! <next few lines under version control, do not edit>
-! $URL: https://svn-dares-dart.cgd.ucar.edu/DART/branches/mizzi/observations/MODIS/modis_ascii_to_obs.f90 $
-! $Id: modis_ascii_to_obs.f90 11132 2017-02-22 19:55:59Z mizzi@ucar.edu $
-! $Revision: 11132 $
-! $Date: 2017-02-22 12:55:59 -0700 (Wed, 22 Feb 2017) $
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
@@ -40,6 +34,11 @@ use  obs_sequence_mod, only : obs_sequence_type, obs_type, read_obs_seq, &
 use      obs_kind_mod, only : MODIS_AOD_RETRIEVAL
 
 implicit none
+
+! version controlled file description for error handling, do not edit
+character(len=*), parameter :: source   = 'modis_ascii_to_obs.f90'
+character(len=*), parameter :: revision = ''
+character(len=*), parameter :: revdate  = ''
 
 character(len=64), parameter :: modis_ascii_input_file = 'modis_asciidata.input'
 character(len=64), parameter :: obs_out_file    = 'modis_obs_seq.out'
