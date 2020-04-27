@@ -3,6 +3,7 @@ path='/scratch/summit/mizzi/DART_OBS_DIAG';
 %
 %exp         = '/real_FRAPPE_AIRNOW_CONTROL/obs_diag_output.nc';
 exp         = '/real_FRAPPE_RETR_AIR_CO/obs_diag_output.nc';
+exp         = '/real_FRAPPE_RETR_AIR_CO_CUT_p05/obs_diag_output.nc';
 %exp         = '/real_FRAPPE_RETR_AIR_O3/obs_diag_output.nc';
 %exp         = '/real_FRAPPE_RETR_AIR_NO2/obs_diag_output.nc';
 %exp         = '/real_FRAPPE_RETR_AIR_SO2/obs_diag_output.nc';

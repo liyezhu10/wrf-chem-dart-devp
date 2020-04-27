@@ -26,15 +26,15 @@
 ############################################################################### 
 #
 export START_DATE=2014071606
-export END_DATE=2014071706
+export END_DATE=2014071718
 #
 # Define EXPERIMENT path
 #export DIR_NAME=real_FRAPPE_CONTROL
 #export DIR_NAME=real_FRAPPE_RETR_IAS_CO
-#export DIR_NAME=real_FRAPPE_RETR_AIR_CO
-export DIR_NAME=real_FRAPPE_CPSR_MOP_CO_INF_DAMP
-export DIR_NAME=real_FRAPPE_CPSR_IAS_CO_INF_DAMP
-export DIR_NAME=real_FRAPPE_RETR_MOP_CO_INF_DAMP
+export DIR_NAME=real_FRAPPE_RETR_AIR_CO_CUT_p05
+#export DIR_NAME=real_FRAPPE_CPSR_MOP_CO_INF_DAMP
+#export DIR_NAME=real_FRAPPE_CPSR_IAS_CO_INF_DAMP
+#export DIR_NAME=real_FRAPPE_RETR_MOP_CO_INF_DAMP
 #export DIR_NAME=real_FRAPPE_RETR_MOP_CO_1p0
 #export DIR_NAME=real_FRAPPE_CPSR_MOP_CO_1p0
 #
@@ -52,7 +52,7 @@ export LBC_FREQ=3
 (( CYCLE_PERIOD_SEC=${CYCLE_PERIOD}*60*60 ))
 #
 # Define code versions
-export DART_VER=DART_CHEM_REPOSITORY
+export DART_VER=DART_classic_mizzi_dev
 export WRFCHEM_VER=WRFCHEMv3.9.1.1_dmpar
 export WRF_VER=WRFv3.9.1.1_dmpar
 export WRFDA_VER=WRFDAv3.9.1.1_dmpar

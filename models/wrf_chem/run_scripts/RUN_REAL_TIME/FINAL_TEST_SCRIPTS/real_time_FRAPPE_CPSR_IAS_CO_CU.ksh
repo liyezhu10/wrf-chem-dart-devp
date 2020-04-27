@@ -18,7 +18,7 @@
 # the University of Colorado Boulder, and Colorado State University. The Summit 
 # supercomputer is a joint effort of the University of Colorado Boulder and 
 # Colorado State University.
-
+#
 ##########################################################################
 #
 # Purpose: Set global environment variables for real_time_wrf_chem
@@ -139,7 +139,6 @@ export NUM_SPECIAL_FORECAST=1
 export SPECIAL_FORECAST_FAC=1./2.
 export SPECIAL_FORECAST_FAC=1.
 export SPECIAL_FORECAST_FAC=2./3.
-1
 export SPECIAL_FORECAST_MEM[1]=16
 export SPECIAL_FORECAST_MEM[2]=27
 export SPECIAL_FORECAST_MEM[3]=28
@@ -613,18 +612,18 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
 # TARG_LON=-120.14 = 239.85 (33,15)
 #   export NL_MIN_LAT=27.5
 #   export NL_MAX_LAT=38.5
-#   export NL_MIN_LON=234.5
-#   export NL_MAX_LON=244.5
+#   export NL_MIN_LON=-125.5
+#   export NL_MAX_LON=-115.5
 #
 # NL_MIN_LON, NL_MAX_LON = [-180.,190.]
 # NL_MIN_LAT, NL_MAX_LAT = [-90.,90.]
 # NNL_MIN_LON, NL_MAX_LON = [0.,360.]
 # NNL_MIN_LON, NL_MAX_LON = [-90.,90.]
 #
-   export NL_MIN_LON=-132
-   export NL_MAX_LON=-94
    export NL_MIN_LAT=27
    export NL_MAX_LAT=48
+   export NL_MIN_LON=-132
+   export NL_MAX_LON=-94
 #
    export NNL_MIN_LON=${NL_MIN_LON}
    if [[ ${NL_MIN_LON} -lt 0. ]]; then
@@ -996,7 +995,7 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
 # &filter.nml
    export NL_OUTLIER_THRESHOLD=3.
    export NL_ENABLE_SPECIAL_OUTLIER_CODE=.true.
-   export NL_SPECIAL_OUTLIER_THRESHOLD=3.
+   export NL_SPECIAL_OUTLIER_THRESHOLD=4.
    export NL_ENS_SIZE=${NUM_MEMBERS}
    export NL_OUTPUT_RESTART=.true.
    export NL_START_FROM_RESTART=.true.
@@ -2977,7 +2976,7 @@ EOFF
          export JOBRND=${RANDOM}_idl_mopitt
          cat << EOFF > job.ksh
 #!/bin/ksh -aeux
-#SBATCH --account $(ACCOUNT}
+#SBATCH --account ${ACCOUNT}
 #SBATCH --job-name ${JOBRND}
 #SBATCH --qos ${GENERAL_JOB_CLASS}
 #SBATCH --time ${GENERAL_TIME_LIMIT}
@@ -3668,10 +3667,10 @@ if ${RUN_AIRNOW_O3_OBS}; then
       export NL_HOUR=${L_HH}
 #
       export NL_FILENAME=\'airnow_o3_hourly_csv_data\'
-      export NL_LAT_MN=${NNL_MIN_LAT}
-      export NL_LAT_MX=${NNL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LAT_MN=${NL_MIN_LAT}
+      export NL_LAT_MX=${NL_MAX_LAT}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
       export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
       export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
       export NL_USE_LOG_NOX=${USE_LOG_NOX_LOGIC}
@@ -3742,10 +3741,10 @@ if ${RUN_AIRNOW_O3_OBS}; then
       export NL_HOUR=${L_HH}
 #
       export NL_FILENAME=\'airnow_co_hourly_csv_data\'
-      export NL_LAT_MN=${NNL_MIN_LAT}
-      export NL_LAT_MX=${NNL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LAT_MN=${NL_MIN_LAT}
+      export NL_LAT_MX=${NL_MAX_LAT}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
       export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
       export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
       export NL_USE_LOG_NOX=${USE_LOG_NOX_LOGIC}
@@ -3816,10 +3815,10 @@ if ${RUN_AIRNOW_NO2_OBS}; then
       export NL_HOUR=${L_HH}
 #
       export NL_FILENAME=\'airnow_no2_hourly_csv_data\'
-      export NL_LAT_MN=${NNL_MIN_LAT}
-      export NL_LAT_MX=${NNL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LAT_MN=${NL_MIN_LAT}
+      export NL_LAT_MX=${NL_MAX_LAT}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
       export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
       export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
       export NL_USE_LOG_NOX=${USE_LOG_NOX_LOGIC}
@@ -3890,10 +3889,10 @@ if ${RUN_AIRNOW_SO2_OBS}; then
       export NL_HOUR=${L_HH}
 #
       export NL_FILENAME=\'airnow_so2_hourly_csv_data\'
-      export NL_LAT_MN=${NNL_MIN_LAT}
-      export NL_LAT_MX=${NNL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LAT_MN=${NL_MIN_LAT}
+      export NL_LAT_MX=${NL_MAX_LAT}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
       export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
       export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
       export NL_USE_LOG_NOX=${USE_LOG_NOX_LOGIC}
@@ -3964,10 +3963,10 @@ if ${RUN_AIRNOW_PM10_OBS}; then
       export NL_HOUR=${L_HH}
 #
       export NL_FILENAME=\'airnow_pm10_hourly_csv_data\'
-      export NL_LAT_MN=${NNL_MIN_LAT}
-      export NL_LAT_MX=${NNL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LAT_MN=${NL_MIN_LAT}
+      export NL_LAT_MX=${NL_MAX_LAT}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
       export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
       export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
       export NL_USE_LOG_NOX=${USE_LOG_NOX_LOGIC}
@@ -4038,10 +4037,10 @@ if ${RUN_AIRNOW_PM25_OBS}; then
       export NL_HOUR=${L_HH}
 #
       export NL_FILENAME=\'airnow_pm2.5_hourly_csv_data\'
-      export NL_LAT_MN=${NNL_MIN_LAT}
-      export NL_LAT_MX=${NNL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LAT_MN=${NL_MIN_LAT}
+      export NL_LAT_MX=${NL_MAX_LAT}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
       export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
       export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
       export NL_USE_LOG_NOX=${USE_LOG_NOX_LOGIC}
@@ -4116,10 +4115,10 @@ if ${RUN_AIRNOW_PM25_OBS}; then
 #
       export NL_FILENAME_COORD=\'panda_station_coordinates.csv\'
       export NL_FILENAME_DATA=\'panda_stationData.csv\'
-      export NL_LAT_MN=${NNL_MIN_LAT}
-      export NL_LAT_MX=${NNL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LAT_MN=${NL_MIN_LAT}
+      export NL_LAT_MX=${NL_MAX_LAT}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
 #
 # GET EXECUTABLE
       cp ${DART_DIR}/observations/PANDA/work/panda_co_ascii_to_obs ./.
@@ -4187,10 +4186,10 @@ if ${RUN_AIRNOW_PM25_OBS}; then
 #
       export NL_FILENAME_COORD=\'panda_station_coordinates.csv\'
       export NL_FILENAME_DATA=\'panda_stationData.csv\'
-      export NL_LAT_MN=${NNL_MIN_LAT}
-      export NL_LAT_MX=${NNL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LAT_MN=${NL_MIN_LAT}
+      export NL_LAT_MX=${NL_MAX_LAT}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
 #
 # GET EXECUTABLE
       cp ${DART_DIR}/observations/PANDA/work/panda_o3_ascii_to_obs ./.
@@ -4258,10 +4257,10 @@ if ${RUN_AIRNOW_PM25_OBS}; then
 #
       export NL_FILENAME_COORD=\'panda_station_coordinates.csv\'
       export NL_FILENAME_DATA=\'panda_stationData.csv\'
-      export NL_LAT_MN=${NNL_MIN_LAT}
-      export NL_LAT_MX=${NNL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LAT_MN=${NL_MIN_LAT}
+      export NL_LAT_MX=${NL_MAX_LAT}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
 #
 # GET EXECUTABLE
       cp ${DART_DIR}/observations/PANDA/work/panda_pm25_ascii_to_obs ./.

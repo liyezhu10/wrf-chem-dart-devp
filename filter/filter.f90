@@ -1965,6 +1965,42 @@ select case (this_obs_type)
       else
          failed_outlier = .false.
       endif
+   case (AIRNOW_CO)
+      if (ratio > special_outlier_threshold) then
+         failed_outlier = .true.
+      else
+         failed_outlier = .false.
+      endif
+   case (AIRNOW_O3)
+      if (ratio > special_outlier_threshold) then
+         failed_outlier = .true.
+      else
+         failed_outlier = .false.
+      endif
+   case (AIRNOW_NO2)
+      if (ratio > special_outlier_threshold) then
+         failed_outlier = .true.
+      else
+         failed_outlier = .false.
+      endif
+   case (AIRNOW_SO2)
+      if (ratio > special_outlier_threshold) then
+         failed_outlier = .true.
+      else
+         failed_outlier = .false.
+      endif
+   case (AIRNOW_PM10)
+      if (ratio > special_outlier_threshold) then
+         failed_outlier = .true.
+      else
+         failed_outlier = .false.
+      endif
+   case (AIRNOW_PM25)
+      if (ratio > special_outlier_threshold) then
+         failed_outlier = .true.
+      else
+         failed_outlier = .false.
+      endif
 ! APM: ---
 
 ! example of specifying a different threshold value for one obs type:

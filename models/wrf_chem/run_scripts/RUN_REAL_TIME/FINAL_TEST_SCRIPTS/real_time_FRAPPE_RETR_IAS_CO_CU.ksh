@@ -18,7 +18,7 @@
 # the University of Colorado Boulder, and Colorado State University. The Summit 
 # supercomputer is a joint effort of the University of Colorado Boulder and 
 # Colorado State University.
-
+#
 ##########################################################################
 #
 # Purpose: Set global environment variables for real_time_wrf_chem
@@ -135,22 +135,36 @@ fi
 #
 # Run WRF-Chem for failed forecasts
 export RUN_SPECIAL_FORECAST=true
-export NUM_SPECIAL_FORECAST=1
+export NUM_SPECIAL_FORECAST=4
 export SPECIAL_FORECAST_FAC=1./2.
 export SPECIAL_FORECAST_FAC=2./3.
 export SPECIAL_FORECAST_FAC=1.
 
-export SPECIAL_FORECAST_MEM[1]=29
+export SPECIAL_FORECAST_MEM[1]=27
 export SPECIAL_FORECAST_MEM[2]=28
-export SPECIAL_FORECAST_MEM[3]=39
+export SPECIAL_FORECAST_MEM[3]=29
 export SPECIAL_FORECAST_MEM[4]=30
-export SPECIAL_FORECAST_MEM[5]=25
-export SPECIAL_FORECAST_MEM[6]=26
-export SPECIAL_FORECAST_MEM[7]=27
-export SPECIAL_FORECAST_MEM[8]=28
-export SPECIAL_FORECAST_MEM[9]=29
-export SPECIAL_FORECAST_MEM[10]=30
-export SPECIAL_FORECAST_MEM[11]=15
+export SPECIAL_FORECAST_MEM[5]=18
+export SPECIAL_FORECAST_MEM[6]=19
+export SPECIAL_FORECAST_MEM[7]=20
+export SPECIAL_FORECAST_MEM[8]=21
+export SPECIAL_FORECAST_MEM[9]=22
+export SPECIAL_FORECAST_MEM[10]=23
+export SPECIAL_FORECAST_MEM[11]=24
+export SPECIAL_FORECAST_MEM[12]=25
+export SPECIAL_FORECAST_MEM[13]=26
+export SPECIAL_FORECAST_MEM[14]=27
+export SPECIAL_FORECAST_MEM[15]=28
+export SPECIAL_FORECAST_MEM[16]=29
+export SPECIAL_FORECAST_MEM[17]=30
+export SPECIAL_FORECAST_MEM[18]=23
+export SPECIAL_FORECAST_MEM[19]=24
+export SPECIAL_FORECAST_MEM[20]=25
+export SPECIAL_FORECAST_MEM[21]=26
+export SPECIAL_FORECAST_MEM[22]=27
+export SPECIAL_FORECAST_MEM[23]=28
+export SPECIAL_FORECAST_MEM[24]=29
+export SPECIAL_FORECAST_MEM[25]=30
 #
 # Run temporal interpolation for missing background files
 # RUN_UNGRIB, RUN_METGRID, and RUN_REAL must all be false for the interpolation and for cycling
@@ -315,29 +329,29 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
    export ASIM_MAX_DD=$(echo $ASIM_MAX_DATE | cut -c7-8)
    export ASIM_MAX_HH=$(echo $ASIM_MAX_DATE | cut -c9-10)
    set -A temp `echo $ASIM_MIN_DATE 0 -g | ${DART_DIR}/models/wrf_chem/work/advance_time`
-   export ASIM_MIN_DAY_GREG=${temp[0]}
+  export ASIM_MIN_DAY_GREG=${temp[0]}
    export ASIM_MIN_SEC_GREG=${temp[1]}
    set -A temp `echo $ASIM_MAX_DATE 0 -g | ${DART_DIR}/models/wrf_chem/work/advance_time` 
    export ASIM_MAX_DAY_GREG=${temp[0]}
    export ASIM_MAX_SEC_GREG=${temp[1]}
-1#
+#
 # SELECT COMPONENT RUN OPTIONS:
    if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
       export RUN_GEOGRID=false
-      export RUN_UNGRIB=true
-      export RUN_METGRID=true
-      export RUN_REAL=true
-      export RUN_PERT_WRFCHEM_MET_IC=true
-      export RUN_PERT_WRFCHEM_MET_BC=true
-      export RUN_EXO_COLDENS=true
-      export RUN_SEASON_WES=true
-      export RUN_WRFCHEM_BIO=true
-      export RUN_WRFCHEM_FIRE=true
-      export RUN_WRFCHEM_CHEMI=true
-      export RUN_PERT_WRFCHEM_CHEM_ICBC=true
-      export RUN_PERT_WRFCHEM_CHEM_EMISS=true
+      export RUN_UNGRIB=false
+      export RUN_METGRID=false
+      export RUN_REAL=false
+      export RUN_PERT_WRFCHEM_MET_IC=false
+      export RUN_PERT_WRFCHEM_MET_BC=false
+      export RUN_EXO_COLDENS=false
+      export RUN_SEASON_WES=false
+      export RUN_WRFCHEM_BIO=false
+      export RUN_WRFCHEM_FIRE=false
+      export RUN_WRFCHEM_CHEMI=false
+      export RUN_PERT_WRFCHEM_CHEM_ICBC=false
+      export RUN_PERT_WRFCHEM_CHEM_EMISS=false
       export RUN_MOPITT_CO_OBS=false
-      export RUN_IASI_CO_OBS=true
+      export RUN_IASI_CO_OBS=false
       export RUN_IASI_O3_OBS=false
       export RUN_OMI_NO2_OBS=false
       export RUN_AIRNOW_O3_OBS=false
@@ -350,9 +364,9 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
       export RUN_PANDA_O3_OBS=false
       export RUN_PANDA_PM25_OBS=false
       export RUN_MODIS_AOD_OBS=false
-      export RUN_MET_OBS=true
-      export RUN_COMBINE_OBS=true
-      export RUN_PREPROCESS_OBS=true
+      export RUN_MET_OBS=false
+      export RUN_COMBINE_OBS=false
+      export RUN_PREPROCESS_OBS=false
 #
       if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
          export RUN_WRFCHEM_INITIAL=true
@@ -553,7 +567,7 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
    export FILTER_NODES=2-4
    export FILTER_TASKS=48
    export WRFCHEM_JOB_CLASS=normal
-   export WRFCHEM_TIME_LIMIT=01:00:00
+   export WRFCHEM_TIME_LIMIT=01:30:00
    export WRFCHEM_NODES=2-4
    export WRFCHEM_TASKS=48
    export PERT_JOB_CLASS=normal
@@ -613,13 +627,8 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
 # TARG_LON=-120.14 = 239.85 (33,15)
 #   export NL_MIN_LAT=27.5
 #   export NL_MAX_LAT=38.5
-#   export NL_MIN_LON=234.5
-#   export NL_MAX_LON=244.5
-#
-   export NL_MIN_LAT=27
-   export NL_MAX_LAT=48
-   export NL_MIN_LON=228
-   export NL_MAX_LON=266
+#   export NL_MIN_LON=-125.5
+#   export NL_MAX_LON=-115.5
 #
 # NL_MIN_LON, NL_MAX_LON = [-180.,190.]
 # NL_MIN_LAT, NL_MAX_LAT = [-90.,90.]
@@ -1001,7 +1010,7 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
 # &filter.nml
    export NL_OUTLIER_THRESHOLD=3.
    export NL_ENABLE_SPECIAL_OUTLIER_CODE=.true.
-   export NL_SPECIAL_OUTLIER_THRESHOLD=3.
+   export NL_SPECIAL_OUTLIER_THRESHOLD=4.
    export NL_ENS_SIZE=${NUM_MEMBERS}
    export NL_OUTPUT_RESTART=.true.
    export NL_START_FROM_RESTART=.true.
@@ -1045,7 +1054,7 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
    export NL_INF_INITIAL_POST=1.0
    export NL_INF_SD_INITIAL_PRIOR=0.6
    export NL_INF_SD_INITIAL_POST=0.0
-   export NL_INF_DAMPING_PRIOR=0.60
+   export NL_INF_DAMPING_PRIOR=0.80
    export NL_INF_DAMPING_POST=1.0
    export NL_INF_LOWER_BOUND_PRIOR=1.0
    export NL_INF_LOWER_BOUND_POST=1.0
@@ -2982,7 +2991,7 @@ EOFF
          export JOBRND=${RANDOM}_idl_mopitt
          cat << EOFF > job.ksh
 #!/bin/ksh -aeux
-#SBATCH --account $(ACCOUNT}
+#SBATCH --account ${ACCOUNT}
 #SBATCH --job-name ${JOBRND}
 #SBATCH --qos ${GENERAL_JOB_CLASS}
 #SBATCH --time ${GENERAL_TIME_LIMIT}
@@ -3675,8 +3684,8 @@ if ${RUN_AIRNOW_O3_OBS}; then
       export NL_FILENAME=\'airnow_o3_hourly_csv_data\'
       export NL_LAT_MN=${NL_MIN_LAT}
       export NL_LAT_MX=${NL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
       export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
       export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
       export NL_USE_LOG_NOX=${USE_LOG_NOX_LOGIC}
@@ -3749,8 +3758,8 @@ if ${RUN_AIRNOW_O3_OBS}; then
       export NL_FILENAME=\'airnow_co_hourly_csv_data\'
       export NL_LAT_MN=${NL_MIN_LAT}
       export NL_LAT_MX=${NL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
       export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
       export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
       export NL_USE_LOG_NOX=${USE_LOG_NOX_LOGIC}
@@ -3823,8 +3832,8 @@ if ${RUN_AIRNOW_NO2_OBS}; then
       export NL_FILENAME=\'airnow_no2_hourly_csv_data\'
       export NL_LAT_MN=${NL_MIN_LAT}
       export NL_LAT_MX=${NL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
       export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
       export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
       export NL_USE_LOG_NOX=${USE_LOG_NOX_LOGIC}
@@ -3897,8 +3906,8 @@ if ${RUN_AIRNOW_SO2_OBS}; then
       export NL_FILENAME=\'airnow_so2_hourly_csv_data\'
       export NL_LAT_MN=${NL_MIN_LAT}
       export NL_LAT_MX=${NL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
       export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
       export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
       export NL_USE_LOG_NOX=${USE_LOG_NOX_LOGIC}
@@ -3971,8 +3980,8 @@ if ${RUN_AIRNOW_PM10_OBS}; then
       export NL_FILENAME=\'airnow_pm10_hourly_csv_data\'
       export NL_LAT_MN=${NL_MIN_LAT}
       export NL_LAT_MX=${NL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
       export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
       export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
       export NL_USE_LOG_NOX=${USE_LOG_NOX_LOGIC}
@@ -4045,8 +4054,8 @@ if ${RUN_AIRNOW_PM25_OBS}; then
       export NL_FILENAME=\'airnow_pm2.5_hourly_csv_data\'
       export NL_LAT_MN=${NL_MIN_LAT}
       export NL_LAT_MX=${NL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
       export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
       export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
       export NL_USE_LOG_NOX=${USE_LOG_NOX_LOGIC}
@@ -4123,8 +4132,8 @@ if ${RUN_AIRNOW_PM25_OBS}; then
       export NL_FILENAME_DATA=\'panda_stationData.csv\'
       export NL_LAT_MN=${NL_MIN_LAT}
       export NL_LAT_MX=${NL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
 #
 # GET EXECUTABLE
       cp ${DART_DIR}/observations/PANDA/work/panda_co_ascii_to_obs ./.
@@ -4194,8 +4203,8 @@ if ${RUN_AIRNOW_PM25_OBS}; then
       export NL_FILENAME_DATA=\'panda_stationData.csv\'
       export NL_LAT_MN=${NL_MIN_LAT}
       export NL_LAT_MX=${NL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
 #
 # GET EXECUTABLE
       cp ${DART_DIR}/observations/PANDA/work/panda_o3_ascii_to_obs ./.
@@ -4265,8 +4274,8 @@ if ${RUN_AIRNOW_PM25_OBS}; then
       export NL_FILENAME_DATA=\'panda_stationData.csv\'
       export NL_LAT_MN=${NL_MIN_LAT}
       export NL_LAT_MX=${NL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
 #
 # GET EXECUTABLE
       cp ${DART_DIR}/observations/PANDA/work/panda_pm25_ascii_to_obs ./.
@@ -4857,43 +4866,6 @@ EOFF
          fi
         let IMEM=${IMEM}+1
       done
-#
-# Create input.nml
-   if [[ ${HH} -eq '06' || ${HH} -eq '18' ]]; then
-      export NL_ASSIMILATE_THESE_OBS_TYPES="'RADIOSONDE_TEMPERATURE',
-                                   'RADIOSONDE_U_WIND_COMPONENT',
-                                   'RADIOSONDE_V_WIND_COMPONENT',
-                                   'RADIOSONDE_SPECIFIC_HUMIDITY',
-                                   'ACARS_U_WIND_COMPONENT',
-                                   'ACARS_V_WIND_COMPONENT',
-                                   'ACARS_TEMPERATURE',
-                                   'AIRCRAFT_U_WIND_COMPONENT',
-                                   'AIRCRAFT_V_WIND_COMPONENT',
-                                   'AIRCRAFT_TEMPERATURE',
-                                   'SAT_U_WIND_COMPONENT',
-                                   'SAT_V_WIND_COMPONENT',
-                                   'IASI_CO_RETRIEVAL'"
-      export NL_EVALUATE_THESE_OBS_TYPES="'MOPITT_CO_RETRIEVAL',
-                                   'AIRNOW_CO',
-                                   'AIRNOW_O3',
-                                   'MODIS_AOD_RETRIEVAL'"
-   elif [[ ${HH} -eq '00' || ${HH} -eq '12' ]]; then
-      export NL_ASSIMILATE_THESE_OBS_TYPES="'RADIOSONDE_TEMPERATURE',
-                                   'RADIOSONDE_U_WIND_COMPONENT',
-                                   'RADIOSONDE_V_WIND_COMPONENT',
-                                   'RADIOSONDE_SPECIFIC_HUMIDITY',
-                                   'ACARS_U_WIND_COMPONENT',
-                                   'ACARS_V_WIND_COMPONENT',
-                                   'ACARS_TEMPERATURE',
-                                   'AIRCRAFT_U_WIND_COMPONENT',
-                                   'AIRCRAFT_V_WIND_COMPONENT',
-                                   'AIRCRAFT_TEMPERATURE',
-                                   'SAT_U_WIND_COMPONENT',
-                                   'SAT_V_WIND_COMPONENT'"
-      export NL_EVALUATE_THESE_OBS_TYPES="'AIRNOW_O3',
-                                   'MODIS_AOD_RETRIEVAL'"
-      fi
-      ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_input.nml.ksh
 #
 # Create job script 
       TRANDOM=$$
