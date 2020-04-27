@@ -120,6 +120,7 @@ character(len=*), parameter :: revdate  = ''
              endif 
              nzp=nz+1
              num_mem=nint(nnum_mem)
+             bdy_dims=(/ny,ny,nx,nx,ny,ny,nx,nx/)
 !
 ! Allocate arrays
              allocate(ch_chem_spc(nchem_spcs))

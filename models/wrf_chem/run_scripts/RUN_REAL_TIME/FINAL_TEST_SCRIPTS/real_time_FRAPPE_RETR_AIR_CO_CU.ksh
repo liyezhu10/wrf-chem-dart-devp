@@ -18,23 +18,23 @@
 # the University of Colorado Boulder, and Colorado State University. The Summit 
 # supercomputer is a joint effort of the University of Colorado Boulder and 
 # Colorado State University.
-
+#
 ##########################################################################
 #
 # Purpose: Set global environment variables for real_time_wrf_chem
 #
 #########################################################################
-
+#
 export INITIAL_DATE=2014071400
 export FIRST_FILTER_DATE=2014071406
 export FIRST_DART_INFLATE_DATE=2014071406
 export FIRST_EMISS_INV_DATE=2014071406
 #
 # START CYCLE DATE-TIME:
-export CYCLE_STR_DATE=2014071606
+export CYCLE_STR_DATE=2014071906
 #
 # END CYCLE DATE-TIME:
-export CYCLE_END_DATE=2014071606
+export CYCLE_END_DATE=2014071906
 #export CYCLE_END_DATE=${CYCLE_STR_DATE}
 #
 export CYCLE_DATE=${CYCLE_STR_DATE}
@@ -140,10 +140,10 @@ export SPECIAL_FORECAST_FAC=1./2.
 export SPECIAL_FORECAST_FAC=1.
 export SPECIAL_FORECAST_FAC=2./3.
 
-export SPECIAL_FORECAST_MEM[1]=26
-export SPECIAL_FORECAST_MEM[2]=6
-export SPECIAL_FORECAST_MEM[3]=7
-export SPECIAL_FORECAST_MEM[4]=8
+export SPECIAL_FORECAST_MEM[1]=29
+export SPECIAL_FORECAST_MEM[2]=23
+export SPECIAL_FORECAST_MEM[3]=29
+export SPECIAL_FORECAST_MEM[4]=30
 export SPECIAL_FORECAST_MEM[5]=9
 export SPECIAL_FORECAST_MEM[6]=10
 export SPECIAL_FORECAST_MEM[7]=11
@@ -197,7 +197,7 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
 #
 # DEPENDENT INPUT DATA DIRECTORIES:
    export EXPERIMENT_DIR=${SCRATCH_DIR}
-   export RUN_DIR=${EXPERIMENT_DIR}/real_FRAPPE_RETR_AIR_CO
+   export RUN_DIR=${EXPERIMENT_DIR}/real_FRAPPE_RETR_AIR_CO_CUT_p05
    export TRUNK_DIR=${WORK_DIR}/TRUNK
    export WPS_DIR=${TRUNK_DIR}/${WPS_VER}
    export WPS_GEOG_DIR=${INPUT_DATA_DIR}/${WPS_GEOG_VER}
@@ -301,7 +301,7 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
    set -A GREG_DATA `echo $NEXT_DATE 0 -g | ${DART_DIR}/models/wrf_chem/work/advance_time`
    export NEXT_DAY_GREG=${GREG_DATA[0]}
    export NEXT_SEC_GREG=${GREG_DATA[1]}
-   export ASIM_WINDOW=1
+   export ASIM_WINDOW=3
    export ASIM_MIN_DATE=$($BUILD_DIR/da_advance_time.exe $DATE -$ASIM_WINDOW 2>/dev/null)
    export ASIM_MIN_YYYY=$(echo $ASIM_MIN_DATE | cut -c1-4)
    export ASIM_MIN_YY=$(echo $ASIM_MIN_DATE | cut -c3-4)
@@ -341,7 +341,7 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
       export RUN_IASI_O3_OBS=false
       export RUN_OMI_NO2_OBS=false
       export RUN_AIRNOW_O3_OBS=false
-      export RUN_AIRNOW_CO_OBS=true
+      export RUN_AIRNOW_CO_OBS=false
       export RUN_AIRNOW_NO2_OBS=false
       export RUN_AIRNOW_SO2_OBS=false
       export RUN_AIRNOW_PM10_OBS=false
@@ -351,14 +351,14 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
       export RUN_PANDA_PM25_OBS=false
       export RUN_MODIS_AOD_OBS=false
       export RUN_MET_OBS=false
-      export RUN_COMBINE_OBS=true
+      export RUN_COMBINE_OBS=false
       export RUN_PREPROCESS_OBS=false
 #
       if [[ ${DATE} -eq ${INITIAL_DATE}  ]]; then
          export RUN_WRFCHEM_INITIAL=true
          export RUN_DART_FILTER=false
          export RUN_UPDATE_BC=false
-         export RUN_ENSEMBLE_MEAN_INPUT=true
+         export RUN_ENSEMBLE_MEAN_INPUT=false
          export RUN_WRFCHEM_CYCLE_CR=false
          export RUN_BAND_DEPTH=false
          export RUN_WRFCHEM_CYCLE_FR=false
@@ -549,7 +549,7 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
    export BIO_NODES=1
    export BIO_TASKS=1
    export FILTER_JOB_CLASS=normal
-   export FILTER_TIME_LIMIT=03:45:00
+   export FILTER_TIME_LIMIT=05:45:00
    export FILTER_NODES=2-4
    export FILTER_TASKS=48
    export WRFCHEM_JOB_CLASS=normal
@@ -613,24 +613,29 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
 # TARG_LON=-120.14 = 239.85 (33,15)
 #   export NL_MIN_LAT=27.5
 #   export NL_MAX_LAT=38.5
-#   export NL_MIN_LON=234.5
-#   export NL_MAX_LON=244.5
+#   export NL_MIN_LON=-125.5
+#   export NL_MAX_LON=-115.5
+#
+# NL_MIN_LON, NL_MAX_LON = [-180.,190.]
+# NL_MIN_LAT, NL_MAX_LAT = [-90.,90.]
+# NNL_MIN_LON, NL_MAX_LON = [0.,360.]
+# NNL_MIN_LON, NL_MAX_LON = [-90.,90.]
 #
    export NL_MIN_LAT=27
    export NL_MAX_LAT=48
-   export NL_MIN_LON=228
-   export NL_MAX_LON=266
+   export NL_MIN_LON=-132
+   export NL_MAX_LON=-94
 #
+   export NNL_MIN_LON=${NL_MIN_LON}
+   if [[ ${NL_MIN_LON} -lt 0. ]]; then
+      (( NNL_MIN_LON=${NL_MIN_LON}+360 ))
+   fi
+   export NNL_MAX_LON=${NL_MAX_LON}
+   if [[ ${NL_MAX_LON} -lt 0. ]]; then
+      (( NNL_MAX_LON=${NL_MAX_LON}+360 ))
+   fi
    export NNL_MIN_LAT=${NL_MIN_LAT}
    export NNL_MAX_LAT=${NL_MAX_LAT}
-   export NNL_MIN_LON=${NL_MIN_LON}
-   if [[ ${NL_MIN_LON} -gt 180 ]]; then 
-      (( NNL_MIN_LON=${NL_MIN_LON}-360 ))
-   fi
-   exportNNL_MAX_LON=${NL_MAX_LON}
-   if [[ ${NL_MAX_LON} -gt 180 ]]; then 
-      (( NNL_MAX_LON=${NL_MAX_LON}-360 ))
-    fi 
    export NL_OBS_PRESSURE_TOP=1000.
 #
 # PERT CHEM PARAMETERS
@@ -1046,10 +1051,10 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
 #
 # &assim_tools_nml
    export NL_CUTOFF=0.1
-   export NL_SPECIAL_LOCALIZATION_OBS_TYPES="'IASI_CO_RETRIEVAL','MOPITT_CO_RETRIEVAL'"
+   export NL_SPECIAL_LOCALIZATION_OBS_TYPES="'IASI_CO_RETRIEVAL','MOPITT_CO_RETRIEVAL','AIRNOW_CO'"
    export NL_SAMPLING_ERROR_CORRECTION=.true.
 # original cutoff
-   export NL_SPECIAL_LOCALIZATION_CUTOFFS=0.1,0.1
+   export NL_SPECIAL_LOCALIZATION_CUTOFFS=0.1,0.1,0.05
    export NL_ADAPTIVE_LOCALIZATION_THRESHOLD=2000
 #
 # &ensemble_manager_nml
@@ -2945,7 +2950,7 @@ module load idl
 #
 idl << EOF
 .compile mopitt_extract_no_transform_RT.pro
-mopitt_extract_no_transform_RT, ${MOP_INFILE}, ${MOP_OUTFILE}, ${BIN_BEG}, ${BIN_END}, ${NNL_MIN_LON}, ${NNL_MAX_LON}, ${NNL_MIN_LAT}, ${NNL_MAX_LAT}
+mopitt_extract_no_transform_RT, ${MOP_INFILE}, ${MOP_OUTFILE}, ${BIN_BEG}, ${BIN_END}, ${NL_MIN_LON}, ${NL_MAX_LON}, ${NL_MIN_LAT}, ${NL_MAX_LAT}
 EOF
 export RC=\$?     
 if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
@@ -2972,7 +2977,7 @@ EOFF
          export JOBRND=${RANDOM}_idl_mopitt
          cat << EOFF > job.ksh
 #!/bin/ksh -aeux
-#SBATCH --account $(ACCOUNT}
+#SBATCH --account ${ACCOUNT}
 #SBATCH --job-name ${JOBRND}
 #SBATCH --qos ${GENERAL_JOB_CLASS}
 #SBATCH --time ${GENERAL_TIME_LIMIT}
@@ -2985,7 +2990,7 @@ module load idl
 #
 idl << EOF
 .compile mopitt_extract_no_transform_RT.pro
-mopitt_extract_no_transform_RT, ${MOP_INFILE}, ${MOP_OUTFILE}, ${BIN_BEG}, ${BIN_END}, ${NNL_MIN_LON}, ${NNL_MAX_LON}, ${NNL_MIN_LAT}, ${NNL_MAX_LAT}
+mopitt_extract_no_transform_RT, ${MOP_INFILE}, ${MOP_OUTFILE}, ${BIN_BEG}, ${BIN_END}, ${NL_MIN_LON}, ${NL_MAX_LON}, ${NL_MIN_LAT}, ${NL_MAX_LAT}
 EOF
 export RC=\$?     
 if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
@@ -3141,7 +3146,7 @@ module load idl
 #
 idl << EOF
 .compile iasi_extract_no_transform_UA.pro
-iasi_extract_no_transform_UA,${INFILE},${OUTFILE},${BIN_BEG_SEC},${BIN_END_SEC}, ${NNL_MIN_LON}, ${NNL_MAX_LON}, ${NNL_MIN_LAT}, ${NNL_MAX_LAT}
+iasi_extract_no_transform_UA,${INFILE},${OUTFILE},${BIN_BEG_SEC},${BIN_END_SEC}, ${NL_MIN_LON}, ${NL_MAX_LON}, ${NL_MIN_LAT}, ${NL_MAX_LAT}
 EOF
 export RC=\$?     
 if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
@@ -3241,7 +3246,7 @@ module load idl
 #
 idl << EOF
 .compile iasi_extract_no_transform_UA.pro
-iasi_extract_no_transform_UA,${INFILE},${OUTFILE},${BIN_BEG_SEC},${BIN_END_SEC}, ${NNL_MIN_LON}, ${NNL_MAX_LON}, ${NNL_MIN_LAT}, ${NNL_MAX_LAT}
+iasi_extract_no_transform_UA,${INFILE},${OUTFILE},${BIN_BEG_SEC},${BIN_END_SEC}, ${NL_MIN_LON}, ${NL_MAX_LON}, ${NL_MIN_LAT}, ${NL_MAX_LAT}
 EOF
 export RC=\$?     
 if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
@@ -3434,7 +3439,7 @@ module load idl
 #
 idl << EOF
 .compile create_ascii_IASI_O3.pro
-create_ascii_IASI_O3,${INFILE_COL},${INFILE_ERR},${INFILE_VMR},${OUTFILE},${BIN_BEG_SEC},${BIN_END_SEC}, ${NNL_MIN_LON}, ${NNL_MAX_LON}, ${NNL_MIN_LAT}, ${NNL_MAX_LAT}, ${DATE}
+create_ascii_IASI_O3,${INFILE_COL},${INFILE_ERR},${INFILE_VMR},${OUTFILE},${BIN_BEG_SEC},${BIN_END_SEC}, ${NL_MIN_LON}, ${NL_MAX_LON}, ${NL_MIN_LAT}, ${NL_MAX_LAT}, ${DATE}
 EOF
 export RC=\$?     
 if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
@@ -3507,7 +3512,7 @@ module load idl
 #
 idl << EOF
 .compile create_ascii_IASI_O3.pro
-create_ascii_IASI_O3,${INFILE_COL},${INFILE_ERR},${INFILE_VMR},${OUTFILE},${BIN_BEG_SEC},${BIN_END_SEC}, ${NNL_MIN_LON}, ${NNL_MAX_LON}, ${NNL_MIN_LAT}, ${NNL_MAX_LAT}, ${DATE}
+create_ascii_IASI_O3,${INFILE_COL},${INFILE_ERR},${INFILE_VMR},${OUTFILE},${BIN_BEG_SEC},${BIN_END_SEC}, ${NL_MIN_LON}, ${NL_MAX_LON}, ${NL_MIN_LAT}, ${NL_MAX_LAT}, ${DATE}
 EOF
 export RC=\$?     
 if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
@@ -3665,8 +3670,8 @@ if ${RUN_AIRNOW_O3_OBS}; then
       export NL_FILENAME=\'airnow_o3_hourly_csv_data\'
       export NL_LAT_MN=${NL_MIN_LAT}
       export NL_LAT_MX=${NL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
       export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
       export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
       export NL_USE_LOG_NOX=${USE_LOG_NOX_LOGIC}
@@ -3739,8 +3744,8 @@ if ${RUN_AIRNOW_O3_OBS}; then
       export NL_FILENAME=\'airnow_co_hourly_csv_data\'
       export NL_LAT_MN=${NL_MIN_LAT}
       export NL_LAT_MX=${NL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
       export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
       export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
       export NL_USE_LOG_NOX=${USE_LOG_NOX_LOGIC}
@@ -3813,8 +3818,8 @@ if ${RUN_AIRNOW_NO2_OBS}; then
       export NL_FILENAME=\'airnow_no2_hourly_csv_data\'
       export NL_LAT_MN=${NL_MIN_LAT}
       export NL_LAT_MX=${NL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
       export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
       export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
       export NL_USE_LOG_NOX=${USE_LOG_NOX_LOGIC}
@@ -3887,8 +3892,8 @@ if ${RUN_AIRNOW_SO2_OBS}; then
       export NL_FILENAME=\'airnow_so2_hourly_csv_data\'
       export NL_LAT_MN=${NL_MIN_LAT}
       export NL_LAT_MX=${NL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
       export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
       export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
       export NL_USE_LOG_NOX=${USE_LOG_NOX_LOGIC}
@@ -3961,8 +3966,8 @@ if ${RUN_AIRNOW_PM10_OBS}; then
       export NL_FILENAME=\'airnow_pm10_hourly_csv_data\'
       export NL_LAT_MN=${NL_MIN_LAT}
       export NL_LAT_MX=${NL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
       export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
       export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
       export NL_USE_LOG_NOX=${USE_LOG_NOX_LOGIC}
@@ -4035,8 +4040,8 @@ if ${RUN_AIRNOW_PM25_OBS}; then
       export NL_FILENAME=\'airnow_pm2.5_hourly_csv_data\'
       export NL_LAT_MN=${NL_MIN_LAT}
       export NL_LAT_MX=${NL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
       export NL_USE_LOG_CO=${USE_LOG_CO_LOGIC}
       export NL_USE_LOG_O3=${USE_LOG_O3_LOGIC}
       export NL_USE_LOG_NOX=${USE_LOG_NOX_LOGIC}
@@ -4113,8 +4118,8 @@ if ${RUN_AIRNOW_PM25_OBS}; then
       export NL_FILENAME_DATA=\'panda_stationData.csv\'
       export NL_LAT_MN=${NL_MIN_LAT}
       export NL_LAT_MX=${NL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
 #
 # GET EXECUTABLE
       cp ${DART_DIR}/observations/PANDA/work/panda_co_ascii_to_obs ./.
@@ -4184,8 +4189,8 @@ if ${RUN_AIRNOW_PM25_OBS}; then
       export NL_FILENAME_DATA=\'panda_stationData.csv\'
       export NL_LAT_MN=${NL_MIN_LAT}
       export NL_LAT_MX=${NL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
 #
 # GET EXECUTABLE
       cp ${DART_DIR}/observations/PANDA/work/panda_o3_ascii_to_obs ./.
@@ -4255,8 +4260,8 @@ if ${RUN_AIRNOW_PM25_OBS}; then
       export NL_FILENAME_DATA=\'panda_stationData.csv\'
       export NL_LAT_MN=${NL_MIN_LAT}
       export NL_LAT_MX=${NL_MAX_LAT}
-      export NL_LON_MN=${NNL_MIN_LON}
-      export NL_LON_MX=${NNL_MAX_LON}
+      export NL_LON_MN=${NL_MIN_LON}
+      export NL_LON_MX=${NL_MAX_LON}
 #
 # GET EXECUTABLE
       cp ${DART_DIR}/observations/PANDA/work/panda_pm25_ascii_to_obs ./.
@@ -4329,7 +4334,7 @@ module load idl
 #
 idl << EOF
 .compile modis_extract_hdf.pro
-modis_extract_hdf, "${MODIS_INDIR}", "${OUTFILE}", ${N_YYYY}, ${N_MM}, ${N_DD}, ${N_HH}, ${N_ASIM_WIN}, ${NNL_MIN_LON}, ${NNL_MAX_LON}, ${NNL_MIN_LAT}, ${NNL_MAX_LAT}
+modis_extract_hdf, "${MODIS_INDIR}", "${OUTFILE}", ${N_YYYY}, ${N_MM}, ${N_DD}, ${N_HH}, ${N_ASIM_WIN}, ${NL_MIN_LON}, ${NL_MAX_LON}, ${NL_MIN_LAT}, ${NL_MAX_LAT}
 EOF
 export RC=\$?     
 if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     
@@ -4521,8 +4526,6 @@ EOFF
       ./obs_sequence_tool
       mv obs_seq.proc obs_seq_comb_${DATE}.out
    fi
-exit
-
 #
 #########################################################################
 #

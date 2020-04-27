@@ -28,15 +28,16 @@ export BUILD_DIR=/projects/mizzi/TRUNK/${WRFDA_VERSION}/var/build
 #export EXP=/real_FRAPPE_RETR_MOP_CO
 #export EXP=/real_FRAPPE_RETR_IAS_CO
 #export EXP=/real_FRAPPE_RETR_AIR_CO
-#export EXP=/real_FRAPPE_RETR_MOP_CO_INF_DAMP
+#export EXP=/real_FRAPPE_RETR_AIR_CO_CUT_p05
+export EXP=/real_FRAPPE_RETR_MOP_CO_INF_DAMP
 #export EXP=/real_FRAPPE_RETR_IAS_CO_INF_DAMP
-export EXP=/real_FRAPPE_CPSR_MOP_CO_INF_DAMP
+#export EXP=/real_FRAPPE_CPSR_MOP_CO_INF_DAMP_NEW
 #export EXP=/real_FRAPPE_CPSR_IAS_CO_INF_DAMP
 #
 export SOURCE_PATH=/scratch/summit/mizzi${EXP}
 #
-export DATE_STR=2014071606
-export DATE_END=2014071806
+export DATE_STR=2014071912
+export DATE_END=2014072012
 #
 export CYCLE_PERIOD=6
 #

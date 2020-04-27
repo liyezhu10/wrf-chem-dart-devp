@@ -5,6 +5,7 @@
 *obscount.txt
 *region?.ps
 *~
+*.exe
 .DS_Store
 Gemfile.lock
 _site/
