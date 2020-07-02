@@ -1,9 +1,9 @@
 %
 path='/scratch/summit/mizzi/DART_OBS_DIAG';
 %exp         = '/real_FRAPPE_CONTROL/obs_diag_output.nc';
-exp         = '/real_FRAPPE_RETR_MOP_CO_INF_DAMP/obs_diag_output.nc';
-%exp         = '/real_FRAPPE_RETR_IAS_CO/obs_diag_output.nc';
-exp         = '/real_FRAPPE_RETR_AIR_CO_CUT_p05/obs_diag_output.nc';
+%exp         = '/real_FRAPPE_RETR_MOP_CO_INF_DAMP/obs_diag_output.nc';
+exp         = '/real_FRAPPE_RETR_IAS_CO_INF_DAMP/obs_diag_output.nc';
+%exp         = '/real_FRAPPE_RETR_AIR_CO_CUT_p05/obs_diag_output.nc';
 %exp         = '/real_FRAPPE_CPSR_MOP_CO_INF_DAMP/obs_diag_output.nc';
 %exp         = '/real_FRAPPE_CPSR_IAS_CO_INF_DAMP/obs_diag_output.nc';
 %exp         = '/real_FRAPPE_RETR_MOP_CO_1p0/obs_diag_output.nc';
@@ -12,14 +12,14 @@ exp         = '/real_FRAPPE_RETR_AIR_CO_CUT_p05/obs_diag_output.nc';
 fname=strcat(path,exp);
 %
 npar=1;
-copystring    = {'totalspread'};
-%copystring    = {'spread'};
+%copystring    = {'totalspread'};
+copystring    = {'spread'};
 nvar=1;
-obsname      = {'AIRNOW_CO'};
+%obsname      = {'AIRNOW_CO'};
 %obsname      = {'AIRNOW_O3'};
 %obsname      = {'MOPITT_CO_RETRIEVAL'};
 %obsname      = {'RADIOSONDE_TEMPERATURE'};
-%obsname      = {'IASI_CO_RETRIEVAL'};
+obsname      = {'IASI_CO_RETRIEVAL'};
 lbnd=0.;
 ubnd=0.5;
 ubnd=4.0;

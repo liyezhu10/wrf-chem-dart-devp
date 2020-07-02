@@ -138,9 +138,12 @@ LD = ifort
 #
 # CURC_MKL_INC = ${MKLROOT}
 
+#INCS = -I$(NETCDF)/include -I${CURC_MKL_INC}
 INCS = -I$(NETCDF)/include -I${CURC_MKL_INC}
-LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf \
-       -L${CURC_MKL_LIB} -lmkl_rt -lmkl_lapack95_lp64 -lmkl_blas95_lp64 -lm -lpthread
+
+LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf -L${CURC_MKL_LIB} -lmkl_rt -lmkl_lapack95_lp64
+#LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf \
+#       -L${CURC_MKL_LIB} -lmkl_rt -lmkl_lapack95_lp64 -lmkl_blas95_lp64 -lm -lpthread
 
 #FFLAGS  = -O2 -ftz -vec-report0 -mcmodel=medium -shared-intel -fp-model precise $(INCS)
 ##FFLAGS  = -g -C -ftz -vec-report0 -mcmodel=medium -shared-intel -fp-model precise $(INCS)
@@ -153,9 +156,9 @@ LIBS = -L$(NETCDF)/lib -lnetcdff -lnetcdf \
 # for speed (verify against a run with with -O and -fp-model precise
 #        that the numerical differences aren't too large to be acceptable):
 
-FFLAGS = -O3 -axavx -xCORE-AVX2  $(INCS)
-
 # FFLAGS = -O3 -axavx -ipo $(INCS)
+# FFLAGS = -O3 -axavx -xCORE-AVX2  $(INCS)
+FFLAGS = -O0 -assume buffered_io -xCORE-AVX2 $(INCS)
 
 LDFLAGS = $(FFLAGS) $(LIBS)
 
@@ -163,4 +166,3 @@ LDFLAGS = $(FFLAGS) $(LIBS)
 # $URL$
 # $Revision$
 # $Date$
-

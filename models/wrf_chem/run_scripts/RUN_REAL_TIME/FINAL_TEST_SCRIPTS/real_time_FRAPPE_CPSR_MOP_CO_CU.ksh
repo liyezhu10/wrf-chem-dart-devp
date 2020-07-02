@@ -31,10 +31,10 @@ export FIRST_DART_INFLATE_DATE=2014071406
 export FIRST_EMISS_INV_DATE=2014071406
 #
 # START CYCLE DATE-TIME:
-export CYCLE_STR_DATE=2014071912
+export CYCLE_STR_DATE=2014072218
 #
 # END CYCLE DATE-TIME:
-export CYCLE_END_DATE=2014071912
+export CYCLE_END_DATE=2014072218
 #export CYCLE_END_DATE=${CYCLE_STR_DATE}
 #
 export CYCLE_DATE=${CYCLE_STR_DATE}
@@ -135,13 +135,13 @@ fi
 #
 # Run WRF-Chem for failed forecasts
 export RUN_SPECIAL_FORECAST=false
-export NUM_SPECIAL_FORECAST=4
+export NUM_SPECIAL_FORECAST=2
 export SPECIAL_FORECAST_FAC=1./2.
 export SPECIAL_FORECAST_FAC=2./3.
 export SPECIAL_FORECAST_FAC=1.
 
-export SPECIAL_FORECAST_MEM[1]=27
-export SPECIAL_FORECAST_MEM[2]=28
+export SPECIAL_FORECAST_MEM[1]=17
+export SPECIAL_FORECAST_MEM[2]=22
 export SPECIAL_FORECAST_MEM[3]=29
 export SPECIAL_FORECAST_MEM[4]=30
 export SPECIAL_FORECAST_MEM[5]=24
@@ -1039,7 +1039,7 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
    export NL_INF_INITIAL_POST=1.0
    export NL_INF_SD_INITIAL_PRIOR=0.6
    export NL_INF_SD_INITIAL_POST=0.0
-   export NL_INF_DAMPING_PRIOR=0.6
+   export NL_INF_DAMPING_PRIOR=0.9
    export NL_INF_DAMPING_POST=1.0
    export NL_INF_LOWER_BOUND_PRIOR=1.0
    export NL_INF_LOWER_BOUND_POST=1.0
@@ -2074,16 +2074,10 @@ EOF
          if [[ ${MEM} -lt 100 ]]; then export CMEM=e0${MEM}; fi
          if [[ ${MEM} -lt 10  ]]; then export CMEM=e00${MEM}; fi
          export ANALYSIS_DATE=$(${BUILD_DIR}/da_advance_time.exe ${DATE} 0 -W 2>/dev/null)
-         if [[ -f wrfbdy_this ]]; then
-            rm -rf wrfbdy_this
-            export DA_BDY_PATH=${RUN_DIR}/${DATE}/real
-            export DA_BDY_FILE=${DA_BDY_PATH}/wrfbdy_d${CR_DOMAIN}_${ANALYSIS_DATE}
-            cp ${DA_BDY_FILE} wrfbdy_this
-         else
-            export DA_BDY_PATH=${RUN_DIR}/${DATE}/real
-            export DA_BDY_FILE=${DA_BDY_PATH}/wrfbdy_d${CR_DOMAIN}_${ANALYSIS_DATE}
-            cp ${DA_BDY_FILE} wrfbdy_this
-         fi
+         rm -rf wrfbdy_this
+         export DA_BDY_PATH=${RUN_DIR}/${DATE}/real
+         export DA_BDY_FILE=${DA_BDY_PATH}/wrfbdy_d${CR_DOMAIN}_${ANALYSIS_DATE}
+         cp ${DA_BDY_FILE} wrfbdy_this
          rm -rf pert_wrf_bc
          cp ${DART_DIR}/models/wrf_chem/work/pert_wrf_bc ./.
          rm -rf input.nml
@@ -2092,18 +2086,26 @@ EOF
 # LOOP THROUGH ALL BDY TENDENCY TIMES FOR THIS MEMBER.
          export L_DATE=${DATE}
          export L_END_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} ${FCST_PERIOD} 2>/dev/null)
+         rm -rf wrfinput_this_*
+         rm -rf wrfinput_next_*
          TRANDOM=$$
          while [[ ${L_DATE} -lt ${L_END_DATE} ]]; do
             export ANALYSIS_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} 0 -W 2>/dev/null)
             export NEXT_L_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} ${LBC_FREQ} 2>/dev/null)
             export NEXT_ANALYSIS_DATE=$(${BUILD_DIR}/da_advance_time.exe ${L_DATE} ${LBC_FREQ} -W 2>/dev/null)
-            rm -rf wrfinput_this
-            rm -rf wrfinput_next
             export DA_INPUT_PATH=${RUN_DIR}/${DATE}/wrfchem_met_ic
-            ln -fs ${DA_INPUT_PATH}/wrfinput_d${CR_DOMAIN}_${ANALYSIS_DATE}.${CMEM} wrfinput_this 
-            ln -fs ${DA_INPUT_PATH}/wrfinput_d${CR_DOMAIN}_${NEXT_ANALYSIS_DATE}.${CMEM} wrfinput_next 
+            ln -fs ${DA_INPUT_PATH}/wrfinput_d${CR_DOMAIN}_${ANALYSIS_DATE}.${CMEM} wrfinput_this_${L_DATE} 
+            ln -fs ${DA_INPUT_PATH}/wrfinput_d${CR_DOMAIN}_${NEXT_ANALYSIS_DATE}.${CMEM} wrfinput_next_${L_DATE} 
 #
-#            RANDOM=$$
+# Create pert_wrf_bc namelist
+            rm -rf pert_wrf_bc_nml.nl
+            cat << EOF > pert_wrf_bc_nml.nl
+&pert_wrf_bc_nml
+wrfbdy_this_file='wrfbdy_this'
+wrfinput_this_file='wrfinput_this_${L_DATE}'
+wrfinput_next_file='wrfinput_next_${L_DATE}'
+/
+EOF
             export JOBRND=${TRANDOM}_pert_bc
             ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${SINGLE_JOB_CLASS} ${SINGLE_TIME_LIMIT} ${SINGLE_NODES} ${SINGLE_TASKS} pert_wrf_bc SERIAL ${ACCOUNT}
             sbatch job.ksh

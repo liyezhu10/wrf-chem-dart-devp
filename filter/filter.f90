@@ -520,20 +520,22 @@ AdvanceTime : do
             inf_damping(1) * (ens_handle%copies(PRIOR_INF_COPY, :) - 1.0_r8) 
       endif
 
+      call trace_message('Before filter_ensemble_inflate')
       call filter_ensemble_inflate(ens_handle, PRIOR_INF_COPY, prior_inflate, ENS_MEAN_COPY)
 
       ! Recompute the the mean and spread as required for diagnostics
+      call trace_message('Before compute_copy_mean_sd')
       call compute_copy_mean_sd(ens_handle, 1, ens_size, ENS_MEAN_COPY, ENS_SD_COPY)
 
       call trace_message('After  prior inflation damping and prep')
    endif
 
    ! Back to state space for forward operator computations
+   call trace_message('Before all_copies_to_all_vars')
    call all_copies_to_all_vars(ens_handle) 
 
    call     trace_message('Before computing prior observation values')
-   call timestamp_message('Before computing prior observation values')
-
+ 
    ! Compute the ensemble of prior observations, load up the obs_err_var 
    ! and obs_values. ens_size is the number of regular ensemble members, 
    ! not the number of copies

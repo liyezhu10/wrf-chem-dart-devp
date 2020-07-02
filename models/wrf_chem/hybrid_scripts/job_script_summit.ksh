@@ -42,6 +42,7 @@ if [[ ${TYPE} == PARALLEL ]]; then
 #SBATCH --nodes ${NODES}
 #SBATCH --ntasks ${TASKS}
 #SBATCH --partition shas
+######SBATCH --partition ssky-preemptable
 mpirun -np \${SLURM_NTASKS} ./${EXECUTE} > index.html 2>&1
 export RC=\$?     
 if [[ -f SUCCESS ]]; then rm -rf SUCCESS; fi     

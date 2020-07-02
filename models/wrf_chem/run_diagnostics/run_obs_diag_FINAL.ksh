@@ -26,15 +26,16 @@
 ############################################################################### 
 #
 export START_DATE=2014071606
-export END_DATE=2014071718
+export END_DATE=2014072206
 #
 # Define EXPERIMENT path
 #export DIR_NAME=real_FRAPPE_CONTROL
 #export DIR_NAME=real_FRAPPE_RETR_IAS_CO
-export DIR_NAME=real_FRAPPE_RETR_AIR_CO_CUT_p05
+#export DIR_NAME=real_FRAPPE_RETR_AIR_CO_CUT_p05
 #export DIR_NAME=real_FRAPPE_CPSR_MOP_CO_INF_DAMP
 #export DIR_NAME=real_FRAPPE_CPSR_IAS_CO_INF_DAMP
 #export DIR_NAME=real_FRAPPE_RETR_MOP_CO_INF_DAMP
+export DIR_NAME=real_FRAPPE_RETR_IAS_CO_INF_DAMP
 #export DIR_NAME=real_FRAPPE_RETR_MOP_CO_1p0
 #export DIR_NAME=real_FRAPPE_CPSR_MOP_CO_1p0
 #

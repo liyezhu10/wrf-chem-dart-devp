@@ -18,8 +18,6 @@ use    utilities_mod, only : timestamp, 		&
                              open_file, 		&
                              close_file, 		&
                              initialize_utilities, 	&
-                             open_file, 		&
-                             close_file, 		&
                              find_namelist_in_file,  	&
                              check_namelist_read,    	&
                              error_handler, 		&
@@ -52,36 +50,35 @@ use obs_def_mod, only      : set_obs_def_kind,          &
                              init_obs_def,              &
                              get_obs_kind
 
-use obs_def_mopitt_mod, only :  set_obs_def_mopitt_co
+use obs_def_mopitt_mod, only : set_obs_def_mopitt_co
 
 use  assim_model_mod, only : static_init_assim_model
 
-use location_mod, only  : location_type, 		&
-                          set_location
+use location_mod, only : location_type,                 &
+                         set_location
 
 use time_manager_mod, only : set_date, 			&
                              set_calendar_type, 	&
                              time_type, 		&
                              get_time
 
-use obs_kind_mod, only   : KIND_CO, 		&
-                           MOPITT_CO_RETRIEVAL,   &
+use obs_kind_mod, only   : KIND_CO,                     &
+                           MOPITT_CO_RETRIEVAL,         &
                            get_kind_from_menu
 
-use random_seq_mod, only : random_seq_type, 	&
-                           init_random_seq, 	&
+use random_seq_mod, only : random_seq_type,             &
+                           init_random_seq,             &
                            random_uniform
 
 use sort_mod, only       : index_sort
 
-
 implicit none
-
+!
 ! version controlled file description for error handling, do not edit
 character(len=*), parameter :: source   = 'mopitt_ascii_to_obs.f90'
 character(len=*), parameter :: revision = ''
 character(len=*), parameter :: revdate  = ''
-
+!
 ! add variables AFA
 type(obs_sequence_type) :: seq
 type(obs_type)          :: obs
@@ -118,7 +115,6 @@ integer,dimension(max_num_obs)             :: qc_mopitt, qc_thinning
 integer,dimension(12)                      :: days_in_month=(/ &
                                            31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31  /)
 integer,dimension(1000)                    :: index_20
-
 !
 real*8                          :: eps_tol=1.e-3,log10e
 real*8                          :: dofs, sdof, co_tot_col, co_tot_err
@@ -146,7 +142,7 @@ real,dimension(mop_dim)         :: xcomp, xcomperr, xapr
 real,dimension(mop_dim,mop_dim) :: avgker, avg_k, adj_avg_k
 real,dimension(mop_dim,mop_dim) :: raw_cov, ret_cov, cov_a, cov_r, cov_m, cov_use
 !
-double precision,dimension(mop_dim) ::  raw_adj_x_r, ret_adj_x_r, adj_x_p 
+double precision,dimension(mop_dim) :: raw_adj_x_r, ret_adj_x_r, adj_x_p 
 !
 character*129           :: qc_meta_data='MOPITT CO QC index'
 character*129           :: file_name='mopitt_obs_seq'
@@ -182,8 +178,6 @@ double precision,allocatable,dimension(:,:)    :: rs_avg_k,rs_cov
 logical                 :: use_log_co
 logical                 :: use_cpsr_co_trunc
 !
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!
 namelist /create_mopitt_obs_nml/filedir,filename,year,month,day,hour,bin_beg, bin_end, &
          MOPITT_CO_retrieval_type,fac_obs_error,use_log_co,use_cpsr_co_trunc, &
          cpsr_co_trunc_lim, mopitt_co_vloc,lon_min,lon_max,lat_min,lat_max
@@ -208,31 +202,30 @@ lon_max=-9999
 lat_min=-9999
 lat_max=-9999
 !
-call find_namelist_in_file("input.nml", "create_mopitt_obs_nml", iunit)
-read(iunit, nml = create_mopitt_obs_nml, iostat = io)
-call check_namelist_read(iunit, io, "create_mopitt_obs_nml")
-
-! Record the namelist values used for the run ...
-call error_handler(E_MSG,'init_create_mopitt_obs','create_mopitt_obs_nml values are',' ',' ',' ')
-write(     *     , nml=create_mopitt_obs_nml)
-
 ! Record the current time, date, etc. to the logfile
-call initialize_utilities('create_obs_sequence')
+call initialize_utilities(source)
 call register_module(source,revision,revdate)
-
+!
 ! Initialize the assim_model module, need this to get model
 ! state meta data for locations of identity observations
 !call static_init_assim_model()
-
+!
 ! Initialize the obs_sequence module
 call static_init_obs_sequence()
-
+!
+call find_namelist_in_file("input.nml", "create_mopitt_obs_nml", iunit)
+read(iunit, nml = create_mopitt_obs_nml, iostat = io)
+call check_namelist_read(iunit, io, "create_mopitt_obs_nml")
+!
+! Record the namelist values used for the run ...
+call error_handler(E_MSG,'init_create_mopitt_obs','create_mopitt_obs_nml values are',' ',' ',' ')
+write(     *     , nml=create_mopitt_obs_nml)
+!
 ! Initialize an obs_sequence structure
 call init_obs_sequence(seq, num_copies, num_qc, max_num_obs)
-
+!
 ! Initialize the obs variable
 call init_obs(obs, num_copies, num_qc)
-
 !
 do icopy =1, num_copies
    if (icopy == 1) then
@@ -507,7 +500,7 @@ allocate (xg_prs(nlon_qc,nlat_qc,mop_dimp),xg_prs_norm(nlon_qc,nlat_qc,mop_dimp)
         lat_qc=nint((lat - lat_min)/dlat_qc)+1
 !
 ! Assign cov_use
-        cov_use=cov_r(:,:)
+        cov_use(:,:)=cov_r(:,:)
 !
 ! Calculate averaging kernel complement: (I-A) (RAWR form)
         raw_adj_x_r(:)=0.
@@ -693,6 +686,7 @@ allocate (xg_prs(nlon_qc,nlat_qc,mop_dimp),xg_prs_norm(nlon_qc,nlat_qc,mop_dimp)
            allocate(rs_avg_k(nlvls,nlvls),rs_cov(nlvls,nlvls),rs_x_r(nlvls),rs_x_p(nlvls))       
            allocate(rr_avg_k(nlvls,nlvls),rr_cov(nlvls,nlvls),rr_x_r(nlvls),rr_x_p(nlvls))       
            allocate(ZL(nlvls,nlvls),ZR(nlvls,nlvls),ZV(nlvls))
+!
            Z(1:nlvls,1:nlvls)=dble(xg_raw_cov(i,j,kstr:mop_dim,kstr:mop_dim))
            call dgesvd('A','A',nlvls,nlvls,Z,nlvls,SV_cov,U_cov,nlvls,VT_cov,nlvls,wrk,lwrk,info)
            nlvls_trc=0
@@ -862,7 +856,7 @@ allocate (xg_prs(nlon_qc,nlat_qc,mop_dimp),xg_prs_norm(nlon_qc,nlat_qc,mop_dimp)
               VT_cov(k,:)=0.
            enddo
 !
-! Scale the singular vectors     
+! Scale the singular vectors
            do k=1,nlvls_trc
               U_cov(:,k)=U_cov(:,k)/sqrt(SV_cov(k))
            enddo
@@ -959,7 +953,7 @@ allocate (xg_prs(nlon_qc,nlat_qc,mop_dimp),xg_prs_norm(nlon_qc,nlat_qc,mop_dimp)
         endif
 !
 ! Truncate the number of CPSR modes
-        if(use_cpsr_co_trunc.eq..TRUE. .and. nlvls_fix.gt.cpsr_co_trunc_lim) then
+        if(use_cpsr_co_trunc .and. nlvls_fix.gt.cpsr_co_trunc_lim) then
            print *, 'APM: change limit ',nlvls_fix, cpsr_co_trunc_lim
            nlvls_fix=cpsr_co_trunc_lim
         endif

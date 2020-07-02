@@ -27,16 +27,16 @@
 # Define experiment parameters
 #
 # 2008 DATES
-#export START_DATE=2008060112
-#export END_DATE=2008060918
+#export START_DATE=2014071606
+#export END_DATE=2014072106
 #
 # FRAPPE DATES
 export START_DATE=2014071606
-export END_DATE=2014071706
+export END_DATE=2014072206
 export DART_FILTER=dart_filter
 #
 export DOMAIN=01
-export NUM_MEMBERS=20
+export NUM_MEMBERS=30
 export CYCLE_PERIOD=6
 export FCST_PERIOD=24
 export FCST_PERIOD=6
@@ -49,7 +49,7 @@ export LBC_FREQ=3
 export DELETE_FLG=false
 #
 # Define code versions
-export DART_VER=DART_CHEM_MY_BRANCH
+export DART_VER=DART_classic_mizzi_dev
 export WRFCHEM_VER=WRFCHEMv3.4_dmpar
 export WRF_VER=WRFv3.4_dmpar
 export WRFDA_VER=WRFDAv3.4_dmpar

@@ -2012,10 +2012,10 @@ if [[ ${RUN_PERT_WRFCHEM_MET_BC} = "true" ]]; then
 #         RANDOM=$$
          export JOBRND=${TRANDOM}_pert_bc
          ${HYBRID_SCRIPTS_DIR}/job_script_summit.ksh ${JOBRND} ${SINGLE_JOB_CLASS} ${SINGLE_TIME_LIMIT} ${SINGLE_NODES} ${SINGLE_TASKS} pert_wrf_bc SERIAL
-         sbatch job.ksh
+         sbatch -W job.ksh
          export L_DATE=${NEXT_L_DATE} 
       done
-      ${HYBRID_SCRIPTS_DIR}/da_run_hold_cu.ksh ${TRANDOM}
+#      ${HYBRID_SCRIPTS_DIR}/da_run_hold_cu.ksh ${TRANDOM}
       export ANALYSIS_DATE=$(${BUILD_DIR}/da_advance_time.exe ${DATE} 0 -W 2>/dev/null)
       mv wrfbdy_this wrfbdy_d${CR_DOMAIN}_${ANALYSIS_DATE}.${CMEM}
       let MEM=${MEM}+1
