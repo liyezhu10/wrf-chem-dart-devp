@@ -31,10 +31,12 @@ export FIRST_DART_INFLATE_DATE=2014072500
 export FIRST_EMISS_INV_DATE=2014072418
 #
 # START CYCLE DATE-TIME:
-export CYCLE_STR_DATE=2014072500
+export CYCLE_STR_DATE=2014072418
+#export CYCLE_STR_DATE=2014072500
 #
 # END CYCLE DATE-TIME:
-export CYCLE_END_DATE=2014072500
+export CYCLE_END_DATE=2014072418
+#export CYCLE_END_DATE=2014072500
 #export CYCLE_END_DATE=${CYCLE_STR_DATE}
 #
 export CYCLE_DATE=${CYCLE_STR_DATE}
@@ -197,7 +199,7 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
 #
 # DEPENDENT INPUT DATA DIRECTORIES:
    export EXPERIMENT_DIR=${SCRATCH_DIR}
-   export RUN_DIR=${EXPERIMENT_DIR}/real_PANDA_RETR_VARLOC_RELEASE_TEST_classic
+   export RUN_DIR=${EXPERIMENT_DIR}/real_PANDA_RETR_VARLOC_RELEASE_TEST_Lanai
    export TRUNK_DIR=${WORK_DIR}/TRUNK
    export WPS_DIR=${TRUNK_DIR}/${WPS_VER}
    export WPS_GEOG_DIR=${INPUT_DATA_DIR}/${WPS_GEOG_VER}
@@ -324,7 +326,7 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
 #
 # SELECT COMPONENT RUN OPTIONS:
    if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
-      export RUN_GEOGRID=false
+      export RUN_GEOGRID=true
       export RUN_UNGRIB=true
       export RUN_METGRID=true
       export RUN_REAL=true
@@ -626,6 +628,11 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
    export NL_MAX_LAT=60.
    export NL_MIN_LON=40.
    export NL_MAX_LON=170.
+#
+#   export NL_MIN_LAT=40.
+#   export NL_MAX_LAT=50.
+#   export NL_MIN_LON=120.
+#   export NL_MAX_LON=130.
 #
    export NNL_MIN_LON=${NL_MIN_LON}
    if [[ ${NL_MIN_LON} -lt 0. ]]; then
@@ -5051,9 +5058,6 @@ EOF
          sbatch -W job.ksh
       fi
    fi
-
-exit
-
 #
 #########################################################################
 #
