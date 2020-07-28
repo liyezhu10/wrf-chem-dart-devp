@@ -29,12 +29,13 @@ export BUILD_DIR=/projects/mizzi/TRUNK/${WRFDA_VERSION}/var/build
 #export EXP=/real_FRAPPE_RETR_IAS_CO_INF_DAMP
 #export EXP=/real_FRAPPE_CPSR_MOP_CO_INF_DAMP
 #export EXP=/real_FRAPPE_CPSR_IAS_CO_INF_DAMP
-export EXP=/real_FRAPPE_RETR_AIR_CO_CUT_p05
+#export EXP=/real_FRAPPE_RETR_AIR_CO_CUT_p05
 #
 export SOURCE_PATH=/scratch/summit/mizzi${EXP}
 #
 export DATE_STR=2014071606
 export DATE_END=2014072106
+export DATE_END=2014071606
 #
 # List of variables to archive
 export ARCHIVE_VARS=XLAT,XLONG,ZNU,U,V,W,PH,PHB,T,T_INIT,MU,MUB,P,ALT,PB,PSFC,QVAPOR,T00,P00,CLDFRA,XLAND,PBLH,CLDFRA2,o3,no,no2,no3,so2,sulf,co,hcho,ch4,P25,P10,BC1,BC2,OC1,OC2,DUST_1,DUST_2,DUST_3,DUST_4,DUST_5,SEAS_1,SEAS_2,SEAS_3,SEAS_4,PM2_5_DRY,PM10
@@ -63,6 +64,9 @@ while [[ ${L_DATE} -le ${DATE_END} ]] ; do
       rm -rf obs_seq.out
       rm -rf prior_inflate_ic_new
       rm -rf prior_inflate_ic_old
+      touch obs_seq.final
+      touch Posterior_Diag.nc
+      touch Prior_Diag.nc
       cd ../
    fi
 #

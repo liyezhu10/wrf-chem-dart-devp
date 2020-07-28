@@ -433,9 +433,7 @@ iasi_nlevels( key)   = co_nlevels
 iasi_nlevelsp(key)   = co_nlevelsp
 
 end subroutine set_obs_def_iasi_co
-
-
-
+!
 function read_iasi_prior(ifile, fform)
 integer,          intent(in)           :: ifile
 character(len=*), intent(in), optional :: fform
@@ -452,9 +450,7 @@ SELECT CASE (fileformat)
       read(ifile, *) read_iasi_prior
 END SELECT
 end function read_iasi_prior
-
-
-
+!
 function read_iasi_nlevels(ifile, fform)
 integer,          intent(in)           :: ifile
 character(len=*), intent(in), optional :: fform
@@ -471,9 +467,7 @@ SELECT CASE (fileformat)
       read(ifile, *) read_iasi_nlevels
 END SELECT
 end function read_iasi_nlevels
-
-
-
+!
 function read_iasi_nlevelsp(ifile, fform)
 integer,          intent(in)           :: ifile
 character(len=*), intent(in), optional :: fform
@@ -490,9 +484,7 @@ SELECT CASE (fileformat)
       read(ifile, *) read_iasi_nlevelsp
 END SELECT
 end function read_iasi_nlevelsp
-
-
-
+!
 subroutine write_iasi_prior(ifile, iasi_prior_temp, fform)
 integer,          intent(in) :: ifile
 real(r8),         intent(in) :: iasi_prior_temp
@@ -509,9 +501,7 @@ SELECT CASE (fileformat)
       write(ifile, *) iasi_prior_temp
 END SELECT
 end subroutine write_iasi_prior
-
-
-
+!
 subroutine write_iasi_nlevels(ifile, iasi_nlevels_temp, fform)
 integer,          intent(in) :: ifile
 integer,          intent(in) :: iasi_nlevels_temp
@@ -528,7 +518,6 @@ SELECT CASE (fileformat)
 END SELECT
 end subroutine write_iasi_nlevels
 !
-
 subroutine write_iasi_nlevelsp(ifile, iasi_nlevelsp_temp, fform)
 integer,          intent(in) :: ifile
 integer,          intent(in) :: iasi_nlevelsp_temp

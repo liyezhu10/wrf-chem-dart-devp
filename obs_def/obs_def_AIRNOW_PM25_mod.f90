@@ -149,6 +149,7 @@ real(r8) :: Pa_to_torr  ! convert Pa to torr
 if ( .not. module_initialized ) call initialize_module
 
 ! water vapor mixing ratio (kg/kg) at this location - this calls the model_mod code.
+istatus=0
 call interpolate(state_vector, location, KIND_VAPOR_MIXING_RATIO, qvapor, istatus)
 if (istatus /= 0) then
    qvapor = missing_r8
@@ -157,6 +158,7 @@ if (istatus /= 0) then
 endif
 !
 ! sulfate (ppmv) at this location - this calls the model_mod code.
+istatus=0
 call interpolate(state_vector, location, KIND_SO4, sulf, istatus)
 if (istatus /= 0) then
    sulf = missing_r8
@@ -165,6 +167,7 @@ if (istatus /= 0) then
 endif
 !
 ! dust (ug/kg-dry air) at this location - this calls the model_mod code.
+istatus=0
 call interpolate(state_vector, location, KIND_DST01, DUST1, istatus)
 if (istatus /= 0) then
    DUST1 = missing_r8
@@ -173,6 +176,7 @@ if (istatus /= 0) then
 endif
 !
 ! dust (ug/kg - dray air) at this location - this calls the model_mod code.
+istatus=0
 call interpolate(state_vector, location, KIND_DST02, DUST2, istatus)
 if (istatus /= 0) then
    DUST2 = missing_r8
@@ -181,6 +185,7 @@ if (istatus /= 0) then
 endif
 !
 ! dust (ug/kg-dry air) at this location - this calls the model_mod code.
+istatus=0
 call interpolate(state_vector, location, KIND_DST03, DUST3, istatus)
 if (istatus /= 0) then
    DUST3 = missing_r8
@@ -189,6 +194,7 @@ if (istatus /= 0) then
 endif
 !
 ! dust (ug/kg-dry air) at this location - this calls the model_mod code.
+istatus=0
 call interpolate(state_vector, location, KIND_DST04, DUST4, istatus)
 if (istatus /= 0) then
    DUST4 = missing_r8
@@ -197,6 +203,7 @@ if (istatus /= 0) then
 endif
 !
 ! dust (ug/kg-dry air) at this location - this calls the model_mod code.
+istatus=0
 call interpolate(state_vector, location, KIND_DST05, DUST5, istatus)
 if (istatus /= 0) then
    DUST5 = missing_r8
@@ -205,6 +212,7 @@ if (istatus /= 0) then
 endif
 !
 ! hydrophilic black carbon (ug/kg-dry air) at this location - this calls the model_mod code.
+istatus=0
 call interpolate(state_vector, location, KIND_BC1, BC1, istatus)
 if (istatus /= 0) then
    BC1 = missing_r8
@@ -213,6 +221,7 @@ if (istatus /= 0) then
 endif
 !
 ! hydrophobic black carbon (ug/kg-dry air) at this location - this calls the model_mod code.
+istatus=0
 call interpolate(state_vector, location, KIND_BC2, BC2, istatus)
 if (istatus /= 0) then
    BC2 = missing_r8
@@ -221,6 +230,7 @@ if (istatus /= 0) then
 endif
 !
 ! hydrophilic organic carbon (ug/kg-dry air) at this location - this calls the model_mod code.
+istatus=0
 call interpolate(state_vector, location, KIND_OC1, OC1, istatus)
 if (istatus /= 0) then
    OC1 = missing_r8
@@ -229,6 +239,7 @@ if (istatus /= 0) then
 endif
 !
 ! hydrophobic organic carbon (ug/kg-dry air) at this location - this calls the model_mod code.
+istatus=0
 call interpolate(state_vector, location, KIND_OC2, OC2, istatus)
 if (istatus /= 0) then
    OC2 = missing_r8
@@ -237,6 +248,7 @@ if (istatus /= 0) then
 endif
 !
 ! sea salt (ug/kg-dry air) at this location - this calls the model_mod code.
+istatus=0
 call interpolate(state_vector, location, KIND_SSLT01, SS1, istatus)
 if (istatus /= 0) then
    SS1 = missing_r8
@@ -245,6 +257,7 @@ if (istatus /= 0) then
 endif
 !
 ! sea salt (ug/kg-dry air) at this location - this calls the model_mod code.
+istatus=0
 call interpolate(state_vector, location, KIND_SSLT02, SS2, istatus)
 if (istatus /= 0) then
    SS2 = missing_r8
@@ -253,6 +266,7 @@ if (istatus /= 0) then
 endif
 !
 ! sea salt (ug/kg-dry air) at this location - this calls the model_mod code.
+istatus=0
 call interpolate(state_vector, location, KIND_SSLT03, SS3, istatus)
 if (istatus /= 0) then
    SS3 = missing_r8
@@ -261,6 +275,7 @@ if (istatus /= 0) then
 endif
 !
 ! sea salt (ug/kg-dry air) at this location - this calls the model_mod code.
+istatus=0
 call interpolate(state_vector, location, KIND_SSLT04, SS4, istatus)
 if (istatus /= 0) then
    SS4 = missing_r8
@@ -269,6 +284,7 @@ if (istatus /= 0) then
 endif
 !
 ! perturbation theta (K) at this location - this calls the model_mod code.
+istatus=0
 call interpolate(state_vector, location, KIND_POTENTIAL_TEMPERATURE, Theta, istatus)
 if (istatus /= 0) then
    Theta = missing_r8
@@ -277,6 +293,7 @@ if (istatus /= 0) then
 endif
 !
 ! perturbation pressure (Pa) at this location - this calls the model_mod code.
+istatus=0
 call interpolate(state_vector, location, KIND_PRESSURE, P, istatus)
 if (istatus /= 0) then
    P = missing_r8
@@ -285,6 +302,7 @@ if (istatus /= 0) then
 endif
 !
 ! p25 (ug/kg-dry air) at this location - this calls the model_mod code.
+istatus=0
 call interpolate(state_vector, location, KIND_P25, p25, istatus)
 if (istatus /= 0) then
    p25 = missing_r8

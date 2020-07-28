@@ -33,19 +33,11 @@ cat > input.nml_temp << EOF
    add_emiss                   = ${NL_ADD_EMISS:-.false.},
    use_varloc                  = ${NL_USE_VARLOC:-.true.},
    use_indep_chem_assim        = ${NL_USE_INDEP_CHEM_ASSIM:-.false.},
-   use_log_co                  = ${NL_USE_LOG_CO:-.false.},
-   use_log_o3                  = ${NL_USE_LOG_O3:-.false.},
-   use_log_nox                 = ${NL_USE_LOG_NOX:-.false.},
-   use_log_so2                 = ${NL_USE_LOG_SO2:-.false.},
-   use_log_pm10                = ${NL_USE_LOG_PM10:-.false.},
-   use_log_pm25                = ${NL_USE_LOG_PM25:-.false.},
-   use_log_aod                 = ${NL_USE_LOG_AOD:-.false.},
    default_state_variables     = ${NL_DEFAULT_STATE_VARIABLES:-.false.},
    conv_state_variables        = ${NL_CONV_STATE_VARIABLES:-"null"}
    emiss_chemi_variables       = ${NL_EMISS_CHEMI_VARIABLES:-"null"}
    emiss_firechemi_variables   = ${NL_EMISS_FIRECHEMI_VARIABLES:-"null"}
    wrf_state_bounds            = ${NL_WRF_STATE_BOUNDS:-"null"}
-   output_state_vector         = ${NL_OUTPUT_STATE_VECTOR:-.false.},
    num_domains                 = ${NL_NUM_DOMAINS:-1},
    calendar_type               = ${NL_CALENDAR_TYPE:-3},
    assimilation_period_seconds = ${NL_ASSIMILATION_PERIOD_SECONDS:-21600},
@@ -56,6 +48,14 @@ cat > input.nml_temp << EOF
    circulation_pres_level      = ${NL_CIRCULATION_PRES_LEVEL:-80000.0},
    circulation_radius          = ${NL_CIRCULATION_RADIUS:-108000.0},
    allow_obs_below_vol         = ${NL_ALLOW_OBS_BELOW_VOL:-.false.},
+   output_state_vector         = ${NL_OUTPUT_STATE_VECTOR:-.false.},
+   use_log_aod                 = ${NL_USE_LOG_AOD:-.false.},
+   use_log_co                  = ${NL_USE_LOG_CO:-.false.},
+   use_log_nox                 = ${NL_USE_LOG_NOX:-.false.},
+   use_log_o3                  = ${NL_USE_LOG_O3:-.false.},
+   use_log_pm10                = ${NL_USE_LOG_PM10:-.false.},
+   use_log_pm25                = ${NL_USE_LOG_PM25:-.false.},
+   use_log_so2                 = ${NL_USE_LOG_SO2:-.false.},
 /
 EOF
 #

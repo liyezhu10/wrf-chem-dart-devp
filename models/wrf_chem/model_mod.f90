@@ -75,14 +75,14 @@ use      obs_kind_mod, only : KIND_SO2, KIND_O3, KIND_CO, KIND_NO, KIND_NO2, KIN
                               KIND_DMS, KIND_DST01, KIND_DST02, KIND_DST03, KIND_DST04, &
                               KIND_DST05, KIND_SO4, KIND_SSLT01, KIND_SSLT02, KIND_SSLT03, &
                               KIND_SSLT04, KIND_TAUAER1, KIND_TAUAER2, KIND_TAUAER3, KIND_TAUAER4, &
-                              KIND_PM25, KIND_PM10, KIND_PM2_5_DRY, KIND_NOy, KIND_PB, KIND_NMOC, &
+                              KIND_PM25, KIND_PM10, KIND_NOy, KIND_PB, KIND_NMOC, &
 !
 ! LXL/APM +++
                               KIND_P25, KIND_P10, KIND_E_CO, KIND_E_NO, KIND_E_NO2, KIND_E_SO2, &
                               KIND_E_SO4, KIND_E_PM25, KIND_E_PM10, KIND_E_BC, KIND_E_OC, & 
                               KIND_EBU_CO, KIND_EBU_NO, KIND_EBU_NO2, KIND_EBU_SO2, KIND_EBU_SO4, &
-                              KIND_EBU_OC, KIND_EBU_BC, KIND_EBU_c2h4, KIND_EBU_ch2o, &
-                              KIND_EBU_ch3oh
+                              KIND_EBU_OC, KIND_EBU_BC, KIND_EBU_C2H4, KIND_EBU_CH2O, &
+                              KIND_EBU_CH3OH
                                
 ! APM/AFAJ/LXL ---
 
@@ -1018,6 +1018,7 @@ WRFDomains : do id=1,num_domains
    wrf%dom(id)%type_tauaer4 = get_type_ind_from_type_string(id,'TAUAER4')
 !
    wrf%dom(id)%type_p25 = get_type_ind_from_type_string(id,'P25')
+   wrf%dom(id)%type_p10 = get_type_ind_from_type_string(id,'P10')
    wrf%dom(id)%type_so4 = get_type_ind_from_type_string(id,'sulf')
    wrf%dom(id)%type_bc1 = get_type_ind_from_type_string(id,'BC1')
    wrf%dom(id)%type_bc2 = get_type_ind_from_type_string(id,'BC2')
@@ -4685,7 +4686,7 @@ else
          endif
       endif
 
-!1.zd P25
+!1.ze P25
    elseif ( obs_kind == KIND_P25 ) then
 
       if ( wrf%dom(id)%type_p25 >= 0 ) then
@@ -4719,6 +4720,42 @@ else
             endif
          endif
       endif
+
+!1.zf P10
+   elseif ( obs_kind == KIND_P10 ) then
+
+      if ( wrf%dom(id)%type_p10 >= 0 ) then
+
+         if ( boundsCheck( i, wrf%dom(id)%periodic_x, id, dim=1, type=wrf%dom(id)%type_p10 ) .and. &
+              boundsCheck( j, wrf%dom(id)%polar,      id, dim=2, type=wrf%dom(id)%type_p10 ) .and. &
+              boundsCheck( k, .false.,                id, dim=3, type=wrf%dom(id)%type_p10 ) ) then
+   
+            call getCorners(i, j, id, wrf%dom(id)%type_p10, ll, ul, lr, ur, rc )
+            if ( rc .ne. 0 ) &
+                 print*, 'model_mod.f90 :: model_interpolate :: getCorners P10 rc = ', rc
+
+            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k, wrf%dom(id)%type_p10)
+            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k, wrf%dom(id)%type_p10)
+            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k, wrf%dom(id)%type_p10)
+            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k, wrf%dom(id)%type_p10)   
+            if (use_log_pm10 .or. use_log_pm25) then
+               fld(1) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+            else
+               fld(1) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+            endif
+
+            ill = wrf%dom(id)%dart_ind(ll(1), ll(2), k+1, wrf%dom(id)%type_p10)
+            iul = wrf%dom(id)%dart_ind(ul(1), ul(2), k+1, wrf%dom(id)%type_p10)
+            ilr = wrf%dom(id)%dart_ind(lr(1), lr(2), k+1, wrf%dom(id)%type_p10)
+            iur = wrf%dom(id)%dart_ind(ur(1), ur(2), k+1, wrf%dom(id)%type_p10)
+            if (use_log_pm10 .or. use_log_pm25) then
+               fld(2) = log(dym*( dxm*exp(x(ill)) + dx*exp(x(ilr)) ) + dy*( dxm*exp(x(iul)) + dx*exp(x(iur)) ))
+            else
+               fld(2) = dym*( dxm*x(ill) + dx*x(ilr) ) + dy*( dxm*x(iul) + dx*x(iur) )
+            endif
+         endif
+      endif
+
 ! APM/CQM ---
 !
    !-----------------------------------------------------
@@ -8402,12 +8439,14 @@ integer                :: t_ind, istatus1, istatus2, k
 integer                :: base_which, local_obs_which
 integer                :: base_obs_kind
 real(r8), dimension(3) :: base_array, local_obs_array
+real(r8)               :: dist_sav
 type(location_type)    :: local_obs_loc
 
 ! Initialize variables to missing status
 num_close = 0
 close_ind = -99
 dist      = 1.0e9
+dist_sav  = 1.0e9
 
 istatus1 = 0
 istatus2 = 0
@@ -8459,9 +8498,9 @@ if (istatus1 == 0) then
       ! or vert_convert returned error (istatus2=1)
       local_obs_array = get_location(local_obs_loc)
       if (((.not. horiz_dist_only).and.(local_obs_array(3) == missing_r8)).or.(istatus2 == 1)) then
-         dist(k) = 1.0e9        
+         dist_sav = 1.0e9        
       else
-         dist(k) = get_dist(base_obs_loc, local_obs_loc, base_obs_type, obs_kind(t_ind))
+         dist_sav = get_dist(base_obs_loc, local_obs_loc, base_obs_type, obs_kind(t_ind))
       endif
 !
 ! APM/AFAJ/LXL +++
@@ -8523,7 +8562,7 @@ if (istatus1 == 0) then
             (obs_kind(t_ind).ne.KIND_TAUAER2)   .and. &
             (obs_kind(t_ind).ne.KIND_TAUAER3)   .and. &
             (obs_kind(t_ind).ne.KIND_TAUAER4)   .and. &
-            (obs_kind(t_ind).ne.KIND_PM2_5_DRY) .and. &
+            (obs_kind(t_ind).ne.KIND_PM25)      .and. &
             (obs_kind(t_ind).ne.KIND_PM10)      .and. &
             (obs_kind(t_ind).ne.KIND_P25)       .and. &
             (obs_kind(t_ind).ne.KIND_P10)       .and. &
@@ -8544,12 +8583,12 @@ if (istatus1 == 0) then
             (obs_kind(t_ind).ne.KIND_EBU_NO)    .and. &
             (obs_kind(t_ind).ne.KIND_EBU_NO2)   .and. &
             (obs_kind(t_ind).ne.KIND_EBU_SO2)   .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_SO4)   .and. &
             (obs_kind(t_ind).ne.KIND_EBU_OC)    .and. &
             (obs_kind(t_ind).ne.KIND_EBU_BC)    .and. &
-            (obs_kind(t_ind).ne.KIND_EBU_c2h4)  .and. &
-            (obs_kind(t_ind).ne.KIND_EBU_ch2o)  .and. &
-            (obs_kind(t_ind).ne.KIND_EBU_ch3oh) .and. &
-! the following not in FRAPPE state vector 
+            (obs_kind(t_ind).ne.KIND_EBU_C2H4)  .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_CH2O)  .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_CH3OH) .and. &
             (obs_kind(t_ind).ne.KIND_GLYALD)    .and. &
             (obs_kind(t_ind).ne.KIND_PAN)       .and. &
             (obs_kind(t_ind).ne.KIND_MEK)       .and. &
@@ -8560,7 +8599,7 @@ if (istatus1 == 0) then
             ) then
 !
 ! Met obs and Met state variable
-               dist(k) = dist(k)
+               dist(k) = dist_sav
             else
 !
 ! Met obs and Chem state variable
@@ -8603,7 +8642,7 @@ if (istatus1 == 0) then
          (obs_kind(t_ind).eq.KIND_TAUAER2)   .or. &
          (obs_kind(t_ind).eq.KIND_TAUAER3)   .or. &
          (obs_kind(t_ind).eq.KIND_TAUAER4)   .or. &
-         (obs_kind(t_ind).eq.KIND_PM2_5_DRY) .or. &
+         (obs_kind(t_ind).eq.KIND_PM25)      .or. &
          (obs_kind(t_ind).eq.KIND_PM10)      .or. &
          (obs_kind(t_ind).eq.KIND_P25)       .or. &
          (obs_kind(t_ind).eq.KIND_P10)       .or. &
@@ -8627,10 +8666,9 @@ if (istatus1 == 0) then
          (obs_kind(t_ind).eq.KIND_EBU_SO4)   .or. &
          (obs_kind(t_ind).eq.KIND_EBU_OC)    .or. &
          (obs_kind(t_ind).eq.KIND_EBU_BC)    .or. &
-         (obs_kind(t_ind).eq.KIND_EBU_c2h4)  .or. &
-         (obs_kind(t_ind).eq.KIND_EBU_ch2o)  .or. &
-         (obs_kind(t_ind).eq.KIND_EBU_ch3oh) .or. &
-! The following not in FRAPPE state vector
+         (obs_kind(t_ind).eq.KIND_EBU_C2H4)  .or. &
+         (obs_kind(t_ind).eq.KIND_EBU_CH2O)  .or. &
+         (obs_kind(t_ind).eq.KIND_EBU_CH3OH) .or. &
          (obs_kind(t_ind).eq.KIND_GLYALD)    .or. &
          (obs_kind(t_ind).eq.KIND_PAN)       .or. &
          (obs_kind(t_ind).eq.KIND_MEK)       .or. &
@@ -8641,7 +8679,7 @@ if (istatus1 == 0) then
          ) then
 !
 ! Chem obs and Chem state variable
-            dist(k) = dist(k)
+            dist(k) = dist_sav
          else
 !
 ! Chem obs and Met state variable
@@ -8666,20 +8704,20 @@ if (istatus1 == 0) then
 ! Chem obs
             if ((base_obs_kind.eq.KIND_CO).and.((obs_kind(t_ind).eq.KIND_CO).or. &
             (obs_kind(t_ind).eq.KIND_E_CO))) then
-               dist(k) = dist(k)
+               dist(k) = dist_sav
             else if ((base_obs_kind.eq.KIND_O3).and.((obs_kind(t_ind).eq.KIND_O3))) then
-               dist(k) = dist(k)
+               dist(k) = dist_sav
             else if ((base_obs_kind.eq.KIND_NO).and.((obs_kind(t_ind).eq.KIND_NO).or. &
             (obs_kind(t_ind).eq.KIND_NO2).or.(obs_kind(t_ind).eq.KIND_E_NO).or. &
             (obs_kind(t_ind).eq.KIND_E_NO2))) then
-               dist(k) = dist(k)
+               dist(k) = dist_sav
             else if ((base_obs_kind.eq.KIND_NO2).and.((obs_kind(t_ind).eq.KIND_NO).or. &
             (obs_kind(t_ind).eq.KIND_NO2).or.(obs_kind(t_ind).eq.KIND_E_NO).or. &
             (obs_kind(t_ind).eq.KIND_E_NO2))) then
-               dist(k) = dist(k)
+               dist(k) = dist_sav
             else if ((base_obs_kind.eq.KIND_SO2).and.((obs_kind(t_ind).eq.KIND_SO2).or. &
             (obs_kind(t_ind).eq.KIND_E_SO2))) then
-               dist(k) = dist(k)
+               dist(k) = dist_sav
             else if ((base_obs_kind.eq.KIND_PM10).and.( &
             (obs_kind(t_ind).eq.KIND_P25).or. &
             (obs_kind(t_ind).eq.KIND_SO4).or. &
@@ -8700,7 +8738,7 @@ if (istatus1 == 0) then
             (obs_kind(t_ind).eq.KIND_E_OC).or.&
             (obs_kind(t_ind).eq.KIND_E_SO4) &
             )) then
-                dist(k) = dist(k)
+                dist(k) = dist_sav
             else if ((base_obs_kind.eq.KIND_PM25).and.( &
             (obs_kind(t_ind).eq.KIND_P25).or. &
             (obs_kind(t_ind).eq.KIND_SO4).or. &
@@ -8717,9 +8755,11 @@ if (istatus1 == 0) then
             (obs_kind(t_ind).eq.KIND_E_OC).or. &
             (obs_kind(t_ind).eq.KIND_E_SO4) &
             )) then
-                dist(k) = dist(k)
+                dist(k) = dist_sav
 ! The following assumes MODIS AOD
-            else if ((base_obs_kind.eq.KIND_AOD).and.( &
+!            (obs_kind(t_ind).eq.KIND_DST01) &
+!            )) then
+            else if ((base_obs_kind.eq.KIND_AOD).and.(&
             (obs_kind(t_ind).eq.KIND_SO4).or. &
             (obs_kind(t_ind).eq.KIND_BC1).or. &
             (obs_kind(t_ind).eq.KIND_BC2).or. &
@@ -8744,7 +8784,7 @@ if (istatus1 == 0) then
             (obs_kind(t_ind).eq.KIND_E_OC).or.&
             (obs_kind(t_ind).eq.KIND_E_SO4) &
             )) then
-               dist(k) = dist(k)
+               dist(k) = dist_sav
             else
                dist(k) = 1.0e9
             endif
@@ -8760,6 +8800,7 @@ if (istatus1 == 0) then
             (obs_kind(t_ind).ne.KIND_SO4)             .and. &
             (obs_kind(t_ind).ne.KIND_HNO3)            .and. &
             (obs_kind(t_ind).ne.KIND_HNO4)            .and. &
+            (obs_kind(t_ind).ne.KIND_N2O5)            .and. &
             (obs_kind(t_ind).ne.KIND_C2H6)            .and. &
             (obs_kind(t_ind).ne.KIND_ACET)            .and. &
             (obs_kind(t_ind).ne.KIND_HCHO)            .and. &
@@ -8785,7 +8826,7 @@ if (istatus1 == 0) then
             (obs_kind(t_ind).ne.KIND_TAUAER2)         .and. &
             (obs_kind(t_ind).ne.KIND_TAUAER3)         .and. &
             (obs_kind(t_ind).ne.KIND_TAUAER4)         .and. &
-            (obs_kind(t_ind).ne.KIND_PM2_5_DRY)       .and. &
+            (obs_kind(t_ind).ne.KIND_PM25)            .and. &
             (obs_kind(t_ind).ne.KIND_PM10)            .and. &
             (obs_kind(t_ind).ne.KIND_P25)             .and. &
             (obs_kind(t_ind).ne.KIND_P10)             .and. &
@@ -8809,10 +8850,9 @@ if (istatus1 == 0) then
             (obs_kind(t_ind).ne.KIND_EBU_SO4)         .and. &
             (obs_kind(t_ind).ne.KIND_EBU_OC)          .and. &
             (obs_kind(t_ind).ne.KIND_EBU_BC)          .and. &
-            (obs_kind(t_ind).ne.KIND_EBU_c2h4)        .and. &
-            (obs_kind(t_ind).ne.KIND_EBU_ch2o)        .and. &
-            (obs_kind(t_ind).ne.KIND_EBU_ch3oh)       .and. &
-! The following not in FRAPPE state vectand           
+            (obs_kind(t_ind).ne.KIND_EBU_C2H4)        .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_CH2O)        .and. &
+            (obs_kind(t_ind).ne.KIND_EBU_CH3OH)       .and. &
             (obs_kind(t_ind).ne.KIND_GLYALD)          .and. &
             (obs_kind(t_ind).ne.KIND_PAN)             .and. &
             (obs_kind(t_ind).ne.KIND_MEK)             .and. &
@@ -8823,7 +8863,7 @@ if (istatus1 == 0) then
             ) then
 !
 ! Met obs and Met state variable
-               dist(k) = dist(k)
+               dist(k) = dist_sav
             else
 !
 ! Met obs and Chem state variable
@@ -9961,48 +10001,58 @@ do i = 1, size(in_state_vector)
 
    ! the MODIS AOD assimilation case
    case (KIND_AOD)
-      if ((.not. in_state_vector(KIND_TAUAER1))   .or. &
-          (.not. in_state_vector(KIND_TAUAER2))   .or. &
-          (.not. in_state_vector(KIND_TAUAER3))   .or. &
-          (.not. in_state_vector(KIND_TAUAER4))) then
-         write(msgstring1, *) 'AOD assimilation requires TAUAER1, 2, 3, and 4 in state vector'
-         call error_handler(E_MSG, 'fill_dart_kinds_table', msgstring1)
-      endif
-
-   ! for assimilating PM in situ observations
-   case (KIND_PM25)
-      if ((.not. in_state_vector(KIND_PM25))   .or. &
-          (.not. in_state_vector(KIND_BC1))   .or. &
-          (.not. in_state_vector(KIND_BC2))   .or. &
-          (.not. in_state_vector(KIND_DST01))   .or. &
-          (.not. in_state_vector(KIND_DST02))   .or. &
-          (.not. in_state_vector(KIND_SSLT01))   .or. &
-          (.not. in_state_vector(KIND_SSLT02))   .or. &
-          (.not. in_state_vector(KIND_SO4))      .or. &
-          (.not. in_state_vector(KIND_OC1))   .or. &
-          (.not. in_state_vector(KIND_OC2))) then
-         write(msgstring1, *) 'PM2.5 assimilation requires P25, BC1,2, DUST_1,2, SEAS_1,2, sulf, OC1,2 in state vector'
-         call error_handler(E_MSG, 'fill_dart_kinds_table', msgstring1)
-      endif
-   case (KIND_PM10)
-      if ((.not. in_state_vector(KIND_PM25))   .or. &
-          (.not. in_state_vector(KIND_BC1))   .or. &
-          (.not. in_state_vector(KIND_BC2))   .or. &
+      if ((.not. in_state_vector(KIND_SO4))     .or. &
+          (.not. in_state_vector(KIND_OC2))     .or. &
+          (.not. in_state_vector(KIND_OC2))     .or. &
+          (.not. in_state_vector(KIND_BC1))     .or. &
+          (.not. in_state_vector(KIND_BC2))     .or. &
+          (.not. in_state_vector(KIND_SSLT01))  .or. &
+          (.not. in_state_vector(KIND_SSLT02))  .or. &
+          (.not. in_state_vector(KIND_SSLT03))  .or. &
+          (.not. in_state_vector(KIND_SSLT04))  .or. &
           (.not. in_state_vector(KIND_DST01))   .or. &
           (.not. in_state_vector(KIND_DST02))   .or. &
           (.not. in_state_vector(KIND_DST03))   .or. &
           (.not. in_state_vector(KIND_DST04))   .or. &
-          (.not. in_state_vector(KIND_SSLT01))   .or. &
-          (.not. in_state_vector(KIND_SSLT02))   .or. &
-          (.not. in_state_vector(KIND_SSLT03))   .or. &
-          (.not. in_state_vector(KIND_SO4))      .or. &
-          (.not. in_state_vector(KIND_OC1))   .or. &
-          (.not. in_state_vector(KIND_OC2))   .or. &
-          (.not. in_state_vector(KIND_PM10))) then
-         write(msgstring1, *) 'PM2.5 assimilation requires P25, P10, BC1,2, DUST_1,2,3,4 SEAS_1,2,3, sulf, OC1,2 in state vector'
+          (.not. in_state_vector(KIND_DST05)))  then
+         write(msgstring1, *) 'MODIS AOD assimilation requires SO4, OC1-2, BC1-2, SSLT01-04,and DST01-05 in state vector'
+         call error_handler(E_MSG, 'fill_dart_kinds_table', msgstring1)
+      endif
+
+   ! for assimilating PM10 in situ observations
+   case (KIND_PM10)
+      if ((.not. in_state_vector(KIND_P25))     .or. &
+          (.not. in_state_vector(KIND_SO4))     .or. &
+          (.not. in_state_vector(KIND_BC1))     .or. &
+          (.not. in_state_vector(KIND_BC2))     .or. &
+          (.not. in_state_vector(KIND_OC1))     .or. &
+          (.not. in_state_vector(KIND_OC2))     .or. &
+          (.not. in_state_vector(KIND_DST01))   .or. &
+          (.not. in_state_vector(KIND_DST02))   .or. &
+          (.not. in_state_vector(KIND_DST03))   .or. &
+          (.not. in_state_vector(KIND_DST04))   .or. &
+          (.not. in_state_vector(KIND_SSLT01))  .or. &
+          (.not. in_state_vector(KIND_SSLT02))  .or. &
+          (.not. in_state_vector(KIND_SSLT03))) then
+         write(msgstring1, *) 'PM10 assimilation requires P25, SO4, BC1-2, OC1-2, DST01-04, and  SSLT01-04 in state vector'
          call error_handler(E_MSG, 'fill_dart_kinds_table', msgstring1)
      endif
 
+   ! for assimilating PM25 in situ observations
+   case (KIND_PM25)
+      if ((.not. in_state_vector(KIND_P25))     .or. &
+          (.not. in_state_vector(KIND_SO4))     .or. &
+          (.not. in_state_vector(KIND_BC1))     .or. &
+          (.not. in_state_vector(KIND_BC2))     .or. &
+          (.not. in_state_vector(KIND_OC1))     .or. &
+          (.not. in_state_vector(KIND_OC2))     .or. &
+          (.not. in_state_vector(KIND_DST01))   .or. &
+          (.not. in_state_vector(KIND_DST02))   .or. &
+          (.not. in_state_vector(KIND_SSLT01))  .or. &
+          (.not. in_state_vector(KIND_SSLT02))) then
+         write(msgstring1, *) 'PM2.5 assimilation requires P25, BC1-2, OC1-2, DST01-02, and SSLT01-02 in state vector'
+         call error_handler(E_MSG, 'fill_dart_kinds_table', msgstring1)
+      endif
    ! by default anything else is fine
 
    end select
@@ -10059,12 +10109,53 @@ if (in_state_vector(KIND_GEOPOTENTIAL_HEIGHT) .and. &
 in_state_vector(KIND_RADAR_REFLECTIVITY) = .true.
 in_state_vector(KIND_POWER_WEIGHTED_FALL_SPEED) = .true.
 
+! PM10 assimilaiton case
+if (in_state_vector(KIND_P25)    .and. &
+   in_state_vector(KIND_SO4)     .and. &
+   in_state_vector(KIND_BC1)     .and. &
+   in_state_vector(KIND_BC2)     .and. &
+   in_state_vector(KIND_OC1)     .and. &
+   in_state_vector(KIND_OC2)     .and. &
+   in_state_vector(KIND_DST01)   .and. &
+   in_state_vector(KIND_DST02)   .and. &
+   in_state_vector(KIND_DST03)   .and. &
+   in_state_vector(KIND_DST04)   .and. &
+   in_state_vector(KIND_SSLT01)  .and. &
+   in_state_vector(KIND_SSLT02)  .and. &
+   in_state_vector(KIND_SSLT03)) then
+   in_state_vector(KIND_PM10)  = .true.
+endif
+
+! PM25 assimilaiton case
+if (in_state_vector(KIND_P25)    .and. &
+   in_state_vector(KIND_SO4)     .and. &
+   in_state_vector(KIND_BC1)     .and. &
+   in_state_vector(KIND_BC2)     .and. &
+   in_state_vector(KIND_OC1)     .and. &
+   in_state_vector(KIND_OC2)     .and. &
+   in_state_vector(KIND_DST01)   .and. &
+   in_state_vector(KIND_DST02)   .and. &
+   in_state_vector(KIND_SSLT01)  .and. &
+   in_state_vector(KIND_SSLT02)) then
+   in_state_vector(KIND_PM25)  = .true.
+endif
+
 ! AOD assimilaiton case
-if (in_state_vector(KIND_TAUAER1)    .and. &
-   in_state_vector(KIND_TAUAER2)    .and. &
-   in_state_vector(KIND_TAUAER3)    .and. &
-   in_state_vector(KIND_TAUAER4))  then
-   in_state_vector(KIND_AOD)  = .true.
+if (in_state_vector(KIND_SO4)    .and. &
+   in_state_vector(KIND_OC1)     .and. &
+   in_state_vector(KIND_OC2)     .and. &
+   in_state_vector(KIND_BC1)     .and. &
+   in_state_vector(KIND_BC2)     .and. &
+   in_state_vector(KIND_SSLT01)  .and. &
+   in_state_vector(KIND_SSLT02)  .and. &
+   in_state_vector(KIND_SSLT03)  .and. &
+   in_state_vector(KIND_SSLT04)  .and. &
+   in_state_vector(KIND_DST01)   .and. &
+   in_state_vector(KIND_DST02)   .and. &
+   in_state_vector(KIND_DST03)   .and. &
+   in_state_vector(KIND_DST04)   .and. &
+   in_state_vector(KIND_DST05))  then
+   in_state_vector(KIND_AOD)  =  .true.
 endif
 
 ! FIXME:  i was going to suggest nuking this routine all together because it makes

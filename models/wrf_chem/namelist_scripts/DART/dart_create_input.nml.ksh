@@ -1,4 +1,4 @@
-#!/bin/ksh -x
+>#!/bin/ksh -x
 #
 # Copyright 2019 University Corporation for Atmospheric Research and 
 # Colorado Department of Public Health and Environment.
@@ -29,8 +29,6 @@ echo off
 ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_assim_model_nml.ksh
 ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_assim_tools_nml.ksh
 ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_cov_cutoff_nml.ksh
-${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_dart_to_wrf_nml.ksh
-${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_ensemble_manager_nml.ksh
 ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_filter_nml.ksh
 ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_location_nml.ksh
 ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_model_nml.ksh
@@ -52,11 +50,13 @@ ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_schedule_nml.ksh
 ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_smoother_nml.ksh
 ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_utilities_nml.ksh
 ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_wrf_obs_preproc_nml.ksh
-${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_wrf_to_dart_nml.ksh
 ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_obs_def_MOPITT_CO_nml.ksh
 ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_obs_def_IASI_CO_nml.ksh
 ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_obs_def_IASI_O3_nml.ksh
 ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_obs_def_AIRNOW_PM10_nml.ksh
 ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_obs_def_AIRNOW_PM25_nml.ksh
 ${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_obs_def_MODIS_AOD_nml.ksh
+${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_dart_to_wrf_nml.ksh
+${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_wrf_to_dart_nml.ksh
+${DART_DIR}/models/wrf_chem/namelist_scripts/DART/dart_create_ensemble_manager_nml.ksh
 echo on

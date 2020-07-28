@@ -94,8 +94,9 @@ if (module_initialized) return
 
 call register_module(source, revision, revdate)
 module_initialized = .true.
-use_log_aod=.false.
+
 ! Read the namelist entry.
+use_log_aod=.false.
 call find_namelist_in_file("input.nml", "obs_def_MODIS_AOD_nml", iunit)
 read(iunit, nml = obs_def_MODIS_AOD_nml, iostat = rc)
 call check_namelist_read(iunit, rc, "obs_def_MODIS_AOD_nml")
@@ -171,13 +172,14 @@ subroutine get_expected_modis_aod(state_vector, location, modis_aod, istatus)
     mloc(2)=-90.0_r8
  endif
 
- do ilev=1,aod_nlev
+ do ilev=aod_nlev,aod_nlev
     mloc(3)=real(ilev)
     nloc = set_location(mloc(1), mloc(2), mloc(3), VERTISLEVEL)
     mloc(3)=real(ilev+1)
     nploc = set_location(mloc(1), mloc(2), mloc(3), VERTISLEVEL)
 !
 ! water vapor mixing ratio (kg/kg) at this location - this calls the model_mod code.
+    istatus=0
     call interpolate(state_vector, nloc, KIND_VAPOR_MIXING_RATIO, qvapor, istatus)
     if (istatus /= 0) then
        qvapor = missing_r8
@@ -186,7 +188,18 @@ subroutine get_expected_modis_aod(state_vector, location, modis_aod, istatus)
     endif
 !    print *, 'ilev, qvapor ',qvapor
 !
+! sulfate (kg/kg) at this location - this calls the model_mod code.
+    istatus=0
+    call interpolate(state_vector, nloc, KIND_SO4, sulf, istatus)
+    if (istatus /= 0) then
+       sulf = missing_r8
+       modis_aod = missing_r8
+       return
+    endif
+!    print *, 'ilev, sulf ',sulf
+!
 ! dust (ug/kg - dry air) at this location - this calls the model_mod code.
+    istatus=0
     call interpolate(state_vector, nloc, KIND_DST01, DUST1, istatus)
     if (istatus /= 0) then
        DUST1 = missing_r8
@@ -196,6 +209,7 @@ subroutine get_expected_modis_aod(state_vector, location, modis_aod, istatus)
 !    print *, 'ilev, DUST1 ',DUST1
 !
 ! dust (ug/kg - dry air) at this location - this calls the model_mod code.
+    istatus=0
     call interpolate(state_vector, nloc, KIND_DST02, DUST2, istatus)
     if (istatus /= 0) then
        DUST2 = missing_r8
@@ -205,6 +219,7 @@ subroutine get_expected_modis_aod(state_vector, location, modis_aod, istatus)
 !    print *, 'ilev, DUST2 ',DUST2
 !
 ! dust (ug/kg - dry air) at this location - this calls the model_mod code.
+    istatus=0
     call interpolate(state_vector, nloc, KIND_DST03, DUST3, istatus)
     if (istatus /= 0) then
        DUST3 = missing_r8
@@ -214,6 +229,7 @@ subroutine get_expected_modis_aod(state_vector, location, modis_aod, istatus)
 !    print *, 'ilev, DUST3 ',DUST3
 !
 ! dust (ug/kg - dry air) at this location - this calls the model_mod code.
+    istatus=0
     call interpolate(state_vector, nloc, KIND_DST04, DUST4, istatus)
     if (istatus /= 0) then
        DUST4 = missing_r8
@@ -223,6 +239,7 @@ subroutine get_expected_modis_aod(state_vector, location, modis_aod, istatus)
 !    print *, 'ilev, DUST4 ',DUST4
 !
 ! dust (ug/kg - dry air) at this location - this calls the model_mod code.
+    istatus=0
     call interpolate(state_vector, nloc, KIND_DST05, DUST5, istatus)
     if (istatus /= 0) then
        DUST5 = missing_r8
@@ -232,6 +249,7 @@ subroutine get_expected_modis_aod(state_vector, location, modis_aod, istatus)
 !    print *, 'ilev, DUST5 ',DUST5
 !
 ! hydrophilic black carbon (ug/kg - dry air) at this location - this calls the model_mod code.
+    istatus=0
     call interpolate(state_vector, nloc, KIND_BC1, BC1, istatus)
     if (istatus /= 0) then
        BC1 = missing_r8
@@ -241,6 +259,7 @@ subroutine get_expected_modis_aod(state_vector, location, modis_aod, istatus)
 !    print *, 'ilev, BC1 ',BC1
 !
 ! hydrophobic black carbon (ug/kg - dry air) at this location - this calls the model_mod code.
+    istatus=0
     call interpolate(state_vector, nloc, KIND_BC2, BC2, istatus)
     if (istatus /= 0) then
        BC2 = missing_r8
@@ -250,6 +269,7 @@ subroutine get_expected_modis_aod(state_vector, location, modis_aod, istatus)
 !    print *, 'ilev, BC2 ',BC2
 !
 ! hydrophilic organic carbon (ug/kg - dry air) at this location - this calls the model_mod code.
+    istatus=0
     call interpolate(state_vector, nloc, KIND_OC1, OC1, istatus)
     if (istatus /= 0) then
        OC1 = missing_r8
@@ -259,6 +279,7 @@ subroutine get_expected_modis_aod(state_vector, location, modis_aod, istatus)
 !    print *, 'ilev, OC1 ',OC1
 !
 ! hydrophobic organic carbon (ug/kg - dry air) at this location - this calls the model_mod code.
+    istatus=0
     call interpolate(state_vector, nloc, KIND_OC2, OC2, istatus)
     if (istatus /= 0) then
        OC2 = missing_r8
@@ -268,6 +289,7 @@ subroutine get_expected_modis_aod(state_vector, location, modis_aod, istatus)
 !    print *, 'ilev, OC2 ',OC2
 !
 ! sea salt (ug/kg - dry air) at this location - this calls the model_mod code.
+    istatus=0
     call interpolate(state_vector, nloc, KIND_SSLT01, SS1, istatus)
     if (istatus /= 0) then
        SS1 = missing_r8
@@ -277,6 +299,7 @@ subroutine get_expected_modis_aod(state_vector, location, modis_aod, istatus)
 !    print *, 'ilev, SS1 ',SS1
 !
 ! sea salt (ug/kg - dry air) at this location - this calls the model_mod code.
+    istatus=0
     call interpolate(state_vector, nloc, KIND_SSLT02, SS2, istatus)
     if (istatus /= 0) then
        SS2 = missing_r8
@@ -286,6 +309,7 @@ subroutine get_expected_modis_aod(state_vector, location, modis_aod, istatus)
 !    print *, 'ilev, SS2 ',SS2
 !
 ! sea salt (ug/kg - dry air) at this location - this calls the model_mod code.
+    istatus=0
     call interpolate(state_vector, nloc, KIND_SSLT03, SS3, istatus)
     if (istatus /= 0) then
        SS3 = missing_r8
@@ -295,6 +319,7 @@ subroutine get_expected_modis_aod(state_vector, location, modis_aod, istatus)
 !    print *, 'ilev, SS3 ',SS3
 !
 ! sea salt (ug/kg - dry air) at this location - this calls the model_mod code.
+    istatus=0
     call interpolate(state_vector, nloc, KIND_SSLT04, SS4, istatus)
     if (istatus /= 0) then
        SS4 = missing_r8
@@ -304,6 +329,7 @@ subroutine get_expected_modis_aod(state_vector, location, modis_aod, istatus)
 !    print *, 'ilev, SS4 ',SS4
 !
 ! theta (K) at this location - this calls the model_mod code.
+    istatus=0
     call interpolate(state_vector, nloc, KIND_POTENTIAL_TEMPERATURE, Theta, istatus)
     if (istatus /= 0) then
        Theta = missing_r8
@@ -313,6 +339,7 @@ subroutine get_expected_modis_aod(state_vector, location, modis_aod, istatus)
 !    print *, 'ilev, Theta ',Theta
 !
 ! pressure (Pa) at this location - this calls the model_mod code.
+    istatus=0
     call interpolate(state_vector, nloc, KIND_PRESSURE, P, istatus)
     if (istatus /= 0) then
        P = missing_r8
@@ -321,26 +348,9 @@ subroutine get_expected_modis_aod(state_vector, location, modis_aod, istatus)
     endif
 !    print *, 'ilev, P ',P
 !
-! sulfate (kg/kg) at this location - this calls the model_mod code.
-    call interpolate(state_vector, nloc, KIND_SO4, sulf, istatus)
-    if (istatus /= 0) then
-       sulf = missing_r8
-       modis_aod = missing_r8
-       return
-    endif
-!    print *, 'ilev, sulf ',sulf
-!
-! geopotential height (m) below this location - this calls the model_mod code.
-    call interpolate(state_vector, nloc, KIND_GEOPOTENTIAL_HEIGHT, PH_dn, istatus)
-    if (istatus /= 0) then
-       PH_dn = missing_r8
-       modis_aod = missing_r8
-       return
-    endif
-!    print *, 'ilev, PH_dn ',PH_dn
-!
-! geopotential height (m) above this location - this calls the model_mod code.
-    call interpolate(state_vector, nploc, KIND_GEOPOTENTIAL_HEIGHT, PH_up, istatus)
+! geopotential height (m) at this location - this calls the model_mod code.
+    istatus=0
+    call interpolate(state_vector, nloc, KIND_GEOPOTENTIAL_HEIGHT, PH_up, istatus)
     if (istatus /= 0) then
        PH_up = missing_r8
        modis_aod = missing_r8
@@ -348,7 +358,18 @@ subroutine get_expected_modis_aod(state_vector, location, modis_aod, istatus)
     endif
 !    print *, 'ilev, PH_up ',PH_up
 !
+! geopotential height (m) below this location - this calls the model_mod code.
+    istatus=0
+    call interpolate(state_vector, nploc, KIND_GEOPOTENTIAL_HEIGHT, PH_dn, istatus)
+    if (istatus /= 0) then
+       PH_dn = missing_r8
+       modis_aod = missing_r8
+       return
+    endif
+!    print *, 'ilev, PH_dn ',PH_dn
+!
 ! p25 at this location - this calls the model_mod code.
+!    istatus=0
 !    call interpolate(state_vector, location, KIND_P25, p25, istatus)
 !    if (istatus /= 0) then
 !       p25 = missing_r8
@@ -362,9 +383,8 @@ subroutine get_expected_modis_aod(state_vector, location, modis_aod, istatus)
 ! return any value > 0 for error.  (values < 0 reserved for
 ! system use.)
 !
-    T = Theta / (100000./(P**(Rd/Cp)))
-    Tv = Theta / (100000./(P**(Rd/Cp))) &
-       * qvapor/(1.+qvapor)
+    T = Theta / (100000./P)**(Rd/Cp)
+    Tv = Theta / (100000./P)**(Rd/Cp) * qvapor/(1.+qvapor)
     rho_d = P/(Rd*T)
     rho_m = P/(Rd*Tv)
 !

@@ -32,11 +32,11 @@ export FIRST_EMISS_INV_DATE=2014072418
 #
 # START CYCLE DATE-TIME:
 export CYCLE_STR_DATE=2014072418
-#export CYCLE_STR_DATE=2014072500
+export CYCLE_STR_DATE=2014072500
 #
 # END CYCLE DATE-TIME:
 export CYCLE_END_DATE=2014072418
-#export CYCLE_END_DATE=2014072500
+export CYCLE_END_DATE=2014072500
 #export CYCLE_END_DATE=${CYCLE_STR_DATE}
 #
 export CYCLE_DATE=${CYCLE_STR_DATE}
@@ -118,7 +118,7 @@ fi
 export VARLOC=.false.
 export INDEP_CHEM_ASIM=.true.
 #
-export ADD_EMISS=false
+export ADD_EMISS=true
 export EMISS_DAMP_CYCLE=1.0
 export EMISS_DAMP_INTRA_CYCLE=1.0
 #
@@ -190,6 +190,7 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
    export WRFDA_VER=WRFDAv3.9.1.1_dmpar
    export WRF_VER=WRFv3.9.1.1_dmpar
    export WRFCHEM_VER=WRFCHEMv3.9.1.1_dmpar
+   export DART_VER=DART_CHEM_REPOSITORY
    export DART_VER=DART_classic_mizzi_dev
 #
 # ROOT DIRECTORIES:
@@ -326,19 +327,19 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
 #
 # SELECT COMPONENT RUN OPTIONS:
    if [[ ${RUN_SPECIAL_FORECAST} = "false" ]]; then
-      export RUN_GEOGRID=true
-      export RUN_UNGRIB=true
-      export RUN_METGRID=true
-      export RUN_REAL=true
-      export RUN_PERT_WRFCHEM_MET_IC=true
-      export RUN_PERT_WRFCHEM_MET_BC=true
-      export RUN_EXO_COLDENS=true
-      export RUN_SEASON_WES=true
-      export RUN_WRFCHEM_BIO=true
-      export RUN_WRFCHEM_FIRE=true
-      export RUN_WRFCHEM_CHEMI=true
-      export RUN_PERT_WRFCHEM_CHEM_ICBC=true
-      export RUN_PERT_WRFCHEM_CHEM_EMISS=true
+      export RUN_GEOGRID=false
+      export RUN_UNGRIB=false
+      export RUN_METGRID=false
+      export RUN_REAL=false
+      export RUN_PERT_WRFCHEM_MET_IC=false
+      export RUN_PERT_WRFCHEM_MET_BC=false
+      export RUN_EXO_COLDENS=false
+      export RUN_SEASON_WES=false
+      export RUN_WRFCHEM_BIO=false
+      export RUN_WRFCHEM_FIRE=false
+      export RUN_WRFCHEM_CHEMI=false
+      export RUN_PERT_WRFCHEM_CHEM_ICBC=false
+      export RUN_PERT_WRFCHEM_CHEM_EMISS=false
       export RUN_MOPITT_CO_OBS=true
       export RUN_IASI_CO_OBS=false
       export RUN_IASI_O3_OBS=false
@@ -353,7 +354,7 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
       export RUN_PANDA_O3_OBS=false
       export RUN_PANDA_PM25_OBS=false
       export RUN_MODIS_AOD_OBS=false
-      export RUN_MET_OBS=true
+      export RUN_MET_OBS=false
       export RUN_COMBINE_OBS=true
       export RUN_PREPROCESS_OBS=true
 #
@@ -629,10 +630,10 @@ while [[ ${CYCLE_DATE} -le ${CYCLE_END_DATE} ]]; do
    export NL_MIN_LON=40.
    export NL_MAX_LON=170.
 #
-#   export NL_MIN_LAT=40.
-#   export NL_MAX_LAT=50.
-#   export NL_MIN_LON=120.
-#   export NL_MAX_LON=130.
+   export NL_MIN_LAT=40.
+   export NL_MAX_LAT=50.
+   export NL_MIN_LON=120.
+   export NL_MAX_LON=130.
 #
    export NNL_MIN_LON=${NL_MIN_LON}
    if [[ ${NL_MIN_LON} -lt 0. ]]; then
@@ -5058,6 +5059,9 @@ EOF
          sbatch -W job.ksh
       fi
    fi
+
+exit
+
 #
 #########################################################################
 #

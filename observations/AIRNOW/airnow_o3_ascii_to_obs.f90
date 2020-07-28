@@ -235,7 +235,7 @@ character(len=*), parameter :: revdate  = ''
             data_greg_sec(indx)=data_greg_sec_temp
             obs_val(indx)=obs_val_temp*fac
             obs_err(indx)=obs_val_temp*fac*err_fac
-            if(use_log_co) then
+            if(use_log_o3) then
                obs_val(indx)=log(obs_val_temp*fac)
                obs_err(indx)=err_fac
             endif

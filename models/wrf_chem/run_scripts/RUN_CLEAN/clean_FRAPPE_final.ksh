@@ -33,8 +33,8 @@ export EXP=/real_FRAPPE_CPSR_IAS_CO_INF_DAMP
 #
 export SOURCE_PATH=/scratch/summit/mizzi${EXP}
 #
-export DATE_STR=2014072000
-export DATE_END=2014072206
+export DATE_STR=2014072106
+export DATE_END=2014072300
 #
 export CYCLE_PERIOD=6
 #

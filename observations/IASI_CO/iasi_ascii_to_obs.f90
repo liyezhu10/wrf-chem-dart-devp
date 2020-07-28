@@ -845,7 +845,7 @@ allocate(xg_prs(nlon_qc,nlat_qc,ias_dimp),xg_prs_norm(nlon_qc,nlat_qc,ias_dimp))
 !              do k=1,nlvls
 !                print *, 'UT ',k,(UT_cov(k,l),l=1,nlvls)
 !              enddo
-!              do k=kstr,mop_dim
+!              do k=kstr,ias_dim
 !                print *, 'xg_raw_cov ',k,(xg_raw_cov(i,j,k,l),l=kstr,ias_dim)
 !              enddo
 !              do k=1,nlvls
@@ -979,7 +979,6 @@ allocate(xg_prs(nlon_qc,nlat_qc,ias_dimp),xg_prs_norm(nlon_qc,nlat_qc,ias_dimp))
         endif
 !
         do k=1,nlvls_fix
-           if(irot.eq.1 .and. k.eq.2) cycle
            qc_count=qc_count+1
 !
 ! RAWR

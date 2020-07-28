@@ -263,7 +263,7 @@ subroutine get_expected_mopitt_co(state, location, key, val, istatus)
    real(r8)            :: obs_val, obs_sum, co_min, co_min_log, level, missing
    real(r8)            :: prs_wrf_sfc, co_wrf_sfc
    real(r8)            :: prs_wrf_1, prs_wrf_2, co_wrf_1, co_wrf_2, prs_wrf_nlev
-   real(r8)            :: prs_mopitt_sfc, prs_mopitt, prs_dn, prs_up, prs_lc
+   real(r8)            :: prs_mopitt_sfc, prs_mopitt
    integer             :: nlevels,nlevelsp
 
    real(r8)            :: vert_mode_filt
@@ -301,7 +301,7 @@ subroutine get_expected_mopitt_co(state, location, key, val, istatus)
    istatus=0
    call interpolate(state, loc2, KIND_SURFACE_PRESSURE, prs_wrf_sfc, istatus)  
    if(istatus/=0) then
-      write(string1, *)'APM NOTICE: WRF prs_wrf_sfc is bad ',istatus
+      write(string1, *)'APM NOTICE: WRF prs_wrf_sfc is bad '
       call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source,revision,revdate)
       val=missing
       return
@@ -313,7 +313,7 @@ subroutine get_expected_mopitt_co(state, location, key, val, istatus)
    istatus = 0
    call interpolate(state, loc2, KIND_PRESSURE, prs_wrf_1, istatus)
    if(istatus/=0) then
-      write(string1, *)'APM NOTICE: WRF prs_wrf_1 is bad ',istatus
+      write(string1, *)'APM NOTICE: WRF prs_wrf_1 is bad '
       call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source,revision,revdate)
       val=missing
       return
@@ -325,7 +325,7 @@ subroutine get_expected_mopitt_co(state, location, key, val, istatus)
    istatus = 0
    call interpolate(state, loc2, KIND_PRESSURE, prs_wrf_2, istatus)
    if(istatus/=0) then
-      write(string1, *)'APM NOTICE: WRF prs_wrf_2 is bad ',istatus,prs_wrf_2
+      write(string1, *)'APM NOTICE: WRF prs_wrf_2 is bad '
       call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source,revision,revdate)
       val=missing
       return
@@ -338,7 +338,7 @@ subroutine get_expected_mopitt_co(state, location, key, val, istatus)
    call interpolate(state, loc2, KIND_co, co_wrf_1, istatus) 
    co_wrf_sfc=co_wrf_1
    if(istatus/=0) then
-      write(string1, *)'APM NOTICE: WRF co_wrf_1 is bad ',istatus,prs_wrf_1,co_wrf_1
+      write(string1, *)'APM NOTICE: WRF co_wrf_1 is bad '
       call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source,revision,revdate)
       val=missing
       return
@@ -364,7 +364,7 @@ subroutine get_expected_mopitt_co(state, location, key, val, istatus)
          istatus=0
          call interpolate(state, loc2, KIND_CO, obs_val, istatus)
          if(istatus/=0) then
-            write(string1, *)'APM NOTICE: WRF co_wrf is bad ',prs_mopitt,istatus
+            write(string1, *)'APM NOTICE: WRF co_wrf is bad ',prs_mopitt
             call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source,revision,revdate)
             val=missing
             return
@@ -372,7 +372,7 @@ subroutine get_expected_mopitt_co(state, location, key, val, istatus)
       endif 
 ! check for lower bound
       if (obs_val.lt.co_min) then
-         write(string1, *)'APM: NOTICE resetting minimum MOPITT CO value ',ilev
+         write(string1, *)'APM: NOTICE resetting minimum MOPITT CO value '
          call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source,revision,revdate)
          obs_val = co_min 
       endif
@@ -380,9 +380,6 @@ subroutine get_expected_mopitt_co(state, location, key, val, istatus)
 ! apply averaging kernel
       if( use_log_co ) then
          val = val + avg_kernel(key,ilev-kstr+1) * log10(exp(obs_val) * 1.e3)  
-!            write(string1, *)'APM: prs, avg_k,obs_val ',ilev-kstr+1,prs_mopitt,avg_kernel(key,ilev-kstr+1), &
-!            exp(obs_val)*1.e3,mloc(1),mloc(2),mloc(3)
-!            call error_handler(E_MSG,'set_obs_def_mopitt_co',string1,source,revision,revdate)
       else
          val = val + avg_kernel(key,ilev-kstr+1) * log10(obs_val * 1.e3)  
       endif

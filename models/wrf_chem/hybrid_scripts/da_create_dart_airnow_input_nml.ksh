@@ -50,7 +50,7 @@ cat > create_airnow_obs_nml.nl << EOF
    file_in=${NL_FILENAME}
    lat_mn=${NL_LAT_MN}
    lat_mx=${NL_LAT_MX}
-   lon_mn=${NL_LON_MN}                                                                                      
+   lon_mn=${NL_LON_MN}                                                                                  
    lon_mx=${NL_LON_MX}
    use_log_co=${NL_USE_LOG_CO}
    use_log_o3=${NL_USE_LOG_O3}
